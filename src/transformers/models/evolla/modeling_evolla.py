@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import ModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import ModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, Seq2SeqModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PretrainedConfig, ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -96,7 +96,7 @@ class EvollaBaseModelOutputWithPast(ModelOutput):
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    protein_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -1742,14 +1742,60 @@ class EvollaModel(EvollaPreTrainedModel):
         protein_attention_mask: Optional[torch.Tensor] = None,
         text_input_ids: torch.LongTensor = None,
         text_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
-        protein_outputs = self.protein_encoder(input_ids=protein_input_ids, attention_mask=protein_attention_mask)
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        # create batch mask for seqs
+        protein_batch_mask = torch.tensor([True]*protein_input_ids.shape[0])
+
+        protein_outputs = self.protein_encoder(
+            input_ids=protein_input_ids,
+            attention_mask=protein_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True
+        )
 
         text_outputs = self.llm(
             input_ids=text_input_ids,
             attention_mask=text_attention_mask,
+            protein_feats=protein_outputs.sequence_compressor_output,
+            protein_batch_mask=protein_batch_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True
         )
-        return text_outputs
+
+        if output_hidden_states:
+            encoder_hidden_states = protein_outputs.hidden_states
+            decoder_hidden_states = text_outputs.hidden_states
+        else:
+            encoder_hidden_states = None
+            decoder_hidden_states = None
+
+        last_hidden_state = text_outputs.last_hidden_state
+        
+        if output_attentions:
+            decoder_attentions = text_outputs.attentions
+        else:
+            decoder_attentions = None
+
+        # change the output to BaseModelOutputWithPast
+        output = EvollaBaseModelOutputWithPast(
+            last_hidden_state=last_hidden_state,
+            hidden_states=decoder_hidden_states,
+            attentions=decoder_attentions,
+            protein_hidden_states=encoder_hidden_states,
+        )
+        return output if return_dict else output.to_tuple()
         
 
 @add_start_docstrings(

@@ -1071,6 +1071,7 @@ class SaProtProteinEncoder(nn.Module):
         input_ids: Optional[torch.LongTensor],
         attention_mask: Optional[torch.FloatTensor],
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ):
         input_shape = input_ids.size()
@@ -1087,6 +1088,7 @@ class SaProtProteinEncoder(nn.Module):
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1118,12 +1120,14 @@ class EvollaProteinEncoder(nn.Module):
         input_ids: torch.LongTensor,
         attention_mask: torch.FloatTensor,
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ):
         sequence_repr = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             return_dict=return_dict,
+            output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
 
@@ -1133,6 +1137,8 @@ class EvollaProteinEncoder(nn.Module):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs
     ):
@@ -1140,11 +1146,12 @@ class EvollaProteinEncoder(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             return_dict=True,
-            output_hidden_states=True,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         # TODO: could be replaced by last hidden state
-        protein_embeds = protein_output.hidden_states[-1]
+        protein_embeds = protein_output.last_hidden_state
 
         sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
 
@@ -1155,7 +1162,7 @@ class EvollaProteinEncoder(nn.Module):
             sequence_compressor_output=sequence_repr,
             last_hidden_state=protein_output.last_hidden_state,
             hidden_states=protein_output.hidden_states,
-            attentions=attention_mask,
+            attentions=protein_output.attentions,
         )
 
 # Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer

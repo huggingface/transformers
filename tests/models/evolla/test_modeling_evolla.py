@@ -44,20 +44,132 @@ if is_torch_available():
     import torch
 
     from transformers import EvollaForVisionText2Text, EvollaModel, EvollaProcessor
-    from transformers.models.evolla.configuration_evolla import EvollaPerceiverConfig, EvollaVisionConfig
 
 if is_vision_available():
     from PIL import Image
 
+
+class EvollaModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=1,
+        text_seq_length=20,
+        text_vocab_size=100,
+        protein_seq_length=10,
+        protein_vocab_size=20,
+        num_hidden_layers=32, # llama hidden layers
+        num_attention_heads=32, # llama attention heads
+        use_input_mask=True,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.protein_seq_length = protein_seq_length
+        self.protein_vocab_size = protein_vocab_size
+        self.text_seq_length = text_seq_length
+        self.text_vocab_size = text_vocab_size
+        self.seq_length = text_seq_length
+        
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        self.use_input_mask = use_input_mask
+
+    @property
+    def is_encoder_decoder(self):
+        return True
+    
+    def prepare_config_and_inputs(self):
+        text_input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.text_vocab_size)
+
+        protein_input_ids = ids_tensor([self.batch_size, self.protein_seq_length], self.protein_vocab_size)
+
+        if self.use_input_mask:
+            text_input_mask = random_attention_mask([self.batch_size, self.text_seq_length])
+            protein_input_mask = random_attention_mask([self.batch_size, self.protein_seq_length])
+
+        config = self.get_config()
+        return (config, text_input_ids, text_input_mask, protein_input_ids, protein_input_mask)
+
+
+    def get_config(self):
+        return EvollaConfig()
+
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        pixel_values,
+        image_attention_mask,
+        interpolate_pos_encoding,
+    ):
+        model = EvollaModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            image_attention_mask=image_attention_mask,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
+        )
+
+    
+    def create_and_check_model_gen(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        pixel_values,
+        image_attention_mask,
+        interpolate_pos_encoding,
+    ):
+        model = EvollaForVisionText2Text(config)
+        model.to(torch_device)
+        model.eval()
+        model.generate(
+            input_ids,
+            attention_mask=input_mask,
+            pixel_values=pixel_values,
+            image_attention_mask=image_attention_mask,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            max_length=self.seq_length + 2,
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config, 
+            text_input_ids,
+            text_input_mask, 
+            protein_input_ids, 
+            protein_input_mask
+        ) = config_and_inputs
+        inputs_dict = {
+            "text_input_ids": text_input_ids,
+            "text_attention_mask": text_input_mask,
+            "protein_input_ids": protein_input_ids,
+            "protein_attention_mask": protein_input_mask,
+        }
+        return config, inputs_dict
 @require_torch
 class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (EvollaModel) if is_torch_available() else ()
+    all_model_classes = (EvollaModel,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model = EvollaModel(EvollaConfig())
-        protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
-        tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
-        self.processor = EvollaProcessor(protein_tokenizer, tokenizer)
+        self.model_tester = EvollaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=EvollaConfig, hidden_size=37)
+        self.is_encoder_decoder = self.model_tester.is_encoder_decoder
+
+    # def setUp(self):
+    #     self.model = EvollaModel(EvollaConfig())
+    #     protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
+    #     tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
+    #     self.processor = EvollaProcessor(protein_tokenizer, tokenizer)
 
     def prepare_input_and_expected_output(self):
         amino_acid_sequence = "AAAA"
@@ -128,6 +240,62 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         outputs = self.model(**inputs)
         # TODO: check accuracy
         print(outputs)
+
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertEqual(out_len + 2, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
 
 @require_torch
 @require_vision

@@ -214,83 +214,6 @@ class EvollaProteinConfig(PretrainedConfig):
 
         super().__init__(**kwargs)
 
-class EvollaVisionConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
-    Evolla model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Evolla-9B.
-
-    e.g. [westlake-repl/Evolla-10B](https://huggingface.co/westlake-repl/Evolla-10B)
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        embed_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer. (elsewhere referred to as `hidden_size`)
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        intermediate_size (`int`, *optional*, defaults to 5120):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of image channels.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
-            testing).
-    """
-
-    model_type = "evolla_vision"
-    attribute_map = {
-        "hidden_size": "embed_dim",
-    }
-
-    def __init__(
-        self,
-        embed_dim=768,
-        image_size=224,
-        intermediate_size=5120,
-        patch_size=14,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        num_channels=3,
-        hidden_act="gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-        **kwargs,
-    ):
-        self.embed_dim = embed_dim
-        self.image_size = image_size
-        self.intermediate_size = intermediate_size
-        self.patch_size = patch_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.layer_norm_eps = layer_norm_eps
-        self.attention_dropout = attention_dropout
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.hidden_act = hidden_act
-
-        super().__init__(**kwargs)
-
-
 class EvollaPerceiverConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
@@ -558,6 +481,8 @@ class EvollaLLMConfig(PretrainedConfig):
 
     def __init__(
         self,
+        output_attentions=False,
+        output_hidden_states=False,
         llama_config=None,
         sequence_aligner_config=None,
         protein_encoder_dim=None,
@@ -565,6 +490,8 @@ class EvollaLLMConfig(PretrainedConfig):
         initializer_range=0.02,
     ):
         super().__init__()
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
         if llama_config is None:
             self.llama_config = EvollaLlamaConfig()
         elif isinstance(llama_config, dict):
@@ -671,61 +598,18 @@ class EvollaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        additional_vocab_size=0,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        dropout=0.0,
-        hidden_act="silu",
-        initializer_range=0.02,
-        alpha_initializer="zeros",
-        alphas_initializer_range=0.0,
-        alpha_type="float",
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        tie_word_embeddings=False,
-        cross_layer_interval=1,
-        qk_layer_norms=False,
-        freeze_text_layers=True,
-        freeze_text_module_exceptions=[],
-        freeze_lm_head=False,
-        freeze_vision_layers=True,
-        freeze_vision_module_exceptions=[],
-        use_resampler=False,
+        output_attentions=False,
+        output_hidden_states=False,
+        use_cache=False,
+        return_dict=True,
         protein_config=None,
         llm_config=None,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.additional_vocab_size = additional_vocab_size
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.dropout = dropout
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.alpha_initializer = alpha_initializer
-        self.alphas_initializer_range = alphas_initializer_range
-        self.alpha_type = alpha_type
-        self.rms_norm_eps = rms_norm_eps
+        self.output_attentions = output_attentions
+        self.output_hidden_states = output_hidden_states
         self.use_cache = use_cache
-
-        self.cross_layer_interval = cross_layer_interval
-        self.qk_layer_norms = qk_layer_norms
-        self.freeze_vision_layers = freeze_vision_layers
-
-        self.freeze_text_layers = freeze_text_layers
-        self.freeze_text_module_exceptions = freeze_text_module_exceptions
-        self.freeze_vision_module_exceptions = freeze_vision_module_exceptions
-        self.freeze_lm_head = freeze_lm_head
-
-        self.use_resampler = use_resampler
+        self.return_dict = return_dict
 
         if protein_config is None:
             self.protein_config = EvollaProteinConfig()
@@ -745,15 +629,11 @@ class EvollaConfig(PretrainedConfig):
             self.protein_config.resampler_config.output_repr_dim = self.llm_config.llama_config.hidden_size
         
         if self.llm_config.sequence_aligner_config.protein_encoder_dim is None:
-            self.llm_config.sequence_aligner_config.protein_encoder_dim = self.protein_config.protein_encoder_config.hidden_size
+            self.llm_config.sequence_aligner_config.protein_encoder_dim = self.protein_config.resampler_config.output_repr_dim
         
         
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
