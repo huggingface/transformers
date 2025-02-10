@@ -1284,14 +1284,13 @@ class ChameleonModel(ChameleonPreTrainedModel):
 
         if pixel_values is not None:
             image_tokens = self.get_image_tokens(pixel_values)
-            if not is_torchdynamo_compiling():
-                n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum().item()
-                n_image_features = image_tokens.shape[0] * image_tokens.shape[1]
-                if n_image_tokens_in_text != n_image_features:
-                    raise ValueError(
-                        f"Image features and image tokens do not match: tokens: {n_image_tokens_in_text}, features {n_image_features}"
-                    )
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_tokens.numel():
+                n_image_tokens_in_text = (input_ids == self.vocabulary_mapping.image_token_id).sum()
+                n_image_features = image_tokens.shape[0] * image_tokens.shape[1]
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens_in_text}, features {n_image_features}"
+                )
             image_tokens = image_tokens.to(input_ids.device, input_ids.dtype)
             input_ids = input_ids.masked_scatter(special_image_mask, image_tokens)
 

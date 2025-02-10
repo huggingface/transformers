@@ -52,7 +52,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = False  # TODO (fix me): compilation fails due to a stide error?
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -130,8 +130,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
         cos, sin = position_embeddings
         query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-        query = torch.cat((query, query_pass), dim=-1)
-        key = torch.cat((key, key_pass), dim=-1)
+        query = torch.cat((query, query_pass), dim=-1).contiguous()
+        key = torch.cat((key, key_pass), dim=-1).contiguous()
 
         # Cache QKV values
         if layer_past is not None:
@@ -187,8 +187,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
         batch_size, num_attention_heads, query_length, attn_head_size = query.size()
         key_length = key.size(-2)
 
-        query = query.reshape(batch_size * num_attention_heads, query_length, attn_head_size)
-        key = key.reshape(batch_size * num_attention_heads, key_length, attn_head_size)
+        query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
+        key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
 
         # [batch_size * num_heads, q_length, kv_length]
         attn_scores = torch.zeros(

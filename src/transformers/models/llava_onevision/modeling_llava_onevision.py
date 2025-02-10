@@ -713,19 +713,14 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                 vision_aspect_ratio=vision_aspect_ratio,
             )
 
-            if not is_torchdynamo_compiling():
-                n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0]
-                if n_image_tokens != n_image_features:
-                    raise ValueError(
-                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-                    )
-            special_image_mask = (
-                (input_ids == self.config.image_token_index)
-                .unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -742,18 +737,14 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             video_features = torch.cat((video_features, image_newline), dim=1)
             video_features = video_features.flatten(0, 1)
 
-            n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
-            n_video_features = video_features.shape[0]
-            if n_video_tokens != n_video_features:
+            special_video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
+            special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
+                n_video_tokens = (input_ids == self.config.video_token_index).sum()
+                n_video_features = video_features.shape[0]
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                 )
-            special_video_mask = (
-                (input_ids == self.config.video_token_index)
-                .unsqueeze(-1)
-                .expand_as(inputs_embeds)
-                .to(inputs_embeds.device)
-            )
             video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_video_mask, video_features)
 
