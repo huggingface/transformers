@@ -632,7 +632,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
-                        if not torch.allclose(param.data, bias_tensor, atol=1e-4):
+                        if not torch.testing.assert_close(param.data, bias_tensor, atol=1e-4):
                             failed_cases.append(
                                 f"Parameter {name} of model {model_class} seems not properly initialized. "
                                 f"Biases should be initialized to {bias_value}, got {param.data}"
@@ -718,14 +718,9 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 outputs_static = model_static(**self._prepare_for_class(inputs_dict, model_class))
                 outputs_dynamic = model_dynamic(**self._prepare_for_class(inputs_dict, model_class))
 
-            self.assertTrue(
-                torch.allclose(
-                    outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4
-                ),
-                f"Max diff: {(outputs_static.last_hidden_state - outputs_dynamic.last_hidden_state).abs().max()}",
-            )
+            torch.testing.assert_close(outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4)
 
-# # TOLERANCE = 1e-4
+TOLERANCE = 1e-4
 
 
 # We will verify our results on an image of cute cats
