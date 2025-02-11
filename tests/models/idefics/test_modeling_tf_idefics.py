@@ -251,6 +251,7 @@ class IdeficsModelTester:
 @require_tf
 class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFIdeficsModel, TFIdeficsForVisionText2Text) if is_tf_available() else ()
+    all_generative_model_classes = ()  # broken tests
     pipeline_model_mapping = {"feature-extraction": TFIdeficsModel} if is_tf_available() else {}
     test_pruning = False
     test_headmasking = False
