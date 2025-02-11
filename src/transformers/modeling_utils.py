@@ -769,7 +769,6 @@ def _load_state_dict_into_meta_model(
             full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
     for param_name, param in state_dict.items():
-
         # Start by removing the prefix if needed
         if param_name.startswith(start_prefix):
             param_name = param_name[len(start_prefix) :]
@@ -4888,7 +4887,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         set_module_tensor_to_device(model, key, "cpu", torch.empty(*param.size(), dtype=dtype))
 
         # correctly initialize the missing keys if it was skipped before
-        if _fast_init:
+        if _fast_init or low_cpu_mem_usage:
             model._initialize_missing_keys(
                 renamed_loaded_keys,
                 ignore_mismatched_sizes,
