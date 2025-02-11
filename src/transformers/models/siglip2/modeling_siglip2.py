@@ -7,7 +7,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -156,7 +156,7 @@ class Siglip2VisionEmbeddings(nn.Module):
     @staticmethod
     def resize_positional_embeddings(
         positional_embeddings: torch.Tensor,
-        spatial_shapes: List[Tuple[int, int]],
+        spatial_shapes: torch.LongTensor,
         max_length: int,
     ) -> torch.Tensor:
         """
@@ -174,7 +174,7 @@ class Siglip2VisionEmbeddings(nn.Module):
             `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim)
             corresponding to the input pixel position ids.
         """
-        batch_size = len(spatial_shapes)
+        batch_size = spatial_shapes.shape[0]
         embed_dim = positional_embeddings.shape[-1]
 
         resulted_positional_embeddings = torch.empty(
@@ -186,8 +186,9 @@ class Siglip2VisionEmbeddings(nn.Module):
         # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
 
-        for i, (height, width) in enumerate(spatial_shapes):
+        for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
+            height, width = spatial_shapes[i]
             resized_embeddings = F.interpolate(
                 positional_embeddings,
                 size=(height, width),
@@ -204,7 +205,7 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: List[Tuple[int, int]]) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: torch.LongTensor) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor`):
@@ -685,7 +686,7 @@ class Siglip2VisionTransformer(nn.Module):
         self,
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
-        spatial_shapes: List[Tuple[int, int]],
+        spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1178,7 +1179,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.Tensor,
-        spatial_shapes: List[Tuple[int, int]],
+        spatial_shapes: torch.LongTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1309,7 +1310,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
+        spatial_shapes: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1367,9 +1368,9 @@ class Siglip2Model(Siglip2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
+        spatial_shapes: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1503,7 +1504,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
+        spatial_shapes: Optional[torch.LongTensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,

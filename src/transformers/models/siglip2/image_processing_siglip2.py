@@ -345,11 +345,10 @@ class Siglip2ImageProcessor(BaseImageProcessor):
             data={
                 "pixel_values": pixel_values,
                 "pixel_attention_mask": pixel_mask,
+                "spatial_shapes": spatial_shapes,
             },
             tensor_type=return_tensors,
         )
-        # Added later to avoid conversion to `tensor` type
-        batch_feature["spatial_shapes"] = spatial_shapes
 
         return batch_feature
 
