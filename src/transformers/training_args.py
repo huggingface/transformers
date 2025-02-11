@@ -517,7 +517,7 @@ class TrainingArguments:
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluation_strategy: Union[IntervalStrategy, str] = field(
-        default="no",
+        default="epoch",
         metadata={"help": "The evaluation strategy to use."},
     )
     prediction_loss_only: bool = field(
@@ -624,10 +624,10 @@ class TrainingArguments:
         metadata={"help": "The logging strategy to use."},
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
-    logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    logging_steps: int = field(default=100, metadata={"help": "Log every X updates steps."})
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
     save_strategy: Union[IntervalStrategy, str] = field(
-        default="steps",
+        default="epoch",
         metadata={"help": "The checkpoint save strategy to use."},
     )
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
