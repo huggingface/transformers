@@ -700,7 +700,7 @@ _import_structure = {
         "Pix2StructTextConfig",
         "Pix2StructVisionConfig",
     ],
-    "models.pixtral": ["PixtralProcessor", "PixtralVisionConfig", "PixtralTextConfig"],
+    "models.pixtral": ["PixtralProcessor", "PixtralVisionConfig"],
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],

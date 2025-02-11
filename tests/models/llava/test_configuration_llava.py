@@ -32,8 +32,7 @@ class LlavaConfigTest(unittest.TestCase):
         }
 
         text_config = {
-            # "model_type": "mistral",
-            "model_type": "pixtral_text",
+            "model_type": "mistral",
             "hidden_size": 5120,
             "head_dim": 128,
             "num_attention_heads": 32,

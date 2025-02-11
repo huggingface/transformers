@@ -180,7 +180,6 @@ MODEL_NAMES_TO_IGNORE = [
     "CLIPVisionModel",
     "Qwen2AudioEncoder",
     "SiglipVisionModel",
-    "PixtralMistral",  # not a real model
 ]
 
 
