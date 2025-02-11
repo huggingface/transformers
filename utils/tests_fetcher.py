@@ -738,6 +738,7 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
 
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
+
                 new_imported_modules_2 = define_import_structure(module)
 
                 for mapping in new_imported_modules_2.values():
@@ -750,6 +751,7 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
                         imports = [i for i in imports if i not in new_imports]
+
                 if len(imports) > 0:
                     # If there are any objects lefts, they may be a submodule
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
@@ -769,6 +771,7 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
                 dependencies.append(module)
 
         imported_modules = new_modules
+
     return dependencies
 
 
@@ -890,6 +893,7 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
         depending on it recursively. This way the tests impacted by a change in file A are the test files in the list
         corresponding to key A in this result.
     """
+
     cache = {}
     # Start from the example deps init.
     example_deps, examples = init_test_examples_dependencies()
