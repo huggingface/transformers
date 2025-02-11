@@ -39,13 +39,13 @@ class LlavaProcessorKwargs(ProcessingKwargs, total=False):
 
 class LlavaProcessor(ProcessorMixin):
     r"""
-    Constructs a Llava processor which wraps a Llava image processor and a Llava tokenizer into a single processor.
+    Constructs a LLaVa processor which wraps a LLaVa image processor and a LLaMa tokenizer into a single processor.
 
-    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`LlavaProcessor`] offers all the functionalities of [`LlavaImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~LlavaProcessor.__call__`] and [`~LlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
+        image_processor ([`LlavaImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.

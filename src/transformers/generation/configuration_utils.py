@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
-NEEDS_CACHE_CONFIG = {}
+CACHE_CONFIG_MAPPING = {}
 NEED_SETUP_CACHE_CLASSES_MAPPING = {}
 QUANT_BACKEND_CLASSES_MAPPING = {}
 ALL_CACHE_IMPLEMENTATIONS = []
@@ -62,8 +62,8 @@ if is_torch_available():
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
-    NEEDS_CACHE_CONFIG["quantized"] = QuantizedCacheConfig
-    NEEDS_CACHE_CONFIG["static"] = StaticCacheConfig
+    CACHE_CONFIG_MAPPING["quantized"] = QuantizedCacheConfig
+    CACHE_CONFIG_MAPPING["static"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
         "offloaded_static": OffloadedStaticCache,
@@ -73,7 +73,7 @@ if is_torch_available():
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys()) + ["offloaded"]
+        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded"]
     )
 
 
@@ -409,11 +409,9 @@ class GenerationConfig(PushToHubMixin):
         self.use_cache = kwargs.pop("use_cache", True)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
-        if self.cache_implementation is not None and self.cache_implementation in NEEDS_CACHE_CONFIG:
-            cache_config_class = NEEDS_CACHE_CONFIG[self.cache_implementation]
-            if self.cache_config is None:
-                self.cache_config = cache_config_class()
-            elif isinstance(self.cache_config, dict):
+        if self.cache_implementation is not None and self.cache_implementation in CACHE_CONFIG_MAPPING:
+            cache_config_class = CACHE_CONFIG_MAPPING[self.cache_implementation]
+            if isinstance(self.cache_config, dict):
                 self.cache_config = cache_config_class.from_dict(self.cache_config)
         self.return_legacy_cache = kwargs.pop("return_legacy_cache", None)
 
@@ -766,7 +764,7 @@ class GenerationConfig(PushToHubMixin):
                 f"{ALL_CACHE_IMPLEMENTATIONS}"
             )
         if self.cache_config is not None:
-            cache_class = NEEDS_CACHE_CONFIG.get(self.cache_implementation)
+            cache_class = CACHE_CONFIG_MAPPING.get(self.cache_implementation)
             if cache_class is None:
                 raise ValueError(
                     "You provided a `cache_config` but the cache implementation you are using "
@@ -787,8 +785,7 @@ class GenerationConfig(PushToHubMixin):
             for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
                 if getattr(self, arg_name) is not None:
                     logger.warning_once(
-                        no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)),
-                        UserWarning,
+                        no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name))
                     )
 
         # 6.  check watermarking arguments
@@ -1581,7 +1578,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
 
 
 @dataclass
-class CompileConfig(object):
+class CompileConfig:
     """
     Class that holds arguments relative to `torch.compile` behavior, when using automatic compilation in `generate`.
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
@@ -1622,7 +1619,9 @@ class CompileConfig(object):
     backend: Union[str, Callable] = "inductor"
     mode: str = "reduce-overhead"
     options: Optional[dict] = None
+    # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
+    _compile_all_devices = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
-        return copy.deepcopy(self.__dict__)
+        return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
