@@ -1738,10 +1738,11 @@ class EvollaModel(EvollaPreTrainedModel):
         
     def forward(
         self,
+        input_ids: torch.LongTensor = None, # text input ids
+        attention_mask: Optional[torch.Tensor] = None, # text attention mask
+        inputs_embeds: Optional[torch.FloatTensor] = None, # text input embeddings
         protein_input_ids: torch.LongTensor = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
-        text_input_ids: torch.LongTensor = None,
-        text_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
@@ -1753,6 +1754,14 @@ class EvollaModel(EvollaPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        text_input_ids = input_ids
+        text_attention_mask = attention_mask
+        text_inputs_embeds = inputs_embeds
+
         # create batch mask for seqs
         protein_batch_mask = torch.tensor([True]*protein_input_ids.shape[0])
 
@@ -1767,6 +1776,7 @@ class EvollaModel(EvollaPreTrainedModel):
         text_outputs = self.llm(
             input_ids=text_input_ids,
             attention_mask=text_attention_mask,
+            inputs_embeds=text_inputs_embeds,
             protein_feats=protein_outputs.sequence_compressor_output,
             protein_batch_mask=protein_batch_mask,
             output_attentions=output_attentions,
@@ -1796,7 +1806,12 @@ class EvollaModel(EvollaPreTrainedModel):
             protein_hidden_states=encoder_hidden_states,
         )
         return output if return_dict else output.to_tuple()
-        
+    
+    def embed_tokens(self, input_ids, **kwargs):
+        return self.llm.embed_tokens(input_ids, **kwargs)
+
+    def get_input_embeddings(self):
+        return self.llm.get_input_embeddings()
 
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",

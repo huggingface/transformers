@@ -54,6 +54,7 @@ class EvollaModelTester:
         self,
         parent,
         batch_size=1,
+        is_training=True,
         text_seq_length=20,
         text_vocab_size=100,
         protein_seq_length=10,
@@ -76,6 +77,7 @@ class EvollaModelTester:
         self.num_attention_heads = num_attention_heads
 
         self.use_input_mask = use_input_mask
+        self.is_training = is_training
 
     @property
     def is_encoder_decoder(self):
@@ -152,8 +154,8 @@ class EvollaModelTester:
             protein_input_mask
         ) = config_and_inputs
         inputs_dict = {
-            "text_input_ids": text_input_ids,
-            "text_attention_mask": text_input_mask,
+            "input_ids": text_input_ids,
+            "attention_mask": text_input_mask,
             "protein_input_ids": protein_input_ids,
             "protein_attention_mask": protein_input_mask,
         }
