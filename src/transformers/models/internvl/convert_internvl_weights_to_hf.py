@@ -95,6 +95,8 @@ chat_template = (
             "{% for content in message['content'] %}"
                 "{% if content['type'] == 'image' %}"
                     "{{ '<image>\n' }}"
+                "{% elif content['type'] == 'video' %}"
+                    "{{ '<video>\n' }}"
                 "{% elif content['type'] == 'text' %}"
                     "{{ content['text'] }}"
                 "{% endif %}"
