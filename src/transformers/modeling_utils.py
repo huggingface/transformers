@@ -1469,7 +1469,8 @@ def _find_mismatched_keys(
     mismatched_keys = []
     if ignore_mismatched_sizes:
         model_state_dict = model_to_load.state_dict()
-        for key in state_dict.keys():
+        state_dict_keys = list(state_dict.keys())
+        for key in state_dict_keys:
             if key in model_state_dict and state_dict[key].shape != model_state_dict[key].shape:
                 if state_dict[key].shape[-1] == 1 and state_dict[key].numel() * 2 == model_state_dict[key].numel():
                     # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
