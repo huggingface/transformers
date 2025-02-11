@@ -28,8 +28,8 @@ if is_torch_available():
 
 
 if is_flute_available():
-    from flute.tune import TuneMetaData, qgemm_v2
     from flute.integrations.higgs import prepare_data_transposed
+    from flute.tune import TuneMetaData, qgemm_v2
 
 if is_hadamard_available():
     from fast_hadamard_transform import hadamard_transform
@@ -528,7 +528,7 @@ class HiggsLinear(torch.nn.Module):
             self.register_parameter("bias", None)
 
         self.workspace = None  # must be set externally to be reused among layers
-        self.tune_metadata: TuneMetaData = None # must be set externally because architecture dependent
+        self.tune_metadata: TuneMetaData = None  # must be set externally because architecture dependent
 
     def forward(self, x):
         x = pad_to_block(x, [-1], self.hadamard_size)
@@ -546,16 +546,6 @@ class HiggsLinear(torch.nn.Module):
             self.tune_metadata,
             hadamard_size=self.hadamard_size,
         )
-        
-    def state_dict(self, *args, prefix='', **kwargs):
-        state_dict1 = super().state_dict(*args, prefix=prefix, **kwargs)
-        state_dict1.update({f'{prefix}tune_metadata': self.tune_metadata})
-        return state_dict1
-
-    def load_state_dict(self, state_dict, *args, **kwargs):
-        self.tune_metadata = state_dict['tune_metadata']
-        super().load_state_dict(state_dict, *args, **kwargs)
-        return
 
 
 def replace_with_higgs_linear(

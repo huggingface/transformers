@@ -118,12 +118,16 @@ class HiggsHfQuantizer(HfQuantizer):
 
         del param_value
 
-        module, tensor_name = get_module_from_name(model, param_name)
+        module, _ = get_module_from_name(model, param_name)
+        module_name = ".".join(param_name.split(".")[:-1])
         for key, value in flute_dict.items():
             if key in module._parameters:
                 module._parameters[key] = torch.nn.Parameter(value, requires_grad=False)
             elif key in module._buffers:
                 module._buffers[key] = torch.nn.Buffer(value)
+            elif key == "tune_metadata":
+                module.tune_metadata = value
+                self.quantization_config.tune_metadata[module_name] = value.to_dict()
             else:
                 raise ValueError(f"Unexpected key {key} in module {module}")
 
@@ -149,7 +153,7 @@ class HiggsHfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        from flute.tune import maybe_tune_and_repack
+        from flute.tune import TuneMetaData, maybe_tune_and_repack
         from flute.utils import make_workspace_streamk
 
         from ..integrations import HiggsLinear
@@ -160,18 +164,18 @@ class HiggsHfQuantizer(HfQuantizer):
                 # Every HiggsLinear needs a "workspace": a buffer for the unpacking operation.
                 # This buffer needs to be on the same device as the weights, but can be reused across modules otherwise.
                 if module.weight.device not in flute_workspaces:
-                    flute_workspaces[module.weight.device] = make_workspace_streamk(
-                        device=module.weight.device
-                    )
+                    flute_workspaces[module.weight.device] = make_workspace_streamk(device=module.weight.device)
                 module.workspace = flute_workspaces[module.weight.device]
 
                 # FLUTE weights are packed in a way that is optimized for a specific number of SMs (GPU streaming multiprocessors).
                 # If the model is loaded on a different device than the one it was saved on, we need to repack the weights.
+                module.tune_metadata = TuneMetaData.from_dict(self.quantization_config.tune_metadata[name])
                 module.weight.data, module.tune_metadata = maybe_tune_and_repack(
                     weight=module.weight.data,
                     scales=module.scales.data,
                     metadata=module.tune_metadata,
                 )
+                self.quantization_config.tune_metadata[name] = module.tune_metadata.to_dict()
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         from ..integrations import HiggsLinear

@@ -1411,16 +1411,20 @@ class HiggsConfig(QuantizationConfigMixin):
         modules_to_not_convert: Optional[List[str]] = None,
         hadamard_size: int = 512,
         group_size: int = 256,
+        tune_metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
         if modules_to_not_convert is None:
             modules_to_not_convert = ["lm_head"]
+        if tune_metadata is None:
+            tune_metadata = {}
         self.quant_method = QuantizationMethod.HIGGS
         self.bits = bits
         self.p = p
         self.modules_to_not_convert = modules_to_not_convert
         self.hadamard_size = hadamard_size
         self.group_size = group_size
+        self.tune_metadata = tune_metadata
 
         self.post_init()
 

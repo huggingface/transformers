@@ -632,7 +632,9 @@ def is_flax_available():
 
 def is_flute_available():
     try:
-        return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.4.1a1"
+        return (
+            importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.4.1a1"
+        )
     except importlib.metadata.PackageNotFoundError:
         return False
 
