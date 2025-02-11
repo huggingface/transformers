@@ -1561,7 +1561,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             A list of module names that should not be converted during quantization.
         activation_scheme (`str`, defaults to `"dynamic"`):
             The scheme used for activation, the defaults and only support scheme for now is "dynamic".
-        weight_block_size (`typing.Tuple[int, int]`, default to `(128, 128)`):
+        weight_block_size (`typing.Tuple[int, int]`, defaults to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
     """
 
