@@ -89,7 +89,8 @@ class Siglip2Processor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **pixel_attention_mask** -- Attention mask for the pixel values. Returned when `images` is not `None`.
-            - **pixel_position_ids** -- Position ids for the pixel values. Returned when `images` is not `None`.
+            - **spatial_shapes** -- List[Tuple[int, int]], the number of horizontal and vertical patches per image.
+              Returned when `images` is not `None`.
         """
 
         if text is None and images is None:
