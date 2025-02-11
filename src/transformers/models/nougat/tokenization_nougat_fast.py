@@ -113,26 +113,17 @@ def normalize_list_like_lines(generation):
         normalization adjusts the bullet point style and nesting levels based on the captured patterns.
     """
 
-    # This matches lines starting with - or *, not followed by - or * (lists)
-    # that are then numbered by digits \d or roman numerals (one or more)
-    # and then, optional additional numbering of this line is captured
-    # this is then fed to re.finditer.
-    pattern = r"(?:^)(-|\*)?(?!-|\*) ?([0-9ixv]+ )?.+? (-|\*) (([0-9ixv]+)\.([0-9ixv]) )?.*?(?:$)"
-
-    for match in reversed(list(re.finditer(pattern, generation, flags=re.I | re.M))):
-        start, stop = match.span()
-        delim = match.group(3) + " "
-        splits = match.group(0).split(delim)
+    lines = generation.split("\n")
+    output_lines = []
+    for line_no, line in enumerate(lines):
+        match = re.search(r". ([-*]) ", line)
+        if not match or line[0] not in ("-", "*"):
+            output_lines.append(line)
+            continue  # Doesn't fit the pattern we want, no changes
+        delim = match.group(1) + " "
+        splits = line.split(delim)[1:]
         replacement = ""
-
-        if match.group(1) is not None:
-            splits = splits[1:]
-            delim1 = match.group(1) + " "
-        else:
-            delim1 = ""
-            continue  # Skip false positives
-
-        pre, post = generation[:start], generation[stop:]
+        delim1 = line[0] + " "
 
         for i, item in enumerate(splits):
             level = 0
@@ -144,15 +135,15 @@ def normalize_list_like_lines(generation):
                 level = potential_numeral.count(".")
 
             replacement += (
-                ("\n" if i > 0 else "") + ("\t" * level) + (delim if i > 0 or start == 0 else delim1) + item.strip()
+                ("\n" if i > 0 else "") + ("\t" * level) + (delim if i > 0 or line_no == 0 else delim1) + item.strip()
             )
 
-        if post == "":
-            post = "\n"
+        if line_no == len(lines) - 1:  # If this is the last line in the generation
+            replacement += "\n"  # Add an empty line to the end of the generation
 
-        generation = pre + replacement + post
+        output_lines.append(replacement)
 
-    return generation
+    return "\n".join(output_lines)
 
 
 def find_next_punctuation(text: str, start_idx=0):
