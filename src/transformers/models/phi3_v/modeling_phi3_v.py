@@ -393,7 +393,7 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3_5, Gemma->Phi3V
+# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3_v, Gemma->Phi3V
 class Phi3RotaryEmbedding(nn.Module):
     def __init__(self, config: Phi3VConfig, device=None):
         super().__init__()
