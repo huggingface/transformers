@@ -80,7 +80,7 @@ GenerationConfig {
 }
 ```
 
-You can customize [`~GenerationMixin.generate`] by overriding the parameters and values in [`GenerationConfig`]. Some of the most commonly adjusted parameters are [`~GenerationConfig.max_new_tokens`], [`~GenerationConfig.num_beams`], [`~GenerationConfig.do_sample`], and [`~GenerationConfig.num_return_sequences`].
+You can customize [`~GenerationMixin.generate`] by overriding the parameters and values in [`GenerationConfig`]. Some of the most commonly adjusted parameters are [max_new_tokens](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.max_new_tokens), [num_beams](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.num_beams), [do_sample](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.do_sample), and [num_return_sequences](https://huggingface.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.num_return_sequences).
 
 ```py
 # enable beam search sampling strategy
@@ -138,7 +138,7 @@ print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 
 The section below covers some common issues you may encounter during text generation and how to solve them.
 
-## Wrong output length
+### Output length
 
 [`~GenerationMixin.generate`] returns up to 20 tokens by default unless otherwise specified in a models [`GenerationConfig`]. It is highly recommended to manually set the number of generated tokens with the [`max_new_tokens`] parameter to control the output length. [Decoder-only](https://hf.co/learn/nlp-course/chapter1/6?fw=pt) models returns the initial prompt along with the generated tokens.
 
@@ -167,7 +167,7 @@ tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 </hfoption>
 </hfoptions>
 
-## Wrong decoding strategy
+### Decoding strategy
 
 The default decoding strategy in [`~GenerationMixin.generate`] is *greedy search*, which selects the next most likely token, unless otherwise specified in a models [`GenerationConfig`]. While this decoding strategy works well for input-grounded tasks (transcription, translation), it is not optimal for more creative use cases (story writing, chat applications).
 
@@ -196,7 +196,7 @@ tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 </hfoption>
 </hfoptions>
 
-## Wrong padding side
+### Padding side
 
 Inputs need to be padded if they don't have the same length. But LLMs aren't trained to continue generation from padding tokens, which means the [`~PreTrainedTokenizer.padding_side`] parameter needs to be set to the left of the input.
 
@@ -229,7 +229,7 @@ tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 </hfoption>
 </hfoptions>
 
-## Wrong prompt format
+### Prompt format
 
 Some models and tasks expect a certain input prompt format, and if the format is incorrect, the model returns a suboptimal output. You can learn more about prompting in the [prompt engineering](./tasks/prompting) guide.
 

@@ -50,7 +50,7 @@ messages = [
 Create a [`ImageTextToTextPipeline`] and pass the chat to it. For large models, setting [device_map=“auto”](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Changing the data type to [torch.bfloat16](./models#model-data-type) also helps save memory.
 
 > [!TIP]
-> [`ImageTextToTextPipeline`] accepts chats in the OpenAI format to make inference easier and more accessible. 
+> The [`ImageTextToTextPipeline`] accepts chats in the OpenAI format to make inference easier and more accessible. 
 
 ```python
 import torch
@@ -158,7 +158,7 @@ These inputs are now ready to be used in [`~GenerationMixin.generate`].
 
 ## Template configuration
 
-You can create a custom chat template with [Jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/) and set it with [`~ProcessorMixin.chat_template`]. Refer to the [Template writing](./chat_templating_writing) guide for more details.
+You can create a custom chat template with [Jinja](https://jinja.palletsprojects.com/en/3.1.x/templates/) and set it with [`~ProcessorMixin.apply_chat_template`]. Refer to the [Template writing](./chat_templating_writing) guide for more details.
 
 For example, to enable a template to handle a *list of content* from multiple modalities while still supporting plain strings for text-only inference, specify how to handle the `content['type']` if it is an image or text as shown below in the Llama 3.2 Vision Instruct [template](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision-Instruct/blob/main/chat_template.json).
 

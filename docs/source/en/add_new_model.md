@@ -53,7 +53,7 @@ This section describes how the model and configuration classes interact and the 
 
 All Transformers' models inherit from a base [`PreTrainedModel`] and [`PretrainedConfig`] class. The configuration is the models blueprint.
 
-There is never more than two levels of abstraction for any model to keep the code readable. The example model here, BrandNewBert, inherits from `BrandNewLlamaPreTrainedModel` and [`PreTrainedModel`]. It is important that a new model only depends on [`PreTrainedModel`] so that it can use the [`~PreTrainedModel.from_pretrained`] and [`~PreTrainedModel.save_pretrained`] methods.
+There is never more than two levels of abstraction for any model to keep the code readable. The example model here, BrandNewLlama, inherits from `BrandNewLlamaPreTrainedModel` and [`PreTrainedModel`]. It is important that a new model only depends on [`PreTrainedModel`] so that it can use the [`~PreTrainedModel.from_pretrained`] and [`~PreTrainedModel.save_pretrained`] methods.
 
 Other important functions like the forward method are defined in the `modeling.py` file.
 
@@ -91,13 +91,13 @@ Open a [New model addition](https://github.com/huggingface/transformers/issues/n
 > [!TIP]
 > Filter by the [New model](https://github.com/huggingface/transformers/labels/New%20model) label on GitHub to view and add any existing model requests.
 
-Now is a good time to get familiar with BrandNewBert. It is helpful to read a models research paper to understand its technical design and implementation. You don't necessarily have to worry too much about the theoretical details. Instead, focus on the practical ones. Use the questions below to guide your reading.
+Now is a good time to get familiar with BrandNewLlama. It is helpful to read a models research paper to understand its technical design and implementation. You don't necessarily have to worry too much about the theoretical details. Instead, focus on the practical ones. Use the questions below to guide your reading.
 
-- What type of model is BrandNewBert? Is it a encoder, decoder, or encoder-decoder model?
-- What tasks can BrandNewBert be used for?
-- What makes BrandNewBert different from other models?
-- What models in Transformers are most similar to BrandNewBert?
-- What tokenizer does BrandNewBert use?
+- What type of model is BrandNewLlama? Is it a encoder, decoder, or encoder-decoder model?
+- What tasks can BrandNewLlama be used for?
+- What makes BrandNewLlama different from other models?
+- What models in Transformers are most similar to BrandNewLlama?
+- What tokenizer does BrandNewLlama use?
 
 In addition to learning more about your model, use the tips below to help you add a model faster.
 
@@ -132,7 +132,7 @@ Due to the number of optional dependencies as Transformers grows, this command m
 pip install -e ".[quality]"
 ```
 
-Return to the parent directory and clone and install the original BrandNewBert repository.
+Return to the parent directory and clone and install the original BrandNewLlama repository.
 
 ```bash
 git clone https://github.com/org_that_created_brand_new_llama_org/brand_new_llama.git
@@ -140,7 +140,7 @@ cd brand_new_bert
 pip install -e .
 ```
 
-Return to your clone of Transformers to begin porting BrandNewBert.
+Return to your clone of Transformers to begin porting BrandNewLlama.
 
 ```bash
 cd transformers
@@ -304,8 +304,8 @@ The automatically generated code in the `modeling.py` file has the same architec
 At this point, your code doesn't have to be clean or even fully correct, It is more efficient to quickly create a first draft and then iteratively improve on it. The most important thing is that your model can be instantiated from Transformers. The command below creates a model from the configuration with random weights, verifying that the `__init__` method works.
 
 ```py
-from transformers import BrandNewBert, BrandNewBertConfig
-model = BrandNewBert(BrandNewBertConfig())
+from transformers import BrandNewLlama, BrandNewLlamaConfig
+model = BrandNewLlama(BrandNewLlamaConfig())
 ```
 
 Random initialization occurs in the `_init_weights` method of `BrandNewLlamaPreTrainedModel`. All leaf modules are initialized depending on the configuration's variables.
@@ -509,7 +509,7 @@ SET RUN_SLOW=1 pytest -sv tests/models/brand_new_llama/test_modeling_brand_new_l
 </hfoption>
 </hfoptions>
 
-All features unique to BrandNewBert should be tested in a separate test under `BrandNewLlamaModelTester/BrandNewLlamaModelTest`. This test is often overlooked, but it is extremely important because:
+All features unique to BrandNewLlama should be tested in a separate test under `BrandNewLlamaModelTester/BrandNewLlamaModelTest`. This test is often overlooked, but it is extremely important because:
 
 - it helps transfer knowledge you acquired during the process to the community by showing how the models novel features work
 - future contributors can quickly test changes to the model by running these special tests

@@ -29,7 +29,7 @@ A virtual environment helps manage different projects and avoids compatibility i
 <hfoptions id="virtual">
 <hfoption id="venv">
 
-Create and activate a virtual environment in your project directory with venv or uv.
+Create and activate a virtual environment in your project directory with [venv](https://docs.python.org/3/library/venv.html).
 
 ```bash
 python -m venv .env
@@ -74,7 +74,7 @@ uv pip install transformers
 </hfoption>
 </hfoptions>
 
-For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally) and TensorFlow(https://www.tensorflow.org/install/pip).
+For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally) and [TensorFlow](https://www.tensorflow.org/install/pip).
 
 Run the command below to check if your system detects an NVIDIA GPU.
 

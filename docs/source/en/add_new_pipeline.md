@@ -52,7 +52,7 @@ def preprocess(self, inputs, maybe_arg=2):
     return {"model_input": model_input}
 ```
 
-1. `_forward` shouldn't be called directly. `forward` is the preferred method because it includes safeguards to make sure everything works correctly on the expected device. Anything linked to the model belongs in `_forward` and everything else belongs in either `preprocess` or `postprocess`.
+2. `_forward` shouldn't be called directly. `forward` is the preferred method because it includes safeguards to make sure everything works correctly on the expected device. Anything linked to the model belongs in `_forward` and everything else belongs in either `preprocess` or `postprocess`.
 
 ```py
 def _forward(self, model_inputs):
@@ -60,7 +60,7 @@ def _forward(self, model_inputs):
     return outputs
 ```
 
-1. `postprocess` generates the final output from the models output in `_forward`.
+3. `postprocess` generates the final output from the models output in `_forward`.
 
 ```py
 def postprocess(self, model_outputs, top_k=5):
@@ -68,7 +68,7 @@ def postprocess(self, model_outputs, top_k=5):
     return best_class
 ```
 
-1. `_sanitize_parameters` lets users pass additional parameters to [`Pipeline`]. This could be during initialization or when [`Pipeline`] is called. `_sanitize_parameters` returns 3 dicts of additional keyword arguments that are passed directly to `preprocess`, `_forward`, and `postprocess`. Don't add anything if a user didn't call the pipeline with extra parameters. This keeps the default arguments in the function definition which is always more natural.
+4. `_sanitize_parameters` lets users pass additional parameters to [`Pipeline`]. This could be during initialization or when [`Pipeline`] is called. `_sanitize_parameters` returns 3 dicts of additional keyword arguments that are passed directly to `preprocess`, `_forward`, and `postprocess`. Don't add anything if a user didn't call the pipeline with extra parameters. This keeps the default arguments in the function definition which is always more natural.
 
 For example, add a `top_k` parameter in `postprocess` to return the top 5 most likely classes. Then in `_sanitize_parameters`, check if the user passed in `top_k` and add it to `postprocess_kwargs`.
 

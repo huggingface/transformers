@@ -369,6 +369,21 @@ accelerate launch \
 
 [`Trainer`] supports various optimizations to improve *training* performance - reduce memory and increase training speed - and *model* performance.
 
+### torch.compile
+
+[torch.compile](./perf_torch_compile) can significantly speed up training and reduce computational overhead. Configure your torch.compile settings in [`TrainingArguments`]. Set `torch.compile` to `True`, and select a backend and compile mode.
+
+```py
+from transformers import TrainingArguments
+
+training_args = TrainingArguments(
+    torch.compile=True,
+    torch.compile_backend="inductor",
+    torch_compile_mode="default",
+    ...,
+)
+```
+
 ### GaLore
 
 [Gradient Low-Rank Projection (GaLore)](https://hf.co/papers/2403.03507) significantly reduces memory usage when training large language models (LLMs). One of GaLores key benefits is *full-parameter* learning, unlike low-rank adaptation methods like [LoRA](https://hf.co/papers/2106.09685), which produces better model performance.
