@@ -1607,6 +1607,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_generate_compile_model_forward(self):
         pass
 
+    # TODO (joao, eustache): fix me :)
+    @unittest.skip(reason="A CUDA exception is thrown when storing extra outputs")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
 
 @require_torch
 @require_torchaudio

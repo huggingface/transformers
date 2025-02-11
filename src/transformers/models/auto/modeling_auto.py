@@ -78,6 +78,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntModel"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
+        ("dab-detr", "DabDetrModel"),
         ("dac", "DacModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
         ("data2vec-text", "Data2VecTextModel"),
@@ -88,6 +89,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("decision_transformer", "DecisionTransformerModel"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
+        ("depth_pro", "DepthProModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
         ("diffllama", "DiffLlamaModel"),
@@ -239,6 +241,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
         ("rt_detr", "RTDetrModel"),
+        ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
@@ -594,9 +597,11 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
+        ("dab-detr", "DabDetrModel"),
         ("data2vec-vision", "Data2VecVisionModel"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
+        ("depth_pro", "DepthProModel"),
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
         ("dinat", "DinatModel"),
@@ -893,10 +898,12 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
+        ("dab-detr", "DabDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
+        ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
@@ -916,6 +923,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for depth estimation mapping
         ("depth_anything", "DepthAnythingForDepthEstimation"),
+        ("depth_pro", "DepthProForDepthEstimation"),
         ("dpt", "DPTForDepthEstimation"),
         ("glpn", "GLPNForDepthEstimation"),
         ("zoedepth", "ZoeDepthForDepthEstimation"),
