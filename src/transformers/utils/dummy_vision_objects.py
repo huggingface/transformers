@@ -562,6 +562,20 @@ class PerceiverImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Phi3VImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class Phi3VProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class Pix2StructImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
