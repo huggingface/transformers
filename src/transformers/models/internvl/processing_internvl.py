@@ -54,6 +54,8 @@ class InternVLProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        image_seq_length (`int`, *optional*, defaults to 256):
+            The number of image token to use per image patch.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """

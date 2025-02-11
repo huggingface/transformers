@@ -2629,7 +2629,12 @@ else:
         ]
     )
     _import_structure["models.internvl"].extend(
-        ["InternVLPreTrainedModel", "InternVLForConditionalGeneration", "InternVLVisionModel"]
+        [
+            "InternVLVisionPreTrainedModel",
+            "InternVLPreTrainedModel",
+            "InternVLForConditionalGeneration",
+            "InternVLVisionModel",
+        ]
     )
     _import_structure["models.jamba"].extend(
         [
@@ -7517,8 +7522,8 @@ if TYPE_CHECKING:
         from .models.internvl import (
             InternVLForConditionalGeneration,
             InternVLPreTrainedModel,
-            InternVLProcessor,
             InternVLVisionModel,
+            InternVLVisionPreTrainedModel,
         )
         from .models.jamba import (
             JambaForCausalLM,

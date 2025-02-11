@@ -29,6 +29,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -37,12 +38,18 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
     torch_int,
 )
 from ..auto import AutoModelForCausalLM
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -237,6 +244,7 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["InternVLVisionLayer"]
     _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
+    _supports_flash_attn_2 = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -532,6 +540,105 @@ class InternVLVisionSdpaSelfAttention(InternVLVisionSelfAttention):
         return context_layer, None
 
 
+class InternVLVisionFlashSelfAttention2(InternVLVisionSelfAttention):
+    """
+    InternVLVisionFlashSelfAttention2 flash attention module. This module inherits from `InternVLVisionSelfAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        output_attentions = False
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.query(hidden_states)
+        key_states = self.key(hidden_states)
+        value_states = self.value(hidden_states)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = query_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size)
+        key_states = key_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.config.attention_probs_dropout_prob if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (Idefics3VisionRMSNorm handles it correctly)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.query.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            is_causal=False,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, self.all_head_size).contiguous()
+        # attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+
 class InternVLVisionSelfOutput(nn.Module):
     """
     The residual connection is defined in InternVLVisionLayer instead of here (as is the case with other models), due to the
@@ -550,16 +657,17 @@ class InternVLVisionSelfOutput(nn.Module):
         return hidden_states
 
 
-INTERNVL_VISION_SELF_ATTENTION_CLASSES = {
+INTERNVL_VISION_ATTENTION_CLASSES = {
     "eager": InternVLVisionSelfAttention,
     "sdpa": InternVLVisionSdpaSelfAttention,
+    "flash_attention_2": InternVLVisionFlashSelfAttention2,
 }
 
 
 class InternVLVisionAttention(nn.Module):
     def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
-        self.attention = INTERNVL_VISION_SELF_ATTENTION_CLASSES[config._attn_implementation](
+        self.attention = INTERNVL_VISION_ATTENTION_CLASSES[config._attn_implementation](
             config, window_size=window_size
         )
         self.output = InternVLVisionSelfOutput(config)
@@ -802,6 +910,11 @@ class InternVLVisionPooler(nn.Module):
         return pooled_output
 
 
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+_CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
+
+
 INTERNVL_VISION_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -812,11 +925,6 @@ INTERNVL_VISION_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
-
-_CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
-
-
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 INTERNVL_VISION_INPUTS_DOCSTRING = r"""
     Args:
@@ -846,6 +954,10 @@ INTERNVL_VISION_INPUTS_DOCSTRING = r"""
 @add_start_docstrings(
     "The bare InternVLVision Model transformer outputting raw hidden-states without any specific head on top.",
     INTERNVL_VISION_START_DOCSTRING,
+    """
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+                Whether or not to apply pooling layer.
+    """,
 )
 class InternVLVisionModel(InternVLVisionPreTrainedModel):
     def __init__(self, config: InternVLVisionConfig, add_pooling_layer: bool = True) -> None:
@@ -1477,4 +1589,9 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         return vision_features
 
 
-__all__ = ["InternVLVisionModel", "InternVLPreTrainedModel", "InternVLForConditionalGeneration"]
+__all__ = [
+    "InternVLVisionPreTrainedModel",
+    "InternVLVisionModel",
+    "InternVLPreTrainedModel",
+    "InternVLForConditionalGeneration",
+]

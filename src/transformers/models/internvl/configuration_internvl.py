@@ -142,7 +142,8 @@ class InternVLConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLForConditionalGeneration`]. It is used to instantiate a
     InternVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of TODO
+    with the defaults will yield a similar configuration to that of InternVL2_5-1B-MPO.
+    e.g. [OpenGVLab/InternVL2_5-1B-MPO](https://huggingface.co/OpenGVLab/InternVL2_5-1B-MPO)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -158,7 +159,13 @@ class InternVLConfig(PretrainedConfig):
         image_token_index (`int`, *optional*, defaults to 151667):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 256):
-            Sequence length of one image embedding.
+            Number of image tokens to use per image patch.
+        downsample_ratio (`float`, *optional*, defaults to 0.5):
+            Factor by which to downsample the image.
+        projector_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the projector.
+        vision_feature_layer (`int`, *optional*, defaults to -1):
+            The index of the layer to use as the image features.
 
     ```python
     >>> from transformers import InternVLForConditionalGeneration, InternVLConfig

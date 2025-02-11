@@ -21,6 +21,7 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from transformers.models.beit.modeling_beit import (
+    _EXPECTED_OUTPUT_SHAPE,
     BeitAttention,
     BeitDropPath,
     BeitEmbeddings,
@@ -36,6 +37,7 @@ from transformers.models.beit.modeling_beit import (
     BeitRelativePositionBias,
     BeitSdpaSelfAttention,
     BeitSelfAttention,
+    BeitSelfOutput,
 )
 from transformers.models.llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
@@ -49,17 +51,25 @@ from transformers.tokenization_utils_base import (
 )
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...utils import (
     add_code_sample_docstrings,
+    add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     is_vision_available,
     logging,
     replace_return_docstrings,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModelForCausalLM
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 if is_vision_available():
@@ -186,7 +196,8 @@ class InternVLConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLForConditionalGeneration`]. It is used to instantiate a
     InternVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of TODO
+    with the defaults will yield a similar configuration to that of InternVL2_5-1B-MPO.
+    e.g. [OpenGVLab/InternVL2_5-1B-MPO](https://huggingface.co/OpenGVLab/InternVL2_5-1B-MPO)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -202,7 +213,13 @@ class InternVLConfig(PretrainedConfig):
         image_token_index (`int`, *optional*, defaults to 151667):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 256):
-            Sequence length of one image embedding.
+            Number of image tokens to use per image patch.
+        downsample_ratio (`float`, *optional*, defaults to 0.5):
+            Factor by which to downsample the image.
+        projector_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the projector.
+        vision_feature_layer (`int`, *optional*, defaults to -1):
+            The index of the layer to use as the image features.
 
     ```python
     >>> from transformers import InternVLForConditionalGeneration, InternVLConfig
@@ -362,6 +379,8 @@ class InternVLProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
+        image_seq_length (`int`, *optional*, defaults to 256):
+            The number of image token to use per image patch.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
@@ -513,7 +532,7 @@ class InternVLVisionSelfAttention(BeitSelfAttention):
 
 
 class InternVLVisionPreTrainedModel(BeitPreTrainedModel):
-    pass
+    _supports_flash_attn_2 = True
 
 
 class InternVLVisionModelOutputWithPooling(BeitModelOutputWithPooling):
@@ -536,8 +555,124 @@ class InternVLVisionSdpaSelfAttention(BeitSdpaSelfAttention):
     pass
 
 
-class InternVLVisionAttention(BeitAttention):
+class InternVLVisionFlashSelfAttention2(InternVLVisionSelfAttention):
+    """
+    InternVLVisionFlashSelfAttention2 flash attention module. This module inherits from `InternVLVisionSelfAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+        **kwargs,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        output_attentions = False
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.query(hidden_states)
+        key_states = self.key(hidden_states)
+        value_states = self.value(hidden_states)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = query_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size)
+        key_states = key_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size).transpose(
+            1, 2
+        )
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        dropout_rate = self.config.attention_probs_dropout_prob if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (Idefics3VisionRMSNorm handles it correctly)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.query.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=dropout_rate,
+            is_causal=False,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, self.all_head_size).contiguous()
+        # attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+
+class InternVLVisionSelfOutput(BeitSelfOutput):
     pass
+
+
+INTERNVL_VISION_ATTENTION_CLASSES = {
+    "eager": InternVLVisionSelfAttention,
+    "sdpa": InternVLVisionSdpaSelfAttention,
+    "flash_attention_2": InternVLVisionFlashSelfAttention2,
+}
+
+
+class InternVLVisionAttention(BeitAttention):
+    def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
+        super().__init__()
+        self.attention = INTERNVL_VISION_ATTENTION_CLASSES[config._attn_implementation](
+            config, window_size=window_size
+        )
+        self.output = InternVLVisionSelfOutput(config)
+        self.pruned_heads = set()
 
 
 class InternVLVisionIntermediate(BeitIntermediate):
@@ -560,7 +695,8 @@ class InternVLVisionPooler(BeitPooler):
     pass
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+INTERNVL_VISION_START_DOCSTRING = ""
+
 
 INTERNVL_VISION_INPUTS_DOCSTRING = r"""
     Args:
@@ -587,6 +723,14 @@ INTERNVL_VISION_INPUTS_DOCSTRING = r"""
 """
 
 
+@add_start_docstrings(
+    "The bare InternVLVision Model transformer outputting raw hidden-states without any specific head on top.",
+    INTERNVL_VISION_START_DOCSTRING,
+    """
+        add_pooling_layer (`bool`, *optional*, defaults to `True`):
+                Whether or not to apply pooling layer.
+    """,
+)
 class InternVLVisionModel(BeitModel, InternVLVisionPreTrainedModel):
     @add_start_docstrings_to_model_forward(INTERNVL_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -934,6 +1078,7 @@ __all__ = [
     "InternVLVisionConfig",
     "InternVLConfig",
     "InternVLProcessor",
+    "InternVLVisionPreTrainedModel",
     "InternVLVisionModel",
     "InternVLPreTrainedModel",
     "InternVLForConditionalGeneration",

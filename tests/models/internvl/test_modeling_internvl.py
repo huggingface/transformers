@@ -255,38 +255,8 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @unittest.skip(reason="InternVL Vision model doesn't support fa2 yet. TODO Yoni")
-    def test_flash_attn_2_from_config(self):
-        pass
-
-    @unittest.skip(reason="InternVL Vision model doesn't support fa2 yet. TODO Yoni")
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip(reason="InternVL Vision model doesn't support fa2 yet. TODO Yoni")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(reason="InternVL Vision model doesn't support fa2 yet. TODO Yoni")
-    def test_eager_matches_fa2_generate(self):
-        pass
-
-    @unittest.skip(
-        reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
-    )
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip(
-        reason="GotOcr2's language backbone is Qwen2 which uses GQA so the KV cache is a non standard format"
-    )
-    def test_past_key_values_format(self):
-        pass
-
-    @unittest.skip(
-        reason="GotOcr2 needs a dynamic control flow to pass pixel values to the forward function only in the first generation step"
-    )
-    def test_generate_compile_1_end_to_end(self):
+    @unittest.skip(reason="Compile not yet supported because in LLava models")
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
