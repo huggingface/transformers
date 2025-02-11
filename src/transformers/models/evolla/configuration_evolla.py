@@ -608,6 +608,7 @@ class EvollaConfig(PretrainedConfig):
         return_dict=True,
         protein_config=None,
         llm_config=None,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.output_attentions = output_attentions
@@ -635,8 +636,7 @@ class EvollaConfig(PretrainedConfig):
         if self.llm_config.sequence_aligner_config.protein_encoder_dim is None:
             self.llm_config.sequence_aligner_config.protein_encoder_dim = self.protein_config.resampler_config.output_repr_dim
         
-        
-
+        self.initializer_range = initializer_range
         super().__init__(
             **kwargs,
         )
