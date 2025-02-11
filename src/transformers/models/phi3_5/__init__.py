@@ -4,6 +4,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_torchvision_available
 )
 
 
@@ -24,7 +25,14 @@ else:
         "Phi3VModel",
         "Phi3VPreTrainedModel",
     ]
-    _import_structure["processing_phi3_v"] = ["Phi3VImageProcessor", "Phi3VProcessor"]
+    _import_structure["processing_phi3_v"] = ["Phi3VProcessor"]
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        _import_structure["image_processing_phi3_v"] = ["Phi3VImageProcessor"]
 
 
 if TYPE_CHECKING:
@@ -43,7 +51,14 @@ if TYPE_CHECKING:
             Phi3VModel,
             Phi3VPreTrainedModel,
         )
-        from .processing_phi3_v import Phi3VImageProcessor, Phi3VProcessor
+        from .processing_phi3_v import Phi3VProcessor
+        try:
+            if not is_torchvision_available():
+                raise OptionalDependencyNotAvailable()
+        except OptionalDependencyNotAvailable:
+            pass
+        else:
+            from .image_processing_phi3_v import Phi3VImageProcessor
 
 
 else:
