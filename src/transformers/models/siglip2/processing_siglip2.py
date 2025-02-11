@@ -39,9 +39,9 @@ class Siglip2Processor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: int = None,
+        padding: Union[bool, str, PaddingStrategy] = "max_length",
+        truncation: Union[bool, str, TruncationStrategy] = True,
+        max_length: int = 64,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
