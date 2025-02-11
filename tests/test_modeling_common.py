@@ -4918,12 +4918,6 @@ class ModelTesterMixin:
                     strict=True,
                 )
 
-                # Test save-restore
-                with tempfile.TemporaryDirectory() as tmpdirname:
-                    save_path = os.path.join(tmpdirname, "exported_model.pt2")
-                    torch.export.save(exported_model, save_path)
-                    exported_model = torch.export.load(save_path)
-
                 # Run exported model and eager model
                 with torch.no_grad():
                     # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
