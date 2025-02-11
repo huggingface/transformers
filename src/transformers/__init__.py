@@ -1253,7 +1253,7 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
-    _import_structure["models.smolvlm"].extend(["SmolVLMImageProcessor"])
+    _import_structure["models.smolvlm"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
@@ -2621,10 +2621,8 @@ else:
         [
             "SmolVLMForConditionalGeneration",
             "SmolVLMModel",
-            "SmolVLMPreTrainedModel",
             "SmolVLMProcessor",
             "SmolVLMVisionConfig",
-            "SmolVLMVisionTransformer",
         ]
     )
     _import_structure["models.ijepa"].extend(
@@ -6409,7 +6407,6 @@ if TYPE_CHECKING:
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.idefics3 import Idefics3ImageProcessor
-        from .models.smolvlm import SmolVLMImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (

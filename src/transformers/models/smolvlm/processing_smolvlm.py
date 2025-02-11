@@ -285,7 +285,7 @@ class SmolVLMProcessor(ProcessorMixin):
             elif isinstance(video, (list, tuple)):
                 if video and is_image_or_image_url(video[0]):
                     # => single list of frames => wrap as [video]
-                    frames = list(video)
+                    frames = list(video) 
                     images = [frames]
                     if messages is not None and text is None:
                         # Build naive timestamps
