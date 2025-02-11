@@ -232,7 +232,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("phimoe", "PhimoeConfig"),
         ("pix2struct", "Pix2StructConfig"),
         ("pixtral", "PixtralVisionConfig"),
-        ("pixtral_text", "PixtralTextConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),
@@ -575,7 +574,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("phobert", "PhoBERT"),
         ("pix2struct", "Pix2Struct"),
         ("pixtral", "Pixtral"),
-        ("pixtral_text", "PixtralMistral"),
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("pop2piano", "Pop2Piano"),
@@ -742,7 +740,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
-        ("pixtral_text", "pixtral"),
     ]
 )
 

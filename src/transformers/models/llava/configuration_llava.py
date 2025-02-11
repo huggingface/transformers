@@ -78,6 +78,7 @@ class LlavaConfig(PretrainedConfig):
 
     model_type = "llava"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    is_composition = True
 
     def __init__(
         self,
