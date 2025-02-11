@@ -555,6 +555,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("phi", "PhiForCausalLM"),
         ("phi3", "Phi3ForCausalLM"),
         ("phimoe", "PhimoeForCausalLM"),
+        ("pixtral_text", "MistralForCausalLM"),
         ("plbart", "PLBartForCausalLM"),
         ("prophetnet", "ProphetNetForCausalLM"),
         ("qdqbert", "QDQBertLMHeadModel"),
