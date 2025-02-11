@@ -120,10 +120,6 @@ class TFModelTesterMixin:
     is_encoder_decoder = False
     has_attentions = True
 
-    @property
-    def all_generative_model_classes(self):
-        return tuple(model_class for model_class in self.all_model_classes if model_class.can_generate())
-
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
 
