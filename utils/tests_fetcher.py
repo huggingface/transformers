@@ -735,6 +735,16 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
                 new_imported_modules = extract_imports(module, cache=cache)
+
+                # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
+                from transformers.utils.import_utils import define_import_structure
+                new_imported_modules_2 = define_import_structure(module)
+
+                for mapping in new_imported_modules_2.values():
+                    for _module, _imports in mapping.items():
+                        _module = module.replace("__init__.py", f"{_module}.py")
+                        new_imported_modules.append((_module, list(_imports)))
+
                 for new_module, new_imports in new_imported_modules:
                     if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
