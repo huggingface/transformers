@@ -32,7 +32,7 @@ Make sure you have autoawq installed:
 pip install autoawq
 ```
 > [!WARNING]
-> AutoAWQ downgrades Transformers to version 4.47.1. You may need to reinstall your Transformers' version after installing AutoAWQ.
+> AutoAWQ downgrades Transformers to version 4.47.1. If you want to do inference with AutoAWQ, you may need to reinstall your Transformers' version after installing AutoAWQ.
 
 AWQ-quantized models can be identified by checking the `quantization_config` attribute in the model's [config.json](https://huggingface.co/TheBloke/zephyr-7B-alpha-AWQ/blob/main/config.json) file:
 
