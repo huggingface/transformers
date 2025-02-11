@@ -590,7 +590,7 @@ class GraniteMoeSharedSdpaAttention(GraniteMoeSharedAttention):
         return attn_output, None, past_key_value
 
 
-GRANITE_MOE_SHARED_ATTENTION_CLASSES = {
+GRANITEMOESHARED_ATTENTION_CLASSES = {
     "eager": GraniteMoeSharedAttention,
     "flash_attention_2": GraniteMoeSharedFlashAttention2,
     "sdpa": GraniteMoeSharedSdpaAttention,
@@ -602,7 +602,7 @@ class GraniteMoeSharedDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = GRANITE_MOE_SHARED_ATTENTION_CLASSES[config._attn_implementation](
+        self.self_attn = GRANITEMOESHARED_ATTENTION_CLASSES[config._attn_implementation](
             config=config, layer_idx=layer_idx
         )
 
@@ -706,7 +706,7 @@ GRANITEMOESHARED_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`GraniteMoeConfig`]):
+        config ([`GraniteMoeSharedConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -807,7 +807,7 @@ class GraniteMoeSharedRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-GRANITE_MOE_SHARED_INPUTS_DOCSTRING = r"""
+GRANITEMOESHARED_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -924,7 +924,7 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(GRANITE_MOE_SHARED_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GRANITEMOESHARED_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1305,7 +1305,7 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(GRANITE_MOE_SHARED_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GRANITEMOESHARED_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
