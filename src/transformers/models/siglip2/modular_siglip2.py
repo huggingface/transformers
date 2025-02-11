@@ -215,9 +215,7 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         return resulted_positional_embeddings
 
-    def forward(
-        self, pixel_values: torch.FloatTensor, spatial_shapes: List[Tuple[int, int]]
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.FloatTensor, spatial_shapes: List[Tuple[int, int]]) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor`):
