@@ -108,21 +108,6 @@ def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
     return patched_image
 
 
-def get_position_ids(image: np.ndarray, patch_size: int) -> np.ndarray:
-    """
-    Get position ids for the patches.
-    """
-    image_height, image_width, _ = image.shape
-    num_patches_height = image_height // patch_size
-    num_patches_width = image_width // patch_size
-
-    y_range = np.arange(num_patches_height)
-    x_range = np.arange(num_patches_width)
-    y_indexes, x_indexes = np.meshgrid(y_range, x_range, indexing="ij")
-
-    return np.stack([y_indexes.flatten(), x_indexes.flatten()], axis=-1)
-
-
 def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 0) -> Tuple[np.ndarray, np.ndarray]:
     """
     Pad the array along the first dimension.
@@ -169,7 +154,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values", "pixel_attention_mask", "pixel_position_ids", "spatial_shapes"]
+    model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
 
     def __init__(
         self,
@@ -322,7 +307,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
 
         pixel_masks = []
         pixel_values = []
-        pixel_position_ids = []
+        spatial_shapes = []
 
         for image in images:
             if do_resize:
@@ -346,25 +331,26 @@ class Siglip2ImageProcessor(BaseImageProcessor):
 
             patches = convert_image_to_patches(image, patch_size)
             patches, mask = pad_along_first_dim(patches, max_num_patches)
-            position_ids = get_position_ids(image, patch_size)
-            position_ids, _ = pad_along_first_dim(position_ids, max_num_patches)
+            num_patches_height = image.shape[0] // patch_size
+            num_patches_width = image.shape[1] // patch_size
 
+            spatial_shapes.append((num_patches_height, num_patches_width))
             pixel_values.append(patches)
             pixel_masks.append(mask)
-            pixel_position_ids.append(position_ids)
 
         pixel_values = np.stack(pixel_values, axis=0)
         pixel_mask = np.stack(pixel_masks, axis=0)
-        pixel_position_ids = np.stack(pixel_position_ids, axis=0)
-        spatial_shapes = (pixel_position_ids.max(axis=1) + 1).tolist()
 
-        data = {
-            "pixel_values": pixel_values,
-            "pixel_attention_mask": pixel_mask,
-            "pixel_position_ids": pixel_position_ids,
-        }
-        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
+        batch_feature = BatchFeature(
+            data={
+                "pixel_values": pixel_values,
+                "pixel_attention_mask": pixel_mask,
+            },
+            tensor_type=return_tensors,
+        )
+        # Added later to avoid conversion to `tensor` type
         batch_feature["spatial_shapes"] = spatial_shapes
+
         return batch_feature
 
 
