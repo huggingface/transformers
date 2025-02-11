@@ -21,7 +21,8 @@ from itertools import accumulate
 from datetime import timedelta
 import decord
 from PIL import Image
-from decord import VideoReader
+import numpy as np
+from decord import VideoReader, cpu
 decord.bridge.set_bridge("torch")
 from num2words import num2words
 
@@ -158,7 +159,7 @@ def load_video_from_disk_or_url(path_or_url: str, sampling_fps: int = 1, max_fra
         ## load video
         frames = 0
     else:
-        frames, timestamps, duration_secondsload_video = load_video(path_or_url, max_frames, sampling_fps)
+        frames, timestamps, duration_seconds = load_video(path_or_url, max_frames, sampling_fps)
         
     return frames, timestamps, duration_seconds
 
@@ -409,12 +410,12 @@ class SmolVLMProcessor(ProcessorMixin):
             
             if messages is not None and text is None:
                 text = self.apply_chat_template(
-                    messages, frames=len(frames), timestamps=timestamps, duration_sec=duration_sec
+                    messages, num_frames=len(frames), timestamps=timestamps, duration_sec=duration_sec
                 )
             else:
                 raise ValueError("Invalid `video` format. Must be string/URL, list of frames, or nested frames.")
                 
-            self.process_images(inputs, text, images, output_kwargs, do_image_splitting=False, image_processor_size=self.video_frame_size)
+            self.process_images(inputs, text, images, output_kwargs, do_image_splitting=False, image_processor_size={"longest_edge": self.video_frame_size})
 
         elif text is not None:
             if any(n_images_in_text):
@@ -537,7 +538,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
         This method modifies 'messages' in-place.
         """
-        if frames is None or timestamps is None or duration_sec is None:
+        if num_frames is None or timestamps is None or duration_sec is None:
             # apply normal template
             return super().apply_chat_template(messages)
             
@@ -549,13 +550,13 @@ class SmolVLMProcessor(ProcessorMixin):
             new_content = []
             for block in msg["content"]:
                 if block.get("type") == "video":
-                    assert  frames is not None or timestamps is not None or duration_sec is not None,  "to use 'video' tokens, you must specify `frames`, `timestamps`, and `duration_sec`."
+                    assert  num_frames is not None or timestamps is not None or duration_sec is not None,  "to use 'video' tokens, you must specify `num_frames`, `timestamps`, and `duration_sec`."
                     # 1) Insert the intro
                     # frames, timestamps, duration_sec must be provided
                     # (Alternatively, you could dynamically load them here.)
-                    if frames is None or timestamps is None or duration_sec is None:
+                    if num_frames is None or timestamps is None or duration_sec is None:
                         # If user didn't pass these, raise or skip
-                        raise ValueError("Must provide frames, timestamps, and duration_sec to insert 'video' blocks.")
+                        raise ValueError("Must provide num_frames, timestamps, and duration_sec to insert 'video' blocks.")
 
                     # Build the video intro text
                     from datetime import timedelta

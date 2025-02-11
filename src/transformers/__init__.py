@@ -2617,7 +2617,7 @@ else:
             "Idefics3VisionTransformer",
         ]
     )
-    _import_structure["models.smolVLM"].extend(
+    _import_structure["models.smolvlm"].extend(
         [
             "SmolVLMForConditionalGeneration",
             "SmolVLMModel",
