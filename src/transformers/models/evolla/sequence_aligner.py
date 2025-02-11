@@ -227,7 +227,7 @@ class CrossAttention(nn.Module):
             bs, protein_kv_seq_len, dim = protein_kv_states.shape
             if protein_kv_attn_mask is None:
                 protein_kv_attn_mask = (
-                    torch.ones(bs, protein_kv_seq_len)
+                    torch.ones(bs, protein_kv_seq_len).to(protein_batch_mask.device)
                     * protein_batch_mask.expand(size=(protein_kv_seq_len, bs)).T
                 ).to(protein_kv_states.device)
         else:
@@ -237,7 +237,7 @@ class CrossAttention(nn.Module):
             bs, structure_kv_seq_len, dim = structure_kv_states.shape
             if structure_kv_attn_mask is None:
                 structure_kv_attn_mask = (
-                    torch.ones(bs, structure_kv_seq_len)
+                    torch.ones(bs, structure_kv_seq_len).to(protein_batch_mask.device)
                     * structure_batch_mask.expand(size=(structure_kv_seq_len, bs)).T
                 ).to(structure_kv_states.device)
         else:
@@ -247,7 +247,7 @@ class CrossAttention(nn.Module):
             bs, msa_kv_seq_len, dim = msa_kv_states.shape
             if msa_kv_attn_mask is None:
                 msa_kv_attn_mask = (
-                    torch.ones(bs, msa_kv_seq_len)
+                    torch.ones(bs, msa_kv_seq_len).to(protein_batch_mask.device)
                     * msa_batch_mask.expand(size=(msa_kv_seq_len, bs)).T
                 ).to(msa_kv_states.device)
         else:
