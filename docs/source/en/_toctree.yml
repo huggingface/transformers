@@ -653,6 +653,8 @@
         title: Depth Anything
       - local: model_doc/depth_anything_v2
         title: Depth Anything V2
+      - local: model_doc/depth_pro
+        title: DepthPro
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
