@@ -32,6 +32,12 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
+        if not is_torch_available() or version.parse(importlib.metadata.version("torch")) < version.parse("2.1.0"):
+            raise ImportError(
+                "Using fp8 quantization requires torch >= 2.1.0"
+                "Please install the latest version of torch ( pip install --upgrade torch )"
+            )
+
         if not is_accelerate_available():
             raise ImportError("Loading an FP8 quantized model requires accelerate (`pip install accelerate`)")
 
@@ -50,11 +56,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             raise ValueError(
                 "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
             )
-        torch_version = version.parse(importlib.metadata.version("torch"))
-        if torch_version < version.parse("2.1.0"):
-            raise RuntimeError(
-                "float8_e4m3fn is only supported in torch versions >= 2.1.0, please upgrade your pytorch version"
-            )
+
         device_map = kwargs.get("device_map", None)
         if device_map is None:
             logger.warning_once(
