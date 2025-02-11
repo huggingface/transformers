@@ -1091,7 +1091,7 @@
         title: Perceiver
       - local: model_doc/perception_lm
         title: PerceptionLM
-      - local: model_doc/phi3_5
+      - local: model_doc/phi3_v
         title: Phi-3.5-vision-instruct
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal

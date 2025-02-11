@@ -253,7 +253,7 @@ if TYPE_CHECKING:
     from .persimmon import *
     from .phi import *
     from .phi3 import *
-    from .phi3_5 import *
+    from .phi3_v import *
     from .phi4_multimodal import *
     from .phimoe import *
     from .phobert import *
