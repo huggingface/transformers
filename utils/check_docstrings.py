@@ -174,7 +174,6 @@ OBJECTS_TO_IGNORE = [
     "ErnieMTokenizer",
     "EsmConfig",
     "EsmModel",
-    "FineGrainedFP8Config",
     "FlaxAlbertForMaskedLM",
     "FlaxAlbertForMultipleChoice",
     "FlaxAlbertForPreTraining",
