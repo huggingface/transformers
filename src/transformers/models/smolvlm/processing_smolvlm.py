@@ -380,7 +380,7 @@ class SmolVLMProcessor(ProcessorMixin):
             if messages is not None and text is None:
                 text = self.apply_chat_template(messages)
                 
-            self.process_images(inputs, text, images)
+            self.process_images(inputs, text, images, image_seq_len, output_kwargs)
             
         if video is not None:
             ## TODO, fix this
@@ -414,8 +414,8 @@ class SmolVLMProcessor(ProcessorMixin):
                 )
             else:
                 raise ValueError("Invalid `video` format. Must be string/URL, list of frames, or nested frames.")
-                
-            self.process_images(inputs, text, images, output_kwargs, do_image_splitting=False, image_processor_size={"longest_edge": self.video_frame_size})
+            
+            self.process_images(inputs, text, images, image_seq_len, output_kwargs, do_image_splitting=False, image_processor_size={"longest_edge": self.video_frame_size})
 
         elif text is not None:
             if any(n_images_in_text):
@@ -427,7 +427,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
         return inputs
 
-    def process_images(self, inputs, text, images, output_kwargs, do_image_splitting=None, image_processor_size=None):
+    def process_images(self, inputs, text, images, image_seq_len, output_kwargs, do_image_splitting=None, image_processor_size=None):
+        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
         if text is not None:
             if isinstance(text, str):
                 text = [text]
