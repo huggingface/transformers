@@ -19,7 +19,6 @@ import torch.utils.checkpoint
 
 from typing import Dict, Any, List, Optional, Union, Tuple
 from ...cache_utils import Cache, DynamicCache
-
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -33,6 +32,7 @@ from ..idefics3.modeling_idefics3 import (
     Idefics3ForConditionalGeneration
 )
 from ..idefics3.configuration_idefics3 import Idefics3VisionConfig, Idefics3Config
+from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 
 logger = logging.get_logger(__name__)
 
@@ -42,6 +42,8 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
 class SmolVLMConfig(Idefics3Config):
     pass
 
+class SmolVLMImageProcessor(Idefics3ImageProcessor):
+    pass
 
 class SmolVLMModel(Idefics3Model):
     """
@@ -254,7 +256,7 @@ class SmolVLMModel(Idefics3Model):
                 )
             else:
                 # Remove padding images from the mask
-                pixel_attention_mask = pixel_attention_mask.view(
+                pixel_attention_mask = pixel_attexntion_mask.view(
                     batch_size * num_images, *pixel_attention_mask.shape[2:]
                 )
                 pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
@@ -329,4 +331,4 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         self.post_init()
 
 
-__all__ = ["SmolVLMVisionConfig", "SmolVLMConfig", "SmolVLMForConditionalGeneration", "SmolVLMModel"]
+__all__ = ["SmolVLMVisionConfig", "SmolVLMConfig", "SmolVLMImageProcessor", "SmolVLMForConditionalGeneration", "SmolVLMModel"]

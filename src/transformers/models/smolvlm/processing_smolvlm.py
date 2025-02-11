@@ -111,6 +111,11 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "return_row_col_info": True,
         },
+        "videos_kwargs": {
+            "max_frames": None,
+            "sampling_fps": None,
+            "video_duration": None,
+        },
     }
 
 
@@ -154,6 +159,7 @@ class SmolVLMProcessor(ProcessorMixin):
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
         self.global_image_tag = "<global-img>"  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
+        
         self.video_sampling_fps = image_processor.video_sampling['fps']
         self.video_frame_size = image_processor.video_sampling['video_size']
         self.max_frames = image_processor.video_sampling['max_frames']
@@ -188,15 +194,11 @@ class SmolVLMProcessor(ProcessorMixin):
     def __call__(
         self,
         images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
-        video: Union[str, List[ImageInput], List[List[ImageInput]]] = None,
-        video_sampling_fps: int = None,
-        max_frames: int = None,
         text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
         messages: Optional[List[Dict[str, Any]]] = None,
-        add_generation_prompt: bool = False,
         audio=None,
-        image_seq_len: Optional[int] = None,
-        **kwargs: Unpack[SmolVLMProcessorKwargs],
+        videos: Union[str, List[ImageInput], List[List[ImageInput]]] = None,
+        **kwargs,
     ) -> BatchEncoding:
         """
         Processes the input prompts and returns a BatchEncoding.
@@ -259,10 +261,11 @@ class SmolVLMProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        video_sampling_fps = output_kwargs["videos_kwargs"]["sampling_fps"]
+        max_frames = output_kwargs["videos_kwargs"]["max_frames"]
         video_sampling_fps = video_sampling_fps if video_sampling_fps is not None else self.video_sampling_fps
         max_frames = max_frames if max_frames is not None else self.max_frames
+        add_generation_prompt = output_kwargs['add_generation_prompt'] if output_kwargs['add_generation_prompt'] is not None else False 
 
         n_images_in_text = []
         n_images_in_images = []
@@ -287,22 +290,29 @@ class SmolVLMProcessor(ProcessorMixin):
                     # => single list of frames => wrap as [video]
                     frames = list(video) 
                     images = [frames]
+                    # Possibly the user provides an explicit video_duration in "videos_kwargs"
+                    duration_sec = output_kwargs["videos_kwargs"].get("video_duration", None)
+            
+                    # If not provided, do a naive approach: (len - 1) / fps
+                    if duration_sec is None:
+                        duration_sec = max(len(frames) - 1, 0) / float(video_sampling_fps)
+                        
                     if messages is not None and text is None:
-                        # Build naive timestamps
                         timestamps = []
                         for i in range(len(frames)):
-                            mm = int(i // (60 * video_sampling_fps))
-                            ss = int(i % (60 * video_sampling_fps))
+                            sec = i / (n_frames - 1) * video_duration
+                            mm = int(sec // 60)
+                            ss = int(sec % 60)
                             ts_str = f"{mm:02d}:{ss:02d}"
                             timestamps.append(ts_str)
-                        duration_sec = max(len(frames) - 1, 0) / float(video_sampling_fps)
                 else:
                     raise ValueError("Invalid format for `video` argument when it's a list/tuple.")
             
             if messages is not None and text is None:
-                text = self.apply_chat_template(
-                    messages, add_generation_prompt=add_generation_prompt, num_frames=len(frames), timestamps=timestamps, duration_sec=duration_sec
+                self.process_video_token(
+                    messages, num_frames=len(frames), timestamps=timestamps, duration_sec=duration_sec
                 )
+                text = self.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
             else:
                 raise ValueError("Invalid `video` format. Must be string/URL, list of frames, or nested frames.")
             
@@ -401,21 +411,21 @@ class SmolVLMProcessor(ProcessorMixin):
             text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
 
-    def apply_chat_template(self, messages, add_generation_prompt, num_frames=None, timestamps=None, duration_sec=None):
+    def process_video_token(self, messages, num_frames, timestamps, duration_sec):
         """
-        Overrides apply_chat_template to first convert any {'type': 'video'} blocks
-        into a series of text+image references (video intro, frame placeholders, etc.).
-        Then calls the base class apply_chat_template.
-
-        If you already have frames/timestamps/duration, pass them in here, e.g. for
-        a single video scenario. In a more general or multi-video scenario, you might
-        expand this method or pass multiple sets of frames.
-
-        This method modifies 'messages' in-place.
+        converts the video token into the interleaved text and image tokens the model was trained with. 
+            
+        Args:
+            messages (List[Dict]): A list of conversation turns, where each turn has
+                a "role" and a "content" (which is a list of blocks).
+            frames (int): The number of frames that were extracted from a video.
+            timestamps (List[str]): Parallel list of timestamps for the frames.
+            duration_sec (float): The total video duration in seconds.
         """
-        if num_frames is None or timestamps is None or duration_sec is None:
-            # apply normal template
-            return super().apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
+        if not num_frames or not timestamps or duration_sec is None:
+            raise ValueError(
+                "process_video_token requires valid frames, timestamps, and duration_sec."
+            )
             
         # For each message, scan content for {"type": "video"}
         for msg in messages:
@@ -425,8 +435,6 @@ class SmolVLMProcessor(ProcessorMixin):
             new_content = []
             for block in msg["content"]:
                 if block.get("type") == "video":
-                    assert  num_frames is not None or timestamps is not None or duration_sec is not None,  "to use 'video' tokens, you must specify `num_frames`, `timestamps`, and `duration_sec`."
-                    # 1) Insert the intro
                     # frames, timestamps, duration_sec must be provided
                     # (Alternatively, you could dynamically load them here.)
                     if num_frames is None or timestamps is None or duration_sec is None:
@@ -451,8 +459,6 @@ class SmolVLMProcessor(ProcessorMixin):
 
             # update the content
             msg["content"] = new_content
-
-        return super().apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
         
     def batch_decode(self, *args, **kwargs):
         """

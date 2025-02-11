@@ -512,7 +512,6 @@ _import_structure = {
     "models.idefics": ["IdeficsConfig"],
     "models.idefics2": ["Idefics2Config"],
     "models.idefics3": ["Idefics3Config"],
-    "models.smolvlm": ["SmolVLMConfig"],
     "models.ijepa": ["IJepaConfig"],
     "models.imagegpt": ["ImageGPTConfig"],
     "models.informer": ["InformerConfig"],
@@ -775,6 +774,7 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.smolvlm": ["SmolVLMConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "Speech2TextConfig",
@@ -1253,7 +1253,6 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
-    _import_structure["models.smolvlm"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
@@ -1287,6 +1286,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.smolvlm"].extend(["SmolVLMImageProcessor"])
     _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
@@ -2617,14 +2617,6 @@ else:
             "Idefics3VisionTransformer",
         ]
     )
-    _import_structure["models.smolvlm"].extend(
-        [
-            "SmolVLMForConditionalGeneration",
-            "SmolVLMModel",
-            "SmolVLMProcessor",
-            "SmolVLMVisionConfig",
-        ]
-    )
     _import_structure["models.ijepa"].extend(
         [
             "IJepaForImageClassification",
@@ -3554,6 +3546,14 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
+        ]
+    )
+    _import_structure["models.smolvlm"].extend(
+        [
+            "SmolVLMForConditionalGeneration",
+            "SmolVLMModel",
+            "SmolVLMProcessor",
+            "SmolVLMVisionConfig",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -5631,7 +5631,6 @@ if TYPE_CHECKING:
     )
     from .models.idefics2 import Idefics2Config
     from .models.idefics3 import Idefics3Config
-    from .models.smolvlm import SmolVLMConfig
     from .models.ijepa import IJepaConfig
     from .models.imagegpt import ImageGPTConfig
     from .models.informer import InformerConfig
@@ -5928,6 +5927,7 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.smolvlm import SmolVLMConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         Speech2TextConfig,
@@ -7546,14 +7546,6 @@ if TYPE_CHECKING:
             Idefics3VisionConfig,
             Idefics3VisionTransformer,
         )
-        from .models.smolvlm import (
-            SmolVLMForConditionalGeneration,
-            SmolVLMModel,
-            SmolVLMPreTrainedModel,
-            SmolVLMProcessor,
-            SmolVLMVisionConfig,
-            SmolVLMVisionTransformer,
-        )
         from .models.ijepa import (
             IJepaForImageClassification,
             IJepaModel,
@@ -8273,6 +8265,14 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
+        )
+        from .models.smolvlm import (
+            SmolVLMForConditionalGeneration,
+            SmolVLMModel,
+            SmolVLMPreTrainedModel,
+            SmolVLMProcessor,
+            SmolVLMVisionConfig,
+            SmolVLMVisionTransformer,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
