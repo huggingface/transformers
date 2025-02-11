@@ -1632,7 +1632,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1732,14 +1732,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
     def set_output_embeddings(self, new_embeddings):
         self.decoder.set_output_embeddings(new_embeddings)
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
-        model_embeds = self.decoder.resize_token_embeddings(new_num_tokens)
-
-        # update vocab size
-        self.config.text_config.vocab_size = new_num_tokens
-
-        return model_embeds
 
     def get_decoder(self):
         return self.decoder

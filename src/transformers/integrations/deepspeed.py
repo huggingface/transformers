@@ -383,8 +383,8 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     Returns: optimizer, lr_scheduler
 
     We may use `deepspeed_init` more than once during the life of Trainer, when we do - it's a temp hack based on:
-    https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
-    can't resume from a checkpoint after it did some stepping https://github.com/microsoft/DeepSpeed/issues/1612
+    https://github.com/deepspeedai/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
+    can't resume from a checkpoint after it did some stepping https://github.com/deepspeedai/DeepSpeed/issues/1612
 
     """
     from deepspeed.utils import logger as ds_logger
