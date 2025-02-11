@@ -400,6 +400,7 @@ _import_structure = {
     "models.deprecated.vit_hybrid": ["ViTHybridConfig"],
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
+    "models.depth_pro": ["DepthProConfig"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
@@ -1238,6 +1239,7 @@ else:
     _import_structure["models.deprecated.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
@@ -1315,6 +1317,7 @@ else:
     _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
+    _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
@@ -2180,6 +2183,13 @@ else:
         [
             "DepthAnythingForDepthEstimation",
             "DepthAnythingPreTrainedModel",
+        ]
+    )
+    _import_structure["models.depth_pro"].extend(
+        [
+            "DepthProForDepthEstimation",
+            "DepthProModel",
+            "DepthProPreTrainedModel",
         ]
     )
     _import_structure["models.detr"].extend(
@@ -5507,6 +5517,7 @@ if TYPE_CHECKING:
         XLMProphetNetConfig,
     )
     from .models.depth_anything import DepthAnythingConfig
+    from .models.depth_pro import DepthProConfig
     from .models.detr import DetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
@@ -6377,6 +6388,7 @@ if TYPE_CHECKING:
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
+        from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
@@ -6470,6 +6482,7 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.deit import DeiTImageProcessorFast
+        from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
@@ -7187,6 +7200,11 @@ if TYPE_CHECKING:
         from .models.depth_anything import (
             DepthAnythingForDepthEstimation,
             DepthAnythingPreTrainedModel,
+        )
+        from .models.depth_pro import (
+            DepthProForDepthEstimation,
+            DepthProModel,
+            DepthProPreTrainedModel,
         )
         from .models.detr import (
             DetrForObjectDetection,
