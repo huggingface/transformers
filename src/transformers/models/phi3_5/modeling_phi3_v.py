@@ -1941,3 +1941,12 @@ class Phi3VForTokenClassification(Phi3VPreTrainedModel):
             hidden_states=model_outputs.hidden_states,
             attentions=model_outputs.attentions,
         )
+
+
+__all__ = [
+    "Phi3VForCausalLM",
+    "Phi3VForSequenceClassification",
+    "Phi3VForTokenClassification",
+    "Phi3VModel",
+    "Phi3VPreTrainedModel",
+]

@@ -290,3 +290,6 @@ class Phi3VImageProcessor(BaseImageProcessor):
         data = {"pixel_values": padded_images, "image_sizes": image_sizes, "num_img_tokens": num_img_tokens}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["Phi3VImageProcessor"]
