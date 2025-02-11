@@ -410,7 +410,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
             predicted_depth.unsqueeze(0).unsqueeze(1), size=(500, 500), mode="bicubic", align_corners=False
         ).squeeze()
         self.assertTrue(output_enlarged.shape == expected_shape)
-        torch.testing.assert_close(predicted_depth_l, output_enlarged, rtol=1e-3)
+        torch.testing.assert_close(predicted_depth_l, output_enlarged, atol=1e-3, rtol=1e-3)
 
     def test_export(self):
         for strict in [True, False]:
