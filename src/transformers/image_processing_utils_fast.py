@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache, partial
 from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, Union
 
@@ -283,6 +282,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image: "torch.Tensor",
         size: SizeDict,
         interpolation: "F.InterpolationMode" = None,
+        antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -324,7 +324,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
-        return F.resize(image, new_size, interpolation=interpolation)
+        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     def rescale(
         self,
@@ -496,8 +496,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
             input_data_format=input_data_format,
             device=device,
         )
-        with ThreadPoolExecutor() as executor:
-            processed_images = list(executor.map(process_image_fn, images))
+        # todo: yoni - check if we can parallelize this efficiently
+        processed_images = []
+        for image in images:
+            processed_images.append(process_image_fn(image))
 
         return processed_images
 

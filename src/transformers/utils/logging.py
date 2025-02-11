@@ -101,7 +101,8 @@ def _configure_library_root_logger() -> None:
             formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
             _default_handler.setFormatter(formatter)
 
-        library_root_logger.propagate = False
+        is_ci = os.getenv("CI") is not None and os.getenv("CI").upper() in {"1", "ON", "YES", "TRUE"}
+        library_root_logger.propagate = True if is_ci else False
 
 
 def _reset_library_root_logger() -> None:
