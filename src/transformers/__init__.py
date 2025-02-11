@@ -693,9 +693,7 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
-    "models.phi3_5": [
-        "Phi3VConfig",
-    ],
+    "models.phi3_5": ["Phi3VConfig"],
     "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
@@ -5838,9 +5836,7 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
-    from .models.phi3_5 import (
-        Phi3VConfig,
-    )
+    from .models.phi3_5 import Phi3VConfig
     from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
