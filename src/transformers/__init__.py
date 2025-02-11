@@ -527,6 +527,7 @@ _import_structure = {
         "InstructBlipVideoQFormerConfig",
         "InstructBlipVideoVisionConfig",
     ],
+    "models.internvl": ["InternVLConfig", "InternVLProcessor", "InternVLVisionConfig"],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -702,7 +703,6 @@ _import_structure = {
         "Pix2StructVisionConfig",
     ],
     "models.pixtral": ["PixtralProcessor", "PixtralVisionConfig"],
-    "models.internvl": ["InternVLProcessor", "InternVLConfig", "InternVLVisionConfig"],
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
@@ -2657,10 +2657,10 @@ else:
     )
     _import_structure["models.internvl"].extend(
         [
-            "InternVLVisionPreTrainedModel",
-            "InternVLPreTrainedModel",
             "InternVLForConditionalGeneration",
+            "InternVLPreTrainedModel",
             "InternVLVisionModel",
+            "InternVLVisionPreTrainedModel",
         ]
     )
     _import_structure["models.jamba"].extend(
