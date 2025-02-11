@@ -167,7 +167,7 @@ class Siglip2VisionEmbeddings(nn.Module):
     @staticmethod
     def resize_positional_embeddings(
         positional_embeddings: torch.Tensor,
-        spatial_shapes: Union[List[Tuple[int, int]], torch.LongTensor],
+        spatial_shapes: List[Tuple[int, int]],
         max_length: int,
     ) -> torch.Tensor:
         """
@@ -176,7 +176,7 @@ class Siglip2VisionEmbeddings(nn.Module):
         Args:
             positional_embeddings (`torch.Tensor`):
                 Position embeddings of shape (height, width, embed_dim)
-            spatial_shapes (`Union[List[Tuple[int, int]], torch.LongTensor]`):
+            spatial_shapes (`List[Tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
             max_length (`int`):
                 Maximum length of the positional embeddings to pad resized positional embeddings to
@@ -216,13 +216,13 @@ class Siglip2VisionEmbeddings(nn.Module):
         return resulted_positional_embeddings
 
     def forward(
-        self, pixel_values: torch.FloatTensor, spatial_shapes: Union[List[Tuple[int, int]], torch.LongTensor]
+        self, pixel_values: torch.FloatTensor, spatial_shapes: List[Tuple[int, int]]
     ) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor`):
                 Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
-            spatial_shapes (`Union[List[Tuple[int, int]], torch.LongTensor]`):
+            spatial_shapes (`List[Tuple[int, int]]`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
         """
 
@@ -253,7 +253,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         self,
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
-        spatial_shapes: Union[List[Tuple[int, int]], torch.LongTensor],
+        spatial_shapes: List[Tuple[int, int]],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -312,7 +312,7 @@ class Siglip2VisionModel(SiglipVisionModel):
         self,
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.Tensor,
-        spatial_shapes: Union[List[Tuple[int, int]], torch.LongTensor],
+        spatial_shapes: List[Tuple[int, int]],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -337,7 +337,7 @@ class Siglip2Model(SiglipModel):
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[Union[List[Tuple[int, int]], torch.LongTensor]] = None,
+        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -372,7 +372,7 @@ class Siglip2Model(SiglipModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[Union[List[Tuple[int, int]], torch.LongTensor]] = None,
+        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -449,7 +449,7 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[Union[List[Tuple[int, int]], torch.LongTensor]] = None,
+        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
