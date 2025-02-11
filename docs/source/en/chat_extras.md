@@ -240,7 +240,7 @@ model_input = tokenizer.apply_chat_template(
 )
 ```
 
-## Retrieval-augmented generation (RAG)
+## RAG
 
 Retrieval-augmented generation (RAG) models enhance a models existing knowledge by allowing it to search documents for additional information before returning a query. For RAG models, add a `documents` parameter to [`~PreTrainedTokenizerBase.apply_chat_template`]. This `documents` parameter should be a list of documents, and each document should be a single dict with `title` and `content` keys.
 
