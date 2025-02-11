@@ -450,6 +450,7 @@ Implementations:
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 - [OSLO](https://github.com/tunib-ai/oslo) has the tensor parallelism implementation based on the Transformers.
+- [`transformers` integration](main_classes/trainer)
 
 SageMaker combines TP with DP for a more efficient processing.
 
