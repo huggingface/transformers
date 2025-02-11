@@ -21,7 +21,6 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -1559,7 +1558,6 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     """,
     KOSMOS2_5_START_DOCSTRING,
 )
-# Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextForCausalLM with KOSMOS-2->KOSMOS-2.5,KOSMOS2->KOSMOS2_5,Kosmos2->Kosmos2_5
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5TextConfig
     _tied_weights_keys = ["lm_head.weight"]
