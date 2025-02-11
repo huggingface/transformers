@@ -209,7 +209,7 @@ from . import (
     persimmon,
     phi,
     phi3,
-    phi3_5,
+    phi3_v,
     phimoe,
     phobert,
     pix2struct,
