@@ -5118,7 +5118,7 @@ class Trainer:
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
         self.is_deepspeed_enabled = getattr(self.accelerator.state, "deepspeed_plugin", None) is not None
         self.is_fsdp_enabled = getattr(self.accelerator.state, "fsdp_plugin", None) is not None
-        self.is_tp_enabled = getattr(self.accelerator.state, "tp_plugin", None) is not None
+        self.is_tp_enabled = getattr(self.accelerator.state, "torch_tp_plugin", None) is not None
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
