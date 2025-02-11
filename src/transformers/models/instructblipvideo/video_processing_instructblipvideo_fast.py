@@ -26,6 +26,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...processing_utils import VideosKwargs
 from ...utils import (
     TensorType,
     is_torch_available,
@@ -46,6 +47,9 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+class InstructBlipVideoVideoProcessorInitKwargs(VideosKwargs): ...
+
+
 class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
@@ -59,7 +63,7 @@ class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
     model_input_names = ["pixel_values"]
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(model_init_kwargs=InstructBlipVideoVideoProcessorInitKwargs, **kwargs)
 
     def _preprocess(
         self,
@@ -67,18 +71,18 @@ class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
+        size_divisor: Optional[int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
+        do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
-        # NOTE: The only diff from Base is that InstructBlipVideo uses `pixel_values` as output key
-
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
@@ -86,7 +90,9 @@ class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(video=stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(
+                    video=stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
+                )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

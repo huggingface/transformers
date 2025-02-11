@@ -32,7 +32,7 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     add_start_docstrings,
@@ -43,7 +43,6 @@ from ...utils import (
 from ...video_processing_utils_fast import (
     BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
     BaseVideoProcessorFast,
-    DefaultFastVideoProcessorInitKwargs,
 )
 from ...video_utils import group_videos_by_shape, reorder_videos
 from .image_processing_qwen2_vl import smart_resize
@@ -59,7 +58,7 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class Qwen2VLFastVideoProcessorInitKwargs(DefaultFastVideoProcessorInitKwargs):
+class Qwen2VLFastVideoProcessorInitKwargs(VideosKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -97,11 +96,10 @@ class Qwen2VLVideoProcessorFast(BaseVideoProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    valid_init_kwargs = Qwen2VLFastVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLFastVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
+        super().__init__(model_init_kwargs=Qwen2VLFastVideoProcessorInitKwargs, **kwargs)
         self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
 
     def _preprocess(

@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import base64
+import math
 import os
 from dataclasses import dataclass
 from io import BytesIO
@@ -370,6 +371,7 @@ def get_image_size_for_max_height_width(
     image_size: Tuple[int, int],
     max_height: int,
     max_width: int,
+    size_divisor: int = 1,
 ) -> Tuple[int, int]:
     """
     Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
@@ -387,13 +389,15 @@ def get_image_size_for_max_height_width(
             The maximum allowed height.
         max_width (`int`):
             The maximum allowed width.
+        size_divisor (`int`, *optional*, defaults to 1):
+            The size by which to make sure both the height and width can be divided.
     """
     height, width = image_size
     height_scale = max_height / height
     width_scale = max_width / width
     min_scale = min(height_scale, width_scale)
-    new_height = int(height * min_scale)
-    new_width = int(width * min_scale)
+    new_height = math.ceil(height * min_scale / size_divisor) * size_divisor
+    new_width = math.ceil(width * min_scale / size_divisor) * size_divisor
     return new_height, new_width
 
 

@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache, partial
-from typing import Dict, Iterable, List, Optional, TypedDict, Union
+from functools import lru_cache
+from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
 
@@ -34,7 +33,7 @@ from .image_utils import (
     validate_fast_preprocess_arguments,
     validate_kwargs,
 )
-from .processing_utils import Unpack
+from .processing_utils import Unpack, VideosKwargs
 from .utils import (
     TensorType,
     add_start_docstrings,
@@ -71,49 +70,31 @@ if is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class DefaultFastVideoProcessorInitKwargs(TypedDict, total=False):
-    do_resize: Optional[bool]
-    size: Optional[Dict[str, int]]
-    default_to_square: Optional[bool]
-    resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]]
-    do_center_crop: Optional[bool]
-    crop_size: Optional[Dict[str, int]]
-    do_rescale: Optional[bool]
-    rescale_factor: Optional[Union[int, float]]
-    do_normalize: Optional[bool]
-    image_mean: Optional[Union[float, List[float]]]
-    image_std: Optional[Union[float, List[float]]]
-    do_convert_rgb: Optional[bool]
-
-
-class DefaultFastVideoProcessorPreprocessKwargs(DefaultFastVideoProcessorInitKwargs):
-    return_tensors: Optional[Union[str, TensorType]]
-    data_format: Optional[ChannelDimension]
-    input_data_format: Optional[Union[str, ChannelDimension]]
-    device: Optional["torch.device"]
-
-
 BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
     Args:
         do_resize (`bool`, *optional*, defaults to `self.do_resize`):
             Whether to resize the video's (height, width) dimensions to the specified `size`. Can be overridden by the
             `do_resize` parameter in the `preprocess` method.
         size (`dict`, *optional*, defaults to `self.size`):
-            Size of the output videoafter resizing. Can be overridden by the `size` parameter in the `preprocess`
+            Size of the output video after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
+        size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
+            The size by which to make sure both the height and width can be divided.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
-            Whether to default to a square videowhen resizing, if size is an int.
+            Whether to default to a square video when resizing, if size is an int.
         resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
             Resampling filter to use if resizing the video. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-            Whether to center crop the videoto the specified `crop_size`. Can be overridden by `do_center_crop` in the
+            Whether to center crop the video to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
+        do_pad (`bool`, *optional*):
+            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         crop_size (`Dict[str, int]` *optional*, defaults to `self.crop_size`):
-            Size of the output videoafter applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
+            Size of the output video after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
             method.
         do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-            Whether to rescale the videoby the specified scale `rescale_factor`. Can be overridden by the
+            Whether to rescale the video by the specified scale `rescale_factor`. Can be overridden by the
             `do_rescale` parameter in the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `self.rescale_factor`):
             Scale factor to use if rescaling the video. Only has an effect if `do_rescale` is set to `True`. Can be
@@ -130,39 +111,12 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
             number of channels in the video. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
-            Whether to convert the videoto RGB."""
+            Whether to convert the video to RGB."""
 
-BASE_VIDEO_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
+BASE_VIDEO_PROCESSOR_FAST_DOCSTRING_PREPROCESS = rf"""
     Preprocess a video or batch of videos.
 
-    Args:
-        videos (`VideoInput`):
-            Image to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
-            passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
-        do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-            Whether to resize the video.
-        size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-            Describes the maximum input dimensions to the model.
-        resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to `self.resample`):
-            Resampling filter to use if resizing the video. This can be one of the enum `PILImageResampling`. Only
-            has an effect if `do_resize` is set to `True`.
-        do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-            Whether to center crop the video.
-        crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-            Size of the output videoafter applying `center_crop`.
-        do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-            Whether to rescale the video.
-        rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-            Rescale factor to rescale the videoby if `do_rescale` is set to `True`.
-        do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-            Whether to normalize the video.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-            Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-        image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-            Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-            `True`.
-        do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-            Whether to convert the videoto RGB.
+        {BASE_VIDEO_PROCESSOR_FAST_DOCSTRING}
         return_tensors (`str` or `TensorType`, *optional*):
             Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
         data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
@@ -189,19 +143,19 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
     image_mean = None
     image_std = None
     size = None
+    size_divisor = None
     default_to_square = True
     crop_size = None
     do_resize = None
     do_center_crop = None
+    do_pad = None
     do_rescale = None
     rescale_factor = 1 / 255
     do_normalize = None
     do_convert_rgb = None
     model_input_names = ["pixel_values_videos"]
-    valid_init_kwargs = DefaultFastVideoProcessorInitKwargs
-    valid_preprocess_kwargs = DefaultFastVideoProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, model_init_kwargs, **kwargs) -> None:
         super().__init__(**kwargs)
         size = kwargs.pop("size", self.size)
         self.size = (
@@ -211,7 +165,10 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         )
         crop_size = kwargs.pop("crop_size", self.crop_size)
         self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-        for key in self.valid_init_kwargs.__annotations__.keys():
+
+        # Save valid kwargs in a list for further processing
+        self.model_valid_processing_keys = list(model_init_kwargs.__annotations__.keys())
+        for key in self.model_valid_processing_keys:
             if kwargs.get(key) is not None:
                 setattr(self, key, kwargs[key])
             else:
@@ -221,6 +178,7 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         size: SizeDict,
+        size_divisor: int = 1,
         interpolation: "F.InterpolationMode" = None,
         **kwargs,
     ) -> "torch.Tensor":
@@ -255,7 +213,9 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
                 input_data_format=ChannelDimension.FIRST,
             )
         elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(video.size()[-2:], size.max_height, size.max_width)
+            new_size = get_image_size_for_max_height_width(
+                video.size()[-2:], size.max_height, size.max_width, size_divisor=size_divisor
+            )
         elif size.height and size.width:
             new_size = (size.height, size.width)
         else:
@@ -377,41 +337,6 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
         return video
 
-    def _prepare_videos_structure(
-        self,
-        videos: VideoInput,
-    ) -> VideoInput:
-        """
-        Prepare the videos structure for processing by making sure the inputs
-        are in correct format and converting list of `PIL.Image` frames to
-        one video array.
-
-        Args:
-            videos (`VideoInput`):
-                The input videos to process.
-
-        Returns:
-            `VideoInput`: A list of video arrays in np.ndarray or `torch.tensor`
-        """
-        return make_batched_videos(videos)
-
-    def _process_video(
-        self,
-        video: VideoInput,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional["torch.device"] = None,
-    ) -> "torch.Tensor":
-        if isinstance(video, np.ndarray):
-            video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_data_format)
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            video = torch.from_numpy(video).contiguous()
-
-        # Now that we have torch tensors, we can move them to the right device
-        if device is not None:
-            video = video.to(device)
-
-        return video
-
     def _prepare_input_videos(
         self,
         videos: VideoInput,
@@ -421,15 +346,20 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         """
         Prepare the input videos for processing.
         """
-        videos = self._prepare_videos_structure(videos)
-        process_image_fn = partial(
-            self._process_video,
-            input_data_format=input_data_format,
-            device=device,
-        )
-        with ThreadPoolExecutor() as executor:
-            processed_videos = list(executor.map(process_image_fn, videos))
+        videos = make_batched_videos(videos)
+        processed_videos = []
+        for video in videos:
+            # `make_batched_videos` always returns a 4D array per video
+            if isinstance(video, np.ndarray):
+                video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_data_format)
+                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                video = torch.from_numpy(video).contiguous()
 
+            # Now that we have torch tensors, we can move them to the right device
+            if device is not None:
+                video = video.to(device)
+
+            processed_videos.append(video)
         return processed_videos
 
     @lru_cache(maxsize=10)
@@ -482,15 +412,13 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
     def preprocess(
         self,
         videos: VideoInput,
-        **kwargs: Unpack[DefaultFastVideoProcessorPreprocessKwargs],
+        **kwargs: Unpack[VideosKwargs],
     ) -> BatchFeature:
-        validate_kwargs(
-            captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
-        )
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.model_valid_processing_keys)
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
-        for kwarg_name in self.valid_preprocess_kwargs.__annotations__:
+        for kwarg_name in self.model_valid_processing_keys:
             kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
 
         # Extract parameters that are only used for preparing the input videos
@@ -500,14 +428,13 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         videos = self._prepare_input_videos(videos=videos, input_data_format=input_data_format, device=device)
 
         # Pop kwargs that need further processing or won't be used in _preprocess
-        default_to_square = kwargs.pop("default_to_square")
+        default_to_square = kwargs.pop("default_to_square", None)
         size = kwargs.pop("size")
         crop_size = kwargs.pop("crop_size")
         image_mean = kwargs.pop("image_mean")
         image_std = kwargs.pop("image_std")
         data_format = kwargs.pop("data_format")
         resample = kwargs.pop("resample")
-        do_convert_rgb = kwargs.pop("do_convert_rgb")
 
         # Make hashable for cache
         size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square)) if size is not None else None
@@ -533,7 +460,6 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
 
         return self._preprocess(
             videos=videos,
-            do_convert_rgb=do_convert_rgb,
             size=size,
             crop_size=crop_size,
             interpolation=interpolation,
@@ -548,10 +474,12 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
+        size_divisor: Optional[int],
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
+        do_pad: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: Optional[Union[float, List[float]]],
@@ -565,7 +493,9 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(video=stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(
+                    video=stacked_videos, size=size, size_divisor=size_divisor, interpolation=interpolation
+                )
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

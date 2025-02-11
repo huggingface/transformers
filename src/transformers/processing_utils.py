@@ -147,6 +147,8 @@ class ImagesKwargs(TypedDict, total=False):
             Whether to resize the image.
         size (`Dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
+        default_to_square (`bool`, *optional*):
+            Whether to default to a square when resizing, if size is an int.
         size_divisor (`int`, *optional*):
             The size by which to make sure both the height and width can be divided.
         crop_size (`Dict[str, int]`, *optional*):
@@ -180,6 +182,7 @@ class ImagesKwargs(TypedDict, total=False):
     do_resize: Optional[bool]
     size: Optional[Dict[str, int]]
     size_divisor: Optional[int]
+    default_to_square: Optional[bool]
     crop_size: Optional[Dict[str, int]]
     resample: Optional[Union["PILImageResampling", int]]
     do_rescale: Optional[bool]
@@ -200,37 +203,45 @@ class VideosKwargs(TypedDict, total=False):
     Keyword arguments for video processing.
 
     Attributes:
+        do_convert_rgb (`bool`):
+            Whether to convert the video to RGB fromat.
         do_resize (`bool`):
-            Whether to resize the image.
+            Whether to resize the video.
         size (`Dict[str, int]`, *optional*):
             Resize the shorter side of the input to `size["shortest_edge"]`.
+        default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
+            Whether to default to a square when resizing, if size is an int.
         size_divisor (`int`, *optional*):
             The size by which to make sure both the height and width can be divided.
         resample (`PILImageResampling`, *optional*):
-            Resampling filter to use if resizing the image.
+            Resampling filter to use if resizing the video.
         do_rescale (`bool`, *optional*):
-            Whether to rescale the image by the specified scale `rescale_factor`.
+            Whether to rescale the video by the specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*):
-            Scale factor to use if rescaling the image.
+            Scale factor to use if rescaling the video.
         do_normalize (`bool`, *optional*):
-            Whether to normalize the image.
+            Whether to normalize the video.
         image_mean (`float` or `List[float]`, *optional*):
-            Mean to use if normalizing the image.
+            Mean to use if normalizing the video.
         image_std (`float` or `List[float]`, *optional*):
-            Standard deviation to use if normalizing the image.
+            Standard deviation to use if normalizing the video.
         do_pad (`bool`, *optional*):
-            Whether to pad the image to the `(max_height, max_width)` of the images in the batch.
+            Whether to pad the video to the `(max_height, max_width)` of the videos in the batch.
         do_center_crop (`bool`, *optional*):
-            Whether to center crop the image.
+            Whether to center crop the video.
+        crop_size (`Dict[str, int]`, *optional*):
+            Desired output size when applying center-cropping.
         data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format for the output image.
+            The channel dimension format for the output video.
         input_data_format (`ChannelDimension` or `str`, *optional*):
-            The channel dimension format for the input image.
+            The channel dimension format for the input video.
     """
 
+    do_convert_rgb: Optional[bool]
     do_resize: Optional[bool]
     size: Optional[Dict[str, int]]
     size_divisor: Optional[int]
+    default_to_square: Optional[bool]
     resample: Optional["PILImageResampling"]
     do_rescale: Optional[bool]
     rescale_factor: Optional[float]
@@ -239,8 +250,10 @@ class VideosKwargs(TypedDict, total=False):
     image_std: Optional[Union[float, List[float]]]
     do_pad: Optional[bool]
     do_center_crop: Optional[bool]
+    crop_size: Optional[Dict[str, int]]
     data_format: Optional[ChannelDimension]
     input_data_format: Optional[Union[str, ChannelDimension]]
+    device: Optional[str]
 
 
 class AudioKwargs(TypedDict, total=False):

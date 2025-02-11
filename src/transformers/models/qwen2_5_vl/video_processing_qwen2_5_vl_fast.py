@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
 # and OPT implementations in this library. It has been modified from its
@@ -17,13 +17,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""video processor class for Qwen2-5-VL."""
-
 from typing import List, Optional, Union
 
-from ...image_processing_utils import (
-    BatchFeature,
-)
+import torch
+import torch.nn.functional as F
+
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -32,34 +31,24 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import (
     TensorType,
     add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
     is_torchvision_v2_available,
 )
-from ...video_processing_utils_fast import (
-    BASE_VIDEO_PROCESSOR_FAST_DOCSTRING,
-    BaseVideoProcessorFast,
-    DefaultFastVideoProcessorInitKwargs,
-)
+from ...video_processing_utils_fast import BASE_VIDEO_PROCESSOR_FAST_DOCSTRING, BaseVideoProcessorFast
 from ...video_utils import group_videos_by_shape, reorder_videos
 from .image_processing_qwen2_5_vl import smart_resize
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+else:
+    from torchvision.transforms import functional as F
 
 
-class Qwen2_5_VLFastVideoProcessorInitKwargs(DefaultFastVideoProcessorInitKwargs):
+class Qwen25FastVideoProcessorInitKwargs(VideosKwargs):
     min_pixels: Optional[int]
     max_pixels: Optional[int]
     patch_size: Optional[int]
@@ -97,11 +86,10 @@ class Qwen2_5_VLVideoProcessorFast(BaseVideoProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    valid_init_kwargs = Qwen2_5_VLFastVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[Qwen2_5_VLFastVideoProcessorInitKwargs]):
-        super().__init__(**kwargs)
+    def __init__(self, **kwargs: Unpack[Qwen25FastVideoProcessorInitKwargs]):
+        super().__init__(model_init_kwargs=Qwen25FastVideoProcessorInitKwargs, **kwargs)
         self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
 
     def _preprocess(
