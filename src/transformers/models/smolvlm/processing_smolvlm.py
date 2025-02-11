@@ -46,9 +46,9 @@ DEFAULT_VIDEO_INTRO = (
     "You are provided the following series of {frame_count} frames "
     "from a {video_duration} [H:MM:SS] video.\n"
 )
-DEFAULT_IMAGE_INTRO = "Here are some images: "
-DEFAULT_MEDIA_OUTTRO = "Now answer the following question: "
-FRAME_TIMESTAMP_MESSAGE = "Frame from {timestamp}:"
+DEFAULT_IMAGE_INTRO = "Here are some images:\n"
+DEFAULT_MEDIA_OUTTRO = "\nNow answer the following question:\n\n"
+FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
 
 
 def is_url(val) -> bool:
@@ -304,6 +304,7 @@ class SmolVLMProcessor(ProcessorMixin):
         video_frame_sampling_fps: int = 1, 
         text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
         messages: Optional[List[Dict[str, Any]]] = None,
+        add_generation_prompt: bool = False,
         audio=None,
         image_seq_len: Optional[int] = None,
         **kwargs: Unpack[SmolVLMProcessorKwargs],
@@ -378,7 +379,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
         if images is not None:
             if messages is not None and text is None:
-                text = self.apply_chat_template(messages)
+                text = self.apply_chat_template(messages, add_generation_prompt)
                 
             self.process_images(inputs, text, images, image_seq_len, output_kwargs)
             
@@ -410,7 +411,7 @@ class SmolVLMProcessor(ProcessorMixin):
             
             if messages is not None and text is None:
                 text = self.apply_chat_template(
-                    messages, num_frames=len(frames), timestamps=timestamps, duration_sec=duration_sec
+                    messages, add_generation_prompt, num_frames=len(frames), timestamps=timestamps, duration_sec=duration_sec
                 )
             else:
                 raise ValueError("Invalid `video` format. Must be string/URL, list of frames, or nested frames.")
@@ -527,7 +528,7 @@ class SmolVLMProcessor(ProcessorMixin):
         new_text += original_text
         return new_text
 
-    def apply_chat_template(self, messages, num_frames=None, timestamps=None, duration_sec=None):
+    def apply_chat_template(self, messages, add_generation_prompt, num_frames=None, timestamps=None, duration_sec=None):
         """
         Overrides apply_chat_template to first convert any {'type': 'video'} blocks
         into a series of text+image references (video intro, frame placeholders, etc.).
@@ -541,7 +542,7 @@ class SmolVLMProcessor(ProcessorMixin):
         """
         if num_frames is None or timestamps is None or duration_sec is None:
             # apply normal template
-            return super().apply_chat_template(messages)
+            return super().apply_chat_template(messages, add_generation_prompt)
             
         # For each message, scan content for {"type": "video"}
         for msg in messages:
@@ -585,7 +586,7 @@ class SmolVLMProcessor(ProcessorMixin):
             # update the content
             msg["content"] = new_content
 
-        return super().apply_chat_template(messages)
+        return super().apply_chat_template(messages, add_generation_prompt)
         
     def batch_decode(self, *args, **kwargs):
         """
