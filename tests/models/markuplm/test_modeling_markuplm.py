@@ -22,6 +22,7 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -52,7 +53,7 @@ class MarkupLMModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -275,7 +276,7 @@ class MarkupLMModelTester:
 
 
 @require_torch
-class MarkupLMModelTest(ModelTesterMixin, unittest.TestCase):
+class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MarkupLMModel,
@@ -286,6 +287,32 @@ class MarkupLMModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else None
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MarkupLMModel,
+            "question-answering": MarkupLMForQuestionAnswering,
+            "text-classification": MarkupLMForSequenceClassification,
+            "token-classification": MarkupLMForTokenClassification,
+            "zero-shot": MarkupLMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        # ValueError: Nodes must be of type `List[str]` (single pretokenized example), or `List[List[str]]`
+        # (batch of pretokenized examples).
+        return True
 
     def setUp(self):
         self.model_tester = MarkupLMModelTester(self)
@@ -358,7 +385,7 @@ class MarkupLMModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[0.0267, -0.1289, 0.4930], [-0.2376, -0.0342, 0.2381], [-0.0329, -0.3785, 0.0263]]
+            [[0.0675, -0.0052, 0.5001], [-0.2281, 0.0802, 0.2192], [-0.0583, -0.3311, 0.1185]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

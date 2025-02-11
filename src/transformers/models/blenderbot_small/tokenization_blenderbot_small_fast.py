@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast tokenization class for BlenderbotSmall."""
+
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
@@ -30,24 +31,6 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/vocab.json"
-    },
-    "merges_file": {
-        "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
-    },
-    "tokenizer_config_file": {
-        "facebook/blenderbot_small-90M": (
-            "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer_config.json"
-        )
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/blenderbot_small-90M": 512,
-}
-
 
 class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -59,8 +42,6 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = BlenderbotSmallTokenizer
 
     def __init__(
@@ -72,7 +53,7 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
         eos_token="<|endoftext|>",
         add_prefix_space=False,
         trim_offsets=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             ByteLevelBPETokenizer(
@@ -117,3 +98,6 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+
+__all__ = ["BlenderbotSmallTokenizerFast"]

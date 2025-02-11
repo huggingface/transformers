@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import DebertaV2Config, is_tf_available
@@ -21,6 +23,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -28,6 +31,7 @@ if is_tf_available():
 
     from transformers import (
         TFDebertaV2ForMaskedLM,
+        TFDebertaV2ForMultipleChoice,
         TFDebertaV2ForQuestionAnswering,
         TFDebertaV2ForSequenceClassification,
         TFDebertaV2ForTokenClassification,
@@ -47,7 +51,7 @@ class TFDebertaV2ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -193,6 +197,22 @@ class TFDebertaV2ModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
+    def create_and_check_for_multiple_choice(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_choices = self.num_choices
+        model = TFDebertaV2ForMultipleChoice(config=config)
+        multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
+        multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
+        multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
+        inputs = {
+            "input_ids": multiple_choice_inputs_ids,
+            "attention_mask": multiple_choice_input_mask,
+            "token_type_ids": multiple_choice_token_type_ids,
+        }
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -209,18 +229,30 @@ class TFDebertaV2ModelTester:
 
 
 @require_tf
-class TFDebertaModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFDebertaModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFDebertaV2Model,
             TFDebertaV2ForMaskedLM,
             TFDebertaV2ForQuestionAnswering,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFDebertaV2Model,
+            "fill-mask": TFDebertaV2ForMaskedLM,
+            "question-answering": TFDebertaV2ForQuestionAnswering,
+            "text-classification": TFDebertaV2ForSequenceClassification,
+            "token-classification": TFDebertaV2ForTokenClassification,
+            "zero-shot": TFDebertaV2ForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
 
     test_head_masking = False
@@ -257,6 +289,10 @@ class TFDebertaModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFDebertaV2Model.from_pretrained("kamalkraj/deberta-v2-xlarge")
         self.assertIsNotNone(model)
+
+    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
+    def test_pt_tf_model_equivalence(self):
+        pass
 
 
 @require_tf

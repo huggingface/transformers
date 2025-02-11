@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Data2VecAudio model. """
+"""Testing suite for the PyTorch Data2VecAudio model."""
 
 import math
 import unittest
@@ -26,6 +26,7 @@ from transformers.testing_utils import is_pt_flax_cross_test, require_soundfile,
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -58,7 +59,7 @@ class Data2VecAudioModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,
         intermediate_size=20,
@@ -282,8 +283,8 @@ class Data2VecAudioModelTester:
             input_values[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
-                # it's important that we make sure that target lenghts are at least
-                # one shorter than logit lenghts to prevent -inf
+                # it's important that we make sure that target lengths are at least
+                # one shorter than logit lengths to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
         loss = model(input_values, labels=labels).loss
@@ -358,7 +359,7 @@ class Data2VecAudioModelTester:
 
 
 @require_torch
-class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
+class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Data2VecAudioForCTC,
@@ -369,6 +370,15 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": Data2VecAudioForSequenceClassification,
+            "automatic-speech-recognition": Data2VecAudioForCTC,
+            "feature-extraction": Data2VecAudioModel,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False
@@ -416,23 +426,20 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Data2VecAudio has no inputs_embeds
+    @unittest.skip(reason="Data2VecAudio has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="`input_ids` is renamed to `input_values`")
     def test_forward_signature(self):
         pass
 
-    # Data2VecAudio cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Data2VecAudio has no tokens embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Data2VecAudio has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Data2VecAudio has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     @is_pt_flax_cross_test
@@ -506,7 +513,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
                     "objective.weight",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -696,7 +703,7 @@ class Data2VecAudioModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 

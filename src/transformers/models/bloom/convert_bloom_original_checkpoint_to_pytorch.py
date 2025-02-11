@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert BigScience BLOOM checkpoint."""
 
-
 import argparse
 import json
 import os
@@ -71,7 +70,7 @@ def layer_name_mapping(key, file):
 def get_dtype_size(dtype):
     if dtype == torch.bool:
         return 1 / 8
-    bit_search = re.search("[^\d](\d+)$", str(dtype))
+    bit_search = re.search(r"[^\d](\d+)$", str(dtype))
     if bit_search is None:
         raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
     bit_size = int(bit_search.groups()[0])
@@ -89,7 +88,7 @@ def convert_bloom_checkpoint_to_pytorch(
 
     if shard_model:
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
+        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
 
         index_dict = {"weight_map": {}, "metadata": {}}
         total_size = 0
@@ -157,7 +156,7 @@ def convert_bloom_checkpoint_to_pytorch(
         model = BloomModel(config)
 
         file_names = os.listdir(bloom_checkpoint_path)
-        file_names = list(sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names)))
+        file_names = sorted(filter(lambda s: s.startswith("layer") and "model_00" in s, file_names))
 
         missing_keys = None
         for i, file in enumerate(file_names):
@@ -191,20 +190,21 @@ def convert_bloom_checkpoint_to_pytorch(
                     tensors[key] = tensors[key] / pretraining_tp
 
             other_keys = model.load_state_dict(tensors, strict=False)
-            assert not other_keys.unexpected_keys
+            assert not other_keys.unexpected_keys, f"The keys {other_keys.unexpected_keys} are unexpected"
             if missing_keys is None:
                 missing_keys = set(other_keys.missing_keys)
             else:
                 missing_keys = missing_keys.intersection(set(other_keys.missing_keys))
 
-        assert not missing_keys
+        assert not missing_keys, f"The keys {missing_keys} are missing"
 
         # Save pytorch-model
         os.makedirs(pytorch_dump_folder_path, exist_ok=True)
         pytorch_weights_dump_path = pytorch_dump_folder_path + "/" + WEIGHTS_NAME
         pytorch_config_dump_path = pytorch_dump_folder_path + "/" + CONFIG_NAME
         print(f"Save PyTorch model to {pytorch_weights_dump_path} with dtype {config.torch_dtype}")
-        model = model.to(config.torch_dtype)
+        if config.torch_dtype is not None:
+            model = model.to(config.torch_dtype)
         torch.save(model.state_dict(), pytorch_weights_dump_path)
         print(f"Save configuration file to {pytorch_config_dump_path}")
         with open(pytorch_config_dump_path, "w", encoding="utf-8") as f:

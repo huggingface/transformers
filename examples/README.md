@@ -17,9 +17,9 @@ limitations under the License.
 
 We host a wide range of example scripts for multiple learning frameworks. Simply choose your favorite: [TensorFlow](https://github.com/huggingface/transformers/tree/main/examples/tensorflow), [PyTorch](https://github.com/huggingface/transformers/tree/main/examples/pytorch) or [JAX/Flax](https://github.com/huggingface/transformers/tree/main/examples/flax).
 
-We also have some [research projects](https://github.com/huggingface/transformers/tree/main/examples/research_projects), as well as some [legacy examples](https://github.com/huggingface/transformers/tree/main/examples/legacy). Note that unlike the main examples these are not actively maintained, and may require specific older versions of dependencies in order to run. 
+We also have some [research projects](https://github.com/huggingface/transformers/tree/main/examples/research_projects), as well as some [legacy examples](https://github.com/huggingface/transformers/tree/main/examples/legacy). Note that unlike the main examples these are not actively maintained, and may require specific older versions of dependencies in order to run.
 
-While we strive to present as many use cases as possible, the example scripts are just that - examples. It is expected that they won't work out-of-the box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs. To help you with that, most of the examples fully expose the preprocessing of the data, allowing you to tweak and edit them as required.
+While we strive to present as many use cases as possible, the example scripts are just that - examples. It is expected that they won't work out-of-the-box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs. To help you with that, most of the examples fully expose the preprocessing of the data, allowing you to tweak and edit them as required.
 
 Please discuss on the [forum](https://discuss.huggingface.co/) or in an [issue](https://github.com/huggingface/transformers/issues) a feature you would like to implement in an example before submitting a PR; we welcome bug fixes, but since we want to keep the examples as simple as possible it's unlikely that we will merge a pull request adding more functionality at the cost of readability.
 
@@ -94,3 +94,41 @@ Alternatively, you can switch your cloned 🤗 Transformers to a specific versio
 git checkout tags/v3.5.1
 ```
 and run the example command as usual afterward.
+
+## Running the Examples on Remote Hardware with Auto-Setup
+
+[run_on_remote.py](./run_on_remote.py) is a script that launches any example on remote self-hosted hardware,
+with automatic hardware and environment setup. It uses [Runhouse](https://github.com/run-house/runhouse) to launch
+on self-hosted hardware (e.g. in your own cloud account or on-premise cluster) but there are other options
+for running remotely as well. You can easily customize the example used, command line arguments, dependencies,
+and type of compute hardware, and then run the script to automatically launch the example.
+
+You can refer to
+[hardware setup](https://www.run.house/docs/tutorials/quick-start-cloud)
+for more information about hardware and dependency setup with Runhouse, or this
+[Colab tutorial](https://colab.research.google.com/drive/1sh_aNQzJX5BKAdNeXthTNGxKz7sM9VPc) for a more in-depth
+walkthrough.
+
+You can run the script with the following commands:
+
+```bash
+# First install runhouse:
+pip install runhouse
+
+# For an on-demand V100 with whichever cloud provider you have configured:
+python run_on_remote.py \
+    --example pytorch/text-generation/run_generation.py \
+    --model_type=gpt2 \
+    --model_name_or_path=openai-community/gpt2 \
+    --prompt "I am a language model and"
+
+# For byo (bring your own) cluster:
+python run_on_remote.py --host <cluster_ip> --user <ssh_user> --key_path <ssh_key_path> \
+  --example <example> <args>
+
+# For on-demand instances
+python run_on_remote.py --instance <instance> --provider <provider> \
+  --example <example> <args>
+```
+
+You can also adapt the script to your own needs.

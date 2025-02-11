@@ -15,23 +15,23 @@
 
 
 import itertools
+import os
 import random
+import tempfile
 import unittest
 
 import numpy as np
 
-from transformers import is_speech_available
-from transformers.testing_utils import require_torch, require_torchaudio
+from transformers import Speech2TextFeatureExtractor
+from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
-if is_speech_available():
-    from transformers import Speech2TextFeatureExtractor
-
 global_rng = random.Random()
 
 
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -48,7 +48,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 @require_torchaudio
-class Speech2TextFeatureExtractionTester(unittest.TestCase):
+class Speech2TextFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -104,8 +104,7 @@ class Speech2TextFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-
-    feature_extraction_class = Speech2TextFeatureExtractor if is_speech_available() else None
+    feature_extraction_class = Speech2TextFeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = Speech2TextFeatureExtractionTester(self)
@@ -132,6 +131,14 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
         encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
@@ -248,3 +255,69 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    def test_integration(self):
+        # fmt: off
+        expected = np.array([
+            -1.5745, -1.7713, -1.7020, -1.6069, -1.2250, -1.1105, -0.9072, -0.8241,
+            -1.2310, -0.8098, -0.3320, -0.4101, -0.7985, -0.4996, -0.8213, -0.9128,
+            -1.0420, -1.1286, -1.0440, -0.7999, -0.8405, -1.2275, -1.5443, -1.4625,
+        ])
+        # fmt: on
+
+        input_speech = self._load_datasamples(1)
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+        self.assertEqual(input_features.shape, (1, 584, 24))
+        self.assertTrue(np.allclose(input_features[0, 0, :30], expected, atol=1e-4))
+
+    def test_feat_extract_from_and_save_pretrained(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
+            check_json_file_has_correct_format(saved_file)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertDictEqual(dict_first, dict_second)
+
+    def test_feat_extract_to_json_file(self):
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            json_file_path = os.path.join(tmpdirname, "feat_extract.json")
+            feat_extract_first.to_json_file(json_file_path)
+            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
+
+        dict_first = feat_extract_first.to_dict()
+        dict_second = feat_extract_second.to_dict()
+        self.assertEqual(dict_first, dict_second)
+
+
+# exact same tests than before, except that we simulate that torchaudio is not available
+@require_torch
+@unittest.mock.patch(
+    "transformers.models.speech_to_text.feature_extraction_speech_to_text.is_speech_available", lambda: False
+)
+class Speech2TextFeatureExtractionWithoutTorchaudioTest(Speech2TextFeatureExtractionTest):
+    def test_using_audio_utils(self):
+        # Tests that it uses audio_utils instead of torchaudio
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+
+        self.assertTrue(hasattr(feat_extract, "window"))
+        self.assertTrue(hasattr(feat_extract, "mel_filters"))
+
+        from transformers.models.speech_to_text.feature_extraction_speech_to_text import is_speech_available
+
+        self.assertFalse(is_speech_available())

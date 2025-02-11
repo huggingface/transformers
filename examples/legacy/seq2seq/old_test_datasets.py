@@ -17,18 +17,18 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from torch.utils.data import DataLoader
-
 from pack_dataset import pack_data_dir
 from parameterized import parameterized
 from save_len_file import save_len_file
+from torch.utils.data import DataLoader
+
 from transformers import AutoTokenizer
 from transformers.models.mbart.modeling_mbart import shift_tokens_right
 from transformers.testing_utils import TestCasePlus, slow
 from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
 
 
-BERT_BASE_CASED = "bert-base-cased"
+BERT_BASE_CASED = "google-bert/bert-base-cased"
 PEGASUS_XSUM = "google/pegasus-xsum"
 ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
 SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]

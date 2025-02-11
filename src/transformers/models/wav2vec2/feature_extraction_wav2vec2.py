@@ -36,11 +36,11 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_size (`int`, defaults to 1):
+        feature_size (`int`, *optional*, defaults to 1):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        padding_value (`float`, defaults to 0.0):
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         do_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
@@ -71,7 +71,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         return_attention_mask=False,
         do_normalize=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.return_attention_mask = return_attention_mask
@@ -109,7 +109,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -117,7 +117,8 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
+                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -136,7 +137,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -165,7 +166,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
-            padding_value (`float`, defaults to 0.0):
+            padding_value (`float`, *optional*, defaults to 0.0):
         """
 
         if sampling_rate is not None:
@@ -181,9 +182,11 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         # always return batch
@@ -235,3 +238,6 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["Wav2Vec2FeatureExtractor"]

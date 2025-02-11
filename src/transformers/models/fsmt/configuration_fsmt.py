@@ -12,10 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" FSMT configuration"""
-
-
-import copy
+"""FSMT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -23,13 +20,12 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
-
 
 class DecoderConfig(PretrainedConfig):
     r"""
     Configuration class for FSMT's decoder specific things. note: this is a private helper class
     """
+
     model_type = "fsmt_decoder"
 
     def __init__(self, vocab_size=0, bos_token_id=0):
@@ -125,9 +121,16 @@ class FSMTConfig(PretrainedConfig):
     ```python
     >>> from transformers import FSMTConfig, FSMTModel
 
-    >>> config = FSMTConfig.from_pretrained("facebook/wmt19-en-ru")
+    >>> # Initializing a FSMT facebook/wmt19-en-ru style configuration
+    >>> config = FSMTConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = FSMTModel(config)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
+
     model_type = "fsmt"
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
 
@@ -165,7 +168,7 @@ class FSMTConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **common_kwargs
+        **common_kwargs,
     ):
         self.langs = langs
         self.src_vocab_size = src_vocab_size
@@ -211,14 +214,5 @@ class FSMTConfig(PretrainedConfig):
             **common_kwargs,
         )
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
 
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+__all__ = ["FSMTConfig"]

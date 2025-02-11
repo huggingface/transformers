@@ -28,19 +28,19 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import datasets
-import numpy as np
-from datasets import Dataset, load_dataset
-from tqdm import tqdm
-
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
-import transformers
+from datasets import Dataset, load_dataset
 from flax.core.frozen_dict import freeze, unfreeze
 from flax.training.common_utils import onehot, stack_forest
 from jax.experimental.maps import mesh
 from jax.experimental.pjit import pjit
 from partitions import set_partitions
+from tqdm import tqdm
+
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -70,7 +70,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -156,9 +156,6 @@ class DataTrainingArguments:
             )
         },
     )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
@@ -214,7 +211,7 @@ def write_eval_metric(summary_writer, eval_metrics, step):
 
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
+) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
@@ -246,7 +243,7 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use --overwrite_output_dir to overcome."
         )
 
@@ -297,14 +294,15 @@ def main():
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
+            extension = data_args.train_file.split(".")[-1]
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-        extension = data_args.train_file.split(".")[-1]
+            extension = data_args.validation_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
         dataset = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained config and tokenizer
     if model_args.config_name:
@@ -325,7 +323,7 @@ def main():
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -362,13 +360,13 @@ def main():
         if block_size > config.max_position_embeddings:
             logger.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+                f"Using block_size={min(1024, config.max_position_embeddings)} instead. You can change that default value by passing --block_size xxx."
             )
-            block_size = 1024
+            block_size = min(1024, config.max_position_embeddings)
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(
-                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
         block_size = min(data_args.block_size, tokenizer.model_max_length)
@@ -395,7 +393,7 @@ def main():
     # to preprocess.
     #
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-    # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+    # https://huggingface.co/docs/datasets/process#map
 
     lm_datasets = tokenized_datasets.map(
         group_texts,

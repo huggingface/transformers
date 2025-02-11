@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MobileViT model configuration"""
+"""MobileViT model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -25,22 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "apple/mobilevit-small": "https://huggingface.co/apple/mobilevit-small/resolve/main/config.json",
-    "apple/mobilevit-x-small": "https://huggingface.co/apple/mobilevit-x-small/resolve/main/config.json",
-    "apple/mobilevit-xx-small": "https://huggingface.co/apple/mobilevit-xx-small/resolve/main/config.json",
-    "apple/deeplabv3-mobilevit-small": (
-        "https://huggingface.co/apple/deeplabv3-mobilevit-small/resolve/main/config.json"
-    ),
-    "apple/deeplabv3-mobilevit-x-small": (
-        "https://huggingface.co/apple/deeplabv3-mobilevit-x-small/resolve/main/config.json"
-    ),
-    "apple/deeplabv3-mobilevit-xx-small": (
-        "https://huggingface.co/apple/deeplabv3-mobilevit-xx-small/resolve/main/config.json"
-    ),
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-}
 
 
 class MobileViTConfig(PretrainedConfig):
@@ -74,21 +58,21 @@ class MobileViTConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the Transformer encoder and convolution layers.
         conv_kernel_size (`int`, *optional*, defaults to 3):
             The size of the convolutional kernel in the MobileViT layer.
-        output_stride (`int`, `optional`, defaults to 32):
+        output_stride (`int`, *optional*, defaults to 32):
             The ratio of the spatial resolution of the output to the resolution of the input image.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the Transformer encoder.
+            The dropout probability for all fully connected layers in the Transformer encoder.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for attached classifiers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        aspp_out_channels (`int`, `optional`, defaults to 256):
+        aspp_out_channels (`int`, *optional*, defaults to 256):
             Number of output channels used in the ASPP layer for semantic segmentation.
         atrous_rates (`List[int]`, *optional*, defaults to `[6, 12, 18]`):
             Dilation (atrous) factors used in the ASPP layer for semantic segmentation.
@@ -111,6 +95,7 @@ class MobileViTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "mobilevit"
 
     def __init__(
@@ -136,7 +121,7 @@ class MobileViTConfig(PretrainedConfig):
         atrous_rates=[6, 12, 18],
         aspp_dropout_prob=0.1,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -166,7 +151,6 @@ class MobileViTConfig(PretrainedConfig):
 
 
 class MobileViTOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
@@ -183,3 +167,6 @@ class MobileViTOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["MobileViTConfig", "MobileViTOnnxConfig"]

@@ -4,7 +4,7 @@ async-generator==1.10
 attrs==20.2.0
 backcall==0.2.0
 CacheControl==0.12.6
-certifi==2020.6.20
+certifi==2024.7.4
 cffi==1.14.2
 chardet==3.0.4
 click==7.1.2
@@ -19,9 +19,9 @@ distlib==0.3.0
 distro==1.4.0
 entrypoints==0.3
 filelock==3.0.12
-future==0.18.2
+future==0.18.3
 html5lib==1.0.1
-idna==2.8
+idna==3.7
 ipaddr==2.2.0
 ipykernel==5.3.4
 ipython
@@ -34,7 +34,7 @@ jsonschema==3.2.0
 jupyter==1.0.0
 jupyter-client==6.1.7
 jupyter-console==6.2.0
-jupyter-core==4.6.3
+jupyter-core==4.11.2
 jupyterlab-pygments==0.1.1
 kiwisolver==1.2.0
 lockfile==0.12.2
@@ -48,7 +48,7 @@ nbformat==5.0.7
 nest-asyncio==1.4.0
 notebook==6.4.12
 numpy==1.22.0
-opencv-python==4.4.0.42
+opencv-python==4.8.1.78
 packaging==20.3
 pandas==1.1.2
 pandocfilters==1.4.2
@@ -62,7 +62,7 @@ prometheus-client==0.8.0
 prompt-toolkit==3.0.7
 ptyprocess==0.6.0
 pyaml==20.4.0
-pyarrow==1.0.1
+pyarrow==15.0.0
 pycparser==2.20
 Pygments>=2.7.4
 pyparsing==2.4.6
@@ -75,7 +75,7 @@ pyzmq==19.0.2
 qtconsole==4.7.7
 QtPy==1.9.0
 regex==2020.7.14
-requests==2.22.0
+requests==2.32.2
 retrying==1.3.3
 sacremoses==0.0.43
 Send2Trash==1.5.0
@@ -84,13 +84,13 @@ six==1.14.0
 terminado==0.8.3
 testpath==0.4.4
 tokenizers==0.8.1rc2
-torch==1.6.0
+torch==2.2.0
 torchvision==0.7.0
-tornado==6.0.4
-tqdm==4.48.2
+tornado==6.4.2
+tqdm==4.66.3
 traitlets
 git+https://github.com/huggingface/transformers.git
-urllib3==1.26.5
+urllib3==1.26.19
 wcwidth==0.2.5
 webencodings==0.5.1
 wget==3.2

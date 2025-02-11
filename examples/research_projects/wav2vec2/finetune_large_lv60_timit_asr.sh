@@ -5,7 +5,7 @@ python run_asr.py \
 --per_device_train_batch_size="2" \
 --per_device_eval_batch_size="2" \
 --gradient_accumulation_steps="4" \
---evaluation_strategy="steps" \
+--eval_strategy="steps" \
 --save_steps="500" \
 --eval_steps="100" \
 --logging_steps="50" \

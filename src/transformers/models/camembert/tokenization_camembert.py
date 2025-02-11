@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for Camembert model."""
-
+"""Tokenization classes for Camembert model."""
 
 import os
 from shutil import copyfile
@@ -29,15 +28,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/sentencepiece.bpe.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "camembert-base": 512,
-}
 
 SPIECE_UNDERLINE = "▁"
 
@@ -89,7 +79,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<s>NOTUSED', '</s>NOTUSED', '<unk>NOTUSED']`):
             Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
@@ -113,8 +103,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -127,14 +115,41 @@ class CamembertTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
+        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"],
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False, special=True)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(str(vocab_file))
+        self.vocab_file = vocab_file
+
+        # HACK: These tokens were added by the author for an obscure reason as they were already part of the
+        # sentencepiece vocabulary (this is the case for <s> and </s> and <unk>).
+        # In this case it is recommended to properly set the tokens by hand.
+        self._added_tokens_decoder = {
+            0: AddedToken("<s>NOTUSED", special=True),
+            1: AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token,
+            2: AddedToken("</s>NOTUSED", special=True),
+            3: AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token,
+            4: AddedToken("<unk>NOTUSED", special=True),
+        }
+
+        self.fairseq_offset = 4  # 3 tokens are newly added, but the offset starts from 4
+
+        # legacy: camemebert is a particular case were we have to make sure `"<unk>NOTUSED"` is here
+        if "added_tokens_decoder" in kwargs:
+            # this is the only class that requires this unfortunately.....
+            # the reason is that the fast version has a whole.
+            kwargs["added_tokens_decoder"].update(self._added_tokens_decoder)
 
         super().__init__(
             bos_token=bos_token,
@@ -148,15 +163,83 @@ class CamembertTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
+
+    @property
+    def vocab_size(self):
+        # The length of the vocabulary without added tokens is len(self.sp_model) but the added tokens are added at the beginning.
+        return len(self.sp_model)
+
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.fairseq_offset)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def _tokenize(self, text: str) -> List[str]:
+        return self.sp_model.encode(text, out_type=str)
+
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        # specifi to camembert, both 3 and 4 point to the unk token.
+        if self.sp_model.PieceToId(token) == 0:
+            # Convert sentence piece unk token to fairseq unk token index
+            return self.unk_token_id
+        return self.fairseq_offset + self.sp_model.PieceToId(token)
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.sp_model.IdToPiece(index - self.fairseq_offset)
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        # TODO decode outputs do not match between fast and slow
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                if not prev_is_special:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
+
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
-        self.vocab_file = vocab_file
-        # HACK: These tokens were added by fairseq but don't seem to be actually used when duplicated in the actual
-        # sentencepiece vocabulary (this is the case for <s> and </s>
-        self.fairseq_tokens_to_ids = {"<s>NOTUSED": 0, "<pad>": 1, "</s>NOTUSED": 2, "<unk>": 3}
-        self.fairseq_offset = len(self.fairseq_tokens_to_ids)
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.fairseq_tokens_to_ids)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self.sp_model.Load(self.vocab_file)
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
+
+        return (out_vocab_file,)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -234,65 +317,5 @@ class CamembertTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    @property
-    def vocab_size(self):
-        return len(self.fairseq_tokens_to_ids) + len(self.sp_model)
 
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    def _tokenize(self, text: str) -> List[str]:
-        return self.sp_model.encode(text, out_type=str)
-
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        if token in self.fairseq_tokens_to_ids:
-            return self.fairseq_tokens_to_ids[token]
-        elif self.sp_model.PieceToId(token) == 0:
-            # Convert sentence piece unk token to fairseq unk token index
-            return self.unk_token_id
-        return self.fairseq_offset + self.sp_model.PieceToId(token)
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.fairseq_ids_to_tokens:
-            return self.fairseq_ids_to_tokens[index]
-        return self.sp_model.IdToPiece(index - self.fairseq_offset)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(self.vocab_file)
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        return self.sp_model.decode(tokens)
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            with open(out_vocab_file, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
-
-        return (out_vocab_file,)
+__all__ = ["CamembertTokenizer"]

@@ -24,18 +24,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/vocab.json"
-    },
-    "merges_file": {
-        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/merges.txt"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"allegro/herbert-base-cased": 514}
-PRETRAINED_INIT_CONFIGURATION = {}
-
 
 class HerbertTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -57,9 +45,6 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = HerbertTokenizer
 
     def __init__(
@@ -72,9 +57,8 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         sep_token="</s>",
-        **kwargs
+        **kwargs,
     ):
-
         super().__init__(
             vocab_file,
             merges_file,
@@ -172,3 +156,6 @@ class HerbertTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+
+__all__ = ["HerbertTokenizerFast"]

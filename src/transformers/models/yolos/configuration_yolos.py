@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" YOLOS model configuration"""
+"""YOLOS model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -25,11 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-YOLOS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "hustvl/yolos-small": "https://huggingface.co/hustvl/yolos-small/resolve/main/config.json",
-    # See all YOLOS models at https://huggingface.co/models?filter=yolos
-}
 
 
 class YolosConfig(PretrainedConfig):
@@ -54,9 +49,9 @@ class YolosConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -64,13 +59,13 @@ class YolosConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         image_size (`List[int]`, *optional*, defaults to `[512, 864]`):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `16`):
+        patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to `3`):
+        num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        num_detection_tokens (`int`, *optional*, defaults to `100`):
+        num_detection_tokens (`int`, *optional*, defaults to 100):
             The number of detection tokens.
         use_mid_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use the mid-layer position encodings.
@@ -103,6 +98,7 @@ class YolosConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "yolos"
 
     def __init__(
@@ -129,7 +125,7 @@ class YolosConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -160,7 +156,6 @@ class YolosConfig(PretrainedConfig):
 
 
 class YolosOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
@@ -178,3 +173,6 @@ class YolosOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+
+__all__ = ["YolosConfig", "YolosOnnxConfig"]

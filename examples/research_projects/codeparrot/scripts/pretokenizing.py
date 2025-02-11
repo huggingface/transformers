@@ -1,14 +1,14 @@
 import multiprocessing
 import time
 
+from arguments import PretokenizationArguments
 from datasets import load_dataset
 
-from arguments import PretokenizationArguments
 from transformers import AutoTokenizer, HfArgumentParser
 
 
 def tokenize(example):
-    output = dict()
+    output = {}
     output["input_ids"] = tokenizer(example["content"], truncation=False)["input_ids"]
     output["ratio_char_token"] = len(example["content"]) / len(output["input_ids"])
     return output

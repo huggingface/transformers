@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the Tensorflow ResNet model. """
+"""Testing suite for the Tensorflow ResNet model."""
 
+from __future__ import annotations
 
 import inspect
 import unittest
@@ -26,19 +27,19 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFResNetForImageClassification, TFResNetModel
-    from transformers.models.resnet.modeling_tf_resnet import TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class TFResNetModelTester:
@@ -116,13 +117,18 @@ class TFResNetModelTester:
 
 
 @require_tf
-class TFResNetModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFResNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ResNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (TFResNetModel, TFResNetForImageClassification) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": TFResNetModel, "image-classification": TFResNetForImageClassification}
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False
@@ -148,10 +154,6 @@ class TFResNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ResNet does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="ResNet does not output attentions")
-    def test_attention_outputs(self):
         pass
 
     @unittest.skip(reason="ResNet does not support input and output embeddings")
@@ -210,9 +212,9 @@ class TFResNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFResNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/resnet-50"
+        model = TFResNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -225,20 +227,16 @@ def prepare_img():
 @require_vision
 class TFResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return (
-            AutoFeatureExtractor.from_pretrained(TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
-            if is_vision_available()
-            else None
-        )
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("microsoft/resnet-50") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFResNetForImageClassification.from_pretrained(TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+        model = TFResNetForImageClassification.from_pretrained("microsoft/resnet-50")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)

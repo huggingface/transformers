@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model DeBERTa."""
+"""Tokenization class for model DeBERTa."""
 
 import os
 import unicodedata
@@ -20,35 +20,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as sp
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...utils import logging
 
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/spm.model",
-        "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/spm.model",
-        "microsoft/deberta-v2-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model"
-        ),
-        "microsoft/deberta-v2-xxlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model"
-        ),
-    }
-}
+logger = logging.get_logger(__name__)
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/deberta-v2-xlarge": 512,
-    "microsoft/deberta-v2-xxlarge": 512,
-    "microsoft/deberta-v2-xlarge-mnli": 512,
-    "microsoft/deberta-v2-xxlarge-mnli": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/deberta-v2-xlarge": {"do_lower_case": False},
-    "microsoft/deberta-v2-xxlarge": {"do_lower_case": False},
-    "microsoft/deberta-v2-xlarge-mnli": {"do_lower_case": False},
-    "microsoft/deberta-v2-xxlarge-mnli": {"do_lower_case": False},
-}
 
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model"}
 
@@ -103,9 +80,6 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -120,10 +94,22 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        if not os.path.isfile(vocab_file):
+            raise ValueError(
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
+        self.do_lower_case = do_lower_case
+        self.split_by_punct = split_by_punct
+        self.vocab_file = vocab_file
+        self._tokenizer = SPMTokenizer(
+            vocab_file, None, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
+        )
+        unk_token = AddedToken(unk_token, normalized=True, special=True) if isinstance(unk_token, str) else unk_token
         super().__init__(
             do_lower_case=do_lower_case,
             bos_token=bos_token,
@@ -137,16 +123,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        if not os.path.isfile(vocab_file):
-            raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
-            )
-        self.do_lower_case = do_lower_case
-        self.split_by_punct = split_by_punct
-        self.vocab_file = vocab_file
-        self._tokenizer = SPMTokenizer(vocab_file, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs)
+        self._tokenizer.special_tokens = self.all_special_tokens
 
     @property
     def vocab_size(self):
@@ -291,7 +268,9 @@ class SPMTokenizer:
               BPE-dropout.
     """
 
-    def __init__(self, vocab_file, split_by_punct=False, sp_model_kwargs: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, vocab_file, special_tokens, split_by_punct=False, sp_model_kwargs: Optional[Dict[str, Any]] = None
+    ):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -312,6 +291,7 @@ class SPMTokenizer:
         # self.vocab['[UNK]'] = 3
 
         self.spm = spm
+        self.special_tokens = special_tokens
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -339,7 +319,22 @@ class SPMTokenizer:
 
     def decode(self, tokens, start=-1, end=-1, raw_text=None):
         if raw_text is None:
-            return self.spm.decode_pieces([t for t in tokens])
+            current_sub_tokens = []
+            out_string = ""
+            prev_is_special = False
+            for token in tokens:
+                # make sure that special tokens are not decoded using sentencepiece model
+                if token in self.special_tokens:
+                    if not prev_is_special:
+                        out_string += " "
+                    out_string += self.spm.decode_pieces(current_sub_tokens) + token
+                    prev_is_special = True
+                    current_sub_tokens = []
+                else:
+                    current_sub_tokens.append(token)
+                    prev_is_special = False
+            out_string += self.spm.decode_pieces(current_sub_tokens)
+            return out_string.strip()
         else:
             words = self.split_to_words(raw_text)
             word_tokens = [self.tokenize(w) for w in words]
@@ -354,6 +349,7 @@ class SPMTokenizer:
             text = "".join(words[word_start:word_end])
             return text
 
+    # TODO add a deprecation cycle as this can have different behaviour from our API
     def add_special_token(self, token):
         if token not in self.special_tokens:
             self.special_tokens.append(token)
@@ -363,6 +359,9 @@ class SPMTokenizer:
         return self.id(token)
 
     def part_of_whole_word(self, token, is_bos=False):
+        logger.warning_once(
+            "The `DebertaTokenizer.part_of_whole_word` method is deprecated and will be removed in `transformers==4.35`"
+        )
         if is_bos:
             return True
         if (
@@ -393,6 +392,9 @@ class SPMTokenizer:
         return self.ids_to_tokens[id]
 
     def id(self, sym):
+        logger.warning_once(
+            "The `DebertaTokenizer.id` method is deprecated and will be removed in `transformers==4.35`"
+        )
         return self.vocab[sym] if sym in self.vocab else 1
 
     def _encode_as_pieces(self, text):
@@ -439,17 +441,6 @@ class SPMTokenizer:
             words.append(text[prev_end:offset])
 
         return words
-
-    def _run_strip_accents(self, text):
-        """Strips accents from a piece of text."""
-        text = unicodedata.normalize("NFD", text)
-        output = []
-        for char in text:
-            cat = unicodedata.category(char)
-            if cat == "Mn":
-                continue
-            output.append(char)
-        return "".join(output)
 
     def _run_split_on_punc(self, text):
         """Splits punctuation on a piece of text."""
@@ -527,4 +518,7 @@ def convert_to_unicode(text):
     elif isinstance(text, bytes):
         return text.decode("utf-8", "ignore")
     else:
-        raise ValueError(f"Unsupported string type: {type(text)}")
+        raise TypeError(f"Unsupported string type: {type(text)}")
+
+
+__all__ = ["DebertaV2Tokenizer"]

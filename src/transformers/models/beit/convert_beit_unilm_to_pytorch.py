@@ -14,24 +14,24 @@
 # limitations under the License.
 """Convert BEiT checkpoints from the unilm repository."""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
 from datasets import load_dataset
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     BeitConfig,
-    BeitFeatureExtractor,
     BeitForImageClassification,
     BeitForMaskedImageModeling,
     BeitForSemanticSegmentation,
+    BeitImageProcessor,
 )
+from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
@@ -265,14 +265,16 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Check outputs on an image
     if is_semantic:
-        feature_extractor = BeitFeatureExtractor(size=config.image_size, do_center_crop=False)
-        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test")
+        image_processor = BeitImageProcessor(size=config.image_size, do_center_crop=False)
+        ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
         image = Image.open(ds[0]["file"])
     else:
-        feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+        image_processor = BeitImageProcessor(
+            size=config.image_size, resample=PILImageResampling.BILINEAR, do_center_crop=False
+        )
         image = prepare_img()
 
-    encoding = feature_extractor(images=image, return_tensors="pt")
+    encoding = image_processor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     outputs = model(pixel_values)
@@ -334,24 +336,25 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError("Can't verify logits as model is not supported")
 
-    assert logits.shape == expected_shape, "Shape of logits not as expected"
+    if logits.shape != expected_shape:
+        raise ValueError(f"Shape of logits not as expected. {logits.shape=}, {expected_shape=}")
     if not has_lm_head:
         if is_semantic:
-            assert torch.allclose(
-                logits[0, :3, :3, :3], expected_logits, atol=1e-3
-            ), "First elements of logits not as expected"
+            if not torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-3):
+                raise ValueError("First elements of logits not as expected")
         else:
             print("Predicted class idx:", logits.argmax(-1).item())
-            assert torch.allclose(
-                logits[0, :3], expected_logits, atol=1e-3
-            ), "First elements of logits not as expected"
-            assert logits.argmax(-1).item() == expected_class_idx, "Predicted class index not as expected"
+
+            if not torch.allclose(logits[0, :3], expected_logits, atol=1e-3):
+                raise ValueError("First elements of logits not as expected")
+            if logits.argmax(-1).item() != expected_class_idx:
+                raise ValueError("Predicted class index not as expected")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

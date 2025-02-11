@@ -14,24 +14,23 @@
 # limitations under the License.
 """Convert ViLT checkpoints from the original Github repository."""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     BertTokenizer,
     ViltConfig,
-    ViltFeatureExtractor,
     ViltForImageAndTextRetrieval,
     ViltForImagesAndTextClassification,
     ViltForMaskedLM,
     ViltForQuestionAnswering,
+    ViltImageProcessor,
     ViltProcessor,
 )
 from transformers.utils import logging
@@ -223,9 +222,9 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         model.load_state_dict(state_dict)
 
     # Define processor
-    feature_extractor = ViltFeatureExtractor(size=384)
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    processor = ViltProcessor(feature_extractor, tokenizer)
+    image_processor = ViltImageProcessor(size=384)
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    processor = ViltProcessor(image_processor, tokenizer)
 
     # Forward pass on example inputs (image + text)
     if nlvr_model:

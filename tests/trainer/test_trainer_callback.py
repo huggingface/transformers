@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import os
 import shutil
 import tempfile
 import unittest
@@ -19,28 +21,44 @@ from unittest.mock import patch
 
 from transformers import (
     DefaultFlowCallback,
+    EarlyStoppingCallback,
     IntervalStrategy,
     PrinterCallback,
     ProgressCallback,
     Trainer,
     TrainerCallback,
+    TrainerState,
     TrainingArguments,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch
+from transformers.trainer_callback import ExportableState
 
 
 if is_torch_available():
-    from transformers.trainer import DEFAULT_CALLBACKS
+    from transformers.trainer import DEFAULT_CALLBACKS, TRAINER_STATE_NAME
 
     from .test_trainer import RegressionDataset, RegressionModelConfig, RegressionPreTrainedModel
+
+
+class MyTestExportableCallback(TrainerCallback, ExportableState):
+    def __init__(self, my_test_state="test"):
+        self.my_test_state = my_test_state
+
+    def state(self):
+        return {
+            "args": {
+                "my_test_state": self.my_test_state,
+            },
+        }
 
 
 class MyTestTrainerCallback(TrainerCallback):
     "A callback that registers the events that goes through."
 
-    def __init__(self):
+    def __init__(self, my_test_state="test"):
         self.events = []
+        self.my_test_state = my_test_state
 
     def on_init_end(self, args, state, control, **kwargs):
         self.events.append("on_init_end")
@@ -59,6 +77,12 @@ class MyTestTrainerCallback(TrainerCallback):
 
     def on_step_begin(self, args, state, control, **kwargs):
         self.events.append("on_step_begin")
+
+    def on_pre_optimizer_step(self, args, state, control, **kwargs):
+        self.events.append("on_pre_optimizer_step")
+
+    def on_optimizer_step(self, args, state, control, **kwargs):
+        self.events.append("on_optimizer_step")
 
     def on_step_end(self, args, state, control, **kwargs):
         self.events.append("on_step_end")
@@ -108,8 +132,8 @@ class TrainerCallbackTest(unittest.TestCase):
         self.assertEqual(len(cbs1), len(cbs2))
 
         # Order doesn't matter
-        cbs1 = list(sorted(cbs1, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__))
-        cbs2 = list(sorted(cbs2, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__))
+        cbs1 = sorted(cbs1, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__)
+        cbs2 = sorted(cbs2, key=lambda cb: cb.__name__ if isinstance(cb, type) else cb.__class__.__name__)
 
         for cb1, cb2 in zip(cbs1, cbs2):
             if isinstance(cb1, type) and isinstance(cb2, type):
@@ -130,15 +154,15 @@ class TrainerCallbackTest(unittest.TestCase):
             expected_events.append("on_epoch_begin")
             for _ in range(train_dl_len):
                 step += 1
-                expected_events += ["on_step_begin", "on_step_end"]
+                expected_events += ["on_step_begin", "on_pre_optimizer_step", "on_optimizer_step", "on_step_end"]
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
-                if trainer.args.evaluation_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
+                if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
-                if step % trainer.args.save_steps == 0:
+                if step % trainer.args.save_steps == 0 or step == trainer.state.max_steps:
                     expected_events.append("on_save")
             expected_events.append("on_epoch_end")
-            if trainer.args.evaluation_strategy == IntervalStrategy.EPOCH:
+            if trainer.args.eval_strategy == IntervalStrategy.EPOCH:
                 expected_events += evaluation_events.copy()
         expected_events += ["on_log", "on_train_end"]
         return expected_events
@@ -197,49 +221,207 @@ class TrainerCallbackTest(unittest.TestCase):
         import warnings
 
         # XXX: for now ignore scatter_gather warnings in this test since it's not relevant to what's being tested
-        warnings.simplefilter(action="ignore", category=UserWarning)
+        with warnings.catch_warnings():
+            warnings.simplefilter(action="ignore", category=UserWarning)
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback])
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback])
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        # Independent log/save/eval
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], logging_steps=5)
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            # Independent log/save/eval
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], logging_steps=5)
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], save_steps=5)
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], save_steps=5)
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_steps=5, evaluation_strategy="steps")
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_steps=5, eval_strategy="steps")
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], evaluation_strategy="epoch")
-        trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
+            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback], eval_strategy="epoch")
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
 
-        # A bit of everything
+            # A bit of everything
+            trainer = self.get_trainer(
+                callbacks=[MyTestTrainerCallback],
+                logging_steps=3,
+                save_steps=10,
+                eval_steps=5,
+                eval_strategy="steps",
+            )
+            trainer.train()
+            events = trainer.callback_handler.callbacks[-2].events
+            self.assertEqual(events, self.get_expected_events(trainer))
+
+            # warning should be emitted for duplicated callbacks
+            with patch("transformers.trainer_callback.logger.warning") as warn_mock:
+                trainer = self.get_trainer(
+                    callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
+                )
+                assert str(MyTestTrainerCallback) in warn_mock.call_args[0][0]
+
+    def test_stateful_callbacks(self):
+        # Use something with non-defaults
+        cb = EarlyStoppingCallback(early_stopping_patience=5, early_stopping_threshold=0.2)
         trainer = self.get_trainer(
-            callbacks=[MyTestTrainerCallback],
-            logging_steps=3,
-            save_steps=10,
-            eval_steps=5,
-            evaluation_strategy="steps",
+            callbacks=[cb],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
         )
         trainer.train()
-        events = trainer.callback_handler.callbacks[-2].events
-        self.assertEqual(events, self.get_expected_events(trainer))
 
-        # warning should be emitted for duplicated callbacks
-        with patch("transformers.trainer_callback.logger.warning") as warn_mock:
-            trainer = self.get_trainer(
-                callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
-            )
-            assert str(MyTestTrainerCallback) in warn_mock.call_args[0][0]
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            callbacks=[EarlyStoppingCallback()],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+            restore_callback_states_from_checkpoint=True,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.train(resume_from_checkpoint=checkpoint)
+        cb = [
+            callback for callback in trainer.callback_handler.callbacks if isinstance(callback, EarlyStoppingCallback)
+        ][0]
+        assert cb.early_stopping_patience == 5
+        assert cb.early_stopping_threshold == 0.2
+
+    def test_stateful_mixed_callbacks(self):
+        # Use two callbacks, one stateful one not
+        # Use something with non-defaults
+        cbs = [
+            MyTestTrainerCallback(my_test_state="another value"),
+            EarlyStoppingCallback(early_stopping_patience=5, early_stopping_threshold=0.2),
+        ]
+        trainer = self.get_trainer(
+            callbacks=cbs,
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        trainer.train()
+
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            callbacks=[EarlyStoppingCallback(), MyTestTrainerCallback()],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+            restore_callback_states_from_checkpoint=True,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.train(resume_from_checkpoint=checkpoint)
+        cbs = [
+            callback
+            for callback in trainer.callback_handler.callbacks
+            if isinstance(callback, (EarlyStoppingCallback, MyTestTrainerCallback))
+        ]
+        assert len(cbs) == 2
+        my_test, early_stopping = cbs
+        assert early_stopping.early_stopping_patience == 5
+        assert early_stopping.early_stopping_threshold == 0.2
+        assert my_test.my_test_state == "test"
+
+    def test_stateful_duplicate_callbacks(self):
+        # Use something with non-defaults
+        cbs = [MyTestExportableCallback("first"), MyTestExportableCallback("second")]
+        trainer = self.get_trainer(
+            callbacks=cbs,
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        trainer.train()
+
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            callbacks=[MyTestExportableCallback(), MyTestExportableCallback()],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+            restore_callback_states_from_checkpoint=True,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.train(resume_from_checkpoint=checkpoint)
+        cbs = [
+            callback
+            for callback in trainer.callback_handler.callbacks
+            if isinstance(callback, MyTestExportableCallback)
+        ]
+        assert len(cbs) == 2
+        assert cbs[0].my_test_state == "first"
+        assert cbs[1].my_test_state == "second"
+
+    def test_missing_stateful_callback(self):
+        cb = EarlyStoppingCallback()
+        trainer = self.get_trainer(
+            callbacks=[cb],
+            load_best_model_at_end=True,
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+        )
+        trainer.train()
+
+        # Create a new trainer with defaults
+        trainer = self.get_trainer(
+            save_strategy="steps",
+            eval_strategy="steps",
+            save_steps=2,
+            eval_steps=2,
+            max_steps=2,
+            restore_callback_states_from_checkpoint=True,
+        )
+        # Load it back in and verify values
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        # warning should be emitted for not-present callbacks
+        with patch("transformers.trainer.logger.warning") as warn_mock:
+            trainer.train(resume_from_checkpoint=checkpoint)
+            assert "EarlyStoppingCallback" in warn_mock.call_args[0][0]
+
+    def test_stateful_control(self):
+        trainer = self.get_trainer(
+            max_steps=2,
+            save_strategy="steps",
+            save_steps=2,
+        )
+        trainer.train()
+        # Load it back in and verify values
+        trainer = self.get_trainer(max_steps=2, restore_callback_states_from_checkpoint=True)
+        checkpoint = os.path.join(self.output_dir, "checkpoint-2")
+        trainer.state = TrainerState.load_from_json(os.path.join(checkpoint, TRAINER_STATE_NAME))
+        trainer._load_callback_state()
+        assert trainer.control.should_training_stop

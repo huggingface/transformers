@@ -15,6 +15,8 @@
 """
 Processor class for LayoutXLM.
 """
+
+import warnings
 from typing import List, Optional, Union
 
 from ...processing_utils import ProcessorMixin
@@ -24,25 +26,44 @@ from ...utils import TensorType
 
 class LayoutXLMProcessor(ProcessorMixin):
     r"""
-    Constructs a LayoutXLM processor which combines a LayoutXLM feature extractor and a LayoutXLM tokenizer into a
-    single processor.
+    Constructs a LayoutXLM processor which combines a LayoutXLM image processor and a LayoutXLM tokenizer into a single
+    processor.
 
     [`LayoutXLMProcessor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`LayoutLMv2FeatureExtractor`] to resize document images to a fixed size, and optionally applies OCR
-    to get words and normalized bounding boxes. These are then provided to [`LayoutXLMTokenizer`] or
+    It first uses [`LayoutLMv2ImageProcessor`] to resize document images to a fixed size, and optionally applies OCR to
+    get words and normalized bounding boxes. These are then provided to [`LayoutXLMTokenizer`] or
     [`LayoutXLMTokenizerFast`], which turns the words and bounding boxes into token-level `input_ids`,
     `attention_mask`, `token_type_ids`, `bbox`. Optionally, one can provide integer `word_labels`, which are turned
     into token-level `labels` for token classification tasks (such as FUNSD, CORD).
 
     Args:
-        feature_extractor (`LayoutLMv2FeatureExtractor`):
-            An instance of [`LayoutLMv2FeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`LayoutXLMTokenizer` or `LayoutXLMTokenizerFast`):
+        image_processor (`LayoutLMv2ImageProcessor`, *optional*):
+            An instance of [`LayoutLMv2ImageProcessor`]. The image processor is a required input.
+        tokenizer (`LayoutXLMTokenizer` or `LayoutXLMTokenizerFast`, *optional*):
             An instance of [`LayoutXLMTokenizer`] or [`LayoutXLMTokenizerFast`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "LayoutLMv2FeatureExtractor"
+
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "LayoutLMv2ImageProcessor"
     tokenizer_class = ("LayoutXLMTokenizer", "LayoutXLMTokenizerFast")
+
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
@@ -53,7 +74,7 @@ class LayoutXLMProcessor(ProcessorMixin):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -65,40 +86,40 @@ class LayoutXLMProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
-        This method first forwards the `images` argument to [`~LayoutLMv2FeatureExtractor.__call__`]. In case
-        [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
+        This method first forwards the `images` argument to [`~LayoutLMv2ImagePrpcessor.__call__`]. In case
+        [`LayoutLMv2ImagePrpcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
         bounding boxes along with the additional arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output,
-        together with resized `images`. In case [`LayoutLMv2FeatureExtractor`] was initialized with `apply_ocr` set to
+        together with resized `images`. In case [`LayoutLMv2ImagePrpcessor`] was initialized with `apply_ocr` set to
         `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional
         arguments to [`~LayoutXLMTokenizer.__call__`] and returns the output, together with resized `images``.
 
         Please refer to the docstring of the above two methods for more information.
         """
         # verify input
-        if self.feature_extractor.apply_ocr and (boxes is not None):
+        if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(
                 "You cannot provide bounding boxes "
-                "if you initialized the feature extractor with apply_ocr set to True."
+                "if you initialized the image processor with apply_ocr set to True."
             )
 
-        if self.feature_extractor.apply_ocr and (word_labels is not None):
+        if self.image_processor.apply_ocr and (word_labels is not None):
             raise ValueError(
-                "You cannot provide word labels if you initialized the feature extractor with apply_ocr set to True."
+                "You cannot provide word labels if you initialized the image processor with apply_ocr set to True."
             )
 
         if return_overflowing_tokens is True and return_offsets_mapping is False:
             raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
 
-        # first, apply the feature extractor
-        features = self.feature_extractor(images=images, return_tensors=return_tensors)
+        # first, apply the image processor
+        features = self.image_processor(images=images, return_tensors=return_tensors)
 
         # second, apply the tokenizer
-        if text is not None and self.feature_extractor.apply_ocr and text_pair is None:
+        if text is not None and self.image_processor.apply_ocr and text_pair is None:
             if isinstance(text, str):
-                text = [text]  # add batch dimension (as the feature extractor always adds a batch dimension)
+                text = [text]  # add batch dimension (as the image processor always adds a batch dimension)
             text_pair = features["words"]
 
         encoded_inputs = self.tokenizer(
@@ -158,3 +179,26 @@ class LayoutXLMProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        return ["input_ids", "bbox", "attention_mask", "image"]
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor
+
+
+__all__ = ["LayoutXLMProcessor"]

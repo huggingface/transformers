@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert BART checkpoint."""
 
-
 import argparse
 import os
 from pathlib import Path
@@ -101,7 +100,10 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkp
     config = BartConfig.from_pretrained(hf_checkpoint_name)
     tokens = bart.encode(SAMPLE_TEXT).unsqueeze(0)
     tokens2 = BartTokenizer.from_pretrained(hf_checkpoint_name).encode(SAMPLE_TEXT, return_tensors="pt").unsqueeze(0)
-    assert torch.eq(tokens, tokens2).all()
+    if not torch.eq(tokens, tokens2).all():
+        raise ValueError(
+            f"converted tokenizer and pretrained tokenizer returned different output: {tokens} != {tokens2}"
+        )
 
     if checkpoint_path == "bart.large.mnli":
         state_dict = bart.state_dict()
@@ -130,8 +132,12 @@ def convert_bart_checkpoint(checkpoint_path, pytorch_dump_folder_path, hf_checkp
             new_model_outputs = model.model(tokens)[0]
 
     # Check results
-    assert fairseq_output.shape == new_model_outputs.shape
-    assert (fairseq_output == new_model_outputs).all().item()
+    if fairseq_output.shape != new_model_outputs.shape:
+        raise ValueError(
+            f"`fairseq_output` shape and `new_model_output` shape are different: {fairseq_output.shape=}, {new_model_outputs.shape}"
+        )
+    if (fairseq_output != new_model_outputs).any().item():
+        raise ValueError("Some values in `fairseq_output` are different from `new_model_outputs`")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
 

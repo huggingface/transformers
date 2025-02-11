@@ -1,3 +1,5 @@
+# Copyright 2023 The HuggingFace Team. All rights reserved.
+import datetime
 import platform
 import subprocess
 from typing import Optional, Tuple, Union
@@ -36,7 +38,11 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     out_bytes = output_stream[0]
     audio = np.frombuffer(out_bytes, np.float32)
     if audio.shape[0] == 0:
-        raise ValueError("Malformed soundfile")
+        raise ValueError(
+            "Soundfile is either not in the correct format or is malformed. Ensure that the soundfile has "
+            "a valid audio file extension (e.g. wav, flac or mp3) and is not corrupted. If reading from a remote "
+            "URL, ensure that the URL is the full address to **download** the audio file."
+        )
     return audio
 
 
@@ -44,9 +50,35 @@ def ffmpeg_microphone(
     sampling_rate: int,
     chunk_length_s: float,
     format_for_conversion: str = "f32le",
+    ffmpeg_input_device: Optional[str] = None,
+    ffmpeg_additional_args: Optional[list[str]] = None,
 ):
     """
-    Helper function ro read raw microphone data.
+    Helper function to read audio from a microphone using ffmpeg. The default input device will be used unless another
+    input device is specified using the `ffmpeg_input_device` argument. Uses 'alsa' on Linux, 'avfoundation' on MacOS and
+    'dshow' on Windows.
+
+    Arguments:
+        sampling_rate (`int`):
+            The sampling_rate to use when reading the data from the microphone. Try using the model's sampling_rate to
+            avoid resampling later.
+        chunk_length_s (`float` or `int`):
+            The length of the maximum chunk of audio to be sent returned.
+        format_for_conversion (`str`, defaults to `f32le`):
+            The name of the format of the audio samples to be returned by ffmpeg. The standard is `f32le`, `s16le`
+            could also be used.
+        ffmpeg_input_device (`str`, *optional*):
+            The identifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
+            the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
+            for how to specify and list input devices.
+        ffmpeg_additional_args (`list[str]`, *optional*):
+            Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
+            process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
+            with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
+
+    Returns:
+        A generator yielding audio chunks of `chunk_length_s` seconds as `bytes` objects of length
+        `int(round(sampling_rate * chunk_length_s)) * size_of_sample`.
     """
     ar = f"{sampling_rate}"
     ac = "1"
@@ -58,15 +90,18 @@ def ffmpeg_microphone(
         raise ValueError(f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
 
     system = platform.system()
+
     if system == "Linux":
         format_ = "alsa"
-        input_ = "default"
+        input_ = ffmpeg_input_device or "default"
     elif system == "Darwin":
         format_ = "avfoundation"
-        input_ = ":0"
+        input_ = ffmpeg_input_device or ":default"
     elif system == "Windows":
         format_ = "dshow"
-        input_ = "default"
+        input_ = ffmpeg_input_device or _get_microphone_name()
+
+    ffmpeg_additional_args = [] if ffmpeg_additional_args is None else ffmpeg_additional_args
 
     ffmpeg_command = [
         "ffmpeg",
@@ -87,6 +122,9 @@ def ffmpeg_microphone(
         "quiet",
         "pipe:1",
     ]
+
+    ffmpeg_command.extend(ffmpeg_additional_args)
+
     chunk_len = int(round(sampling_rate * chunk_length_s)) * size_of_sample
     iterator = _ffmpeg_stream(ffmpeg_command, chunk_len)
     for item in iterator:
@@ -99,11 +137,14 @@ def ffmpeg_microphone_live(
     stream_chunk_s: Optional[int] = None,
     stride_length_s: Optional[Union[Tuple[float, float], float]] = None,
     format_for_conversion: str = "f32le",
+    ffmpeg_input_device: Optional[str] = None,
+    ffmpeg_additional_args: Optional[list[str]] = None,
 ):
     """
-    Helper function to read audio from the microphone file through ffmpeg. This will output `partial` overlapping
-    chunks starting from `stream_chunk_s` (if it is defined) until `chunk_length_s` is reached. It will make use of
-    striding to avoid errors on the "sides" of the various chunks.
+    Helper function to read audio from a microphone using ffmpeg. This will output `partial` overlapping chunks starting
+    from `stream_chunk_s` (if it is defined) until `chunk_length_s` is reached. It will make use of striding to avoid
+    errors on the "sides" of the various chunks. The default input device will be used unless another input device is
+    specified using the `ffmpeg_input_device` argument. Uses 'alsa' on Linux, 'avfoundation' on MacOS and 'dshow' on Windows.
 
     Arguments:
         sampling_rate (`int`):
@@ -111,32 +152,46 @@ def ffmpeg_microphone_live(
             avoid resampling later.
         chunk_length_s (`float` or `int`):
             The length of the maximum chunk of audio to be sent returned. This includes the eventual striding.
-        stream_chunk_s (`float` or `int`)
+        stream_chunk_s (`float` or `int`):
             The length of the minimal temporary audio to be returned.
-        stride_length_s (`float` or `int` or `(float, float)`, *optional*, defaults to `None`)
+        stride_length_s (`float` or `int` or `(float, float)`, *optional*):
             The length of the striding to be used. Stride is used to provide context to a model on the (left, right) of
             an audio sample but without using that part to actually make the prediction. Setting this does not change
             the length of the chunk.
-        format_for_conversion: (`str`, defalts to `f32le`)
+        format_for_conversion (`str`, *optional*, defaults to `f32le`):
             The name of the format of the audio samples to be returned by ffmpeg. The standard is `f32le`, `s16le`
             could also be used.
+        ffmpeg_input_device (`str`, *optional*):
+            The identifier of the input device to be used by ffmpeg (i.e. ffmpeg's '-i' argument). If unset,
+            the default input device will be used. See `https://www.ffmpeg.org/ffmpeg-devices.html#Input-Devices`
+            for how to specify and list input devices.
+        ffmpeg_additional_args (`list[str]`, *optional*):
+            Additional arguments to pass to ffmpeg, can include arguments like -nostdin for running as a background
+            process. For example, to pass -nostdin to the ffmpeg process, pass in ["-nostdin"]. If passing in flags
+            with multiple arguments, use the following convention (eg ["flag", "arg1", "arg2]).
+
     Return:
         A generator yielding dictionaries of the following form
 
-        `{"sampling_rate": int, "raw": np.array(), "partial" bool}` With optionnally a `"stride" (int, int)` key if
+        `{"sampling_rate": int, "raw": np.array(), "partial" bool}` With optionally a `"stride" (int, int)` key if
         `stride_length_s` is defined.
 
         `stride` and `raw` are all expressed in `samples`, and `partial` is a boolean saying if the current yield item
         is a whole chunk, or a partial temporary result to be later replaced by another larger chunk.
-
-
     """
     if stream_chunk_s is not None:
         chunk_s = stream_chunk_s
     else:
         chunk_s = chunk_length_s
 
-    microphone = ffmpeg_microphone(sampling_rate, chunk_s, format_for_conversion=format_for_conversion)
+    microphone = ffmpeg_microphone(
+        sampling_rate,
+        chunk_s,
+        format_for_conversion=format_for_conversion,
+        ffmpeg_input_device=ffmpeg_input_device,
+        ffmpeg_additional_args=[] if ffmpeg_additional_args is None else ffmpeg_additional_args,
+    )
+
     if format_for_conversion == "s16le":
         dtype = np.int16
         size_of_sample = 2
@@ -154,6 +209,8 @@ def ffmpeg_microphone_live(
 
     stride_left = int(round(sampling_rate * stride_length_s[0])) * size_of_sample
     stride_right = int(round(sampling_rate * stride_length_s[1])) * size_of_sample
+    audio_time = datetime.datetime.now()
+    delta = datetime.timedelta(seconds=chunk_s)
     for item in chunk_bytes_iter(microphone, chunk_len, stride=(stride_left, stride_right), stream=True):
         # Put everything back in numpy scale
         item["raw"] = np.frombuffer(item["raw"], dtype=dtype)
@@ -162,6 +219,10 @@ def ffmpeg_microphone_live(
             item["stride"][1] // size_of_sample,
         )
         item["sampling_rate"] = sampling_rate
+        audio_time += delta
+        if datetime.datetime.now() > audio_time + 10 * delta:
+            # We're late !! SKIP
+            continue
         yield item
 
 
@@ -214,3 +275,23 @@ def _ffmpeg_stream(ffmpeg_command, buflen: int):
                 yield raw
     except FileNotFoundError as error:
         raise ValueError("ffmpeg was not found but is required to stream audio files from filename") from error
+
+
+def _get_microphone_name():
+    """
+    Retrieve the microphone name in Windows .
+    """
+    command = ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", ""]
+
+    try:
+        ffmpeg_devices = subprocess.run(command, text=True, stderr=subprocess.PIPE, encoding="utf-8")
+        microphone_lines = [line for line in ffmpeg_devices.stderr.splitlines() if "(audio)" in line]
+
+        if microphone_lines:
+            microphone_name = microphone_lines[0].split('"')[1]
+            print(f"Using microphone: {microphone_name}")
+            return f"audio={microphone_name}"
+    except FileNotFoundError:
+        print("ffmpeg was not found. Please install it or make sure it is in your system PATH.")
+
+    return "default"

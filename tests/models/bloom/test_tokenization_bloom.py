@@ -18,14 +18,14 @@ import unittest
 from datasets import load_dataset
 
 from transformers import BloomTokenizerFast
-from transformers.testing_utils import require_tokenizers
+from transformers.testing_utils import require_jinja, require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
 class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "bigscience/tokenizer"
     slow_tokenizer_class = None
     rust_tokenizer_class = BloomTokenizerFast
     tokenizer_class = BloomTokenizerFast
@@ -42,6 +42,10 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_rust_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         return BloomTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
+
+    @unittest.skip(reason="This needs a slow tokenizer. Bloom does not have one!")
+    def test_encode_decode_with_spaces(self):
+        return
 
     def test_encodings_from_sample_data(self):
         """
@@ -119,18 +123,40 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             - https://huggingface.co/bigscience/tokenizer/
         """
         tokenizer = self.get_rust_tokenizer()
-        ds = load_dataset("xnli", "all_languages", split="test", streaming=True)
+        ds = load_dataset("facebook/xnli", "all_languages", split="test", streaming=True)
 
         sample_data = next(iter(ds))["premise"]  # pick up one data
         input_text = list(sample_data.values())
 
         output_tokens = list(map(tokenizer.encode, input_text))
-        predicted_text = list(map(lambda x: tokenizer.decode(x, clean_up_tokenization_spaces=False), output_tokens))
+        predicted_text = [tokenizer.decode(x, clean_up_tokenization_spaces=False) for x in output_tokens]
         self.assertListEqual(predicted_text, input_text)
 
-    def test_pretrained_model_lists(self):
-        # The test has to be overriden because BLOOM uses ALiBi positional embeddings that does not have
-        # any sequence length constraints. This test of the parent class will fail since it relies on the
-        # maximum sequence length of the positoonal embeddings.
-        self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
-        self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
+    @require_jinja
+    def test_tokenization_for_chat(self):
+        tokenizer = self.get_rust_tokenizer()
+        tokenizer.chat_template = "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+        ]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        expected_tokens = [
+            [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2],
+            [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2, 229126, 427, 11890, 1152, 17, 2],
+            [229126, 427, 11890, 1152, 17, 2, 59414, 4, 2],
+        ]
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)
+
+    def test_add_prefix_space_fast(self):
+        tokenizer_w_prefix = self.get_rust_tokenizer(add_prefix_space=True)
+        tokenizer_wo_prefix = self.get_rust_tokenizer(add_prefix_space=False)
+        tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
+        tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
+        self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)

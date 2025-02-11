@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MegatronBERT model. """
-
+"""Testing suite for the PyTorch MegatronBERT model."""
 
 import math
 import os
@@ -25,6 +24,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -57,7 +57,7 @@ class MegatronBertModelTester:
         vocab_size=99,
         hidden_size=64,
         embedding_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -266,8 +266,7 @@ class MegatronBertModelTester:
 
 
 @require_torch
-class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MegatronBertModel,
@@ -282,6 +281,19 @@ class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MegatronBertModel,
+            "fill-mask": MegatronBertForMaskedLM,
+            "question-answering": MegatronBertForQuestionAnswering,
+            "text-classification": MegatronBertForSequenceClassification,
+            "text-generation": MegatronBertForCausalLM,
+            "token-classification": MegatronBertForTokenClassification,
+            "zero-shot": MegatronBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
     # test_resize_embeddings = False
@@ -357,7 +369,7 @@ TOLERANCE = 1e-4
 @require_tokenizers
 class MegatronBertModelIntegrationTests(unittest.TestCase):
     @slow
-    @unittest.skip("Model is not available.")
+    @unittest.skip(reason="Model is not available.")
     def test_inference_no_head(self):
         directory = "nvidia/megatron-bert-uncased-345m"
         if "MYDIR" in os.environ:

@@ -38,9 +38,10 @@ VIT_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -70,8 +71,8 @@ VIT_START_DOCSTRING = r"""
 VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
-            [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
+            for details.
 
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -85,7 +86,6 @@ VIT_INPUTS_DOCSTRING = r"""
 
 
 class FlaxViTPatchEmbeddings(nn.Module):
-
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -356,7 +356,6 @@ class FlaxViTLayerCollection(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -444,7 +443,7 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
@@ -523,7 +522,6 @@ class FlaxViTModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         hidden_states = self.embeddings(pixel_values, deterministic=deterministic)
 
         outputs = self.encoder(
@@ -565,17 +563,17 @@ FLAX_VISION_MODEL_DOCSTRING = """
     Examples:
 
     ```python
-    >>> from transformers import ViTFeatureExtractor, FlaxViTModel
+    >>> from transformers import AutoImageProcessor, FlaxViTModel
     >>> from PIL import Image
     >>> import requests
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224-in21k")
+    >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
     >>> model = FlaxViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
 
-    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> last_hidden_states = outputs.last_hidden_state
     ```
@@ -648,7 +646,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import ViTFeatureExtractor, FlaxViTForImageClassification
+    >>> from transformers import AutoImageProcessor, FlaxViTForImageClassification
     >>> from PIL import Image
     >>> import jax
     >>> import requests
@@ -656,10 +654,10 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+    >>> image_processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224")
     >>> model = FlaxViTForImageClassification.from_pretrained("google/vit-base-patch16-224")
 
-    >>> inputs = feature_extractor(images=image, return_tensors="np")
+    >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
 
@@ -673,3 +671,6 @@ overwrite_call_docstring(FlaxViTForImageClassification, FLAX_VISION_CLASSIF_DOCS
 append_replace_return_docstrings(
     FlaxViTForImageClassification, output_type=FlaxSequenceClassifierOutput, config_class=ViTConfig
 )
+
+
+__all__ = ["FlaxViTForImageClassification", "FlaxViTModel", "FlaxViTPreTrainedModel"]

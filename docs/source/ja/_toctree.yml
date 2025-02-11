@@ -1,0 +1,394 @@
+- sections:
+  - local: index
+    title: 🤗 Transformers
+  - local: quicktour
+    title: クイックツアー
+  - local: installation
+    title: インストール
+  title: Get started
+- sections:
+  - local: pipeline_tutorial
+    title: パイプラインを使用して推論を実行する
+  - local: autoclass_tutorial
+    title: AutoClass を使用して移植可能なコードを作成する
+  - local: preprocessing
+    title: データの前処理
+  - local: training
+    title: 事前トレーニングされたモデルを微調整する
+  - local: run_scripts
+    title: スクリプトを使用してトレーニングする
+  - local: accelerate
+    title: 🤗 Accelerate を使用して分散トレーニングをセットアップする
+  - local: peft
+    title: 🤗 PEFT を使用してアダプターをロードしてトレーニングする
+  - local: model_sharing
+    title: モデルを共有する
+  - local: transformers_agents
+    title: エージェント
+  - local: llm_tutorial
+    title: LLM を使用した生成
+  title: Tutorials
+- sections:
+  - isExpanded: false
+    sections:
+    - local: tasks/sequence_classification
+      title: テキストの分類
+    - local: tasks/token_classification
+      title: トークンの分類
+    - local: tasks/question_answering
+      title: 質疑応答
+    - local: tasks/language_modeling
+      title: 因果言語モデリング
+    - local: tasks/masked_language_modeling
+      title: マスクされた言語モデリング
+    - local: tasks/translation
+      title: 翻訳
+    - local: tasks/summarization
+      title: 要約
+    - local: tasks/multiple_choice
+      title: 複数の選択肢
+    title: 自然言語処理
+  - isExpanded: false
+    sections:
+    - local: tasks/audio_classification
+      title: 音声の分類
+    - local: tasks/asr
+      title: 自動音声認識
+    title: オーディオ
+  - isExpanded: false
+    sections:
+    - local: tasks/image_classification
+      title: 画像分類
+    - local: tasks/semantic_segmentation
+      title: セマンティックセグメンテーション
+    - local: tasks/video_classification
+      title: ビデオの分類
+    - local: tasks/object_detection
+      title: 物体検出
+    - local: tasks/zero_shot_object_detection
+      title: ゼロショット物体検出
+    - local: tasks/zero_shot_image_classification
+      title: ゼロショット画像分類
+    - local: tasks/monocular_depth_estimation
+      title: 深さの推定
+    - local: tasks/image_to_image
+      title: 画像から画像へ
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: コンピュータビジョンのための知識の蒸留
+    title: コンピュータビジョン
+  - isExpanded: false
+    sections:
+    - local: tasks/image_captioning
+      title: 画像のキャプション
+    - local: tasks/document_question_answering
+      title: 文書の質問への回答
+    - local: tasks/visual_question_answering
+      title: 視覚的な質問への回答
+    - local: tasks/text-to-speech
+      title: テキスト読み上げ
+    title: マルチモーダル
+  - isExpanded: false
+    sections:
+    - local: generation_strategies
+      title: 生成戦略をカスタマイズする
+    title: 世代
+  - isExpanded: false
+    sections:
+    - local: tasks/idefics
+      title: IDEFICS を使用したイメージ タスク
+    - local: tasks/prompting
+      title: LLM プロンプト ガイド
+    title: プロンプト
+  title: Task Guides
+- sections:
+  - local: fast_tokenizers
+    title: 🤗 トークナイザーの高速トークナイザーを使用する
+  - local: multilingual
+    title: 多言語モデルで推論を実行する
+  - local: create_a_model
+    title: モデル固有の API を使用する
+  - local: custom_models
+    title: カスタムモデルを共有する
+  - local: chat_templating
+    title: チャットモデルのテンプレート
+  - local: serialization
+    title: ONNX へのエクスポート
+  - local: tflite
+    title: TFLite へのエクスポート
+  - local: torchscript
+    title: トーチスクリプトへのエクスポート
+  - local: community
+    title: コミュニティリソース
+  - local: custom_tools
+    title: カスタムツールとプロンプト
+  - local: troubleshooting
+    title: トラブルシューティング
+  title: 開発者ガイド
+- sections:
+  - local: performance
+    title: 概要
+  - sections:
+    - local: perf_train_gpu_one
+      title: 単一の GPU で効率的にトレーニングするための方法とツール
+    - local: perf_train_gpu_many
+      title: 複数の GPU と並列処理
+    - local: perf_train_cpu
+      title: CPU での効率的なトレーニング
+    - local: perf_train_cpu_many
+      title: 分散CPUトレーニング
+    - local: perf_train_tpu
+      title: TPU に関するトレーニング
+    - local: perf_train_tpu_tf
+      title: TensorFlow を使用した TPU のトレーニング
+    - local: perf_train_special
+      title: 特殊なハードウェアに関するトレーニング
+    - local: perf_hardware
+      title: トレーニング用のカスタム ハードウェア
+    - local: hpo_train
+      title: Trainer API を使用したハイパーパラメータ検索
+    title: 効率的なトレーニングテクニック
+  - sections:
+    - local: perf_infer_cpu
+      title: CPUでの推論
+    - local: perf_infer_gpu_one
+      title: 1 つの GPU での推論
+    - local: perf_infer_gpu_many
+      title: 多くの GPU での推論
+    - local: perf_infer_special
+      title: 特殊なハードウェアでの推論
+    title: 推論の最適化
+  - local: big_models
+    title: 大きなモデルのインスタンス化
+  - local: tf_xla
+    title: TensorFlowモデルのXLA統合
+  - local: perf_torch_compile
+    title: torch.compile()を使用した推論の最適化
+  title: パフォーマンスとスケーラビリティ
+- sections:
+  - local: add_new_model
+    title: 🤗 Transformersにモデルを追加する方法
+  - local: testing
+    title: テスト
+  - local: pr_checks
+    title: プルリクエストのチェック
+  title: 貢献する
+- sections:
+  - local: philosophy
+    title: フィロソフィー
+  - local: glossary
+    title: 用語集
+  - local: task_summary
+    title: 🤗 Transformersの機能
+  - local: tasks_explained
+    title: 🤗 Transformersがタスクを解決する方法
+  - local: model_summary
+    title: Transformerモデルファミリー
+  - local: tokenizer_summary
+    title: トークナイザーの概要
+  - local: attention
+    title: 注意機構
+  - local: pad_truncation
+    title: パディングと切り詰め
+  - local: bertology
+    title: BERTology
+  - local: perplexity
+    title: 固定長モデルのパープレキシティ
+  - local: pipeline_webserver
+    title: Webサーバー推論用パイプライン
+  - local: model_memory_anatomy
+    title: モデルトレーニングの解剖学
+  title: コンセプチュアルガイド
+- sections:
+  - sections:
+    - local: main_classes/agent
+      title: エージェントとツール
+    - local: model_doc/auto
+      title: Auto Classes
+    - local: main_classes/callback
+      title: コールバック
+    - local: main_classes/configuration
+      title: 構成
+    - local: main_classes/data_collator
+      title: データ照合者
+    - local: main_classes/keras_callbacks
+      title: Keras コールバック
+    - local: main_classes/logging
+      title: ロギング
+    - local: main_classes/model
+      title: モデル
+    - local: main_classes/text_generation
+      title: テキストの生成
+    - local: main_classes/onnx
+      title: ONNX
+    - local: main_classes/optimizer_schedules
+      title: 最適化
+    - local: main_classes/output
+      title: モデルの出力
+    - local: main_classes/pipelines
+      title: パイプライン
+    - local: main_classes/processors
+      title: プロセッサー
+    - local: main_classes/quantization
+      title: 量子化
+    - local: main_classes/tokenizer
+      title: トークナイザー
+    - local: main_classes/trainer
+      title: トレーナー
+    - local: main_classes/deepspeed
+      title: ディープスピードの統合
+    - local: main_classes/feature_extractor
+      title: 特徴抽出器
+    - local: main_classes/image_processor
+      title: 画像処理プロセッサ
+    title: 主要なクラス
+  - sections:
+    - isExpanded: false
+      sections:
+      - local: model_doc/albert
+        title: ALBERT
+      - local: model_doc/bart
+        title: BART
+      - local: model_doc/barthez
+        title: BARThez
+      - local: model_doc/bartpho
+        title: BARTpho
+      - local: model_doc/bert
+        title: BERT
+      - local: model_doc/bert-generation
+        title: BertGeneration
+      - local: model_doc/bert-japanese
+        title: BertJapanese
+      - local: model_doc/bertweet
+        title: Bertweet
+      - local: model_doc/big_bird
+        title: BigBird
+      - local: model_doc/bigbird_pegasus
+        title: BigBirdPegasus
+      - local: model_doc/biogpt
+        title: BioGpt
+      - local: model_doc/blenderbot
+        title: Blenderbot
+      - local: model_doc/blenderbot-small
+        title: Blenderbot Small
+      - local: model_doc/bloom
+        title: BLOOM
+      - local: model_doc/bort
+        title: BORT
+      - local: model_doc/byt5
+        title: ByT5
+      - local: model_doc/camembert
+        title: CamemBERT
+      - local: model_doc/canine
+        title: CANINE
+      - local: model_doc/codegen
+        title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
+      - local: model_doc/convbert
+        title: ConvBERT
+      - local: model_doc/cpm
+        title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
+      - local: model_doc/ctrl
+        title: CTRL
+      - local: model_doc/deberta
+        title: DeBERTa
+      - local: model_doc/deberta-v2
+        title: DeBERTa-v2
+      - local: model_doc/dialogpt
+        title: DialoGPT
+      title: 文章モデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/beit
+        title: BEiT
+      - local: model_doc/bit
+        title: BiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
+      - local: model_doc/convnext
+        title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
+      - local: model_doc/cvt
+        title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
+      - local: model_doc/deit
+        title: DeiT
+      - local: model_doc/deta
+        title: DETA
+      - local: model_doc/detr
+        title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
+      title: ビジョンモデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/audio-spectrogram-transformer
+        title: Audio Spectrogram Transformer
+      - local: model_doc/bark
+        title: Bark
+      - local: model_doc/clap
+        title: CLAP
+      title: 音声モデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/align
+        title: ALIGN
+      - local: model_doc/altclip
+        title: AltCLIP
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
+      - local: model_doc/clip
+        title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
+      - local: model_doc/data2vec
+        title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
+      title: マルチモーダルモデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/decision_transformer
+        title: Decision Transformer
+      title: 強化学習モデル
+    - isExpanded: false
+      sections:
+      - local: model_doc/autoformer
+        title: Autoformer
+      title: 時系列モデル
+    title: モデル
+  - sections:
+    - local: internal/modeling_utils
+      title: カスタムレイヤーとユーティリティ
+    - local: internal/pipelines_utils
+      title: パイプライン用のユーティリティ
+    - local: internal/tokenization_utils
+      title: ト=ークナイザー用のユーティリティ
+    - local: internal/trainer_utils
+      title: トレーナー用ユーティリティ
+    - local: internal/generation_utils
+      title: 発電用ユーティリティ
+    - local: internal/image_processing_utils
+      title: 画像プロセッサ用ユーティリティ
+    - local: internal/audio_utils
+      title: オーディオ処理用のユーティリティ
+    - local: internal/file_utils
+      title: 一般公共事業
+    - local: internal/time_series_utils
+      title: 時系列用のユーティリティ
+    title: 内部ヘルパー
+  title: API

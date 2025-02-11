@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-pruning Masked BERT on sequence classification on GLUE."""
+"""Fine-pruning Masked BERT on sequence classification on GLUE."""
 
 import argparse
 import glob
@@ -24,12 +24,12 @@ import random
 
 import numpy as np
 import torch
+from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from emmental import MaskedBertConfig, MaskedBertForSequenceClassification
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -98,7 +98,7 @@ def regularization(model: nn.Module, mode: str):
             elif mode == "l0":
                 regu += torch.sigmoid(param - 2 / 3 * np.log(0.1 / 1.1)).sum() / param.numel()
             else:
-                ValueError("Don't know this mode.")
+                raise ValueError("Don't know this mode.")
             counter += 1
     return regu / counter
 
@@ -228,7 +228,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -312,8 +311,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
             tr_loss += loss.item()
             if (step + 1) % args.gradient_accumulation_steps == 0 or (
                 # last step in epoch but step is always smaller than gradient_accumulation_steps
-                len(epoch_iterator) <= args.gradient_accumulation_steps
-                and (step + 1) == len(epoch_iterator)
+                len(epoch_iterator) <= args.gradient_accumulation_steps and (step + 1) == len(epoch_iterator)
             ):
                 if args.fp16:
                     nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
@@ -672,7 +670,7 @@ def main():
         default=1,
         type=int,
         help=(
-            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
+            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays "
             "at its `initial_threshold` value (sparsity schedule)."
         ),
     )
@@ -681,7 +679,7 @@ def main():
         default=2,
         type=int,
         help=(
-            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
+            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays "
             "at its final_threshold value (sparsity schedule)."
         ),
     )
@@ -800,7 +798,7 @@ def main():
         type=str,
         default="O1",
         help=(
-            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
             "See details at https://nvidia.github.io/apex/amp.html"
         ),
     )
@@ -942,9 +940,9 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
+            checkpoints = [
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
+            ]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
         for checkpoint in checkpoints:
@@ -954,7 +952,7 @@ def main():
             model = model_class.from_pretrained(checkpoint)
             model.to(args.device)
             result = evaluate(args, model, tokenizer, prefix=prefix)
-            result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
+            result = {k + "_{}".format(global_step): v for k, v in result.items()}
             results.update(result)
 
     return results

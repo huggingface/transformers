@@ -46,7 +46,7 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
     # Add special tokens to the token vocabulary for downstream tasks
     entity_token_1 = AddedToken("<ent>", lstrip=False, rstrip=False)
     entity_token_2 = AddedToken("<ent2>", lstrip=False, rstrip=False)
-    tokenizer.add_special_tokens(dict(additional_special_tokens=[entity_token_1, entity_token_2]))
+    tokenizer.add_special_tokens({"additional_special_tokens": [entity_token_1, entity_token_2]})
     config.vocab_size += 2
 
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert BigBird checkpoint."""
 
-
 import argparse
 
 from transformers import BigBirdConfig, BigBirdForPreTraining, BigBirdForQuestionAnswering, load_tf_weights_in_big_bird
@@ -43,7 +42,6 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, p
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(

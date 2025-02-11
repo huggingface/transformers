@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SEW model configuration"""
+"""SEW model configuration"""
 
 import functools
 import operator
@@ -22,11 +22,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SEW_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "asapp/sew-tiny-100k": "https://huggingface.co/asapp/sew-tiny-100k/resolve/main/config.json",
-    # See all SEW models at https://huggingface.co/models?filter=sew
-}
 
 
 class SEWConfig(PretrainedConfig):
@@ -59,10 +54,15 @@ class SEWConfig(PretrainedConfig):
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for activations inside the fully connected layer.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`SEWForCTC`].
+        layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556) for more
+            details.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -149,6 +149,7 @@ class SEWConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "sew"
 
     def __init__(
@@ -190,7 +191,7 @@ class SEWConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
@@ -224,9 +225,9 @@ class SEWConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect."
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`,"
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride)"
+                "Configuration for convolutional layers is incorrect. "
+                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
+                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
@@ -250,3 +251,6 @@ class SEWConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+
+__all__ = ["SEWConfig"]

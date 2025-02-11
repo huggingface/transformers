@@ -12,18 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RemBERT model configuration"""
+"""RemBERT model configuration"""
+
+from collections import OrderedDict
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/rembert": "https://huggingface.co/google/rembert/resolve/main/config.json",
-    # See all RemBERT models at https://huggingface.co/models?filter=rembert
-}
 
 
 class RemBertConfig(PretrainedConfig):
@@ -59,7 +58,7 @@ class RemBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0):
             The dropout ratio for the attention probabilities.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
@@ -73,6 +72,8 @@ class RemBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -91,6 +92,7 @@ class RemBertConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "rembert"
 
     def __init__(
@@ -111,11 +113,10 @@ class RemBertConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=312,
         eos_token_id=313,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -136,3 +137,26 @@ class RemBertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.tie_word_embeddings = False
+
+
+class RemBertOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+
+__all__ = ["RemBertConfig", "RemBertOnnxConfig"]

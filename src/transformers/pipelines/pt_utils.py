@@ -2,6 +2,8 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, IterableDataset
 
+from ..utils.generic import ModelOutput
+
 
 class PipelineDataset(Dataset):
     def __init__(self, dataset, process, params):
@@ -29,7 +31,7 @@ class PipelineIterator(IterableDataset):
         ```
 
                 Arguments:
-                    loader (`torch.utils.data.DataLoader` or any iterator):
+                    loader (`torch.utils.data.DataLoader` or `Iterable`):
                         The iterator that will be used to apply `infer` on.
                     infer (any function):
                         The function to apply of each element of `loader`.
@@ -71,11 +73,19 @@ class PipelineIterator(IterableDataset):
         """
         if isinstance(self._loader_batch_data, torch.Tensor):
             # Batch data is simple tensor, just fetch the slice
-            result = self._loader_batch_data[self._loader_batch_index]
+            result = self._loader_batch_data[self._loader_batch_index].unsqueeze(0)
         else:
             # Batch data is assumed to be BaseModelOutput (or dict)
             loader_batched = {}
             for k, element in self._loader_batch_data.items():
+                if isinstance(element, ModelOutput):
+                    # Convert ModelOutput to tuple first
+                    element = element.to_tuple()
+                    if isinstance(element[0], torch.Tensor):
+                        loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                    elif isinstance(element[0], np.ndarray):
+                        loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
+                    continue
                 if k in {"hidden_states", "past_key_values", "attentions"} and isinstance(element, tuple):
                     # Those are stored as lists of tensors so need specific unbatching.
                     if isinstance(element[0], torch.Tensor):
@@ -83,7 +93,10 @@ class PipelineIterator(IterableDataset):
                     elif isinstance(element[0], np.ndarray):
                         loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
                     continue
-                if isinstance(element[self._loader_batch_index], torch.Tensor):
+                if element is None:
+                    # This can happen for optional data that get passed around
+                    loader_batched[k] = None
+                elif isinstance(element[self._loader_batch_index], torch.Tensor):
                     # Take correct batch data, but make it looked like batch_size=1
                     # For compatibility with other methods within transformers
 
@@ -115,9 +128,12 @@ class PipelineIterator(IterableDataset):
             # Try to infer the size of the batch
             if isinstance(processed, torch.Tensor):
                 first_tensor = processed
+            elif isinstance(processed, tuple):
+                first_tensor = processed[0]
             else:
                 key = list(processed.keys())[0]
                 first_tensor = processed[key]
+
             if isinstance(first_tensor, list):
                 observed_batch_size = len(first_tensor)
             else:
@@ -127,7 +143,7 @@ class PipelineIterator(IterableDataset):
                 # elements.
                 self.loader_batch_size = observed_batch_size
             # Setting internal index to unwrap the batch
-            self._loader_batch_data = processed
+            self._loader_batch_data = processed[0] if isinstance(processed, tuple) else processed
             self._loader_batch_index = 0
             return self.loader_batch_item()
         else:
@@ -147,7 +163,7 @@ class PipelineChunkIterator(PipelineIterator):
         ```
 
                 Arguments:
-                    loader (`torch.utils.data.DataLoader` or any iterator):
+                    loader (`torch.utils.data.DataLoader` or `Iterable`):
                         The iterator that will be used to apply `infer` on.
                     infer (any function):
                         The function to apply of each element of `loader`.
@@ -208,7 +224,7 @@ class PipelinePackIterator(PipelineIterator):
     ```
 
         Arguments:
-            loader (`torch.utils.data.DataLoader` or any iterator):
+            loader (`torch.utils.data.DataLoader` or `Iterable`):
                 The iterator that will be used to apply `infer` on.
             infer (any function):
                 The function to apply of each element of `loader`.
@@ -290,3 +306,16 @@ class KeyDataset(Dataset):
 
     def __getitem__(self, i):
         return self.dataset[i][self.key]
+
+
+class KeyPairDataset(Dataset):
+    def __init__(self, dataset: Dataset, key1: str, key2: str):
+        self.dataset = dataset
+        self.key1 = key1
+        self.key2 = key2
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, i):
+        return {"text": self.dataset[i][self.key1], "text_pair": self.dataset[i][self.key2]}

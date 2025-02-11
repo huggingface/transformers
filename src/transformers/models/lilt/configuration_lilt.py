@@ -12,19 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LiLT configuration"""
+"""LiLT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-LILT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "SCUT-DLVCLab/lilt-roberta-en-base": (
-        "https://huggingface.co/SCUT-DLVCLab/lilt-roberta-en-base/resolve/main/config.json"
-    ),
-}
 
 
 class LiltConfig(PretrainedConfig):
@@ -70,9 +64,6 @@ class LiltConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
         channel_shrink_ratio (`int`, *optional*, defaults to 4):
@@ -93,6 +84,7 @@ class LiltConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "lilt"
 
     def __init__(
@@ -111,11 +103,10 @@ class LiltConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         position_embedding_type="absolute",
-        use_cache=True,
         classifier_dropout=None,
         channel_shrink_ratio=4,
         max_2d_position_embeddings=1024,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -132,7 +123,9 @@ class LiltConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         self.channel_shrink_ratio = channel_shrink_ratio
         self.max_2d_position_embeddings = max_2d_position_embeddings
+
+
+__all__ = ["LiltConfig"]

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MarkupLM model."""
+"""PyTorch MarkupLM model."""
 
 import math
 import os
@@ -23,13 +23,13 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from transformers.activations import ACT2FN
-from transformers.file_utils import (
+from ...activations import ACT2FN
+from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from transformers.modeling_outputs import (
+from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
@@ -37,14 +37,13 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from transformers.modeling_utils import (
+from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from transformers.utils import logging
-
+from ...utils import logging
 from .configuration_markuplm import MarkupLMConfig
 
 
@@ -52,12 +51,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/markuplm-base"
 _CONFIG_FOR_DOC = "MarkupLMConfig"
-_TOKENIZER_FOR_DOC = "MarkupLMTokenizer"
-
-MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/markuplm-base",
-    "microsoft/markuplm-large",
-]
 
 
 class XPathEmbeddings(nn.Module):
@@ -145,7 +138,9 @@ class MarkupLMEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -318,6 +313,9 @@ class MarkupLMLMPredictionHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.decoder(hidden_states)
@@ -405,6 +403,7 @@ class MarkupLMSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
+        use_cache = past_key_value is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -419,10 +418,16 @@ class MarkupLMSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            query_length, key_length = query_layer.shape[2], key_layer.shape[2]
+            if use_cache:
+                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
+                    -1, 1
+                )
+            else:
+                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
+
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
@@ -463,11 +468,18 @@ class MarkupLMSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->MarkupLM
+MARKUPLM_SELF_ATTENTION_CLASSES = {
+    "eager": MarkupLMSelfAttention,
+}
+
+
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->MarkupLM,BERT->MARKUPLM
 class MarkupLMAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = MarkupLMSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.self = MARKUPLM_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, position_embedding_type=position_embedding_type
+        )
         self.output = MarkupLMSelfOutput(config)
         self.pruned_heads = set()
 
@@ -625,6 +637,13 @@ class MarkupLMEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -634,26 +653,15 @@ class MarkupLMEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_value,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -705,9 +713,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
     """
 
     config_class = MarkupLMConfig
-    pretrained_model_archive_map = MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "markuplm"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->MarkupLM
     def _init_weights(self, module):
@@ -749,7 +755,7 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MarkupLMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -798,7 +804,7 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
     MARKUPLM_START_DOCSTRING,
 )
 class MarkupLMModel(MarkupLMPreTrainedModel):
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->MarkupLM
+    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->MarkupLM
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -829,27 +835,27 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        xpath_tags_seq=None,
-        xpath_subs_seq=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.LongTensor] = None,
+        xpath_tags_seq: Optional[torch.LongTensor] = None,
+        xpath_subs_seq: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import MarkupLMProcessor, MarkupLMModel
+        >>> from transformers import AutoProcessor, MarkupLMModel
 
-        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base")
         >>> model = MarkupLMModel.from_pretrained("microsoft/markuplm-base")
 
         >>> html_string = "<html> <head> <title>Page Title</title> </head> </html>"
@@ -870,6 +876,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -929,24 +936,13 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
-
     # Copied from transformers.models.bert.modeling_bert.BertModel._reorder_cache
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
 
 
@@ -958,8 +954,6 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
     MARKUPLM_START_DOCSTRING,
 )
 class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with bert->markuplm, Bert->MarkupLM
     def __init__(self, config):
         super().__init__(config)
@@ -975,20 +969,20 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
     @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        xpath_tags_seq=None,
-        xpath_subs_seq=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        xpath_tags_seq: Optional[torch.Tensor] = None,
+        xpath_subs_seq: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.Tensor] = None,
+        end_positions: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
@@ -1004,10 +998,10 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MarkupLMProcessor, MarkupLMForQuestionAnswering
+        >>> from transformers import AutoProcessor, MarkupLMForQuestionAnswering
         >>> import torch
 
-        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
         >>> model = MarkupLMForQuestionAnswering.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
 
         >>> html_string = "<html> <head> <title>My name is Niels</title> </head> </html>"
@@ -1099,19 +1093,19 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
     @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        xpath_tags_seq=None,
-        xpath_subs_seq=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        xpath_tags_seq: Optional[torch.Tensor] = None,
+        xpath_subs_seq: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1206,19 +1200,19 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids=None,
-        xpath_tags_seq=None,
-        xpath_subs_seq=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        input_ids: Optional[torch.Tensor] = None,
+        xpath_tags_seq: Optional[torch.Tensor] = None,
+        xpath_subs_seq: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1298,3 +1292,12 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "MarkupLMForQuestionAnswering",
+    "MarkupLMForSequenceClassification",
+    "MarkupLMForTokenClassification",
+    "MarkupLMModel",
+    "MarkupLMPreTrainedModel",
+]

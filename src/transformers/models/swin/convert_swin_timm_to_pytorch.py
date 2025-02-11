@@ -1,13 +1,13 @@
 import argparse
 import json
 
-import torch
-from PIL import Image
-
 import requests
 import timm
+import torch
 from huggingface_hub import hf_hub_download
-from transformers import AutoFeatureExtractor, SwinConfig, SwinForImageClassification
+from PIL import Image
+
+from transformers import AutoImageProcessor, SwinConfig, SwinForImageClassification
 
 
 def get_swin_config(swin_name):
@@ -102,15 +102,15 @@ def convert_state_dict(orig_state_dict, model):
             dim = model.swin.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
 
             if "weight" in key:
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
-                ] = val[:dim, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"] = (
+                    val[:dim, :]
+                )
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
                     dim : dim * 2, :
                 ]
-                orig_state_dict[
-                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
-                ] = val[-dim:, :]
+                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"] = (
+                    val[-dim:, :]
+                )
             else:
                 orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
                     :dim
@@ -140,9 +140,9 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
+    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
     image = Image.open(requests.get(url, stream=True).raw)
-    inputs = feature_extractor(images=image, return_tensors="pt")
+    inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])
     hf_outs = model(**inputs).logits
@@ -152,8 +152,8 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
     print(f"Saving model {swin_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

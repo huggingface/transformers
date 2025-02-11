@@ -14,9 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Language model training examples
+# Language model training and inference examples
 
-The following example showcases how to train a language model from scratch 
+The following example showcases how to train a language model from scratch
 using the JAX/Flax backend.
 
 JAX/Flax allows you to trace pure functions and compile them into efficient, fused accelerator code on both GPU and TPU.
@@ -25,10 +25,10 @@ way which enables simple and efficient model parallelism.
 
 ## Masked language modeling
 
-In the following, we demonstrate how to train a bi-directional transformer model 
+In the following, we demonstrate how to train a bi-directional transformer model
 using masked language modeling objective as introduced in [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805).
-More specifically, we demonstrate how JAX/Flax can be leveraged 
-to pre-train [**`roberta-base`**](https://huggingface.co/roberta-base)
+More specifically, we demonstrate how JAX/Flax can be leveraged
+to pre-train [**`FacebookAI/roberta-base`**](https://huggingface.co/FacebookAI/roberta-base)
 in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
@@ -75,14 +75,14 @@ tokenizer.save("./norwegian-roberta-base/tokenizer.json")
 
 ### Create configuration
 
-Next, we create the model's configuration file. This is as simple 
-as loading and storing [`**roberta-base**`](https://huggingface.co/roberta-base)
+Next, we create the model's configuration file. This is as simple
+as loading and storing [`**FacebookAI/roberta-base**`](https://huggingface.co/FacebookAI/roberta-base)
 in the local model folder:
 
 ```python
 from transformers import RobertaConfig
 
-config = RobertaConfig.from_pretrained("roberta-base", vocab_size=50265)
+config = RobertaConfig.from_pretrained("FacebookAI/roberta-base", vocab_size=50265)
 config.save_pretrained("./norwegian-roberta-base")
 ```
 
@@ -117,20 +117,20 @@ python run_mlm_flax.py \
     --push_to_hub
 ```
 
-Training should converge at a loss and accuracy 
+Training should converge at a loss and accuracy
 of 1.78 and 0.64 respectively after 18 epochs on a single TPUv3-8.
 This should take less than 18 hours.
 Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/GdYmdak2TWeVz0DDRYOrrg).
 
-For a step-by-step walkthrough of how to do masked language modeling in Flax, please have a 
+For a step-by-step walkthrough of how to do masked language modeling in Flax, please have a
 look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb) google colab.
 
 ## Causal language modeling
 
-In the following, we demonstrate how to train an auto-regressive causal transformer model 
+In the following, we demonstrate how to train an auto-regressive causal transformer model
 in JAX/Flax.
-More specifically, we pretrain a randomely initialized [**`gpt2`**](https://huggingface.co/gpt2) model in Norwegian on a single TPUv3-8.
-to pre-train 124M [**`gpt2`**](https://huggingface.co/gpt2)
+More specifically, we pretrain a randomly initialized [**`openai-community/gpt2`**](https://huggingface.co/openai-community/gpt2) model in Norwegian on a single TPUv3-8.
+to pre-train 124M [**`openai-community/gpt2`**](https://huggingface.co/openai-community/gpt2)
 in Norwegian on a single TPUv3-8 pod.
 
 The example script uses the 🤗 Datasets library. You can easily customize them to your needs if you need extra processing on your datasets.
@@ -178,14 +178,14 @@ tokenizer.save("./norwegian-gpt2/tokenizer.json")
 
 ### Create configuration
 
-Next, we create the model's configuration file. This is as simple 
-as loading and storing [`**gpt2**`](https://huggingface.co/gpt2)
+Next, we create the model's configuration file. This is as simple
+as loading and storing [`**openai-community/gpt2**`](https://huggingface.co/openai-community/gpt2)
 in the local model folder:
 
 ```python
 from transformers import GPT2Config
 
-config = GPT2Config.from_pretrained("gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0, vocab_size=50257)
+config = GPT2Config.from_pretrained("openai-community/gpt2", resid_pdrop=0.0, embd_pdrop=0.0, attn_pdrop=0.0, vocab_size=50257)
 config.save_pretrained("./norwegian-gpt2")
 ```
 
@@ -218,19 +218,19 @@ python run_clm_flax.py \
     --push_to_hub
 ```
 
-Training should converge at a loss and perplexity 
+Training should converge at a loss and perplexity
 of 3.24 and 25.72 respectively after 20 epochs on a single TPUv3-8.
 This should take less than ~21 hours.
-Training statistics can be accessed on [tfhub.de](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
+Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/2zEhLwJ0Qp2FAkI3WVH9qA).
 
-For a step-by-step walkthrough of how to do causal language modeling in Flax, please have a 
+For a step-by-step walkthrough of how to do causal language modeling in Flax, please have a
 look at [this](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/causal_language_modeling_flax.ipynb) google colab.
 
 ## T5-like span-masked language modeling
 
-In the following, we demonstrate how to train a T5 model using the span-masked language model 
+In the following, we demonstrate how to train a T5 model using the span-masked language model
 objective as proposed in the [Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer](https://arxiv.org/abs/1910.10683).
-More specifically, we demonstrate how JAX/Flax can be leveraged 
+More specifically, we demonstrate how JAX/Flax can be leveraged
 to pre-train [**`google/t5-v1_1-base`**](https://huggingface.co/google/t5-v1_1-base)
 in Norwegian on a single TPUv3-8 pod.
 
@@ -247,9 +247,9 @@ cd ./norwegian-t5-base
 
 ### Train tokenizer
 
-In the first step, we train a tokenizer to efficiently process the text input for the model. 
-We make use of the [tokenizers](https://github.com/huggingface/tokenizers) library to train 
-a sentencepiece unigram tokenizer as shown in [t5_tokenizer_model.py](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling/t5_tokenizer_model.py) 
+In the first step, we train a tokenizer to efficiently process the text input for the model.
+We make use of the [tokenizers](https://github.com/huggingface/tokenizers) library to train
+a sentencepiece unigram tokenizer as shown in [t5_tokenizer_model.py](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling/t5_tokenizer_model.py)
 which is heavily inspired from [yandex-research/DeDLOC's tokenizer model](https://github.com/yandex-research/DeDLOC/blob/5c994bc64e573702a9a79add3ecd68b38f14b548/sahajbert/tokenizer/tokenizer_model.py) .
 
 The tokenizer is trained on the complete Norwegian dataset of OSCAR
@@ -293,7 +293,7 @@ tokenizer.save("./norwegian-t5-base/tokenizer.json")
 
 ### Create configuration
 
-Next, we create the model's configuration file. This is as simple 
+Next, we create the model's configuration file. This is as simple
 as loading and storing [`**google/t5-v1_1-base**`](https://huggingface.co/google/t5-v1_1-base)
 in the local model folder:
 
@@ -333,16 +333,16 @@ python run_t5_mlm_flax.py \
 	--push_to_hub
 ```
 
-Training should converge at a loss and accuracy 
+Training should converge at a loss and accuracy
 of 2.36 and 57.0 respectively after 3 epochs on a single TPUv3-8.
 This should take around 4.5 hours.
 Training statistics can be accessed on directly on the 🤗 [hub](https://huggingface.co/patrickvonplaten/t5-base-norwegian/tensorboard)
 
 ## BART: Denoising language modeling
 
-In the following, we demonstrate how to train a BART model 
+In the following, we demonstrate how to train a BART model
 using denoising language modeling objective as introduced in [BART: Denoising Sequence-to-Sequence Pre-training for Natural Language Generation, Translation, and Comprehension](https://arxiv.org/abs/1910.13461).
-More specifically, we demonstrate how JAX/Flax can be leveraged 
+More specifically, we demonstrate how JAX/Flax can be leveraged
 to pre-train [**`bart-base`**](https://huggingface.co/facebook/bart-base)
 in Norwegian on a single TPUv3-8 pod.
 
@@ -389,7 +389,7 @@ tokenizer.save("./norwegian-bart-base/tokenizer.json")
 
 ### Create configuration
 
-Next, we create the model's configuration file. This is as simple 
+Next, we create the model's configuration file. This is as simple
 as loading and storing [`**facebook/bart-base**`](https://huggingface.co/facebook/bart-base)
 in the local model folder:
 
@@ -425,7 +425,7 @@ python run_bart_dlm_flax.py \
     --push_to_hub
 ```
 
-Training should converge at a loss and accuracy 
+Training should converge at a loss and accuracy
 of 1.36 and 0.77 respectively after 3 epochs on a single TPUv3-8.
 This should take less than 6 hours.
 Training statistics can be accessed on [tfhub.dev](https://tensorboard.dev/experiment/Maw62QlaSXWS0MOf2V2lbg/).
@@ -440,16 +440,16 @@ For reproducibility, we state the training commands used for PyTorch/XLA and PyT
 |-------|-----------|------------|------------|
 | MLM   |  15h32m   |  23h46m    | 44h14m     |
 
-*All experiments are ran on Google Cloud Platform. 
+*All experiments are ran on Google Cloud Platform.
 GPU experiments are ran without further optimizations besides JAX
 transformations. GPU experiments are ran with full precision (fp32). "TPU v3-8"
 are 8 TPU cores on 4 chips (each chips has 2 cores), while "8 GPU" are 8 GPU chips.
 
 ### Script to run MLM with PyTorch/XLA on TPUv3-8
 
-For comparison one can run the same pre-training with PyTorch/XLA on TPU. To set up PyTorch/XLA on Cloud TPU VMs, please 
+For comparison one can run the same pre-training with PyTorch/XLA on TPU. To set up PyTorch/XLA on Cloud TPU VMs, please
 refer to [this](https://cloud.google.com/tpu/docs/pytorch-xla-ug-tpu-vm) guide.
-Having created the tokenzier and configuration in `norwegian-roberta-base`, we create the following symbolic links:
+Having created the tokenizer and configuration in `norwegian-roberta-base`, we create the following symbolic links:
 
 ```bash
 ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
@@ -490,16 +490,16 @@ python3 xla_spawn.py --num_cores ${NUM_TPUS} run_mlm.py --output_dir="./runs" \
     --do_train \
     --do_eval \
     --logging_steps="500" \
-    --evaluation_strategy="epoch" \
+    --eval_strategy="epoch" \
     --report_to="tensorboard" \
     --save_strategy="no"
 ```
 
 ### Script to compare pre-training with PyTorch on 8 GPU V100's
 
-For comparison you can run the same pre-training with PyTorch on GPU. Note that we have to make use of `gradient_accumulation` 
+For comparison you can run the same pre-training with PyTorch on GPU. Note that we have to make use of `gradient_accumulation`
 because the maximum batch size that fits on a single V100 GPU is 32 instead of 128.
-Having created the tokenzier and configuration in `norwegian-roberta-base`, we create the following symbolic links:
+Having created the tokenizer and configuration in `norwegian-roberta-base`, we create the following symbolic links:
 
 ```bash
 ln -s ~/transformers/examples/pytorch/language-modeling/run_mlm.py ./
@@ -538,7 +538,31 @@ python3 -m torch.distributed.launch --nproc_per_node ${NUM_GPUS} run_mlm.py \
     --do_train \
     --do_eval \
     --logging_steps="500" \
-    --evaluation_strategy="steps" \
+    --eval_strategy="steps" \
     --report_to="tensorboard" \
     --save_strategy="no"
 ```
+
+## Language model inference with bfloat16
+
+The following example demonstrates performing inference with a language model using the JAX/Flax backend.
+
+The example script run_bert_flax.py uses bert-base-uncased, and the model is loaded into `FlaxBertModel`.
+The input data are randomly generated tokens, and the model is also jitted with JAX.
+By default, it uses float32 precision for inference. To enable bfloat16, add the flag shown in the command below.
+
+```bash
+python3 run_bert_flax.py --precision bfloat16
+> NOTE: For JAX Versions after v0.4.33 or later, users will need to set the below environment variables as a \
+> temporary workaround to use Bfloat16 datatype. \
+> This restriction is expected to be removed in future version
+```bash
+export XLA_FLAGS=--xla_cpu_use_thunk_runtime=false
+```
+bfloat16 gives better performance on GPUs and also Intel CPUs (Sapphire Rapids or later) with Advanced Matrix Extension (Intel AMX).  
+By changing the dtype for `FlaxBertModel `to `jax.numpy.bfloat16`, you get the performance benefits of the underlying hardware.
+```python
+import jax
+model = FlaxBertModel.from_pretrained("bert-base-uncased", config=config, dtype=jax.numpy.bfloat16)
+```
+Switching from float32 to bfloat16 can increase the speed of an AWS c7i.4xlarge with Intel Sapphire Rapids by more than 2x.

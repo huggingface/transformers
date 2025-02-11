@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch UniSpeech model. """
+"""Testing suite for the PyTorch UniSpeech model."""
 
 import math
 import unittest
@@ -22,7 +22,7 @@ import pytest
 from datasets import load_dataset
 
 from transformers import UniSpeechConfig, is_torch_available
-from transformers.testing_utils import require_soundfile, require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_soundfile, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -32,6 +32,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -64,7 +65,7 @@ class UniSpeechModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
         intermediate_size=20,
@@ -244,8 +245,8 @@ class UniSpeechModelTester:
             input_values[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
-                # it's important that we make sure that target lenghts are at least
-                # one shorter than logit lenghts to prevent -inf
+                # it's important that we make sure that target lengths are at least
+                # one shorter than logit lengths to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
         loss = model(input_values, labels=labels).loss
@@ -297,11 +298,20 @@ class UniSpeechModelTester:
 
 
 @require_torch
-class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
+class UniSpeechRobustModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (UniSpeechForCTC, UniSpeechModel, UniSpeechForSequenceClassification, UniSpeechForPreTraining)
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": UniSpeechForSequenceClassification,
+            "automatic-speech-recognition": UniSpeechForCTC,
+            "feature-extraction": UniSpeechModel,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False
@@ -318,6 +328,12 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `UniSpeechGumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -344,22 +360,23 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
     # UniSpeech has no inputs_embeds
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
     def test_forward_signature(self):
         pass
 
     # UniSpeech cannot resize token embeddings
     # since it has no tokens embeddings
+    @unittest.skip(reason="UniSpeech has no tokens embeds")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # UniSpeech has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="UniSpeech has no inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):
@@ -411,6 +428,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 uniform_init_parms = [
                     "conv.weight",
+                    "conv.parametrizations.weight",
                     "masked_spec_embed",
                     "codevectors",
                     "quantizer.weight_proj.weight",
@@ -422,7 +440,7 @@ class UniSpeechRobustModelTest(ModelTesterMixin, unittest.TestCase):
                     "feature_projection.projection.bias",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -546,8 +564,7 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 
@@ -580,4 +597,4 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(cosine_sim[:, :5], expected_cosine_sim_slice, atol=1e-3))
+        torch.testing.assert_close(cosine_sim[:, :5], expected_cosine_sim_slice, rtol=1e-3, atol=1e-3)

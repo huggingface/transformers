@@ -14,8 +14,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning multi-lingual models on XNLI (e.g. Bert, DistilBERT, XLM).
-    Adapted from `examples/text-classification/run_glue.py`"""
+"""Finetuning multi-lingual models on XNLI (e.g. Bert, DistilBERT, XLM).
+Adapted from `examples/text-classification/run_glue.py`"""
 
 import logging
 import os
@@ -25,10 +25,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
+import evaluate
 import numpy as np
 from datasets import load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -152,12 +152,22 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -186,6 +196,10 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
+
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
     datasets.utils.logging.set_verbosity(log_level)
@@ -195,8 +209,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -228,7 +242,7 @@ def main():
                 model_args.language,
                 split="train",
                 cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
             )
         else:
             train_dataset = load_dataset(
@@ -236,7 +250,7 @@ def main():
                 model_args.train_language,
                 split="train",
                 cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
             )
         label_list = train_dataset.features["label"].names
 
@@ -246,7 +260,7 @@ def main():
             model_args.language,
             split="validation",
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
         label_list = eval_dataset.features["label"].names
 
@@ -256,7 +270,7 @@ def main():
             model_args.language,
             split="test",
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
         label_list = predict_dataset.features["label"].names
 
@@ -269,10 +283,13 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
+        id2label={str(i): label for i, label in enumerate(label_list)},
+        label2id={label: i for i, label in enumerate(label_list)},
         finetuning_task="xnli",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -280,7 +297,8 @@ def main():
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -288,7 +306,8 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
 
@@ -350,7 +369,7 @@ def main():
             )
 
     # Get the metric function
-    metric = evaluate.load("xnli")
+    metric = evaluate.load("xnli", cache_dir=model_args.cache_dir)
 
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
@@ -374,7 +393,7 @@ def main():
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
     )
 

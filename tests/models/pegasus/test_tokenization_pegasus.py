@@ -27,7 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece_no_bos.model")
 @require_sentencepiece
 @require_tokenizers
 class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "google/pegasus-xsum"
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
     test_rust_tokenizer = True
@@ -55,15 +55,15 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         token = "</s>"
         token_id = 1
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
-        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
+        self.assertEqual(self.get_tokenizer().convert_tokens_to_ids(token), token_id)
+        self.assertEqual(self.get_tokenizer().convert_ids_to_tokens(token_id), token)
 
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "<pad>")
         self.assertEqual(vocab_keys[1], "</s>")
-        self.assertEqual(vocab_keys[-1], "v")
+        self.assertEqual(vocab_keys[104], "<unk_102>")
         self.assertEqual(len(vocab_keys), 1_103)
 
     def test_vocab_size(self):
@@ -120,9 +120,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        # fmt: off
-        expected_encoding = {'input_ids': [[38979, 143, 18485, 606, 130, 26669, 87686, 121, 54189, 1129, 111, 26669, 87686, 121, 9114, 14787, 121, 13249, 158, 592, 956, 121, 14621, 31576, 143, 62613, 108, 9688, 930, 43430, 11562, 62613, 304, 108, 11443, 897, 108, 9314, 17415, 63399, 108, 11443, 7614, 18316, 118, 4284, 7148, 12430, 143, 1400, 25703, 158, 111, 4284, 7148, 11772, 143, 21297, 1064, 158, 122, 204, 3506, 1754, 1133, 14787, 1581, 115, 33224, 4482, 111, 1355, 110, 29173, 317, 50833, 108, 20147, 94665, 111, 77198, 107, 1], [110, 62613, 117, 638, 112, 1133, 121, 20098, 1355, 79050, 13872, 135, 1596, 53541, 1352, 141, 13039, 5542, 124, 302, 518, 111, 268, 2956, 115, 149, 4427, 107, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [139, 1235, 2799, 18289, 17780, 204, 109, 9474, 1296, 107, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
-        # fmt: on
+        expected_encoding = {'input_ids': [[38979, 143, 18485, 606, 130, 26669, 87686, 121, 54189, 1129, 111, 26669, 87686, 121, 9114, 14787, 121, 13249, 158, 592, 956, 121, 14621, 31576, 143, 62613, 108, 9688, 930, 43430, 11562, 62613, 304, 108, 11443, 897, 108, 9314, 17415, 63399, 108, 11443, 7614, 18316, 118, 4284, 7148, 12430, 143, 1400, 25703, 158, 111, 4284, 7148, 11772, 143, 21297, 1064, 158, 122, 204, 3506, 1754, 1133, 14787, 1581, 115, 33224, 4482, 111, 1355, 110, 29173, 317, 50833, 108, 20147, 94665, 111, 77198, 107, 1], [110, 62613, 117, 638, 112, 1133, 121, 20098, 1355, 79050, 13872, 135, 1596, 53541, 1352, 141, 13039, 5542, 124, 302, 518, 111, 268, 2956, 115, 149, 4427, 107, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [139, 1235, 2799, 18289, 17780, 204, 109, 9474, 1296, 107, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
@@ -134,7 +132,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "google/pegasus-xsum"
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
     test_rust_tokenizer = True

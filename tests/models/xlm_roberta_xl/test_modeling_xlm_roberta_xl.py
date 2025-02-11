@@ -19,9 +19,10 @@ import unittest
 from transformers import XLMRobertaXLConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -46,29 +47,50 @@ class XLMRobertaXLModelTester:
     def __init__(
         self,
         parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_input_mask = True
-        self.use_token_type_ids = True
-        self.use_labels = True
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.intermediate_size = 37
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 16
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 3
-        self.num_choices = 4
-        self.scope = None
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_token_type_ids = use_token_type_ids
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
+        self.scope = scope
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -336,8 +358,7 @@ class XLMRobertaXLModelTester:
 
 
 @require_torch
-class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLMRobertaXLForCausalLM,
@@ -352,6 +373,37 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         else ()
     )
     all_generative_model_classes = (XLMRobertaXLForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": XLMRobertaXLModel,
+            "fill-mask": XLMRobertaXLForMaskedLM,
+            "question-answering": XLMRobertaXLForQuestionAnswering,
+            "text-classification": XLMRobertaXLForSequenceClassification,
+            "text-generation": XLMRobertaXLForCausalLM,
+            "token-classification": XLMRobertaXLForTokenClassification,
+            "zero-shot": XLMRobertaXLForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    model_split_percents = [0.5, 0.85, 0.95]
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = XLMRobertaXLModelTester(self)
@@ -410,6 +462,11 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
+    def test_decoder_model_past_with_large_inputs_relative_pos_emb(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        config_and_inputs[0].position_embedding_type = "relative_key"
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
@@ -427,8 +484,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     def test_create_position_ids_respects_padding_index(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is XLMRobertaXLEmbeddings.padding_idx + 1
@@ -446,8 +502,7 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
     def test_create_position_ids_from_inputs_embeds(self):
-        """Ensure that the default position ids only assign a sequential . This is a regression
-        test for https://github.com/huggingface/transformers/issues/1761
+        """This is a regression test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
         first available non-padding position index is XLMRobertaXLEmbeddings.padding_idx + 1
@@ -487,7 +542,7 @@ class XLMRobertaModelXLIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)
 
     @unittest.skip(reason="Model is too large to be tested on the CI")
     def test_xlm_roberta_xxl(self):
@@ -506,4 +561,4 @@ class XLMRobertaModelXLIntegrationTest(unittest.TestCase):
         output = model(input_ids)["last_hidden_state"].detach()
         self.assertEqual(output.shape, expected_output_shape)
         # compare the actual values for a slice of last dim
-        self.assertTrue(torch.allclose(output[:, :, -1], expected_output_values_last_dim, atol=1e-3))
+        torch.testing.assert_close(output[:, :, -1], expected_output_values_last_dim, rtol=1e-3, atol=1e-3)

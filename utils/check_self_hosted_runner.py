@@ -4,7 +4,6 @@ import subprocess
 
 
 def get_runner_status(target_runners, token):
-
     offline_runners = []
 
     cmd = (
@@ -26,7 +25,7 @@ def get_runner_status(target_runners, token):
         fp.write(json.dumps(offline_runners))
 
     if len(offline_runners) > 0:
-        failed = "\n".join(offline_runners)
+        failed = "\n".join([x["name"] for x in offline_runners])
         raise ValueError(f"The following runners are offline:\n{failed}")
 
 

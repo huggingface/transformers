@@ -12,9 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" RAG model configuration"""
-
-import copy
+"""RAG model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings
@@ -112,7 +110,8 @@ class RagConfig(PretrainedConfig):
         output_retrieved=False,
         use_cache=True,
         forced_eos_token_id=None,
-        **kwargs
+        dataset_revision=None,
+        **kwargs,
     ):
         super().__init__(
             bos_token_id=bos_token_id,
@@ -125,9 +124,11 @@ class RagConfig(PretrainedConfig):
             vocab_size=vocab_size,
             **kwargs,
         )
-        assert (
-            "question_encoder" in kwargs and "generator" in kwargs
-        ), "Config has to be initialized with question_encoder and generator config"
+        if "question_encoder" not in kwargs or "generator" not in kwargs:
+            raise ValueError(
+                f"A configuraton of type {self.model_type} cannot be instantiated because "
+                f"both `question_encoder` and `generator` sub-configurations were not passed, only {kwargs}"
+            )
         question_encoder_config = kwargs.pop("question_encoder")
         question_encoder_model_type = question_encoder_config.pop("model_type")
         decoder_config = kwargs.pop("generator")
@@ -157,6 +158,7 @@ class RagConfig(PretrainedConfig):
         self.passages_path = passages_path
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+        self.dataset_revision = dataset_revision
 
         self.output_retrieved = output_retrieved
 
@@ -180,15 +182,5 @@ class RagConfig(PretrainedConfig):
         """
         return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["question_encoder"] = self.question_encoder.to_dict()
-        output["generator"] = self.generator.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+__all__ = ["RagConfig"]

@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ALBERT model configuration"""
+"""ALBERT model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -21,24 +22,12 @@ from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 
 
-ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/config.json",
-    "albert-large-v1": "https://huggingface.co/albert-large-v1/resolve/main/config.json",
-    "albert-xlarge-v1": "https://huggingface.co/albert-xlarge-v1/resolve/main/config.json",
-    "albert-xxlarge-v1": "https://huggingface.co/albert-xxlarge-v1/resolve/main/config.json",
-    "albert-base-v2": "https://huggingface.co/albert-base-v2/resolve/main/config.json",
-    "albert-large-v2": "https://huggingface.co/albert-large-v2/resolve/main/config.json",
-    "albert-xlarge-v2": "https://huggingface.co/albert-xlarge-v2/resolve/main/config.json",
-    "albert-xxlarge-v2": "https://huggingface.co/albert-xxlarge-v2/resolve/main/config.json",
-}
-
-
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
     to instantiate an ALBERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the ALBERT
-    [albert-xxlarge-v2](https://huggingface.co/albert-xxlarge-v2) architecture.
+    [albert/albert-xxlarge-v2](https://huggingface.co/albert/albert-xxlarge-v2) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -85,6 +74,12 @@ class AlbertConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 2):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 3):
+            End of stream token id.
 
     Examples:
 
@@ -132,7 +127,7 @@ class AlbertConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -170,3 +165,6 @@ class AlbertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["AlbertConfig", "AlbertOnnxConfig"]

@@ -26,11 +26,12 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
-from datasets import load_dataset, load_metric
-
 import quant_trainer
-import transformers
+from datasets import load_dataset, load_metric
 from trainer_quant_qa import QuestionAnsweringTrainer
+from utils_qa import postprocess_qa_predictions
+
+import transformers
 from transformers import (
     AutoTokenizer,
     DataCollatorWithPadding,
@@ -46,7 +47,6 @@ from transformers import (
 from transformers.trainer_utils import SchedulerType, get_last_checkpoint
 from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
-from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -308,7 +308,7 @@ def main():
             extension = data_args.test_file.split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files, field="data", cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # set default quantization parameters before building model
     quant_trainer.set_default_quantizers(quant_trainer_args)
@@ -322,14 +322,14 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=True,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
     model = QDQBertForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
@@ -337,7 +337,7 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     # Tokenizer check: this script requires a fast tokenizer.
@@ -349,7 +349,7 @@ def main():
         )
 
     # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
+    # Preprocessing is slightly different for training and evaluation.
     if training_args.do_train or model_args.do_calib:
         column_names = raw_datasets["train"].column_names
     elif training_args.do_eval or model_args.save_onnx:
@@ -365,7 +365,7 @@ def main():
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
-            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
@@ -448,7 +448,7 @@ def main():
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
         if data_args.max_train_samples is not None:
-            # We will select sample from whole data if agument is specified
+            # We will select sample from whole data if argument is specified
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
         # Create train feature from dataset

@@ -23,7 +23,7 @@ import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends
+from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends, strtobool
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
 
@@ -131,6 +131,13 @@ class LegacyIndex(Index):
     def _load_passages(self):
         logger.info(f"Loading passages from {self.index_path}")
         passages_path = self._resolve_path(self.index_path, self.PASSAGE_FILENAME)
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+            )
         with open(passages_path, "rb") as passages_file:
             passages = pickle.load(passages_file)
         return passages
@@ -140,6 +147,13 @@ class LegacyIndex(Index):
         resolved_index_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index.dpr")
         self.index = faiss.read_index(resolved_index_path)
         resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
+        if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+            raise ValueError(
+                "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+                "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+                "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+                "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+            )
         with open(resolved_meta_path, "rb") as metadata_file:
             self.index_id_to_db_id = pickle.load(metadata_file)
         assert (
@@ -190,7 +204,7 @@ class HFIndexBase(Index):
 
     def _check_dataset_format(self, with_index: bool):
         if not isinstance(self.dataset, Dataset):
-            raise ValueError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
+            raise TypeError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
         if len({"title", "text", "embeddings"} - set(self.dataset.column_names)) > 0:
             raise ValueError(
                 "Dataset should be a dataset with the following columns: "
@@ -252,6 +266,7 @@ class CanonicalHFIndex(HFIndexBase):
         index_name: Optional[str] = None,
         index_path: Optional[str] = None,
         use_dummy_dataset=False,
+        dataset_revision=None,
     ):
         if int(index_path is None) + int(index_name is None) != 1:
             raise ValueError("Please provide `index_name` or `index_path`.")
@@ -260,9 +275,14 @@ class CanonicalHFIndex(HFIndexBase):
         self.index_name = index_name
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
+        self.dataset_revision = dataset_revision
         logger.info(f"Loading passages from {self.dataset_name}")
         dataset = load_dataset(
-            self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
+            self.dataset_name,
+            with_index=False,
+            split=self.dataset_split,
+            dummy=self.use_dummy_dataset,
+            revision=dataset_revision,
         )
         super().__init__(vector_size, dataset, index_initialized=False)
 
@@ -279,6 +299,7 @@ class CanonicalHFIndex(HFIndexBase):
                 split=self.dataset_split,
                 index_name=self.index_name,
                 dummy=self.use_dummy_dataset,
+                revision=self.dataset_revision,
             )
             self.dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
         self._index_initialized = True
@@ -413,6 +434,7 @@ class RagRetriever:
                 index_name=config.index_name,
                 index_path=config.index_path,
                 use_dummy_dataset=config.use_dummy_dataset,
+                dataset_revision=config.dataset_revision,
             )
 
     @classmethod
@@ -573,10 +595,10 @@ class RagRetriever:
         Retrieves documents for specified `question_hidden_states`.
 
         Args:
-            question_input_ids: (`List[List[int]]`) batch of input ids
+            question_input_ids (`List[List[int]]`) batch of input ids
             question_hidden_states (`np.ndarray` of shape `(batch_size, vector_size)`:
                 A batch of query vectors to retrieve with.
-            prefix: (`str`, *optional*):
+            prefix (`str`, *optional*):
                 The prefix used by the generator's tokenizer.
             n_docs (`int`, *optional*):
                 The number of docs retrieved per query.
@@ -650,3 +672,6 @@ class RagRetriever:
                 },
                 tensor_type=return_tensors,
             )
+
+
+__all__ = ["RagRetriever"]

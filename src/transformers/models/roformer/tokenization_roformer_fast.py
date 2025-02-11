@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RoFormer."""
+
 import json
 from typing import List, Optional, Tuple
 
@@ -28,44 +29,6 @@ from .tokenization_utils import JiebaPreTokenizer
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "junnyu/roformer_chinese_small": "https://huggingface.co/junnyu/roformer_chinese_small/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_base": "https://huggingface.co/junnyu/roformer_chinese_base/resolve/main/vocab.txt",
-        "junnyu/roformer_chinese_char_small": (
-            "https://huggingface.co/junnyu/roformer_chinese_char_small/resolve/main/vocab.txt"
-        ),
-        "junnyu/roformer_chinese_char_base": (
-            "https://huggingface.co/junnyu/roformer_chinese_char_base/resolve/main/vocab.txt"
-        ),
-        "junnyu/roformer_small_discriminator": (
-            "https://huggingface.co/junnyu/roformer_small_discriminator/resolve/main/vocab.txt"
-        ),
-        "junnyu/roformer_small_generator": (
-            "https://huggingface.co/junnyu/roformer_small_generator/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "junnyu/roformer_chinese_small": 1536,
-    "junnyu/roformer_chinese_base": 1536,
-    "junnyu/roformer_chinese_char_small": 512,
-    "junnyu/roformer_chinese_char_base": 512,
-    "junnyu/roformer_small_discriminator": 128,
-    "junnyu/roformer_small_generator": 128,
-}
-
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "junnyu/roformer_chinese_small": {"do_lower_case": True},
-    "junnyu/roformer_chinese_base": {"do_lower_case": True},
-    "junnyu/roformer_chinese_char_small": {"do_lower_case": True},
-    "junnyu/roformer_chinese_char_base": {"do_lower_case": True},
-    "junnyu/roformer_small_discriminator": {"do_lower_case": True},
-    "junnyu/roformer_small_generator": {"do_lower_case": True},
-}
 
 
 class RoFormerTokenizerFast(PreTrainedTokenizerFast):
@@ -85,13 +48,10 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
 
     >>> tokenizer = RoFormerTokenizerFast.from_pretrained("junnyu/roformer_chinese_base")
     >>> tokenizer.tokenize("今天天气非常好。")
-    # ['今', '天', '天', '气', '非常', '好', '。']
+    ['今', '天', '天', '气', '非常', '好', '。']
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = RoFormerTokenizer
 
     def __init__(
@@ -106,7 +66,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -122,15 +82,19 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        pre_tok_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
+        normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
         if (
-            pre_tok_state.get("lowercase", do_lower_case) != do_lower_case
-            or pre_tok_state.get("strip_accents", strip_accents) != strip_accents
+            normalizer_state.get("lowercase", do_lower_case) != do_lower_case
+            or normalizer_state.get("strip_accents", strip_accents) != strip_accents
         ):
-            pre_tok_class = getattr(normalizers, pre_tok_state.pop("type"))
-            pre_tok_state["lowercase"] = do_lower_case
-            pre_tok_state["strip_accents"] = strip_accents
-            self.backend_tokenizer.normalizer = pre_tok_class(**pre_tok_state)
+            normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
+            normalizer_state["lowercase"] = do_lower_case
+            normalizer_state["strip_accents"] = strip_accents
+            self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
+
+        # Make sure we correctly set the custom PreTokenizer
+        vocab = self.backend_tokenizer.get_vocab()
+        self.backend_tokenizer.pre_tokenizer = PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
         self.do_lower_case = do_lower_case
 
@@ -163,7 +127,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         """
         output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
-        if token_ids_1:
+        if token_ids_1 is not None:
             output += token_ids_1 + [self.sep_token_id]
 
         return output
@@ -211,3 +175,6 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
     ):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
         return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)
+
+
+__all__ = ["RoFormerTokenizerFast"]

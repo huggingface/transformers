@@ -12,12 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OWL-ViT model configuration"""
+"""OWL-ViT model configuration"""
 
-import copy
-import os
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
 
 
 if TYPE_CHECKING:
@@ -30,12 +28,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/owlvit-base-patch32": "https://huggingface.co/google/owlvit-base-patch32/resolve/main/config.json",
-    "google/owlvit-base-patch16": "https://huggingface.co/google/owlvit-base-patch16/resolve/main/config.json",
-    "google/owlvit-large-patch14": "https://huggingface.co/google/owlvit-large-patch14/resolve/main/config.json",
-}
 
 
 class OwlViTTextConfig(PretrainedConfig):
@@ -66,17 +58,22 @@ class OwlViTTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float`, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The id of the padding token in the input sequences.
+        bos_token_id (`int`, *optional*, defaults to 49406):
+            The id of the beginning-of-sequence token in the input sequences.
+        eos_token_id (`int`, *optional*, defaults to 49407):
+            The id of the end-of-sequence token in the input sequences.
 
     Example:
 
@@ -92,7 +89,9 @@ class OwlViTTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "owlvit_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -103,15 +102,14 @@ class OwlViTTextConfig(PretrainedConfig):
         num_attention_heads=8,
         max_position_embeddings=16,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=0,
         bos_token_id=49406,
         eos_token_id=49407,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -123,27 +121,9 @@ class OwlViTTextConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
-        self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from OwlViTConfig
-        if config_dict.get("model_type") == "owlvit":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class OwlViTVisionConfig(PretrainedConfig):
@@ -165,21 +145,22 @@ class OwlViTVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
         image_size (`int`, *optional*, defaults to 768):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
-        dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        initializer_factor (`float``, *optional*, defaults to 1):
+        initializer_factor (`float`, *optional*, defaults to 1.0):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
 
@@ -199,6 +180,7 @@ class OwlViTVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "owlvit_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -206,15 +188,15 @@ class OwlViTVisionConfig(PretrainedConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
+        num_channels=3,
         image_size=768,
         patch_size=32,
         hidden_act="quick_gelu",
-        layer_norm_eps=0.00001,
-        dropout=0.0,
+        layer_norm_eps=1e-5,
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -222,58 +204,44 @@ class OwlViTVisionConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
         self.image_size = image_size
         self.patch_size = patch_size
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
-        self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from OwlViTConfig
-        if config_dict.get("model_type") == "owlvit":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class OwlViTConfig(PretrainedConfig):
     r"""
     [`OwlViTConfig`] is the configuration class to store the configuration of an [`OwlViTModel`]. It is used to
     instantiate an OWL-ViT model according to the specified arguments, defining the text model and vision model
-    configs.
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the OWL-ViT
+    [google/owlvit-base-patch32](https://huggingface.co/google/owlvit-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        text_config_dict (`dict`, *optional*):
+        text_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTTextConfig`].
-        vision_config_dict (`dict`, *optional*):
+        vision_config (`dict`, *optional*):
             Dictionary of configuration options used to initialize [`OwlViTVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimensionality of text and vision projection layers.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
+            The initial value of the *logit_scale* parameter. Default is used as per the original OWL-ViT
             implementation.
+        return_dict (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return a dictionary. If `False`, returns a tuple.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
 
     model_type = "owlvit"
-    is_composition = True
+    sub_configs = {"text_config": OwlViTTextConfig, "vision_config": OwlViTVisionConfig}
 
     def __init__(
         self,
@@ -282,17 +250,17 @@ class OwlViTConfig(PretrainedConfig):
         projection_dim=512,
         logit_scale_init_value=2.6592,
         return_dict=True,
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(text_config=text_config, vision_config=vision_config, **kwargs)
+        super().__init__(**kwargs)
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config_dict is None. Initializing the OwlViTTextConfig with default values.")
+            logger.info("text_config is None. Initializing the OwlViTTextConfig with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config_dict is None. initializing the OwlViTVisionConfig with default values.")
+            logger.info("vision_config is None. initializing the OwlViTVisionConfig with default values.")
 
         self.text_config = OwlViTTextConfig(**text_config)
         self.vision_config = OwlViTVisionConfig(**vision_config)
@@ -301,18 +269,6 @@ class OwlViTConfig(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.return_dict = return_dict
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
     def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
@@ -328,19 +284,6 @@ class OwlViTConfig(PretrainedConfig):
         config_dict["vision_config"] = vision_config
 
         return cls.from_dict(config_dict, **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
 
 
 class OwlViTOnnxConfig(OnnxConfig):
@@ -376,15 +319,17 @@ class OwlViTOnnxConfig(OnnxConfig):
         seq_length: int = -1,
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
-
         text_input_dict = super().generate_dummy_inputs(
             processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
+            processor.image_processor, batch_size=batch_size, framework=framework
         )
         return {**text_input_dict, **image_input_dict}
 
     @property
     def default_onnx_opset(self) -> int:
         return 14
+
+
+__all__ = ["OwlViTConfig", "OwlViTOnnxConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]

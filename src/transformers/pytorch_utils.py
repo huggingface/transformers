@@ -11,14 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import inspect
+from functools import lru_cache, wraps
 from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
 from packaging import version
-from torch import _softmax_backward_data, nn
+from safetensors.torch import storage_ptr, storage_size
+from torch import nn
 
-from .utils import logging
+from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -27,19 +31,25 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
-is_torch_less_than_1_8 = parsed_torch_version_base < version.parse("1.8.0")
-is_torch_greater_or_equal_than_1_10 = parsed_torch_version_base >= version.parse("1.10")
-is_torch_less_than_1_11 = parsed_torch_version_base < version.parse("1.11")
+is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse("2.4")
+is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
+is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
+is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
 
+# For backwards compatibility (e.g. some remote codes on Hub using those variables).
+is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
+is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
+is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
 
-def torch_int_div(tensor1, tensor2):
-    """
-    A function that performs integer division across different versions of PyTorch.
-    """
-    if is_torch_less_than_1_8:
-        return tensor1 // tensor2
-    else:
-        return torch.div(tensor1, tensor2, rounding_mode="floor")
+# Cache this result has it's a C FFI call which can be pretty time-consuming
+_torch_distributed_available = torch.distributed.is_available()
+
+if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+    from torch.distributed.tensor import Replicate
+    from torch.distributed.tensor.parallel import (
+        ColwiseParallel,
+        RowwiseParallel,
+    )
 
 
 def softmax_backward_data(parent, grad_output, output, dim, self):
@@ -48,10 +58,9 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
     to the torch version detected.
     """
 
-    if is_torch_less_than_1_11:
-        return _softmax_backward_data(grad_output, output, parent.dim, self)
-    else:
-        return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
+    from torch import _softmax_backward_data
+
+    return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
 
 
 def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
@@ -102,10 +111,13 @@ class Conv1D(nn.Module):
     def __init__(self, nf, nx):
         super().__init__()
         self.nf = nf
-        w = torch.empty(nx, nf)
-        nn.init.normal_(w, std=0.02)
-        self.weight = nn.Parameter(w)
+        self.nx = nx
+        self.weight = nn.Parameter(torch.empty(nx, nf))
         self.bias = nn.Parameter(torch.zeros(nf))
+        nn.init.normal_(self.weight, std=0.02)
+
+    def __repr__(self) -> str:
+        return "Conv1D(nf={nf}, nx={nx})".format(**self.__dict__)
 
     def forward(self, x):
         size_out = x.size()[:-1] + (self.nf,)
@@ -172,7 +184,10 @@ def prune_layer(
 
 
 def apply_chunking_to_forward(
-    forward_fn: Callable[..., torch.Tensor], chunk_size: int, chunk_dim: int, *input_tensors
+    forward_fn: Callable[..., torch.Tensor],
+    chunk_size: int,
+    chunk_dim: int,
+    *input_tensors,
 ) -> torch.Tensor:
     """
     This function chunks the `input_tensors` into smaller input tensor parts of size `chunk_size` over the dimension
@@ -259,7 +274,8 @@ def find_pruneable_heads_and_indices(
         already_pruned_heads (`Set[int]`): A set of already pruned heads.
 
     Returns:
-        `Tuple[Set[int], torch.LongTensor]`: A tuple with the remaining heads and their corresponding indices.
+        `Tuple[Set[int], torch.LongTensor]`: A tuple with the indices of heads to prune taking `already_pruned_heads`
+        into account and the indices of rows/columns to keep in the layer weight.
     """
     mask = torch.ones(n_heads, head_size)
     heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
@@ -270,3 +286,108 @@ def find_pruneable_heads_and_indices(
     mask = mask.view(-1).contiguous().eq(1)
     index: torch.LongTensor = torch.arange(len(mask))[mask].long()
     return heads, index
+
+
+def meshgrid(
+    *tensors: Union[torch.Tensor, List[torch.Tensor]], indexing: Optional[str] = None
+) -> Tuple[torch.Tensor, ...]:
+    """
+    Wrapper around torch.meshgrid to avoid warning messages about the introduced `indexing` argument.
+
+    Reference: https://pytorch.org/docs/1.13/generated/torch.meshgrid.html
+    """
+    return torch.meshgrid(*tensors, indexing=indexing)
+
+
+def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
+    """
+    Unique identifier to a tensor storage. Multiple different tensors can share the same underlying storage. For
+    example, "meta" tensors all share the same storage, and thus their identifier will all be equal. This identifier is
+    guaranteed to be unique and constant for this tensor's storage during its lifetime. Two tensor storages with
+    non-overlapping lifetimes may have the same id.
+    """
+    if tensor.device.type == "xla" and is_torch_xla_available():
+        # NOTE: xla tensors dont have storage
+        # use some other unique id to distinguish.
+        # this is a XLA tensor, it must be created using torch_xla's
+        # device. So the following import is safe:
+        import torch_xla
+
+        unique_id = torch_xla._XLAC._xla_get_tensor_id(tensor)
+    else:
+        unique_id = storage_ptr(tensor)
+
+    return tensor.device, unique_id, storage_size(tensor)
+
+
+def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int) -> torch.Tensor:
+    """
+    Same as `torch.isin` without flags, but MPS-friendly. We can remove this function when we stop supporting
+    torch <= 2.3. See https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
+
+    Args:
+        elements (`torch.Tensor`): Input elements
+        test_elements (`torch.Tensor` or `int`): The elements to check against.
+
+    Returns:
+        `torch.Tensor`: A boolean tensor of the same shape as `elements` that is True for `elements` in `test_elements`
+        and False otherwise
+    """
+
+    if elements.device.type == "mps" and not is_torch_greater_or_equal_than_2_4:
+        test_elements = torch.tensor(test_elements)
+        if test_elements.ndim == 0:
+            test_elements = test_elements.unsqueeze(0)
+        return elements.tile(test_elements.shape[0], 1).eq(test_elements.unsqueeze(1)).sum(dim=0).bool().squeeze()
+    else:
+        # Note: don't use named arguments in `torch.isin`, see https://github.com/pytorch/pytorch/issues/126045
+        return torch.isin(elements, test_elements)
+
+
+# TODO need to add the __repr__ that shows that it is a colwise parallel
+# See https://github.com/pytorch/pytorch/issues/145726
+def translate_to_torch_parallel_style(style: str):
+    """
+    In model configurations, we use a neutral type (string) to specify parallel
+    styles, here we translate them into torch.distributed tensor-parallel
+    types.
+    """
+    if not isinstance(style, str):
+        raise ValueError(f"Unsupported parallel style type {type(style)}, expected str")
+
+    if style == "colwise":
+        return ColwiseParallel()
+    elif style == "rowwise":
+        return RowwiseParallel()
+    elif style == "colwise_rep":
+        return ColwiseParallel(output_layouts=Replicate())
+    elif style == "rowwise_rep":
+        return RowwiseParallel(input_layouts=Replicate())
+    else:
+        raise ValueError(f"Unsupported parallel style value: {style}")
+
+
+def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
+    """
+    LRU cache decorator from standard functools library, but with a workaround to disable
+    caching when torchdynamo is compiling. Expected to work with class methods.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not is_torchdynamo_compiling():
+                # Cache the function only if the model is not being compiled
+                # check if the function is already cached, otherwise create it
+                if not hasattr(self, f"_cached_{func.__name__}"):
+                    self.__setattr__(
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                    )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+            else:
+                # Otherwise, just call the original function
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

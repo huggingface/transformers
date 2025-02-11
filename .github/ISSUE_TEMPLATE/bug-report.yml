@@ -1,6 +1,17 @@
 name: "\U0001F41B Bug Report"
 description: Submit a bug report to help us improve transformers
+labels: [ "bug" ]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! 🤗
+
+        Before you submit your bug report:
+
+          - If it is your first time submitting, be sure to check our [bug report guidelines](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#did-you-find-a-bug)
+          - Try our [docs bot](https://huggingface.co/spaces/huggingchat/hf-docs-chat) -- it might be able to help you with your issue
+
   - type: textarea
     id: system-info
     attributes:
@@ -17,40 +28,36 @@ body:
       description: |
         Your issue will be replied to more quickly if you can figure out the right person to tag with @
         If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of **who to tag**.
+
+        All issues are read by one of the core maintainers, so if you don't know who to tag, just leave this blank and
+        a core maintainer will ping the right person.
+
         Please tag fewer than 3 people.
-        
+
         Models:
 
-          - ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: `@LysandreJik`
-          - T5, Pegasus, EncoderDecoder: `@patrickvonplaten`
-          - Blenderbot, MBART, BART, Marian, Pegasus: `@patil-suraj`
-          - Reformer, TransfoXL, XLNet, FNet: `@patrickvonplaten`
-          - Longformer, BigBird: `@ydshieh`
-          - FSMT: `@stas00`
-          - Funnel: `@sgugger`
-          - GPT-2, GPT: `@patil-suraj`, `@patrickvonplaten`, `@LysandreJik`
-          - RAG, DPR: `@patrickvonplaten`, `@lhoestq`
-          - TensorFlow: `@Rocketknight1`
-          - JAX/Flax: `@patil-suraj`
-          - TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: `@NielsRogge`
-          - GPT-Neo, GPT-J, CLIP: `@patil-suraj`
-          - Wav2Vec2, HuBERT, UniSpeech, UniSpeechSAT, SEW, SEW-D: `@patrickvonplaten`, `@anton-l`
-          - SpeechEncoderDecoder, Speech2Text, Speech2Text2: `@sanchit-gandhi`, `@patrickvonplaten`, `@anton-l`
-          
-          If the model isn't in the list, ping `@LysandreJik` who will redirect you to the correct contributor.
+          - text models: @ArthurZucker
+          - vision models: @amyeroberts, @qubvel
+          - speech models: @ylacombe, @eustlb
+          - graph models: @clefourrier
 
         Library:
-          - Benchmarks: `@patrickvonplaten`
-          - Deepspeed: `@stas00`
-          - Ray/raytune: `@richardliaw`, `@amogkam`
-          - Text generation: `@patrickvonplaten`, `@Narsil`, `@gante`
-          - Tokenizers: `@SaulLu`
-          - Trainer: `@sgugger`
-          - Pipelines: `@Narsil`
-          - Speech: `@patrickvonplaten`, `@anton-l`, `@sanchit-gandhi`
-          - Vision: `@NielsRogge`, `@sgugger`
 
-        Documentation: `@sgugger`, `@stevhliu`
+          - flax: @sanchit-gandhi
+          - generate: @zucchini-nlp (visual-language models) or @gante (all others)
+          - pipelines: @Rocketknight1
+          - tensorflow: @gante and @Rocketknight1
+          - tokenizers: @ArthurZucker and @itazap
+          - trainer: @muellerzr @SunMarc
+
+        Integrations:
+
+          - deepspeed: HF Trainer/Accelerate: @muellerzr
+          - ray/raytune: @richardliaw, @amogkam
+          - Big Model Inference: @SunMarc
+          - quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
+
+        Documentation: @stevhliu
 
         Model hub:
 
@@ -58,17 +65,19 @@ body:
 
         HF projects:
 
+          - accelerate: [different repo](https://github.com/huggingface/accelerate)
           - datasets: [different repo](https://github.com/huggingface/datasets)
+          - diffusers: [different repo](https://github.com/huggingface/diffusers)
           - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
-        Examples:
+        Maintained examples (not research project or legacy):
 
-          - maintained examples (not research project or legacy): `@sgugger`, `@patil-suraj`
+          - Flax: @sanchit-gandhi
+          - PyTorch: See Models above and tag the person corresponding to the modality of the example.
+          - TensorFlow: @Rocketknight1
 
-        For research projetcs, please ping the contributor directly. For example, on the following projects:
+        Research projects are not maintained and should be taken as is.
 
-          - research_projects/bert-loses-patience: `@JetRunner`
-          - research_projects/distillation: `@VictorSanh`
       placeholder: "@Username ..."
 
   - type: checkboxes
@@ -103,11 +112,11 @@ body:
 
       placeholder: |
         Steps to reproduce the behavior:
-          
+
           1.
           2.
           3.
-          
+
 
   - type: textarea
     id: expected-behavior

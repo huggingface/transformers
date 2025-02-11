@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Nystromformer model configuration"""
+"""Nystromformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "uw-madison/nystromformer-512": "https://huggingface.co/uw-madison/nystromformer-512/resolve/main/config.json",
-    # See all Nystromformer models at https://huggingface.co/models?filter=nystromformer
-}
 
 
 class NystromformerConfig(PretrainedConfig):
@@ -52,7 +47,7 @@ class NystromformerConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -89,6 +84,7 @@ class NystromformerConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "nystromformer"
 
     def __init__(
@@ -112,7 +108,7 @@ class NystromformerConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -131,3 +127,6 @@ class NystromformerConfig(PretrainedConfig):
         self.inv_coeff_init_option = inv_coeff_init_option
         self.layer_norm_eps = layer_norm_eps
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+__all__ = ["NystromformerConfig"]

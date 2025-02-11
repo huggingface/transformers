@@ -15,6 +15,7 @@
 """
 Processor class for MarkupLM.
 """
+
 from typing import Optional, Union
 
 from ...file_utils import TensorType
@@ -41,6 +42,7 @@ class MarkupLMProcessor(ProcessorMixin):
         parse_html (`bool`, *optional*, defaults to `True`):
             Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
     """
+
     feature_extractor_class = "MarkupLMFeatureExtractor"
     tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
     parse_html = True
@@ -54,7 +56,7 @@ class MarkupLMProcessor(ProcessorMixin):
         questions=None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
@@ -66,7 +68,7 @@ class MarkupLMProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         This method first forwards the `html_strings` argument to [`~MarkupLMFeatureExtractor.__call__`]. Next, it
@@ -138,3 +140,11 @@ class MarkupLMProcessor(ProcessorMixin):
         docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        return tokenizer_input_names
+
+
+__all__ = ["MarkupLMProcessor"]

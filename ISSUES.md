@@ -18,7 +18,7 @@ limitations under the License.
 
 This is an Open Source Project so please be mindful that like in any other project of this kind there is no obligation to answer all requests for help.
 
-However, we want to encourage you to ask for help whenever you think it's needed! We are happy about every  question we get because it allows us to better understand your needs, possible misunderstandings, and most importantly a way for you to help us make this library better. That being said, this document's main purpose is to provide guidelines at how you can formulate your requests to increase your chances to be understood and to get support.
+However, we want to encourage you to ask for help whenever you think it's needed! We are happy about every question we get because it allows us to better understand your needs, possible misunderstandings, and most importantly a way for you to help us make this library better. That being said, this document's main purpose is to provide guidelines at how you can formulate your requests to increase your chances to be understood and to get support.
 
 There are two main venues to receive support: [the forums](https://discuss.huggingface.co/) and [the GitHub issues](https://github.com/huggingface/transformers/issues).
 
@@ -152,13 +152,13 @@ You are not required to read the following guidelines before opening an issue. H
 
    ```bash
     cd examples/seq2seq
-    python -m torch.distributed.launch --nproc_per_node=2 ./finetune_trainer.py \
+    torchrun --nproc_per_node=2 ./finetune_trainer.py \
     --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
     --output_dir output_dir --overwrite_output_dir \
     --do_train --n_train 500 --num_train_epochs 1 \
     --per_device_train_batch_size 1  --freeze_embeds \
     --src_lang en_XX --tgt_lang ro_RO --task translation \
-    --fp16 --sharded_ddp
+    --fp16
    ```
 
    If you don't break it up, one has to scroll horizontally which often makes it quite difficult to quickly see what's happening.

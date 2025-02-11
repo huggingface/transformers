@@ -1,4 +1,5 @@
+accelerate>=0.12.0
 torch>=1.5.0
 torchvision>=0.6.0
-datasets>=1.17.0
+datasets>=2.14.0
 evaluate

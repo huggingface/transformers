@@ -21,15 +21,17 @@ Fine-tuning the library models for question answering using a slightly adapted v
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
-from datasets import load_dataset
-
 import evaluate
-import transformers
+from datasets import load_dataset
 from trainer_qa import QuestionAnsweringTrainer
+from utils_qa import postprocess_qa_predictions
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
@@ -45,11 +47,10 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -79,12 +80,22 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -238,6 +249,10 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
+
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
     datasets.utils.logging.set_verbosity(log_level)
@@ -247,8 +262,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -285,7 +300,8 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -304,10 +320,10 @@ def main():
             data_files=data_files,
             field="data",
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
     #
@@ -318,14 +334,16 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=True,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
@@ -333,7 +351,8 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     # Tokenizer check: this script requires a fast tokenizer.
@@ -345,7 +364,7 @@ def main():
         )
 
     # Preprocessing the datasets.
-    # Preprocessing is slighlty different for training and evaluation.
+    # Preprocessing is slightly different for training and evaluation.
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
     elif training_args.do_eval:
@@ -361,7 +380,7 @@ def main():
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
-            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
@@ -401,7 +420,12 @@ def main():
         for i, offsets in enumerate(offset_mapping):
             # We will label impossible answers with the index of the CLS token.
             input_ids = tokenized_examples["input_ids"][i]
-            cls_index = input_ids.index(tokenizer.cls_token_id)
+            if tokenizer.cls_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.cls_token_id)
+            elif tokenizer.bos_token_id in input_ids:
+                cls_index = input_ids.index(tokenizer.bos_token_id)
+            else:
+                cls_index = 0
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
             sequence_ids = tokenized_examples.sequence_ids(i)
@@ -586,15 +610,25 @@ def main():
         # Format the result to the format the metric expects.
         if data_args.version_2_with_negative:
             formatted_predictions = [
-                {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
+                {"id": str(k), "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
             ]
         else:
-            formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
+            formatted_predictions = [{"id": str(k), "prediction_text": v} for k, v in predictions.items()]
 
-        references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
+        references = [{"id": str(ex["id"]), "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    metric = evaluate.load("squad_v2" if data_args.version_2_with_negative else "squad")
+    if data_args.version_2_with_negative:
+        accepted_best_metrics = ("exact", "f1", "HasAns_exact", "HasAns_f1")
+    else:
+        accepted_best_metrics = ("exact_match", "f1")
+
+    if training_args.load_best_model_at_end and training_args.metric_for_best_model not in accepted_best_metrics:
+        warnings.warn(f"--metric_for_best_model should be set to one of {accepted_best_metrics}")
+
+    metric = evaluate.load(
+        "squad_v2" if data_args.version_2_with_negative else "squad", cache_dir=model_args.cache_dir
+    )
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
@@ -606,7 +640,7 @@ def main():
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         eval_examples=eval_examples if training_args.do_eval else None,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         post_process_function=post_processing_function,
         compute_metrics=compute_metrics,

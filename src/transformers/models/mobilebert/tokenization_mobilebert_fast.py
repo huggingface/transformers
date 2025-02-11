@@ -29,18 +29,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/vocab.txt"},
-    "tokenizer_file": {
-        "mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/tokenizer.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"mobilebert-uncased": 512}
-
-
-PRETRAINED_INIT_CONFIGURATION = {}
-
 
 # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with BERT->MobileBERT,Bert->MobileBert
 class MobileBertTokenizerFast(PreTrainedTokenizerFast):
@@ -84,9 +72,6 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = MobileBertTokenizer
 
     def __init__(
@@ -101,7 +86,7 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -150,7 +135,7 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
         """
         output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
 
-        if token_ids_1:
+        if token_ids_1 is not None:
             output += token_ids_1 + [self.sep_token_id]
 
         return output
@@ -159,8 +144,8 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A MobileBERT
-        sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A MobileBERT sequence
+        pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
@@ -187,3 +172,6 @@ class MobileBertTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+
+__all__ = ["MobileBertTokenizerFast"]

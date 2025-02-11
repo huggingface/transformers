@@ -14,18 +14,17 @@
 # limitations under the License.
 """Convert LeViT checkpoints from timm."""
 
-
 import argparse
 import json
 from collections import OrderedDict
 from functools import partial
 from pathlib import Path
 
-import torch
-
 import timm
+import torch
 from huggingface_hub import hf_hub_download
-from transformers import LevitConfig, LevitFeatureExtractor, LevitForImageClassificationWithTeacher
+
+from transformers import LevitConfig, LevitForImageClassificationWithTeacher, LevitImageProcessor
 from transformers.utils import logging
 
 
@@ -74,8 +73,8 @@ def convert_weight_and_push(
 
     if push_to_hub:
         our_model.save_pretrained(save_directory / checkpoint_name)
-        feature_extractor = LevitFeatureExtractor()
-        feature_extractor.save_pretrained(save_directory / checkpoint_name)
+        image_processor = LevitImageProcessor()
+        image_processor.save_pretrained(save_directory / checkpoint_name)
 
         print(f"Pushed {checkpoint_name}")
 
@@ -167,12 +166,12 @@ if __name__ == "__main__":
         required=False,
         help="Path to the output PyTorch model directory.",
     )
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
     parser.add_argument(
-        "--push_to_hub",
-        default=True,
-        type=bool,
-        required=False,
-        help="If True, push model and feature extractor to the hub.",
+        "--no-push_to_hub",
+        dest="push_to_hub",
+        action="store_false",
+        help="Do not push model and image processor to the hub",
     )
 
     args = parser.parse_args()

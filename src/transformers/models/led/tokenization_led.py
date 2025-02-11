@@ -32,21 +32,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
 # See all LED models at https://huggingface.co/models?filter=LED
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/led-base-16384": 16384,
-}
 
 
 @lru_cache()
@@ -97,12 +82,14 @@ class LEDTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import LEDTokenizer
+
     >>> tokenizer = LEDTokenizer.from_pretrained("allenai/led-base-16384")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 
@@ -167,8 +154,6 @@ class LEDTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.__init__
@@ -185,7 +170,7 @@ class LEDTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -196,19 +181,6 @@ class LEDTokenizer(PreTrainedTokenizer):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
-        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -225,6 +197,19 @@ class LEDTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
 
     @property
     # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.vocab_size
@@ -427,6 +412,7 @@ class LEDTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         encoded_inputs = super()._pad(
@@ -434,6 +420,7 @@ class LEDTokenizer(PreTrainedTokenizer):
             max_length=max_length,
             padding_strategy=padding_strategy,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
         )
 
@@ -462,3 +449,6 @@ class LEDTokenizer(PreTrainedTokenizer):
                     raise ValueError("Invalid padding strategy:" + str(self.padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["LEDTokenizer"]

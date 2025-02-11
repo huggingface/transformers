@@ -14,18 +14,17 @@
 # limitations under the License.
 """Convert DeiT distilled checkpoints from the timm library."""
 
-
 import argparse
 import json
 from pathlib import Path
 
-import torch
-from PIL import Image
-
 import requests
 import timm
+import torch
 from huggingface_hub import hf_hub_download
-from transformers import DeiTConfig, DeiTFeatureExtractor, DeiTForImageClassificationWithTeacher
+from PIL import Image
+
+from transformers import DeiTConfig, DeiTForImageClassificationWithTeacher, DeiTImageProcessor
 from transformers.utils import logging
 
 
@@ -182,12 +181,12 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
     model = DeiTForImageClassificationWithTeacher(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by DeiTFeatureExtractor
+    # Check outputs on an image, prepared by DeiTImageProcessor
     size = int(
         (256 / 224) * config.image_size
     )  # to maintain same ratio w.r.t. 224 images, see https://github.com/facebookresearch/deit/blob/ab5715372db8c6cad5740714b2216d55aeae052e/datasets.py#L103
-    feature_extractor = DeiTFeatureExtractor(size=size, crop_size=config.image_size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    image_processor = DeiTImageProcessor(size=size, crop_size=config.image_size)
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
@@ -198,8 +197,8 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {deit_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

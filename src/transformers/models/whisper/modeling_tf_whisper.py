@@ -12,26 +12,38 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow Whisper model."""
+"""TensorFlow Whisper model."""
 
+from __future__ import annotations
 
 import math
 import random
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
+from ...generation.configuration_utils import GenerationConfig
+from ...generation.tf_logits_process import TFLogitsProcessorList
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
 )
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, keras_serializable, unpack_inputs
-from ...tf_utils import shape_list, stable_softmax
+from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
+    TFModelInputType,
+    TFPreTrainedModel,
+    keras,
+    keras_serializable,
+    unpack_inputs,
+)
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_whisper import WhisperConfig
+from .tokenization_whisper import TASK_IDS, TO_LANGUAGE_CODE
 
 
 logger = logging.get_logger(__name__)
@@ -39,12 +51,20 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "WhisperConfig"
 
 
-TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai/whisper-base",
-    # See all Whisper models at https://huggingface.co/models?filter=whisper
-]
-
 LARGE_NEGATIVE = -1e8
+
+
+def sinusoidal_embedding_init(shape, dtype=tf.float32) -> tf.Tensor:
+    """Returns sinusoids for positional embedding"""
+    length, channels = shape
+    if channels % 2 != 0:
+        raise ValueError(
+            f"Number of channels has to be divisible by 2 for sinusoidal positional embeddings, got {channels} channels."
+        )
+    log_timescale_increment = math.log(10000) / (channels // 2 - 1)
+    inv_timescales = tf.exp(-log_timescale_increment * tf.range(channels // 2, dtype=tf.float32))
+    scaled_time = tf.reshape(tf.range(length, dtype=tf.float32), (-1, 1)) * tf.reshape(inv_timescales, (1, -1))
+    return tf.cast(tf.concat([tf.sin(scaled_time), tf.cos(scaled_time)], axis=1), dtype)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
@@ -104,28 +124,37 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFWhisperPositionalEmbedding(tf.keras.layers.Layer):
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None, **kwargs):
+class TFWhisperPositionalEmbedding(keras.layers.Layer):
+    def __init__(
+        self,
+        num_positions: int,
+        embedding_dim: int,
+        padding_idx: Optional[int] = None,
+        embedding_initializer=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
+        self.embedding_initializer = keras.initializers.get(embedding_initializer)
 
     def build(self, input_shape):
         self.weight = self.add_weight(
             name="weight",
             shape=[self.num_positions, self.embedding_dim],
+            initializer=self.embedding_initializer,
             trainable=True,
         )
         super().build(input_shape)
 
     def call(self, input_ids, past_key_values_length=0):
         past_key_values_length = tf.cast(past_key_values_length, tf.int32)
-        gather_indices = tf.range(tf.shape(input_ids)[-1], delta=1) + past_key_values_length
+        gather_indices = tf.range(tf.shape(input_ids)[1], delta=1) + past_key_values_length
         return tf.gather(self.weight, gather_indices)
 
 
-class TFWhisperAttention(tf.keras.layers.Layer):
+class TFWhisperAttention(keras.layers.Layer):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -135,12 +164,12 @@ class TFWhisperAttention(tf.keras.layers.Layer):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.embed_dim = embed_dim
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
 
         if (self.head_dim * num_heads) != self.embed_dim:
@@ -151,10 +180,10 @@ class TFWhisperAttention(tf.keras.layers.Layer):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=False, name="k_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = keras.layers.Dense(embed_dim, use_bias=False, name="k_proj")
+        self.v_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.q_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.out_proj = keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention._shape with BART->whisper
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
@@ -164,12 +193,12 @@ class TFWhisperAttention(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
+        key_value_states: tf.Tensor | None = None,
+        past_key_value: Tuple[Tuple[tf.Tensor]] | None = None,
+        attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
         training: Optional[bool] = False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+    ) -> Tuple[tf.Tensor, tf.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -279,29 +308,47 @@ class TFWhisperAttention(tf.keras.layers.Layer):
 
         return attn_output, attn_weights, past_key_value
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "k_proj", None) is not None:
+            with tf.name_scope(self.k_proj.name):
+                self.k_proj.build([None, None, self.embed_dim])
+        if getattr(self, "v_proj", None) is not None:
+            with tf.name_scope(self.v_proj.name):
+                self.v_proj.build([None, None, self.embed_dim])
+        if getattr(self, "q_proj", None) is not None:
+            with tf.name_scope(self.q_proj.name):
+                self.q_proj.build([None, None, self.embed_dim])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.embed_dim])
+
 
 # Copied from transformers.models.speech_to_text.modeling_tf_speech_to_text.TFSpeech2TextEncoderLayer with Speech2Text->Whisper
-class TFWhisperEncoderLayer(tf.keras.layers.Layer):
+class TFWhisperEncoderLayer(keras.layers.Layer):
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
         self.self_attn = TFWhisperAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
+        self.fc1 = keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training: bool = False
     ):
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
@@ -335,9 +382,29 @@ class TFWhisperEncoderLayer(tf.keras.layers.Layer):
 
         return hidden_states, self_attn_weights
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.encoder_ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 # Copied from transformers.models.speech_to_text.modeling_tf_speech_to_text.TFSpeech2TextDecoderLayer with Speech2Text->Whisper
-class TFWhisperDecoderLayer(tf.keras.layers.Layer):
+class TFWhisperDecoderLayer(keras.layers.Layer):
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
@@ -349,11 +416,11 @@ class TFWhisperDecoderLayer(tf.keras.layers.Layer):
             name="self_attn",
             is_decoder=True,
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.activation_dropout = keras.layers.Dropout(config.activation_dropout)
 
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.self_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = TFWhisperAttention(
             self.embed_dim,
             config.decoder_attention_heads,
@@ -361,29 +428,30 @@ class TFWhisperDecoderLayer(tf.keras.layers.Layer):
             name="encoder_attn",
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.encoder_attn_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
+        self.fc1 = keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
+        self.fc2 = keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        self.config = config
 
     def call(
         self,
         hidden_states,
-        attention_mask: Optional[tf.Tensor] = None,
-        encoder_hidden_states: Optional[tf.Tensor] = None,
-        encoder_attention_mask: Optional[tf.Tensor] = None,
-        layer_head_mask: Optional[tf.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
-        past_key_value: Optional[Tuple[tf.Tensor]] = None,
+        attention_mask: tf.Tensor | None = None,
+        encoder_hidden_states: tf.Tensor | None = None,
+        encoder_attention_mask: tf.Tensor | None = None,
+        layer_head_mask: tf.Tensor | None = None,
+        cross_attn_layer_head_mask: tf.Tensor | None = None,
+        past_key_value: Tuple[tf.Tensor] | None = None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`tf.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`tf.Tensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`tf.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`): mask for attention heads in a given layer of size
@@ -448,6 +516,32 @@ class TFWhisperDecoderLayer(tf.keras.layers.Layer):
             present_key_value,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attn", None) is not None:
+            with tf.name_scope(self.self_attn.name):
+                self.self_attn.build(None)
+        if getattr(self, "self_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.self_attn_layer_norm.name):
+                self.self_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "encoder_attn", None) is not None:
+            with tf.name_scope(self.encoder_attn.name):
+                self.encoder_attn.build(None)
+        if getattr(self, "encoder_attn_layer_norm", None) is not None:
+            with tf.name_scope(self.encoder_attn_layer_norm.name):
+                self.encoder_attn_layer_norm.build([None, None, self.embed_dim])
+        if getattr(self, "fc1", None) is not None:
+            with tf.name_scope(self.fc1.name):
+                self.fc1.build([None, None, self.embed_dim])
+        if getattr(self, "fc2", None) is not None:
+            with tf.name_scope(self.fc2.name):
+                self.fc2.build([None, None, self.config.decoder_ffn_dim])
+        if getattr(self, "final_layer_norm", None) is not None:
+            with tf.name_scope(self.final_layer_norm.name):
+                self.final_layer_norm.build([None, None, self.embed_dim])
+
 
 class TFWhisperPreTrainedModel(TFPreTrainedModel):
     config_class = WhisperConfig
@@ -472,23 +566,18 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
         """
         return {
             self.main_input_name: tf.random.uniform(
-                [2, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
+                [1, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
             ),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int64),
+            "decoder_input_ids": tf.constant([[1, 3]], dtype=tf.int32),
         }
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-        return self.serving_output(output)
+    @property
+    def input_signature(self):
+        return {
+            "input_features": tf.TensorSpec((None, self.config.num_mel_bins, None), tf.float32, name="input_features"),
+            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+            "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+        }
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -496,7 +585,7 @@ WHISPER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -513,7 +602,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
+            [`AutoFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
             tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -565,15 +654,12 @@ WHISPER_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. decoder_inputs_embeds (`tf.Tensor` of shape
-            `(batch_size, target_sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-            `decoder_input_ids` you can choose to directly pass an embedded representation. If `past_key_values` is
-            used, optionally only the last `decoder_inputs_embeds` have to be input (see `past_key_values`). This is
-            useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
-
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        decoder_inputs_embeds (`tf.Tensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -589,7 +675,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFWhisperEncoder(tf.keras.layers.Layer):
+class TFWhisperEncoder(keras.layers.Layer):
     config_class = WhisperConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -612,17 +698,21 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         self.embed_scale = math.sqrt(self.embed_dim) if config.scale_embedding else 1.0
 
         # Padding is added in call() to match the PyTorch implementation
-        self.conv1 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=1, padding="valid", name="conv1")
-        self.conv2 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=2, padding="valid", name="conv2")
+        self.conv1 = keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=1, padding="valid", name="conv1")
+        self.conv2 = keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=2, padding="valid", name="conv2")
 
         self.embed_positions = TFWhisperPositionalEmbedding(
-            self.max_source_positions, self.embed_dim, name="embed_positions"
+            num_positions=self.max_source_positions,
+            embedding_dim=self.embed_dim,
+            embedding_initializer=sinusoidal_embedding_init,
+            name="embed_positions",
         )
+        self.embed_positions.trainable = False
 
         self.encoder_layers = [TFWhisperEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
 
     @unpack_inputs
     def call(
@@ -640,7 +730,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the fbank features,
+                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the fbank features,
                 padding and conversion into a tensor of type `tf.Tensor`. See [`~WhisperFeatureExtractor.__call__`]
             head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
                 Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
@@ -667,9 +757,9 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         # TF 2.0 layers can't use channels first format when running on CPU.
         input_features = tf.transpose(input_features, perm=(0, 2, 1))
         input_features = tf.pad(input_features, [[0, 0], [1, 1], [0, 0]])
-        inputs_embeds = tf.keras.activations.gelu(self.conv1(input_features))
+        inputs_embeds = keras.activations.gelu(self.conv1(input_features))
         inputs_embeds = tf.pad(inputs_embeds, [[0, 0], [1, 1], [0, 0]])
-        inputs_embeds = tf.keras.activations.gelu(self.conv2(inputs_embeds))
+        inputs_embeds = keras.activations.gelu(self.conv2(inputs_embeds))
         inputs_embeds = tf.transpose(inputs_embeds, perm=(0, 1, 2))
 
         embed_pos = self.embed_positions(input_ids=tf.zeros((1, self.max_source_positions), dtype=tf.int32))
@@ -719,9 +809,30 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv1", None) is not None:
+            with tf.name_scope(self.conv1.name):
+                self.conv1.build([None, None, self.num_mel_bins])
+        if getattr(self, "conv2", None) is not None:
+            with tf.name_scope(self.conv2.name):
+                self.conv2.build([None, None, self.embed_dim])
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.d_model])
+        if getattr(self, "encoder_layers", None) is not None:
+            for layer in self.encoder_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-class TFWhisperDecoder(tf.keras.layers.Layer):
+class TFWhisperDecoder(keras.layers.Layer):
     config_class = WhisperConfig
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFWhisperDecoderLayer`]
@@ -733,17 +844,17 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_target_positions
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = tf.keras.layers.Embedding(
+        self.embed_tokens = keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.d_model,
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            embeddings_initializer=keras.initializers.TruncatedNormal(stddev=self.config.init_std),
             name="embed_tokens",
         )
         self.embed_positions = TFWhisperPositionalEmbedding(
@@ -752,7 +863,7 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
 
         self.decoder_layers = [TFWhisperDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -772,11 +883,6 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         )
 
         if attention_mask is not None:
-            attention_mask = tf.cond(
-                tf.greater(tf.shape(attention_mask)[-1], seq_len) & tf.greater(seq_len, 0),
-                lambda: attention_mask[:, : seq_len + past_key_values_length],
-                lambda: attention_mask,
-            )
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
             combined_attention_mask = (
@@ -847,11 +953,11 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of shape
-                `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
-                you can choose to directly pass an embedded representation. This is useful if you want more control
-                over how to convert `input_ids` indices into associated vectors than the model's internal embedding
-                lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -880,19 +986,10 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = tf.shape(past_key_values[0][0])[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)
             inputs_embeds = self.embed_tokens(input_ids)
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
@@ -972,13 +1069,31 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embed_tokens", None) is not None:
+            with tf.name_scope(self.embed_tokens.name):
+                self.embed_tokens.build(None)
+        if getattr(self, "embed_positions", None) is not None:
+            with tf.name_scope(self.embed_positions.name):
+                self.embed_positions.build(None)
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.d_model])
+        if getattr(self, "decoder_layers", None) is not None:
+            for layer in self.decoder_layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @add_start_docstrings(
     "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
     WHISPER_START_DOCSTRING,
 )
 @keras_serializable
-class TFWhisperMainLayer(tf.keras.layers.Layer):
+class TFWhisperMainLayer(keras.layers.Layer):
     config_class = WhisperConfig
 
     def __init__(self, config: WhisperConfig, **kwargs):
@@ -1027,11 +1142,11 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
 
          ```python
          >>> import tensorflow as tf
-         >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
+         >>> from transformers import TFWhisperModel, AutoFeatureExtractor
          >>> from datasets import load_dataset
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
@@ -1095,6 +1210,17 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
+
 
 @add_start_docstrings(
     "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
@@ -1125,26 +1251,26 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         return self.model.encoder
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     @unpack_inputs
     def call(
         self,
-        input_features=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        decoder_position_ids=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_features: TFModelInputType | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_head_mask: np.ndarray | tf.Tensor | None = None,
+        cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
+        encoder_outputs: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        decoder_inputs_embeds: Optional[Tuple[Union[np.ndarray, tf.Tensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqModelOutput]:
         r"""
         Returns:
 
@@ -1152,11 +1278,11 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
 
          ```python
          >>> import tensorflow as tf
-         >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
+         >>> from transformers import TFWhisperModel, AutoFeatureExtractor
          >>> from datasets import load_dataset
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
@@ -1203,6 +1329,14 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
             encoder_attentions=enc_attns,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
+
 
 @add_start_docstrings(
     "The Whisper Model with a language modeling head. Can be used for automatic speech recognition.",
@@ -1235,7 +1369,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> tf.keras.layers.Embedding:
+    def resize_token_embeddings(self, new_num_tokens: int) -> keras.layers.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
         return new_embeddings
 
@@ -1244,23 +1378,23 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     @unpack_inputs
     def call(
         self,
-        input_features=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        decoder_position_ids=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_features: TFModelInputType | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_head_mask: np.ndarray | tf.Tensor | None = None,
+        cross_attn_head_mask: np.ndarray | tf.Tensor | None = None,
+        encoder_outputs: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        decoder_inputs_embeds: Optional[Tuple[Union[np.ndarray, tf.Tensor]]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[Tuple[tf.Tensor], TFSeq2SeqLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
@@ -1273,10 +1407,10 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import WhisperProcessor, TFWhisperForConditionalGeneration
+        >>> from transformers import AutoProcessor, TFWhisperForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1284,16 +1418,16 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
         >>> input_features = inputs.input_features
 
-        >>> generated_ids = model.generate(input_ids=input_features)
+        >>> generated_ids = model.generate(input_features=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' Mr. Quilter is the apostle of the middle classes, and we are glad to'
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            if decoder_input_ids is None:
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
@@ -1337,6 +1471,233 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             encoder_attentions=outputs.encoder_attentions,
         )
 
+    def generate(
+        self,
+        inputs: Optional[tf.Tensor] = None,
+        generation_config: Optional[GenerationConfig] = None,
+        logits_processor: Optional[TFLogitsProcessorList] = None,
+        seed: Optional[List[int]] = None,
+        return_timestamps: Optional[bool] = None,
+        task: Optional[str] = None,
+        language: Optional[str] = None,
+        is_multilingual: Optional[bool] = None,
+        prompt_ids: Optional[tf.Tensor] = None,
+        return_token_timestamps=None,
+        **kwargs,
+    ):
+        r"""
+        Generates sequences of token ids for models with a language modeling head.
+
+        <Tip warning={true}>
+
+        Most generation-controlling parameters are set in `generation_config` which, if not passed, will be set to the
+        model's default generation configuration. You can override any `generation_config` by passing the corresponding
+        parameters to generate, e.g. `.generate(inputs, num_beams=4, do_sample=True)`.
+
+        For an overview of generation strategies and code examples, check out the [following
+        guide](../generation_strategies).
+
+        </Tip>
+
+        Parameters:
+            inputs (`tf.Tensor` of varying shape depending on the modality, *optional*):
+                The sequence used as a prompt for the generation or as model inputs to the encoder. If unset the method
+                initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs` should of in
+                the format of `input_ids`. For encoder-decoder models *inputs* can represent any of `input_ids`,
+                `input_values`, `input_features`, or `pixel_values`.
+            generation_config (`~generation.GenerationConfig`, *optional*):
+                The generation configuration to be used as base parametrization for the generation call. `**kwargs`
+                passed to generate matching the attributes of `generation_config` will override them. If
+                `generation_config` is not provided, the default will be used, which had the following loading
+                priority: 1) from the `generation_config.json` model file, if it exists; 2) from the model
+                configuration. Please note that unspecified parameters will inherit [`~generation.GenerationConfig`]'s
+                default values, whose documentation should be checked to parameterize generation.
+            logits_processor (`LogitsProcessorList`, *optional*):
+                Custom logits processors that complement the default logits processors built from arguments and
+                generation config. If a logit processor is passed that is already created with the arguments or a
+                generation config an error is thrown. This feature is intended for advanced users.
+            seed (`List[int]`, *optional*):
+                Random seed to control sampling, containing two integers, used when `do_sample` is `True`. See the
+                `seed` argument from stateless functions in `tf.random`.
+            return_timestamps (`bool`, *optional*):
+                Whether to return the timestamps with the text. This enables the `TFWhisperTimestampsLogitsProcessor`.
+            task (`str`, *optional*):
+                Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
+                will be updated accordingly.
+            language (`str`, *optional*):
+                Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
+                find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
+            is_multilingual (`bool`, *optional*):
+                Whether or not the model is multilingual.
+            prompt_ids (`tf.Tensor`, *optional*):
+                Rank-1 tensor of token IDs created by passing text to [`~WhisperProcessor.get_prompt_ids`] that is
+                provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
+                transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
+                correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
+            return_token_timestamps (`bool`, *optional*):
+                Whether to return token-level timestamps with the text. This can be used with or without the
+                `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
+                words.
+            kwargs (`Dict[str, Any]`, *optional*):
+                Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
+                forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
+                specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
+
+        Return:
+            [`~utils.ModelOutput`] or `tf.Tensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True` or when
+            `config.return_dict_in_generate=True`) or a `tf.Tensor`.
+
+                If the model is *not* an encoder-decoder model (`model.config.is_encoder_decoder=False`), the possible
+                [`~utils.ModelOutput`] types are:
+
+                    - [`~generation.TFGreedySearchDecoderOnlyOutput`],
+                    - [`~generation.TFSampleDecoderOnlyOutput`],
+                    - [`~generation.TFBeamSearchDecoderOnlyOutput`],
+                    - [`~generation.TFBeamSampleDecoderOnlyOutput`]
+
+                If the model is an encoder-decoder model (`model.config.is_encoder_decoder=True`), the possible
+                [`~utils.ModelOutput`] types are:
+
+                    - [`~generation.TFGreedySearchEncoderDecoderOutput`],
+                    - [`~generation.TFSampleEncoderDecoderOutput`],
+                    - [`~generation.TFBeamSearchEncoderDecoderOutput`],
+                    - [`~generation.TFBeamSampleEncoderDecoderOutput`]
+
+        """
+        if generation_config is None:
+            generation_config = self.generation_config
+
+        if return_timestamps is not None:
+            if not hasattr(generation_config, "no_timestamps_token_id"):
+                raise ValueError(
+                    "You are trying to return timestamps, but the generation config is not properly set. "
+                    "Make sure to initialize the generation config with the correct attributes that are needed such as `no_timestamps_token_id`. "
+                    "For more details on how to generate the approtiate config, refer to https://github.com/huggingface/transformers/issues/21878#issuecomment-1451902363"
+                )
+
+            generation_config.return_timestamps = return_timestamps
+        else:
+            generation_config.return_timestamps = False
+
+        if language is not None:
+            language = language.lower()
+            generation_config.language = language
+        if task is not None:
+            generation_config.task = task
+
+        forced_decoder_ids = None
+
+        # Legacy code for backward compatibility
+        if hasattr(self.config, "forced_decoder_ids") and self.config.forced_decoder_ids is not None:
+            forced_decoder_ids = self.config.forced_decoder_ids
+        elif (
+            hasattr(self.generation_config, "forced_decoder_ids")
+            and self.generation_config.forced_decoder_ids is not None
+        ):
+            forced_decoder_ids = self.generation_config.forced_decoder_ids
+        else:
+            forced_decoder_ids = kwargs.get("forced_decoder_ids", None)
+
+        if task is not None or language is not None or (forced_decoder_ids is None and prompt_ids is not None):
+            forced_decoder_ids = []
+            if hasattr(generation_config, "language"):
+                if generation_config.language in generation_config.lang_to_id.keys():
+                    language_token = generation_config.language
+                elif generation_config.language in TO_LANGUAGE_CODE.keys():
+                    language_token = f"<|{TO_LANGUAGE_CODE[generation_config.language]}|>"
+                elif generation_config.language in TO_LANGUAGE_CODE.values():
+                    language_token = f"<|{generation_config.language}|>"
+                else:
+                    is_language_code = len(generation_config.language) == 2
+                    raise ValueError(
+                        f"Unsupported language: {generation_config.language}. Language should be one of:"
+                        f" {list(TO_LANGUAGE_CODE.values()) if is_language_code else list(TO_LANGUAGE_CODE.keys())}."
+                    )
+                if language_token not in generation_config.lang_to_id:
+                    raise ValueError(
+                        f"{language_token} is not supported by this specific model as it is not in the `generation_config.lang_to_id`."
+                        "(You should just add it to the generation config)"
+                    )
+                forced_decoder_ids.append((1, generation_config.lang_to_id[language_token]))
+            else:
+                forced_decoder_ids.append((1, None))  # automatically detect the language
+
+            if hasattr(generation_config, "task"):
+                if generation_config.task in TASK_IDS:
+                    forced_decoder_ids.append((2, generation_config.task_to_id[generation_config.task]))
+                else:
+                    raise ValueError(
+                        f"The `{generation_config.task}`task is not supported. The task should be one of `{TASK_IDS}`"
+                    )
+            elif hasattr(generation_config, "task_to_id"):
+                forced_decoder_ids.append((2, generation_config.task_to_id["transcribe"]))  # defaults to transcribe
+            if hasattr(generation_config, "no_timestamps_token_id") and not generation_config.return_timestamps:
+                idx = forced_decoder_ids[-1][0] + 1 if forced_decoder_ids else 1
+                forced_decoder_ids.append((idx, generation_config.no_timestamps_token_id))
+
+        if forced_decoder_ids is not None:
+            generation_config.forced_decoder_ids = forced_decoder_ids
+
+        if prompt_ids is not None:
+            if kwargs.get("decoder_start_token_id") is not None:
+                raise ValueError(
+                    "When specifying `prompt_ids`, you cannot also specify `decoder_start_token_id` as it gets overwritten."
+                )
+            prompt_ids = prompt_ids.tolist()
+            decoder_start_token_id, *text_prompt_ids = prompt_ids
+            # Slicing the text prompt ids in a manner consistent with the OpenAI implementation
+            # to accommodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
+            text_prompt_ids = text_prompt_ids[-self.config.max_length // 2 - 1 :]
+            # Set the decoder_start_token_id to <|startofprev|>
+            kwargs.update({"decoder_start_token_id": decoder_start_token_id})
+
+            # Update the max generation length to include the prompt
+            specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
+            default_max_length = generation_config.max_new_tokens or generation_config.max_length
+            non_prompt_max_length = specified_max_length or default_max_length
+            kwargs["max_new_tokens"] = non_prompt_max_length + len(text_prompt_ids)
+
+            # Reformat the forced_decoder_ids to incorporate the prompt
+            non_prompt_forced_decoder_ids = (
+                kwargs.pop("forced_decoder_ids", None) or generation_config.forced_decoder_ids
+            )
+            forced_decoder_ids = [
+                *text_prompt_ids,
+                generation_config.decoder_start_token_id,
+                *[token for _rank, token in non_prompt_forced_decoder_ids],
+            ]
+            forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
+            generation_config.forced_decoder_ids = forced_decoder_ids
+
+        # TODO: Implement `WhisperTimeStampLogitsProcessor`.
+        if generation_config.return_timestamps:
+            # logits_processor = [TFWhisperTimeStampLogitsProcessor(generation_config)]
+            raise ValueError("`TFWhisperForConditionalGeneration` doesn't support returning the timestamps yet.")
+
+        if return_token_timestamps:
+            kwargs["output_attentions"] = True
+            kwargs["return_dict_in_generate"] = True
+
+            if getattr(generation_config, "task", None) == "translate":
+                logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
+            if not hasattr(generation_config, "alignment_heads"):
+                raise ValueError(
+                    "Model generation config has no `alignment_heads`, token-level timestamps not available. "
+                    "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
+                )
+
+        outputs = super().generate(
+            inputs,
+            generation_config,
+            logits_processor,
+            **kwargs,
+        )
+
+        if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+            outputs["token_timestamps"] = self._extract_token_timestamps(outputs, generation_config.alignment_heads)
+
+        return outputs
+
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
@@ -1359,21 +1720,21 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
-        past=None,
+        past_key_values=None,
         use_cache=None,
         encoder_outputs=None,
         attention_mask=None,
         decoder_attention_mask=None,
-        **kwargs
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         if decoder_attention_mask is not None:  # xla
             decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
-        elif past is not None:  # no xla + past
-            decoder_position_ids = past[0][0].shape[2]
+        elif past_key_values is not None:  # no xla + past
+            decoder_position_ids = past_key_values[0][0].shape[2]
         else:  # no xla + no past
             decoder_position_ids = tf.range(decoder_input_ids.shape[1])
         decoder_position_ids = tf.broadcast_to(decoder_position_ids, decoder_input_ids.shape)
@@ -1381,17 +1742,20 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         return {
             "input_features": None,  # Needs to be passed to make Keras.layer.__call__ happy
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_position_ids": decoder_position_ids,
         }
 
-    #
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx) for past_state in layer_past),)
-        return reordered_past
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "model", None) is not None:
+            with tf.name_scope(self.model.name):
+                self.model.build(None)
+
+
+__all__ = ["TFWhisperForConditionalGeneration", "TFWhisperModel", "TFWhisperPreTrainedModel"]

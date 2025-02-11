@@ -12,18 +12,35 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that updates the metadata of the Transformers library in the repository `huggingface/transformers-metadata`.
+
+Usage for an update (as used by the GitHub action `update_metadata`):
+
+```bash
+python utils/update_metadata.py --token <token> --commit_sha <commit_sha>
+```
+
+Usage to check all pipelines are properly defined in the constant `PIPELINE_TAGS_AND_AUTO_MODELS` of this script, so
+that new pipelines are properly added as metadata (as used in `make repo-consistency`):
+
+```bash
+python utils/update_metadata.py --check-only
+```
+"""
 
 import argparse
 import collections
-import importlib.util
 import os
 import re
 import tempfile
+from typing import Dict, List, Tuple
 
 import pandas as pd
 from datasets import Dataset
+from huggingface_hub import hf_hub_download, upload_folder
 
-from huggingface_hub import Repository
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -32,30 +49,28 @@ TRANSFORMERS_PATH = "src/transformers"
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 # Regexes that match TF/Flax/PT model names.
 _re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 _re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 # Will match any TF or Flax model too so need to be in an else branch afterthe two previous regexes.
-_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
+_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration|ForRetrieval)")
 
 
 # Fill this with tuples (pipeline_tag, model_mapping, auto_model)
 PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("pretraining", "MODEL_FOR_PRETRAINING_MAPPING_NAMES", "AutoModelForPreTraining"),
     ("feature-extraction", "MODEL_MAPPING_NAMES", "AutoModel"),
+    ("image-feature-extraction", "MODEL_FOR_IMAGE_MAPPING_NAMES", "AutoModel"),
     ("audio-classification", "MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES", "AutoModelForAudioClassification"),
     ("text-generation", "MODEL_FOR_CAUSAL_LM_MAPPING_NAMES", "AutoModelForCausalLM"),
     ("automatic-speech-recognition", "MODEL_FOR_CTC_MAPPING_NAMES", "AutoModelForCTC"),
     ("image-classification", "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForImageClassification"),
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
+    ("image-text-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
+    ("image-to-image", "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES", "AutoModelForImageToImage"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
     (
@@ -98,21 +113,40 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
     (
         "zero-shot-image-classification",
-        "_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
-        "AutoModel",
+        "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
+        "AutoModelForZeroShotImageClassification",
     ),
     ("depth-estimation", "MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "AutoModelForDepthEstimation"),
+    ("video-classification", "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "AutoModelForVideoClassification"),
+    ("mask-generation", "MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "AutoModelForMaskGeneration"),
+    ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES", "AutoModelForTextToSpectrogram"),
+    ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES", "AutoModelForTextToWaveform"),
 ]
 
 
-# Thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python
-def camel_case_split(identifier):
-    "Split a camelcased `identifier` into words."
+def camel_case_split(identifier: str) -> List[str]:
+    """
+    Split a camel-cased name into words.
+
+    Args:
+        identifier (`str`): The camel-cased name to parse.
+
+    Returns:
+        `List[str]`: The list of words in the identifier (as seprated by capital letters).
+
+    Example:
+
+    ```py
+    >>> camel_case_split("CamelCasedClass")
+    ["Camel", "Cased", "Class"]
+    ```
+    """
+    # Regex thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python
     matches = re.finditer(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)", identifier)
     return [m.group(0) for m in matches]
 
 
-def get_frameworks_table():
+def get_frameworks_table() -> pd.DataFrame:
     """
     Generates a dataframe containing the supported auto classes for each model type, using the content of the auto
     modules.
@@ -158,13 +192,16 @@ def get_frameworks_table():
     data["tensorflow"] = [tf_models[t] for t in all_models]
     data["flax"] = [flax_models[t] for t in all_models]
 
-    # Now let's use the auto-mapping names to make sure
+    # Now let's find the right processing class for each model. In order we check if there is a Processor, then a
+    # Tokenizer, then a FeatureExtractor, then an ImageProcessor
     processors = {}
     for t in all_models:
         if t in transformers_module.models.auto.processing_auto.PROCESSOR_MAPPING_NAMES:
             processors[t] = "AutoProcessor"
         elif t in transformers_module.models.auto.tokenization_auto.TOKENIZER_MAPPING_NAMES:
             processors[t] = "AutoTokenizer"
+        elif t in transformers_module.models.auto.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES:
+            processors[t] = "AutoImageProcessor"
         elif t in transformers_module.models.auto.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES:
             processors[t] = "AutoFeatureExtractor"
         else:
@@ -176,10 +213,17 @@ def get_frameworks_table():
     return pd.DataFrame(data)
 
 
-def update_pipeline_and_auto_class_table(table):
+def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
     """
-    Update the table of model class to (pipeline_tag, auto_class) without removing old keys if they don't exist
-    anymore.
+    Update the table maping models to pipelines and auto classes without removing old keys if they don't exist anymore.
+
+    Args:
+        table (`Dict[str, Tuple[str, str]]`):
+            The existing table mapping model names to a tuple containing the pipeline tag and the auto-class name with
+            which they should be used.
+
+    Returns:
+        `Dict[str, Tuple[str, str]]`: The updated table in the same format.
     """
     auto_modules = [
         transformers_module.models.auto.modeling_auto,
@@ -208,52 +252,93 @@ def update_pipeline_and_auto_class_table(table):
     return table
 
 
-def update_metadata(token, commit_sha):
+def update_metadata(token: str, commit_sha: str):
     """
-    Update the metada for the Transformers repo.
+    Update the metadata for the Transformers repo in `huggingface/transformers-metadata`.
+
+    Args:
+        token (`str`): A valid token giving write access to `huggingface/transformers-metadata`.
+        commit_sha (`str`): The commit SHA on Transformers corresponding to this update.
     """
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        repo = Repository(
-            tmp_dir, clone_from="huggingface/transformers-metadata", repo_type="dataset", use_auth_token=token
-        )
+    frameworks_table = get_frameworks_table()
+    frameworks_dataset = Dataset.from_pandas(frameworks_table)
 
-        frameworks_table = get_frameworks_table()
-        frameworks_dataset = Dataset.from_pandas(frameworks_table)
-        frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
+    resolved_tags_file = hf_hub_download(
+        "huggingface/transformers-metadata", "pipeline_tags.json", repo_type="dataset", token=token
+    )
+    tags_dataset = Dataset.from_json(resolved_tags_file)
+    table = {
+        tags_dataset[i]["model_class"]: (tags_dataset[i]["pipeline_tag"], tags_dataset[i]["auto_class"])
+        for i in range(len(tags_dataset))
+    }
+    table = update_pipeline_and_auto_class_table(table)
 
-        tags_dataset = Dataset.from_json(os.path.join(tmp_dir, "pipeline_tags.json"))
-        table = {
-            tags_dataset[i]["model_class"]: (tags_dataset[i]["pipeline_tag"], tags_dataset[i]["auto_class"])
-            for i in range(len(tags_dataset))
+    # Sort the model classes to avoid some nondeterministic updates to create false update commits.
+    model_classes = sorted(table.keys())
+    tags_table = pd.DataFrame(
+        {
+            "model_class": model_classes,
+            "pipeline_tag": [table[m][0] for m in model_classes],
+            "auto_class": [table[m][1] for m in model_classes],
         }
-        table = update_pipeline_and_auto_class_table(table)
+    )
+    tags_dataset = Dataset.from_pandas(tags_table)
 
-        # Sort the model classes to avoid some nondeterministic updates to create false update commits.
-        model_classes = sorted(list(table.keys()))
-        tags_table = pd.DataFrame(
-            {
-                "model_class": model_classes,
-                "pipeline_tag": [table[m][0] for m in model_classes],
-                "auto_class": [table[m][1] for m in model_classes],
-            }
-        )
-        tags_dataset = Dataset.from_pandas(tags_table)
+    hub_frameworks_json = hf_hub_download(
+        repo_id="huggingface/transformers-metadata",
+        filename="frameworks.json",
+        repo_type="dataset",
+        token=token,
+    )
+    with open(hub_frameworks_json) as f:
+        hub_frameworks_json = f.read()
+
+    hub_pipeline_tags_json = hf_hub_download(
+        repo_id="huggingface/transformers-metadata",
+        filename="pipeline_tags.json",
+        repo_type="dataset",
+        token=token,
+    )
+    with open(hub_pipeline_tags_json) as f:
+        hub_pipeline_tags_json = f.read()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
         tags_dataset.to_json(os.path.join(tmp_dir, "pipeline_tags.json"))
 
-        if repo.is_repo_clean():
-            print("Nothing to commit!")
+        with open(os.path.join(tmp_dir, "frameworks.json")) as f:
+            frameworks_json = f.read()
+        with open(os.path.join(tmp_dir, "pipeline_tags.json")) as f:
+            pipeline_tags_json = f.read()
+
+        frameworks_equal = hub_frameworks_json == frameworks_json
+        hub_pipeline_tags_equal = hub_pipeline_tags_json == pipeline_tags_json
+
+        if frameworks_equal and hub_pipeline_tags_equal:
+            print("No updates on the Hub, not pushing the metadata files.")
+            return
+
+        if commit_sha is not None:
+            commit_message = (
+                f"Update with commit {commit_sha}\n\nSee: "
+                f"https://github.com/huggingface/transformers/commit/{commit_sha}"
+            )
         else:
-            if commit_sha is not None:
-                commit_message = (
-                    f"Update with commit {commit_sha}\n\nSee: "
-                    f"https://github.com/huggingface/transformers/commit/{commit_sha}"
-                )
-            else:
-                commit_message = "Update"
-            repo.push_to_hub(commit_message)
+            commit_message = "Update"
+
+        upload_folder(
+            repo_id="huggingface/transformers-metadata",
+            folder_path=tmp_dir,
+            repo_type="dataset",
+            token=token,
+            commit_message=commit_message,
+        )
 
 
 def check_pipeline_tags():
+    """
+    Check all pipeline tags are properly defined in the `PIPELINE_TAGS_AND_AUTO_MODELS` constant of this script.
+    """
     in_table = {tag: cls for tag, _, cls in PIPELINE_TAGS_AND_AUTO_MODELS}
     pipeline_tasks = transformers_module.pipelines.SUPPORTED_TASKS
     missing = []

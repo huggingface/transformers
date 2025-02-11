@@ -15,37 +15,56 @@
 """
 Image/Text processor class for CLIP
 """
+
+import warnings
+
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
 class CLIPProcessor(ProcessorMixin):
     r"""
-    Constructs a CLIP processor which wraps a CLIP feature extractor and a CLIP tokenizer into a single processor.
+    Constructs a CLIP processor which wraps a CLIP image processor and a CLIP tokenizer into a single processor.
 
-    [`CLIPProcessor`] offers all the functionalities of [`CLIPFeatureExtractor`] and [`CLIPTokenizerFast`]. See the
+    [`CLIPProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`CLIPTokenizerFast`]. See the
     [`~CLIPProcessor.__call__`] and [`~CLIPProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`CLIPFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`CLIPTokenizerFast`]):
+        image_processor ([`CLIPImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "CLIPFeatureExtractor"
+
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "CLIPImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
 
     def __call__(self, text=None, images=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -54,8 +73,7 @@ class CLIPProcessor(ProcessorMixin):
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
 
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
@@ -74,15 +92,21 @@ class CLIPProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        tokenizer_kwargs, image_processor_kwargs = {}, {}
+        if kwargs:
+            tokenizer_kwargs = {k: v for k, v in kwargs.items() if k not in self.image_processor._valid_processor_keys}
+            image_processor_kwargs = {
+                k: v for k, v in kwargs.items() if k in self.image_processor._valid_processor_keys
+            }
 
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding = self.tokenizer(text, return_tensors=return_tensors, **tokenizer_kwargs)
 
         if images is not None:
-            image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors, **image_processor_kwargs)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
@@ -105,3 +129,28 @@ class CLIPProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor
+
+
+__all__ = ["CLIPProcessor"]

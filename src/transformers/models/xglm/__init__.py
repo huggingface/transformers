@@ -1,8 +1,4 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,127 +13,19 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_flax_available,
-    is_sentencepiece_available,
-    is_tf_available,
-    is_tokenizers_available,
-    is_torch_available,
-)
-
-
-_import_structure = {"configuration_xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"]}
-
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_xglm"] = ["XGLMTokenizer"]
-
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_xglm_fast"] = ["XGLMTokenizerFast"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_xglm"] = [
-        "XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "XGLMForCausalLM",
-        "XGLMModel",
-        "XGLMPreTrainedModel",
-    ]
-
-
-try:
-    if not is_flax_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_flax_xglm"] = [
-        "FlaxXGLMForCausalLM",
-        "FlaxXGLMModel",
-        "FlaxXGLMPreTrainedModel",
-    ]
-
-
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_xglm"] = [
-        "TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFXGLMForCausalLM",
-        "TFXGLMModel",
-        "TFXGLMPreTrainedModel",
-    ]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_xglm import XGLMTokenizer
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_xglm_fast import XGLMTokenizerFast
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
-
-    try:
-        if not is_flax_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_flax_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel, FlaxXGLMPreTrainedModel
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_xglm import (
-            TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFXGLMForCausalLM,
-            TFXGLMModel,
-            TFXGLMPreTrainedModel,
-        )
-
-
+    from .configuration_xglm import *
+    from .modeling_flax_xglm import *
+    from .modeling_tf_xglm import *
+    from .modeling_xglm import *
+    from .tokenization_xglm import *
+    from .tokenization_xglm_fast import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

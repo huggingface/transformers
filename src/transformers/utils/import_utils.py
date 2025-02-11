@@ -15,26 +15,62 @@
 Import utilities: Utilities related to imports and our lazy inits.
 """
 
+import importlib.machinery
+import importlib.metadata
 import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 import warnings
 from collections import OrderedDict
-from functools import lru_cache, wraps
+from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any
+from typing import Any, Dict, FrozenSet, Optional, Set, Tuple, Union
 
 from packaging import version
-
-from transformers.utils.versions import importlib_metadata
 
 from . import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
+
+# TODO: This doesn't work for all packages (`bs4`, `faiss`, etc.) Talk to Sylvain to see how to do with it better.
+def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[Tuple[bool, str], bool]:
+    # Check if the package spec exists and grab its version to avoid importing a local directory
+    package_exists = importlib.util.find_spec(pkg_name) is not None
+    package_version = "N/A"
+    if package_exists:
+        try:
+            # Primary method to get the package version
+            package_version = importlib.metadata.version(pkg_name)
+        except importlib.metadata.PackageNotFoundError:
+            # Fallback method: Only for "torch" and versions containing "dev"
+            if pkg_name == "torch":
+                try:
+                    package = importlib.import_module(pkg_name)
+                    temp_version = getattr(package, "__version__", "N/A")
+                    # Check if the version contains "dev"
+                    if "dev" in temp_version:
+                        package_version = temp_version
+                        package_exists = True
+                    else:
+                        package_exists = False
+                except ImportError:
+                    # If the package can't be imported, it's not available
+                    package_exists = False
+            else:
+                # For packages other than "torch", don't attempt the fallback and set as not available
+                package_exists = False
+        logger.debug(f"Detected {pkg_name} version: {package_version}")
+    if return_version:
+        return package_exists, package_version
+    else:
+        return package_exists
+
 
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
@@ -43,27 +79,144 @@ USE_TF = os.environ.get("USE_TF", "AUTO").upper()
 USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
+# Try to run a native pytorch job in an environment with TorchXLA installed by setting this value to 0.
+USE_TORCH_XLA = os.environ.get("USE_TORCH_XLA", "1").upper()
+
 FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 
+# `transformers` requires `torch>=1.11` but this variable is exposed publicly, and we can't simply remove it.
+# This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
+TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
+
+ACCELERATE_MIN_VERSION = "0.26.0"
+FSDP_MIN_VERSION = "1.12.0"
+GGUF_MIN_VERSION = "0.10.0"
+XLA_FSDPV2_MIN_VERSION = "2.2.0"
+HQQ_MIN_VERSION = "0.2.1"
+VPTQ_MIN_VERSION = "0.0.4"
+
+
+_accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
+_apex_available = _is_package_available("apex")
+_aqlm_available = _is_package_available("aqlm")
+_vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
+_av_available = importlib.util.find_spec("av") is not None
+_decord_available = importlib.util.find_spec("decord") is not None
+_bitsandbytes_available = _is_package_available("bitsandbytes")
+_eetq_available = _is_package_available("eetq")
+_fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
+_galore_torch_available = _is_package_available("galore_torch")
+_lomo_available = _is_package_available("lomo_optim")
+_grokadamw_available = _is_package_available("grokadamw")
+_schedulefree_available = _is_package_available("schedulefree")
+# `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
+_bs4_available = importlib.util.find_spec("bs4") is not None
+_coloredlogs_available = _is_package_available("coloredlogs")
+# `importlib.metadata.util` doesn't work with `opencv-python-headless`.
+_cv2_available = importlib.util.find_spec("cv2") is not None
+_yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
+_datasets_available = _is_package_available("datasets")
+_detectron2_available = _is_package_available("detectron2")
+# We need to check both `faiss` and `faiss-cpu`.
+_faiss_available = importlib.util.find_spec("faiss") is not None
+try:
+    _faiss_version = importlib.metadata.version("faiss")
+    logger.debug(f"Successfully imported faiss version {_faiss_version}")
+except importlib.metadata.PackageNotFoundError:
+    try:
+        _faiss_version = importlib.metadata.version("faiss-cpu")
+        logger.debug(f"Successfully imported faiss version {_faiss_version}")
+    except importlib.metadata.PackageNotFoundError:
+        _faiss_available = False
+_ftfy_available = _is_package_available("ftfy")
+_g2p_en_available = _is_package_available("g2p_en")
+_hadamard_available = _is_package_available("fast_hadamard_transform")
+_ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
+_jieba_available = _is_package_available("jieba")
+_jinja_available = _is_package_available("jinja2")
+_kenlm_available = _is_package_available("kenlm")
+_keras_nlp_available = _is_package_available("keras_nlp")
+_levenshtein_available = _is_package_available("Levenshtein")
+_librosa_available = _is_package_available("librosa")
+_natten_available = _is_package_available("natten")
+_nltk_available = _is_package_available("nltk")
+_onnx_available = _is_package_available("onnx")
+_openai_available = _is_package_available("openai")
+_optimum_available = _is_package_available("optimum")
+_auto_gptq_available = _is_package_available("auto_gptq")
+_gptqmodel_available = _is_package_available("gptqmodel")
+# `importlib.metadata.version` doesn't work with `awq`
+_auto_awq_available = importlib.util.find_spec("awq") is not None
+_quanto_available = _is_package_available("quanto")
+_is_optimum_quanto_available = False
+try:
+    importlib.metadata.version("optimum_quanto")
+    _is_optimum_quanto_available = True
+except importlib.metadata.PackageNotFoundError:
+    _is_optimum_quanto_available = False
+# For compressed_tensors, only check spec to allow compressed_tensors-nightly package
+_compressed_tensors_available = importlib.util.find_spec("compressed_tensors") is not None
+_pandas_available = _is_package_available("pandas")
+_peft_available = _is_package_available("peft")
+_phonemizer_available = _is_package_available("phonemizer")
+_uroman_available = _is_package_available("uroman")
+_psutil_available = _is_package_available("psutil")
+_py3nvml_available = _is_package_available("py3nvml")
+_pyctcdecode_available = _is_package_available("pyctcdecode")
+_pygments_available = _is_package_available("pygments")
+_pytesseract_available = _is_package_available("pytesseract")
+_pytest_available = _is_package_available("pytest")
+_pytorch_quantization_available = _is_package_available("pytorch_quantization")
+_rjieba_available = _is_package_available("rjieba")
+_sacremoses_available = _is_package_available("sacremoses")
+_safetensors_available = _is_package_available("safetensors")
+_scipy_available = _is_package_available("scipy")
+_sentencepiece_available = _is_package_available("sentencepiece")
+_is_seqio_available = _is_package_available("seqio")
+_is_gguf_available, _gguf_version = _is_package_available("gguf", return_version=True)
+_sklearn_available = importlib.util.find_spec("sklearn") is not None
+if _sklearn_available:
+    try:
+        importlib.metadata.version("scikit-learn")
+    except importlib.metadata.PackageNotFoundError:
+        _sklearn_available = False
+_smdistributed_available = importlib.util.find_spec("smdistributed") is not None
+_soundfile_available = _is_package_available("soundfile")
+_spacy_available = _is_package_available("spacy")
+_sudachipy_available, _sudachipy_version = _is_package_available("sudachipy", return_version=True)
+_tensorflow_probability_available = _is_package_available("tensorflow_probability")
+_tensorflow_text_available = _is_package_available("tensorflow_text")
+_tf2onnx_available = _is_package_available("tf2onnx")
+_timm_available = _is_package_available("timm")
+_tokenizers_available = _is_package_available("tokenizers")
+_torchaudio_available = _is_package_available("torchaudio")
+_torchao_available = _is_package_available("torchao")
+_torchdistx_available = _is_package_available("torchdistx")
+_torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
+_mlx_available = _is_package_available("mlx")
+_hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
+_tiktoken_available = _is_package_available("tiktoken")
+_blobfile_available = _is_package_available("blobfile")
+_liger_kernel_available = _is_package_available("liger_kernel")
+_triton_available = _is_package_available("triton")
+
 _torch_version = "N/A"
+_torch_available = False
 if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
-    _torch_available = importlib.util.find_spec("torch") is not None
-    if _torch_available:
-        try:
-            _torch_version = importlib_metadata.version("torch")
-            logger.info(f"PyTorch version {_torch_version} available.")
-        except importlib_metadata.PackageNotFoundError:
-            _torch_available = False
+    _torch_available, _torch_version = _is_package_available("torch", return_version=True)
 else:
     logger.info("Disabling PyTorch because USE_TF is set")
     _torch_available = False
 
 
 _tf_version = "N/A"
+_tf_available = False
 if FORCE_TF_AVAILABLE in ENV_VARS_TRUE_VALUES:
     _tf_available = True
 else:
     if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
+        # Note: _is_package_available("tensorflow") fails for tensorflow-cpu. Please test any changes to the line below
+        # with tensorflow-cpu to make sure it still works!
         _tf_available = importlib.util.find_spec("tensorflow") is not None
         if _tf_available:
             candidates = (
@@ -73,6 +226,7 @@ else:
                 "tf-nightly",
                 "tf-nightly-cpu",
                 "tf-nightly-gpu",
+                "tf-nightly-rocm",
                 "intel-tensorflow",
                 "intel-tensorflow-avx512",
                 "tensorflow-rocm",
@@ -83,9 +237,9 @@ else:
             # For the metadata, we have to look for both tensorflow and tensorflow-cpu
             for pkg in candidates:
                 try:
-                    _tf_version = importlib_metadata.version(pkg)
+                    _tf_version = importlib.metadata.version(pkg)
                     break
-                except importlib_metadata.PackageNotFoundError:
+                except importlib.metadata.PackageNotFoundError:
                     pass
             _tf_available = _tf_version is not None
         if _tf_available:
@@ -94,166 +248,25 @@ else:
                     f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum."
                 )
                 _tf_available = False
-            else:
-                logger.info(f"TensorFlow version {_tf_version} available.")
     else:
         logger.info("Disabling Tensorflow because USE_TORCH is set")
-        _tf_available = False
 
 
-if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
-    _flax_available = importlib.util.find_spec("jax") is not None and importlib.util.find_spec("flax") is not None
-    if _flax_available:
-        try:
-            _jax_version = importlib_metadata.version("jax")
-            _flax_version = importlib_metadata.version("flax")
-            logger.info(f"JAX version {_jax_version}, Flax version {_flax_version} available.")
-        except importlib_metadata.PackageNotFoundError:
-            _flax_available = False
-else:
-    _flax_available = False
-
-
-_datasets_available = importlib.util.find_spec("datasets") is not None
+_essentia_available = importlib.util.find_spec("essentia") is not None
 try:
-    # Check we're not importing a "datasets" directory somewhere but the actual library by trying to grab the version
-    # AND checking it has an author field in the metadata that is HuggingFace.
-    _ = importlib_metadata.version("datasets")
-    _datasets_metadata = importlib_metadata.metadata("datasets")
-    if _datasets_metadata.get("author", "") != "HuggingFace Inc.":
-        _datasets_available = False
-except importlib_metadata.PackageNotFoundError:
-    _datasets_available = False
+    _essentia_version = importlib.metadata.version("essentia")
+    logger.debug(f"Successfully imported essentia version {_essentia_version}")
+except importlib.metadata.PackageNotFoundError:
+    _essentia_version = False
 
 
-_detectron2_available = importlib.util.find_spec("detectron2") is not None
+_pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
 try:
-    _detectron2_version = importlib_metadata.version("detectron2")
-    logger.debug(f"Successfully imported detectron2 version {_detectron2_version}")
-except importlib_metadata.PackageNotFoundError:
-    _detectron2_available = False
+    _pretty_midi_version = importlib.metadata.version("pretty_midi")
+    logger.debug(f"Successfully imported pretty_midi version {_pretty_midi_version}")
+except importlib.metadata.PackageNotFoundError:
+    _pretty_midi_available = False
 
-
-_faiss_available = importlib.util.find_spec("faiss") is not None
-try:
-    _faiss_version = importlib_metadata.version("faiss")
-    logger.debug(f"Successfully imported faiss version {_faiss_version}")
-except importlib_metadata.PackageNotFoundError:
-    try:
-        _faiss_version = importlib_metadata.version("faiss-cpu")
-        logger.debug(f"Successfully imported faiss version {_faiss_version}")
-    except importlib_metadata.PackageNotFoundError:
-        _faiss_available = False
-
-_ftfy_available = importlib.util.find_spec("ftfy") is not None
-try:
-    _ftfy_version = importlib_metadata.version("ftfy")
-    logger.debug(f"Successfully imported ftfy version {_ftfy_version}")
-except importlib_metadata.PackageNotFoundError:
-    _ftfy_available = False
-
-
-coloredlogs = importlib.util.find_spec("coloredlogs") is not None
-try:
-    _coloredlogs_available = importlib_metadata.version("coloredlogs")
-    logger.debug(f"Successfully imported sympy version {_coloredlogs_available}")
-except importlib_metadata.PackageNotFoundError:
-    _coloredlogs_available = False
-
-
-sympy_available = importlib.util.find_spec("sympy") is not None
-try:
-    _sympy_available = importlib_metadata.version("sympy")
-    logger.debug(f"Successfully imported sympy version {_sympy_available}")
-except importlib_metadata.PackageNotFoundError:
-    _sympy_available = False
-
-
-_tf2onnx_available = importlib.util.find_spec("tf2onnx") is not None
-try:
-    _tf2onnx_version = importlib_metadata.version("tf2onnx")
-    logger.debug(f"Successfully imported tf2onnx version {_tf2onnx_version}")
-except importlib_metadata.PackageNotFoundError:
-    _tf2onnx_available = False
-
-_onnx_available = importlib.util.find_spec("onnxruntime") is not None
-try:
-    _onxx_version = importlib_metadata.version("onnx")
-    logger.debug(f"Successfully imported onnx version {_onxx_version}")
-except importlib_metadata.PackageNotFoundError:
-    _onnx_available = False
-
-
-_scatter_available = importlib.util.find_spec("torch_scatter") is not None
-try:
-    _scatter_version = importlib_metadata.version("torch_scatter")
-    logger.debug(f"Successfully imported torch-scatter version {_scatter_version}")
-except importlib_metadata.PackageNotFoundError:
-    _scatter_available = False
-
-
-_pytorch_quantization_available = importlib.util.find_spec("pytorch_quantization") is not None
-try:
-    _pytorch_quantization_version = importlib_metadata.version("pytorch_quantization")
-    logger.debug(f"Successfully imported pytorch-quantization version {_pytorch_quantization_version}")
-except importlib_metadata.PackageNotFoundError:
-    _pytorch_quantization_available = False
-
-
-_soundfile_available = importlib.util.find_spec("soundfile") is not None
-try:
-    _soundfile_version = importlib_metadata.version("soundfile")
-    logger.debug(f"Successfully imported soundfile version {_soundfile_version}")
-except importlib_metadata.PackageNotFoundError:
-    _soundfile_available = False
-
-
-_tensorflow_probability_available = importlib.util.find_spec("tensorflow_probability") is not None
-try:
-    _tensorflow_probability_version = importlib_metadata.version("tensorflow_probability")
-    logger.debug(f"Successfully imported tensorflow-probability version {_tensorflow_probability_version}")
-except importlib_metadata.PackageNotFoundError:
-    _tensorflow_probability_available = False
-
-
-_timm_available = importlib.util.find_spec("timm") is not None
-try:
-    _timm_version = importlib_metadata.version("timm")
-    logger.debug(f"Successfully imported timm version {_timm_version}")
-except importlib_metadata.PackageNotFoundError:
-    _timm_available = False
-
-
-_torchaudio_available = importlib.util.find_spec("torchaudio") is not None
-try:
-    _torchaudio_version = importlib_metadata.version("torchaudio")
-    logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
-except importlib_metadata.PackageNotFoundError:
-    _torchaudio_available = False
-
-
-_phonemizer_available = importlib.util.find_spec("phonemizer") is not None
-try:
-    _phonemizer_version = importlib_metadata.version("phonemizer")
-    logger.debug(f"Successfully imported phonemizer version {_phonemizer_version}")
-except importlib_metadata.PackageNotFoundError:
-    _phonemizer_available = False
-
-
-_pyctcdecode_available = importlib.util.find_spec("pyctcdecode") is not None
-try:
-    _pyctcdecode_version = importlib_metadata.version("pyctcdecode")
-    logger.debug(f"Successfully imported pyctcdecode version {_pyctcdecode_version}")
-except importlib_metadata.PackageNotFoundError:
-    _pyctcdecode_available = False
-
-
-_librosa_available = importlib.util.find_spec("librosa") is not None
-try:
-    _librosa_version = importlib_metadata.version("librosa")
-    logger.debug(f"Successfully imported librosa version {_librosa_version}")
-except importlib_metadata.PackageNotFoundError:
-    _librosa_available = False
 
 ccl_version = "N/A"
 _is_ccl_available = (
@@ -261,18 +274,144 @@ _is_ccl_available = (
     or importlib.util.find_spec("oneccl_bindings_for_pytorch") is not None
 )
 try:
-    ccl_version = importlib_metadata.version("oneccl_bind_pt")
-    logger.debug(f"Successfully imported oneccl_bind_pt version {ccl_version}")
-except importlib_metadata.PackageNotFoundError:
+    ccl_version = importlib.metadata.version("oneccl_bind_pt")
+    logger.debug(f"Detected oneccl_bind_pt version {ccl_version}")
+except importlib.metadata.PackageNotFoundError:
     _is_ccl_available = False
 
-# This is the version of torch required to run torch.fx features and torch.onnx with dictionary inputs.
-TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
-TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION = version.parse("1.8")
+
+_flax_available = False
+if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
+    _flax_available, _flax_version = _is_package_available("flax", return_version=True)
+    if _flax_available:
+        _jax_available, _jax_version = _is_package_available("jax", return_version=True)
+        if _jax_available:
+            logger.info(f"JAX version {_jax_version}, Flax version {_flax_version} available.")
+        else:
+            _flax_available = _jax_available = False
+            _jax_version = _flax_version = "N/A"
+
+
+_torch_fx_available = False
+if _torch_available:
+    torch_version = version.parse(_torch_version)
+    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
+        TORCH_FX_REQUIRED_VERSION.major,
+        TORCH_FX_REQUIRED_VERSION.minor,
+    )
+
+
+_torch_xla_available = False
+if USE_TORCH_XLA in ENV_VARS_TRUE_VALUES:
+    _torch_xla_available, _torch_xla_version = _is_package_available("torch_xla", return_version=True)
+    if _torch_xla_available:
+        logger.info(f"Torch XLA version {_torch_xla_version} available.")
+
+
+def is_kenlm_available():
+    return _kenlm_available
+
+
+def is_cv2_available():
+    return _cv2_available
+
+
+def is_yt_dlp_available():
+    return _yt_dlp_available
 
 
 def is_torch_available():
     return _torch_available
+
+
+def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION):
+    return _accelerate_available and version.parse(_accelerate_version) >= version.parse(min_version)
+
+
+def is_torch_deterministic():
+    """
+    Check whether pytorch uses deterministic algorithms by looking if torch.set_deterministic_debug_mode() is set to 1 or 2"
+    """
+    import torch
+
+    if torch.get_deterministic_debug_mode() == 0:
+        return False
+    else:
+        return True
+
+
+def is_hadamard_available():
+    return _hadamard_available
+
+
+def is_hqq_available(min_version: str = HQQ_MIN_VERSION):
+    return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
+
+
+def is_pygments_available():
+    return _pygments_available
+
+
+def get_torch_version():
+    return _torch_version
+
+
+def is_torch_sdpa_available():
+    if not is_torch_available():
+        return False
+    elif _torch_version == "N/A":
+        return False
+
+    # NOTE: We require torch>=2.1 (and not torch>=2.0) to use SDPA in Transformers for two reasons:
+    # - Allow the global use of the `scale` argument introduced in https://github.com/pytorch/pytorch/pull/95259
+    # - Memory-efficient attention supports arbitrary attention_mask: https://github.com/pytorch/pytorch/pull/104310
+    # NOTE: MLU is OK with non-contiguous inputs.
+    if is_torch_mlu_available():
+        return version.parse(_torch_version) >= version.parse("2.1.0")
+    # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
+    if is_torch_npu_available():
+        return version.parse(_torch_version) >= version.parse("2.1.0")
+    # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
+    return version.parse(_torch_version) >= version.parse("2.1.1")
+
+
+def is_torch_flex_attn_available():
+    if not is_torch_available():
+        return False
+    elif _torch_version == "N/A":
+        return False
+
+    # TODO check if some bugs cause push backs on the exact version
+    # NOTE: We require torch>=2.5.0 as it is the first release
+    return version.parse(_torch_version) >= version.parse("2.5.0")
+
+
+def is_torchvision_available():
+    return _torchvision_available
+
+
+def is_torchvision_v2_available():
+    if not is_torchvision_available():
+        return False
+
+    # NOTE: We require torchvision>=0.15 as v2 transforms are available from this version: https://pytorch.org/vision/stable/transforms.html#v1-or-v2-which-one-should-i-use
+    return version.parse(_torchvision_version) >= version.parse("0.15")
+
+
+def is_galore_torch_available():
+    return _galore_torch_available
+
+
+def is_lomo_available():
+    return _lomo_available
+
+
+def is_grokadamw_available():
+    return _grokadamw_available
+
+
+def is_schedulefree_available():
+    return _schedulefree_available
 
 
 def is_pyctcdecode_available():
@@ -281,6 +420,14 @@ def is_pyctcdecode_available():
 
 def is_librosa_available():
     return _librosa_available
+
+
+def is_essentia_available():
+    return _essentia_available
+
+
+def is_pretty_midi_available():
+    return _pretty_midi_available
 
 
 def is_torch_cuda_available():
@@ -292,36 +439,68 @@ def is_torch_cuda_available():
         return False
 
 
+def is_mamba_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            return _is_package_available("mamba_ssm")
+    return False
+
+
+def is_mamba_2_ssm_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        else:
+            if _is_package_available("mamba_ssm"):
+                import mamba_ssm
+
+                if version.parse(mamba_ssm.__version__) >= version.parse("2.0.4"):
+                    return True
+    return False
+
+
+def is_causal_conv1d_available():
+    if is_torch_available():
+        import torch
+
+        if not torch.cuda.is_available():
+            return False
+        return _is_package_available("causal_conv1d")
+    return False
+
+
+def is_mambapy_available():
+    if is_torch_available():
+        return _is_package_available("mambapy")
+    return False
+
+
+def is_torch_mps_available(min_version: Optional[str] = None):
+    if is_torch_available():
+        import torch
+
+        if hasattr(torch.backends, "mps"):
+            backend_available = torch.backends.mps.is_available() and torch.backends.mps.is_built()
+            if min_version is not None:
+                flag = version.parse(_torch_version) >= version.parse(min_version)
+                backend_available = backend_available and flag
+            return backend_available
+    return False
+
+
 def is_torch_bf16_gpu_available():
     if not is_torch_available():
         return False
 
     import torch
 
-    # since currently no utility function is available we build our own.
-    # some bits come from https://github.com/pytorch/pytorch/blob/2289a12f21c54da93bf5d696e3f9aea83dd9c10d/torch/testing/_internal/common_cuda.py#L51
-    # with additional check for torch version
-    # to succeed:
-    # 1. torch >= 1.10 (1.9 should be enough for AMP API has changed in 1.10, so using 1.10 as minimal)
-    # 2. the hardware needs to support bf16 (GPU arch >= Ampere, or CPU)
-    # 3. if using gpu, CUDA >= 11
-    # 4. torch.autocast exists
-    # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
-    # really only correct for the 0th gpu (or currently set default device if different from 0)
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
-        return False
-
-    if torch.cuda.is_available() and torch.version.cuda is not None:
-        if torch.cuda.get_device_properties(torch.cuda.current_device()).major < 8:
-            return False
-        if int(torch.version.cuda.split(".")[0]) < 11:
-            return False
-        if not hasattr(torch.cuda.amp, "autocast"):
-            return False
-    else:
-        return False
-
-    return True
+    return torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 
 
 def is_torch_bf16_cpu_available():
@@ -329,9 +508,6 @@ def is_torch_bf16_cpu_available():
         return False
 
     import torch
-
-    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
-        return False
 
     try:
         # multiple levels of AttributeError depending on the pytorch version so do them all in one check
@@ -353,6 +529,53 @@ def is_torch_bf16_available():
     return is_torch_bf16_gpu_available()
 
 
+@lru_cache()
+def is_torch_fp16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        _ = x @ x
+
+        # At this moment, let's be strict of the check: check if `LayerNorm` is also supported on device, because many
+        # models use this layer.
+        batch, sentence_length, embedding_dim = 3, 4, 5
+        embedding = torch.randn(batch, sentence_length, embedding_dim, dtype=torch.float16, device=device)
+        layer_norm = torch.nn.LayerNorm(embedding_dim, dtype=torch.float16, device=device)
+        _ = layer_norm(embedding)
+
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
+@lru_cache()
+def is_torch_bf16_available_on_device(device):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if device == "cuda":
+        return is_torch_bf16_gpu_available()
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        _ = x @ x
+    except:  # noqa: E722
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
+        return False
+
+    return True
+
+
 def is_torch_tf32_available():
     if not is_torch_available():
         return False
@@ -371,28 +594,16 @@ def is_torch_tf32_available():
     return True
 
 
-torch_version = None
-_torch_fx_available = _torch_onnx_dict_inputs_support_available = False
-if _torch_available:
-    torch_version = version.parse(importlib_metadata.version("torch"))
-    _torch_fx_available = (torch_version.major, torch_version.minor) >= (
-        TORCH_FX_REQUIRED_VERSION.major,
-        TORCH_FX_REQUIRED_VERSION.minor,
-    )
-
-    _torch_onnx_dict_inputs_support_available = torch_version >= TORCH_ONNX_DICT_INPUTS_MINIMUM_VERSION
-
-
 def is_torch_fx_available():
     return _torch_fx_available
 
 
+def is_peft_available():
+    return _peft_available
+
+
 def is_bs4_available():
-    return importlib.util.find_spec("bs4") is not None
-
-
-def is_torch_onnx_dict_inputs_support_available():
-    return _torch_onnx_dict_inputs_support_available
+    return _bs4_available
 
 
 def is_tf_available():
@@ -411,17 +622,38 @@ def is_onnx_available():
     return _onnx_available
 
 
+def is_openai_available():
+    return _openai_available
+
+
 def is_flax_available():
     return _flax_available
+
+
+def is_flute_available():
+    try:
+        return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.3.0"
+    except importlib.metadata.PackageNotFoundError:
+        return False
 
 
 def is_ftfy_available():
     return _ftfy_available
 
 
+def is_g2p_en_available():
+    return _g2p_en_available
+
+
 @lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
+    warnings.warn(
+        "`is_torch_tpu_available` is deprecated and will be removed in 4.41.0. "
+        "Please use the `is_torch_xla_available` instead.",
+        FutureWarning,
+    )
+
     if not _torch_available:
         return False
     if importlib.util.find_spec("torch_xla") is not None:
@@ -438,8 +670,136 @@ def is_torch_tpu_available(check_device=True):
     return False
 
 
+@lru_cache
+def is_torch_xla_available(check_is_tpu=False, check_is_gpu=False):
+    """
+    Check if `torch_xla` is available. To train a native pytorch job in an environment with torch xla installed, set
+    the USE_TORCH_XLA to false.
+    """
+    assert not (check_is_tpu and check_is_gpu), "The check_is_tpu and check_is_gpu cannot both be true."
+
+    if not _torch_xla_available:
+        return False
+
+    import torch_xla
+
+    if check_is_gpu:
+        return torch_xla.runtime.device_type() in ["GPU", "CUDA"]
+    elif check_is_tpu:
+        return torch_xla.runtime.device_type() == "TPU"
+
+    return True
+
+
+@lru_cache()
+def is_torch_neuroncore_available(check_device=True):
+    if importlib.util.find_spec("torch_neuronx") is not None:
+        return is_torch_xla_available()
+    return False
+
+
+@lru_cache()
+def is_torch_npu_available(check_device=False):
+    "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
+    if not _torch_available or importlib.util.find_spec("torch_npu") is None:
+        return False
+
+    import torch
+    import torch_npu  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.npu.device_count()
+            return torch.npu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "npu") and torch.npu.is_available()
+
+
+@lru_cache()
+def is_torch_mlu_available(check_device=False):
+    """
+    Checks if `mlu` is available via an `cndev-based` check which won't trigger the drivers and leave mlu
+    uninitialized.
+    """
+    if not _torch_available or importlib.util.find_spec("torch_mlu") is None:
+        return False
+
+    import torch
+    import torch_mlu  # noqa: F401
+
+    pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
+    try:
+        os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
+        available = torch.mlu.is_available()
+    finally:
+        if pytorch_cndev_based_mlu_check_previous_value:
+            os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
+        else:
+            os.environ.pop("PYTORCH_CNDEV_BASED_MLU_CHECK", None)
+
+    return available
+
+
+@lru_cache()
+def is_torch_musa_available(check_device=False):
+    "Checks if `torch_musa` is installed and potentially if a MUSA is in the environment"
+    if not _torch_available or importlib.util.find_spec("torch_musa") is None:
+        return False
+
+    import torch
+    import torch_musa  # noqa: F401
+
+    torch_musa_min_version = "0.33.0"
+    if _accelerate_available and version.parse(_accelerate_version) < version.parse(torch_musa_min_version):
+        return False
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no MUSA is found
+            _ = torch.musa.device_count()
+            return torch.musa.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "musa") and torch.musa.is_available()
+
+
 def is_torchdynamo_available():
-    return importlib.util.find_spec("torchdynamo") is not None
+    if not is_torch_available():
+        return False
+
+    return version.parse(_torch_version) >= version.parse("2.0.0")
+
+
+def is_torch_compile_available():
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    # We don't do any version check here to support nighlies marked as 1.14. Ultimately needs to check version against
+    # 2.0 but let's do it later.
+    return hasattr(torch, "compile")
+
+
+def is_torchdynamo_compiling():
+    if not is_torch_available():
+        return False
+
+    # Importing torch._dynamo causes issues with PyTorch profiler (https://github.com/pytorch/pytorch/issues/130622)
+    # hence rather relying on `torch.compiler.is_compiling()` when possible (torch>=2.3)
+    try:
+        import torch
+
+        return torch.compiler.is_compiling()
+    except Exception:
+        try:
+            import torch._dynamo as dynamo  # noqa: F401
+
+            return dynamo.is_compiling()
+        except Exception:
+            return False
 
 
 def is_torch_tensorrt_fx_available():
@@ -456,45 +816,62 @@ def is_detectron2_available():
     return _detectron2_available
 
 
-def is_more_itertools_available():
-    return importlib.util.find_spec("more_itertools") is not None
-
-
 def is_rjieba_available():
-    return importlib.util.find_spec("rjieba") is not None
+    return _rjieba_available
 
 
 def is_psutil_available():
-    return importlib.util.find_spec("psutil") is not None
+    return _psutil_available
 
 
 def is_py3nvml_available():
-    return importlib.util.find_spec("py3nvml") is not None
+    return _py3nvml_available
 
 
 def is_sacremoses_available():
-    return importlib.util.find_spec("sacremoses") is not None
+    return _sacremoses_available
 
 
 def is_apex_available():
-    return importlib.util.find_spec("apex") is not None
+    return _apex_available
+
+
+def is_aqlm_available():
+    return _aqlm_available
+
+
+def is_vptq_available(min_version: str = VPTQ_MIN_VERSION):
+    return _vptq_available and version.parse(_vptq_version) >= version.parse(min_version)
+
+
+def is_av_available():
+    return _av_available
+
+
+def is_decord_available():
+    return _decord_available
 
 
 def is_ninja_available():
-    return importlib.util.find_spec("ninja") is not None
+    r"""
+    Code comes from *torch.utils.cpp_extension.is_ninja_available()*. Returns `True` if the
+    [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
+    """
+    try:
+        subprocess.check_output("ninja --version".split())
+    except Exception:
+        return False
+    else:
+        return True
 
 
-def is_ipex_available():
+def is_ipex_available(min_version: str = ""):
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
-    if not is_torch_available() or importlib.util.find_spec("intel_extension_for_pytorch") is None:
+    if not is_torch_available() or not _ipex_available:
         return False
-    _ipex_version = "N/A"
-    try:
-        _ipex_version = importlib_metadata.version("intel_extension_for_pytorch")
-    except importlib_metadata.PackageNotFoundError:
-        return False
+
     torch_major_and_minor = get_major_and_minor_from_version(_torch_version)
     ipex_major_and_minor = get_major_and_minor_from_version(_ipex_version)
     if torch_major_and_minor != ipex_major_and_minor:
@@ -503,11 +880,113 @@ def is_ipex_available():
             f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
         )
         return False
+    if min_version:
+        return version.parse(_ipex_version) >= version.parse(min_version)
     return True
 
 
+@lru_cache
+def is_torch_xpu_available(check_device=False):
+    """
+    Checks if XPU acceleration is available either via `intel_extension_for_pytorch` or
+    via stock PyTorch (>=2.4) and potentially if a XPU is in the environment
+    """
+    if not is_torch_available():
+        return False
+
+    torch_version = version.parse(_torch_version)
+    if is_ipex_available():
+        import intel_extension_for_pytorch  # noqa: F401
+    elif torch_version.major < 2 or (torch_version.major == 2 and torch_version.minor < 4):
+        return False
+
+    import torch
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no XPU  is found
+            _ = torch.xpu.device_count()
+            return torch.xpu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "xpu") and torch.xpu.is_available()
+
+
+@lru_cache()
 def is_bitsandbytes_available():
-    return importlib.util.find_spec("bitsandbytes") is not None
+    if not is_torch_available() or not _bitsandbytes_available:
+        return False
+
+    import torch
+
+    # `bitsandbytes` versions older than 0.43.1 eagerly require CUDA at import time,
+    # so those versions of the library are practically only available when CUDA is too.
+    if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.43.1"):
+        return torch.cuda.is_available()
+
+    # Newer versions of `bitsandbytes` can be imported on systems without CUDA.
+    return True
+
+
+def is_bitsandbytes_multi_backend_available() -> bool:
+    if not is_bitsandbytes_available():
+        return False
+
+    import bitsandbytes as bnb
+
+    return "multi_backend" in getattr(bnb, "features", set())
+
+
+def is_flash_attn_2_available():
+    if not is_torch_available():
+        return False
+
+    if not _is_package_available("flash_attn"):
+        return False
+
+    # Let's add an extra check to see if cuda is available
+    import torch
+
+    if not (torch.cuda.is_available() or is_torch_mlu_available()):
+        return False
+
+    if torch.version.cuda:
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+    elif torch.version.hip:
+        # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.0.4")
+    elif is_torch_mlu_available():
+        return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.3.3")
+    else:
+        return False
+
+
+@lru_cache()
+def is_flash_attn_greater_or_equal_2_10():
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse("2.1.0")
+
+
+@lru_cache()
+def is_flash_attn_greater_or_equal(library_version: str):
+    if not _is_package_available("flash_attn"):
+        return False
+
+    return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
+
+
+@lru_cache()
+def is_torch_greater_or_equal(library_version: str):
+    if not _is_package_available("torch"):
+        return False
+
+    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
+
+
+def is_torchdistx_available():
+    return _torchdistx_available
 
 
 def is_faiss_available():
@@ -515,17 +994,23 @@ def is_faiss_available():
 
 
 def is_scipy_available():
-    return importlib.util.find_spec("scipy") is not None
+    return _scipy_available
 
 
 def is_sklearn_available():
-    if importlib.util.find_spec("sklearn") is None:
-        return False
-    return is_scipy_available() and importlib.util.find_spec("sklearn.metrics")
+    return _sklearn_available
 
 
 def is_sentencepiece_available():
-    return importlib.util.find_spec("sentencepiece") is not None
+    return _sentencepiece_available
+
+
+def is_seqio_available():
+    return _is_seqio_available
+
+
+def is_gguf_available(min_version: str = GGUF_MIN_VERSION):
+    return _is_gguf_available and version.parse(_gguf_version) >= version.parse(min_version)
 
 
 def is_protobuf_available():
@@ -534,32 +1019,92 @@ def is_protobuf_available():
     return importlib.util.find_spec("google.protobuf") is not None
 
 
-def is_accelerate_available():
-    return importlib.util.find_spec("accelerate") is not None
+def is_fsdp_available(min_version: str = FSDP_MIN_VERSION):
+    return is_torch_available() and version.parse(_torch_version) >= version.parse(min_version)
+
+
+def is_optimum_available():
+    return _optimum_available
+
+
+def is_auto_awq_available():
+    return _auto_awq_available
+
+
+def is_optimum_quanto_available():
+    # `importlib.metadata.version` doesn't work with `optimum.quanto`, need to put `optimum_quanto`
+    return _is_optimum_quanto_available
+
+
+def is_compressed_tensors_available():
+    return _compressed_tensors_available
+
+
+def is_auto_gptq_available():
+    return _auto_gptq_available
+
+
+def is_gptqmodel_available():
+    return _gptqmodel_available
+
+
+def is_eetq_available():
+    return _eetq_available
+
+
+def is_fbgemm_gpu_available():
+    return _fbgemm_gpu_available
+
+
+def is_levenshtein_available():
+    return _levenshtein_available
+
+
+def is_optimum_neuron_available():
+    return _optimum_available and _is_package_available("optimum.neuron")
 
 
 def is_safetensors_available():
-    return importlib.util.find_spec("safetensors") is not None
+    return _safetensors_available
 
 
 def is_tokenizers_available():
-    return importlib.util.find_spec("tokenizers") is not None
+    return _tokenizers_available
 
 
+@lru_cache
 def is_vision_available():
-    return importlib.util.find_spec("PIL") is not None
+    _pil_available = importlib.util.find_spec("PIL") is not None
+    if _pil_available:
+        try:
+            package_version = importlib.metadata.version("Pillow")
+        except importlib.metadata.PackageNotFoundError:
+            try:
+                package_version = importlib.metadata.version("Pillow-SIMD")
+            except importlib.metadata.PackageNotFoundError:
+                return False
+        logger.debug(f"Detected PIL version {package_version}")
+    return _pil_available
 
 
 def is_pytesseract_available():
-    return importlib.util.find_spec("pytesseract") is not None
+    return _pytesseract_available
+
+
+def is_pytest_available():
+    return _pytest_available
 
 
 def is_spacy_available():
-    return importlib.util.find_spec("spacy") is not None
+    return _spacy_available
 
 
 def is_tensorflow_text_available():
-    return importlib.util.find_spec("tensorflow_text") is not None
+    return is_tf_available() and _tensorflow_text_available
+
+
+def is_keras_nlp_available():
+    return is_tensorflow_text_available() and _keras_nlp_available
 
 
 def is_in_notebook():
@@ -568,8 +1113,7 @@ def is_in_notebook():
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
             raise ImportError("console")
-        if "VSCODE_PID" in os.environ:
-            raise ImportError("vscode")
+        # Removed the lines to include VSCode
         if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
             # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
             # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
@@ -578,10 +1122,6 @@ def is_in_notebook():
         return importlib.util.find_spec("IPython") is not None
     except (AttributeError, ImportError, KeyError):
         return False
-
-
-def is_scatter_available():
-    return _scatter_available
 
 
 def is_pytorch_quantization_available():
@@ -593,7 +1133,7 @@ def is_tensorflow_probability_available():
 
 
 def is_pandas_available():
-    return importlib.util.find_spec("pandas") is not None
+    return _pandas_available
 
 
 def is_sagemaker_dp_enabled():
@@ -607,7 +1147,7 @@ def is_sagemaker_dp_enabled():
     except json.JSONDecodeError:
         return False
     # Lastly, check if the `smdistributed` module is present.
-    return importlib.util.find_spec("smdistributed") is not None
+    return _smdistributed_available
 
 
 def is_sagemaker_mp_enabled():
@@ -631,14 +1171,14 @@ def is_sagemaker_mp_enabled():
     except json.JSONDecodeError:
         return False
     # Lastly, check if the `smdistributed` module is present.
-    return importlib.util.find_spec("smdistributed") is not None
+    return _smdistributed_available
 
 
 def is_training_run_on_sagemaker():
     return "SAGEMAKER_JOB_NAME" in os.environ
 
 
-def is_soundfile_availble():
+def is_soundfile_available():
     return _soundfile_available
 
 
@@ -646,8 +1186,20 @@ def is_timm_available():
     return _timm_available
 
 
+def is_natten_available():
+    return _natten_available
+
+
+def is_nltk_available():
+    return _nltk_available
+
+
 def is_torchaudio_available():
     return _torchaudio_available
+
+
+def is_torchao_available():
+    return _torchao_available
 
 
 def is_speech_available():
@@ -657,6 +1209,10 @@ def is_speech_available():
 
 def is_phonemizer_available():
     return _phonemizer_available
+
+
+def is_uroman_available():
+    return _uroman_available
 
 
 def torch_only_method(fn):
@@ -677,11 +1233,91 @@ def is_ccl_available():
 
 
 def is_sudachi_available():
-    return importlib.util.find_spec("sudachipy") is not None
+    return _sudachipy_available
+
+
+def get_sudachi_version():
+    return _sudachipy_version
+
+
+def is_sudachi_projection_available():
+    if not is_sudachi_available():
+        return False
+
+    # NOTE: We require sudachipy>=0.6.8 to use projection option in sudachi_kwargs for the constructor of BertJapaneseTokenizer.
+    # - `projection` option is not supported in sudachipy<0.6.8, see https://github.com/WorksApplications/sudachi.rs/issues/230
+    return version.parse(_sudachipy_version) >= version.parse("0.6.8")
 
 
 def is_jumanpp_available():
-    return (importlib.util.find_spec("pyknp") is not None) and (shutil.which("jumanpp") is not None)
+    return (importlib.util.find_spec("rhoknp") is not None) and (shutil.which("jumanpp") is not None)
+
+
+def is_cython_available():
+    return importlib.util.find_spec("pyximport") is not None
+
+
+def is_jieba_available():
+    return _jieba_available
+
+
+def is_jinja_available():
+    return _jinja_available
+
+
+def is_mlx_available():
+    return _mlx_available
+
+
+def is_tiktoken_available():
+    return _tiktoken_available and _blobfile_available
+
+
+def is_liger_kernel_available():
+    if not _liger_kernel_available:
+        return False
+
+    return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
+
+
+def is_triton_available():
+    return _triton_available
+
+
+# docstyle-ignore
+AV_IMPORT_ERROR = """
+{0} requires the PyAv library but it was not found in your environment. You can install it with:
+```
+pip install av
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+YT_DLP_IMPORT_ERROR = """
+{0} requires the YT-DLP library but it was not found in your environment. You can install it with:
+```
+pip install yt-dlp
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+DECORD_IMPORT_ERROR = """
+{0} requires the PyAv library but it was not found in your environment. You can install it with:
+```
+pip install decord
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+CV2_IMPORT_ERROR = """
+{0} requires the OpenCV library but it was not found in your environment. You can install it with:
+```
+pip install opencv-python
+```
+Please note that you may need to restart your runtime after installation.
+"""
 
 
 # docstyle-ignore
@@ -698,7 +1334,7 @@ then restarting your kernel.
 
 Note that if you have a local folder named `datasets` or a local python file named `datasets.py` in your current
 working directory, python may try to import this instead of the 🤗 Datasets library. You should rename this folder or
-that python file if that's the case.
+that python file if that's the case. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -712,6 +1348,7 @@ In a notebook or a colab, you can install it by executing a cell with
 ```
 !pip install tokenizers
 ```
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -719,7 +1356,7 @@ In a notebook or a colab, you can install it by executing a cell with
 SENTENCEPIECE_IMPORT_ERROR = """
 {0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -727,7 +1364,7 @@ that match your environment.
 PROTOBUF_IMPORT_ERROR = """
 {0} requires the protobuf library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/protocolbuffers/protobuf/tree/master/python#installation and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -735,7 +1372,7 @@ that match your environment.
 FAISS_IMPORT_ERROR = """
 {0} requires the faiss library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/facebookresearch/faiss/blob/master/INSTALL.md and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -743,6 +1380,15 @@ that match your environment.
 PYTORCH_IMPORT_ERROR = """
 {0} requires the PyTorch library but it was not found in your environment. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
+"""
+
+
+# docstyle-ignore
+TORCHVISION_IMPORT_ERROR = """
+{0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
+installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
@@ -772,7 +1418,7 @@ installation page https://www.tensorflow.org/install that match your environment
 # docstyle-ignore
 BS4_IMPORT_ERROR = """
 {0} requires the Beautiful Soup library but it was not found in your environment. You can install it with pip:
-`pip install beautifulsoup4`
+`pip install beautifulsoup4`. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -786,6 +1432,7 @@ In a notebook or a colab, you can install it by executing a cell with
 ```
 !pip install -U scikit-learn
 ```
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -793,6 +1440,7 @@ In a notebook or a colab, you can install it by executing a cell with
 TENSORFLOW_IMPORT_ERROR = """
 {0} requires the TensorFlow library but it was not found in your environment. Checkout the instructions on the
 installation page: https://www.tensorflow.org/install and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -800,7 +1448,7 @@ installation page: https://www.tensorflow.org/install and follow the ones that m
 DETECTRON2_IMPORT_ERROR = """
 {0} requires the detectron2 library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/facebookresearch/detectron2/blob/master/INSTALL.md and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
 
@@ -808,127 +1456,216 @@ that match your environment.
 FLAX_IMPORT_ERROR = """
 {0} requires the FLAX library but it was not found in your environment. Checkout the instructions on the
 installation page: https://github.com/google/flax and follow the ones that match your environment.
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 FTFY_IMPORT_ERROR = """
 {0} requires the ftfy library but it was not found in your environment. Checkout the instructions on the
 installation section: https://github.com/rspeer/python-ftfy/tree/master#installing and follow the ones
-that match your environment.
+that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
+LEVENSHTEIN_IMPORT_ERROR = """
+{0} requires the python-Levenshtein library but it was not found in your environment. You can install it with pip: `pip
+install python-Levenshtein`. Please note that you may need to restart your runtime after installation.
+"""
 
 # docstyle-ignore
-SCATTER_IMPORT_ERROR = """
-{0} requires the torch-scatter library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/rusty1s/pytorch_scatter.
+G2P_EN_IMPORT_ERROR = """
+{0} requires the g2p-en library but it was not found in your environment. You can install it with pip:
+`pip install g2p-en`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
 `pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
+Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 {0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
-explained here: https://github.com/tensorflow/probability.
+explained here: https://github.com/tensorflow/probability. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TENSORFLOW_TEXT_IMPORT_ERROR = """
 {0} requires the tensorflow_text library but it was not found in your environment. You can install it with pip as
 explained here: https://www.tensorflow.org/text/guide/tf_text_intro.
+Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+TORCHAUDIO_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. Please install it and restart your
+runtime.
+"""
 
 # docstyle-ignore
 PANDAS_IMPORT_ERROR = """
 {0} requires the pandas library but it was not found in your environment. You can install it with pip as
 explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
+Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 PHONEMIZER_IMPORT_ERROR = """
 {0} requires the phonemizer library but it was not found in your environment. You can install it with pip:
-`pip install phonemizer`
+`pip install phonemizer`. Please note that you may need to restart your runtime after installation.
+"""
+# docstyle-ignore
+UROMAN_IMPORT_ERROR = """
+{0} requires the uroman library but it was not found in your environment. You can install it with pip:
+`pip install uroman`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SACREMOSES_IMPORT_ERROR = """
 {0} requires the sacremoses library but it was not found in your environment. You can install it with pip:
-`pip install sacremoses`
+`pip install sacremoses`. Please note that you may need to restart your runtime after installation.
 """
-
 
 # docstyle-ignore
 SCIPY_IMPORT_ERROR = """
 {0} requires the scipy library but it was not found in your environment. You can install it with pip:
-`pip install scipy`
+`pip install scipy`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 SPEECH_IMPORT_ERROR = """
 {0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
-`pip install torchaudio`
+`pip install torchaudio`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 TIMM_IMPORT_ERROR = """
 {0} requires the timm library but it was not found in your environment. You can install it with pip:
-`pip install timm`
+`pip install timm`. Please note that you may need to restart your runtime after installation.
 """
+
+# docstyle-ignore
+NATTEN_IMPORT_ERROR = """
+{0} requires the natten library but it was not found in your environment. You can install it by referring to:
+shi-labs.com/natten . You can also install it with pip (may take longer to build):
+`pip install natten`. Please note that you may need to restart your runtime after installation.
+"""
+
+NUMEXPR_IMPORT_ERROR = """
+{0} requires the numexpr library but it was not found in your environment. You can install it by referring to:
+https://numexpr.readthedocs.io/en/latest/index.html.
+"""
+
+
+# docstyle-ignore
+NLTK_IMPORT_ERROR = """
+{0} requires the NLTK library but it was not found in your environment. You can install it by referring to:
+https://www.nltk.org/install.html. Please note that you may need to restart your runtime after installation.
+"""
+
 
 # docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
-`pip install pillow`
+`pip install pillow`. Please note that you may need to restart your runtime after installation.
 """
 
 
 # docstyle-ignore
 PYTESSERACT_IMPORT_ERROR = """
 {0} requires the PyTesseract library but it was not found in your environment. You can install it with pip:
-`pip install pytesseract`
+`pip install pytesseract`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 PYCTCDECODE_IMPORT_ERROR = """
 {0} requires the pyctcdecode library but it was not found in your environment. You can install it with pip:
-`pip install pyctcdecode`
+`pip install pyctcdecode`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
-{0} requires the accelerate library but it was not found in your environment. You can install it with pip:
-`pip install accelerate`
+{0} requires the accelerate library >= {ACCELERATE_MIN_VERSION} it was not found in your environment.
+You can install or update it with pip: `pip install --upgrade accelerate`. Please note that you may need to restart your
+runtime after installation.
 """
 
 # docstyle-ignore
 CCL_IMPORT_ERROR = """
 {0} requires the torch ccl library but it was not found in your environment. You can install it with pip:
 `pip install oneccl_bind_pt -f https://developer.intel.com/ipex-whl-stable`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+ESSENTIA_IMPORT_ERROR = """
+{0} requires essentia library. But that was not found in your environment. You can install them with pip:
+`pip install essentia==2.1b6.dev1034`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+LIBROSA_IMPORT_ERROR = """
+{0} requires thes librosa library. But that was not found in your environment. You can install them with pip:
+`pip install librosa`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+PRETTY_MIDI_IMPORT_ERROR = """
+{0} requires thes pretty_midi library. But that was not found in your environment. You can install them with pip:
+`pip install pretty_midi`
+Please note that you may need to restart your runtime after installation.
+"""
+
+
+CYTHON_IMPORT_ERROR = """
+{0} requires the Cython library but it was not found in your environment. You can install it with pip: `pip install
+Cython`. Please note that you may need to restart your runtime after installation.
+"""
+
+JIEBA_IMPORT_ERROR = """
+{0} requires the jieba library but it was not found in your environment. You can install it with pip: `pip install
+jieba`. Please note that you may need to restart your runtime after installation.
+"""
+
+PEFT_IMPORT_ERROR = """
+{0} requires the peft library but it was not found in your environment. You can install it with pip: `pip install
+peft`. Please note that you may need to restart your runtime after installation.
+"""
+
+JINJA_IMPORT_ERROR = """
+{0} requires the jinja library but it was not found in your environment. You can install it with pip: `pip install
+jinja2`. Please note that you may need to restart your runtime after installation.
 """
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("av", (is_av_available, AV_IMPORT_ERROR)),
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
+        ("cv2", (is_cv2_available, CV2_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
+        ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
+        ("g2p_en", (is_g2p_en_available, G2P_EN_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
+        ("uroman", (is_uroman_available, UROMAN_IMPORT_ERROR)),
+        ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
+        ("levenshtein", (is_levenshtein_available, LEVENSHTEIN_IMPORT_ERROR)),
+        ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
-        ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
@@ -937,12 +1674,21 @@ BACKENDS_MAPPING = OrderedDict(
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("tensorflow_text", (is_tensorflow_text_available, TENSORFLOW_TEXT_IMPORT_ERROR)),
         ("timm", (is_timm_available, TIMM_IMPORT_ERROR)),
+        ("torchaudio", (is_torchaudio_available, TORCHAUDIO_IMPORT_ERROR)),
+        ("natten", (is_natten_available, NATTEN_IMPORT_ERROR)),
+        ("nltk", (is_nltk_available, NLTK_IMPORT_ERROR)),
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
+        ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
+        ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
+        ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
+        ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
+        ("jinja", (is_jinja_available, JINJA_IMPORT_ERROR)),
+        ("yt_dlp", (is_yt_dlp_available, YT_DLP_IMPORT_ERROR)),
     ]
 )
 
@@ -973,34 +1719,10 @@ class DummyObject(type):
     `requires_backend` each time a user tries to access any method of that class.
     """
 
-    def __getattr__(cls, key):
-        if key.startswith("_"):
-            return super().__getattr__(cls, key)
+    def __getattribute__(cls, key):
+        if key.startswith("_") and key != "_from_config":
+            return super().__getattribute__(key)
         requires_backends(cls, cls._backends)
-
-
-def torch_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_torch_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires PyTorch.")
-
-    return wrapper
-
-
-def tf_required(func):
-    # Chose a different decorator name than in tests so it's clear they are not the same.
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if is_tf_available():
-            return func(*args, **kwargs)
-        else:
-            raise ImportError(f"Method `{func.__name__}` requires TF.")
-
-    return wrapper
 
 
 def is_torch_fx_proxy(x):
@@ -1011,6 +1733,10 @@ def is_torch_fx_proxy(x):
     return False
 
 
+BACKENDS_T = FrozenSet[str]
+IMPORT_STRUCTURE_T = Dict[BACKENDS_T, Dict[str, Set[str]]]
+
+
 class _LazyModule(ModuleType):
     """
     Module class that surfaces all objects but only performs associated imports when the objects are requested.
@@ -1018,21 +1744,71 @@ class _LazyModule(ModuleType):
 
     # Very heavily inspired by optuna.integration._IntegrationModule
     # https://github.com/optuna/optuna/blob/master/optuna/integration/__init__.py
-    def __init__(self, name, module_file, import_structure, module_spec=None, extra_objects=None):
+    def __init__(
+        self,
+        name: str,
+        module_file: str,
+        import_structure: IMPORT_STRUCTURE_T,
+        module_spec: importlib.machinery.ModuleSpec = None,
+        extra_objects: Dict[str, object] = None,
+    ):
         super().__init__(name)
-        self._modules = set(import_structure.keys())
-        self._class_to_module = {}
-        for key, values in import_structure.items():
-            for value in values:
-                self._class_to_module[value] = key
-        # Needed for autocompletion in an IDE
-        self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
-        self.__file__ = module_file
-        self.__spec__ = module_spec
-        self.__path__ = [os.path.dirname(module_file)]
-        self._objects = {} if extra_objects is None else extra_objects
-        self._name = name
-        self._import_structure = import_structure
+
+        self._object_missing_backend = {}
+        if any(isinstance(key, frozenset) for key in import_structure.keys()):
+            self._modules = set()
+            self._class_to_module = {}
+            self.__all__ = []
+
+            _import_structure = {}
+
+            for backends, module in import_structure.items():
+                missing_backends = []
+                for backend in backends:
+                    if backend not in BACKENDS_MAPPING:
+                        raise ValueError(
+                            f"Error: the following backend: '{backend}' was specified around object {module} but isn't specified in the backends mapping."
+                        )
+                    callable, error = BACKENDS_MAPPING[backend]
+                    if not callable():
+                        missing_backends.append(backend)
+                self._modules = self._modules.union(set(module.keys()))
+
+                for key, values in module.items():
+                    if len(missing_backends):
+                        self._object_missing_backend[key] = missing_backends
+
+                    for value in values:
+                        self._class_to_module[value] = key
+                        if len(missing_backends):
+                            self._object_missing_backend[value] = missing_backends
+                    _import_structure.setdefault(key, []).extend(values)
+
+                # Needed for autocompletion in an IDE
+                self.__all__.extend(list(module.keys()) + list(chain(*module.values())))
+
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = _import_structure
+
+        # This can be removed once every exportable object has a `export()` export.
+        else:
+            self._modules = set(import_structure.keys())
+            self._class_to_module = {}
+            for key, values in import_structure.items():
+                for value in values:
+                    self._class_to_module[value] = key
+            # Needed for autocompletion in an IDE
+            self.__all__ = list(import_structure.keys()) + list(chain(*import_structure.values()))
+            self.__file__ = module_file
+            self.__spec__ = module_spec
+            self.__path__ = [os.path.dirname(module_file)]
+            self._objects = {} if extra_objects is None else extra_objects
+            self._name = name
+            self._import_structure = import_structure
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
@@ -1047,11 +1823,24 @@ class _LazyModule(ModuleType):
     def __getattr__(self, name: str) -> Any:
         if name in self._objects:
             return self._objects[name]
-        if name in self._modules:
-            value = self._get_module(name)
+        if name in self._object_missing_backend.keys():
+            missing_backends = self._object_missing_backend[name]
+
+            class Placeholder(metaclass=DummyObject):
+                _backends = missing_backends
+
+                def __init__(self, *args, **kwargs):
+                    requires_backends(self, missing_backends)
+
+            Placeholder.__name__ = name
+            Placeholder.__module__ = self.__spec__
+
+            value = Placeholder
         elif name in self._class_to_module.keys():
             module = self._get_module(self._class_to_module[name])
             value = getattr(module, name)
+        elif name in self._modules:
+            value = self._get_module(name)
         else:
             raise AttributeError(f"module {self.__name__} has no attribute {name}")
 
@@ -1073,3 +1862,411 @@ class _LazyModule(ModuleType):
 
 class OptionalDependencyNotAvailable(BaseException):
     """Internally used error class for signalling an optional dependency was not found."""
+
+
+def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
+    """Imports transformers directly
+
+    Args:
+        path (`str`): The path to the source file
+        file (`str`, *optional*): The file to join with the path. Defaults to "__init__.py".
+
+    Returns:
+        `ModuleType`: The resulting imported module
+    """
+    name = "transformers"
+    location = os.path.join(path, file)
+    spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    module = sys.modules[name]
+    return module
+
+
+def export(*, backends=()):
+    """
+    This decorator enables two things:
+    - Attaching a `__backends` tuple to an object to see what are the necessary backends for it
+      to execute correctly without instantiating it
+    - The '@export' string is used to dynamically import objects
+    """
+    for backend in backends:
+        if backend not in BACKENDS_MAPPING:
+            raise ValueError(f"Backend should be defined in the BACKENDS_MAPPING. Offending backend: {backend}")
+
+    if not isinstance(backends, tuple):
+        raise ValueError("Backends should be a tuple.")
+
+    def inner_fn(fun):
+        fun.__backends = backends
+        return fun
+
+    return inner_fn
+
+
+BASE_FILE_REQUIREMENTS = {
+    lambda e: "modeling_tf_" in e: ("tf",),
+    lambda e: "modeling_flax_" in e: ("flax",),
+    lambda e: "modeling_" in e: ("torch",),
+    lambda e: e.startswith("tokenization_") and e.endswith("_fast"): ("tokenizers",),
+}
+
+
+def fetch__all__(file_content):
+    """
+    Returns the content of the __all__ variable in the file content.
+    Returns None if not defined, otherwise returns a list of strings.
+    """
+
+    if "__all__" not in file_content:
+        return []
+
+    lines = file_content.splitlines()
+    for index, line in enumerate(lines):
+        if line.startswith("__all__"):
+            start_index = index
+
+    lines = lines[start_index:]
+
+    if not lines[0].startswith("__all__"):
+        raise ValueError(
+            "fetch__all__ accepts a list of lines, with the first line being the __all__ variable declaration"
+        )
+
+    # __all__ is defined on a single line
+    if lines[0].endswith("]"):
+        return [obj.strip("\"' ") for obj in lines[0].split("=")[1].strip(" []").split(",")]
+
+    # __all__ is defined on multiple lines
+    else:
+        _all = []
+        for __all__line_index in range(1, len(lines)):
+            if lines[__all__line_index].strip() == "]":
+                return _all
+            else:
+                _all.append(lines[__all__line_index].strip("\"', "))
+
+        return _all
+
+
+@lru_cache()
+def create_import_structure_from_path(module_path):
+    """
+    This method takes the path to a file/a folder and returns the import structure.
+    If a file is given, it will return the import structure of the parent folder.
+
+    Import structures are designed to be digestible by `_LazyModule` objects. They are
+    created from the __all__ definitions in each files as well as the `@export` decorators
+    above methods and objects.
+
+    The import structure allows explicit display of the required backends for a given object.
+    These backends are specified in two ways:
+
+    1. Through their `@export`, if they are exported with that decorator. This `@export` decorator
+       accepts a `backend` tuple kwarg mentioning which backends are required to run this object.
+
+    2. If an object is defined in a file with "default" backends, it will have, at a minimum, this
+       backend specified. The default backends are defined according to the filename:
+
+       - If a file is named like `modeling_*.py`, it will have a `torch` backend
+       - If a file is named like `modeling_tf_*.py`, it will have a `tf` backend
+       - If a file is named like `modeling_flax_*.py`, it will have a `flax` backend
+       - If a file is named like `tokenization_*_fast.py`, it will have a `tokenizers` backend
+
+    Backends serve the purpose of displaying a clear error message to the user in case the backends are not installed.
+    Should an object be imported without its required backends being in the environment, any attempt to use the
+    object will raise an error mentioning which backend(s) should be added to the environment in order to use
+    that object.
+
+    Here's an example of an input import structure at the src.transformers.models level:
+
+    {
+        'albert': {
+            frozenset(): {
+                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+            },
+            frozenset({'tokenizers'}): {
+                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+            },
+        },
+        'align': {
+            frozenset(): {
+                'configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+                'processing_align': {'AlignProcessor'}
+            },
+        },
+        'altclip': {
+            frozenset(): {
+                'configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+                'processing_altclip': {'AltCLIPProcessor'},
+            }
+        }
+    }
+    """
+    import_structure = {}
+    if os.path.isdir(module_path):
+        directory = module_path
+        adjacent_modules = []
+
+        for f in os.listdir(module_path):
+            if f != "__pycache__" and os.path.isdir(os.path.join(module_path, f)):
+                import_structure[f] = create_import_structure_from_path(os.path.join(module_path, f))
+
+            elif not os.path.isdir(os.path.join(directory, f)):
+                adjacent_modules.append(f)
+
+    else:
+        directory = os.path.dirname(module_path)
+        adjacent_modules = [f for f in os.listdir(directory) if not os.path.isdir(os.path.join(directory, f))]
+
+    # We're only taking a look at files different from __init__.py
+    # We could theoretically export things directly from the __init__.py
+    # files, but this is not supported at this time.
+    if "__init__.py" in adjacent_modules:
+        adjacent_modules.remove("__init__.py")
+
+    # Modular files should not be imported
+    def find_substring(substring, list_):
+        return any(substring in x for x in list_)
+
+    if find_substring("modular_", adjacent_modules) and find_substring("modeling_", adjacent_modules):
+        adjacent_modules = [module for module in adjacent_modules if "modular_" not in module]
+
+    module_requirements = {}
+    for module_name in adjacent_modules:
+        # Only modules ending in `.py` are accepted here.
+        if not module_name.endswith(".py"):
+            continue
+
+        with open(os.path.join(directory, module_name), encoding="utf-8") as f:
+            file_content = f.read()
+
+        # Remove the .py suffix
+        module_name = module_name[:-3]
+
+        previous_line = ""
+        previous_index = 0
+
+        # Some files have some requirements by default.
+        # For example, any file named `modeling_tf_xxx.py`
+        # should have TensorFlow as a required backend.
+        base_requirements = ()
+        for string_check, requirements in BASE_FILE_REQUIREMENTS.items():
+            if string_check(module_name):
+                base_requirements = requirements
+                break
+
+        # Objects that have a `@export` assigned to them will get exported
+        # with the backends specified in the decorator as well as the file backends.
+        exported_objects = set()
+        if "@export" in file_content:
+            lines = file_content.split("\n")
+            for index, line in enumerate(lines):
+                # This allows exporting items with other decorators. We'll take a look
+                # at the line that follows at the same indentation level.
+                if line.startswith((" ", "\t", "@", ")")) and not line.startswith("@export"):
+                    continue
+
+                # Skipping line enables putting whatever we want between the
+                # export() call and the actual class/method definition.
+                # This is what enables having # Copied from statements, docs, etc.
+                skip_line = False
+
+                if "@export" in previous_line:
+                    skip_line = False
+
+                    # Backends are defined on the same line as export
+                    if "backends" in previous_line:
+                        backends_string = previous_line.split("backends=")[1].split("(")[1].split(")")[0]
+                        backends = tuple(sorted([b.strip("'\",") for b in backends_string.split(", ") if b]))
+
+                    # Backends are defined in the lines following export, for example such as:
+                    # @export(
+                    #     backends=(
+                    #             "sentencepiece",
+                    #             "torch",
+                    #             "tf",
+                    #     )
+                    # )
+                    #
+                    # or
+                    #
+                    # @export(
+                    #     backends=(
+                    #             "sentencepiece", "tf"
+                    #     )
+                    # )
+                    elif "backends" in lines[previous_index + 1]:
+                        backends = []
+                        for backend_line in lines[previous_index:index]:
+                            if "backends" in backend_line:
+                                backend_line = backend_line.split("=")[1]
+                            if '"' in backend_line or "'" in backend_line:
+                                if ", " in backend_line:
+                                    backends.extend(backend.strip("()\"', ") for backend in backend_line.split(", "))
+                                else:
+                                    backends.append(backend_line.strip("()\"', "))
+
+                            # If the line is only a ')', then we reached the end of the backends and we break.
+                            if backend_line.strip() == ")":
+                                break
+                        backends = tuple(backends)
+
+                    # No backends are registered for export
+                    else:
+                        backends = ()
+
+                    backends = frozenset(backends + base_requirements)
+                    if backends not in module_requirements:
+                        module_requirements[backends] = {}
+                    if module_name not in module_requirements[backends]:
+                        module_requirements[backends][module_name] = set()
+
+                    if not line.startswith("class") and not line.startswith("def"):
+                        skip_line = True
+                    else:
+                        start_index = 6 if line.startswith("class") else 4
+                        object_name = line[start_index:].split("(")[0].strip(":")
+                        module_requirements[backends][module_name].add(object_name)
+                        exported_objects.add(object_name)
+
+                if not skip_line:
+                    previous_line = line
+                    previous_index = index
+
+        # All objects that are in __all__ should be exported by default.
+        # These objects are exported with the file backends.
+        if "__all__" in file_content:
+            for _all_object in fetch__all__(file_content):
+                if _all_object not in exported_objects:
+                    backends = frozenset(base_requirements)
+                    if backends not in module_requirements:
+                        module_requirements[backends] = {}
+                    if module_name not in module_requirements[backends]:
+                        module_requirements[backends][module_name] = set()
+
+                    module_requirements[backends][module_name].add(_all_object)
+
+    import_structure = {**module_requirements, **import_structure}
+    return import_structure
+
+
+def spread_import_structure(nested_import_structure):
+    """
+    This method takes as input an unordered import structure and brings the required backends at the top-level,
+    aggregating modules and objects under their required backends.
+
+    Here's an example of an input import structure at the src.transformers.models level:
+
+    {
+        'albert': {
+            frozenset(): {
+                'configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'}
+            },
+            frozenset({'tokenizers'}): {
+                'tokenization_albert_fast': {'AlbertTokenizerFast'}
+            },
+        },
+        'align': {
+            frozenset(): {
+                'configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+                'processing_align': {'AlignProcessor'}
+            },
+        },
+        'altclip': {
+            frozenset(): {
+                'configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+                'processing_altclip': {'AltCLIPProcessor'},
+            }
+        }
+    }
+
+    Here's an example of an output import structure at the src.transformers.models level:
+
+    {
+        frozenset({'tokenizers'}): {
+            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+        },
+        frozenset(): {
+            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'align.processing_align': {'AlignProcessor'},
+            'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+            'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+            'altclip.processing_altclip': {'AltCLIPProcessor'}
+        }
+    }
+
+    """
+
+    def propagate_frozenset(unordered_import_structure):
+        tuple_first_import_structure = {}
+        for _key, _value in unordered_import_structure.items():
+            if not isinstance(_value, dict):
+                tuple_first_import_structure[_key] = _value
+
+            elif any(isinstance(v, frozenset) for v in _value.keys()):
+                # Here we want to switch around key and v
+                for k, v in _value.items():
+                    if isinstance(k, frozenset):
+                        if k not in tuple_first_import_structure:
+                            tuple_first_import_structure[k] = {}
+                        tuple_first_import_structure[k][_key] = v
+
+            else:
+                tuple_first_import_structure[_key] = propagate_frozenset(_value)
+
+        return tuple_first_import_structure
+
+    def flatten_dict(_dict, previous_key=None):
+        items = []
+        for _key, _value in _dict.items():
+            _key = f"{previous_key}.{_key}" if previous_key is not None else _key
+            if isinstance(_value, dict):
+                items.extend(flatten_dict(_value, _key).items())
+            else:
+                items.append((_key, _value))
+        return dict(items)
+
+    # The tuples contain the necessary backends. We want these first, so we propagate them up the
+    # import structure.
+    ordered_import_structure = nested_import_structure
+
+    # 6 is a number that gives us sufficient depth to go through all files and foreseeable folder depths
+    # while not taking too long to parse.
+    for i in range(6):
+        ordered_import_structure = propagate_frozenset(ordered_import_structure)
+
+    # We then flatten the dict so that it references a module path.
+    flattened_import_structure = {}
+    for key, value in ordered_import_structure.copy().items():
+        if isinstance(key, str):
+            del ordered_import_structure[key]
+        else:
+            flattened_import_structure[key] = flatten_dict(value)
+
+    return flattened_import_structure
+
+
+def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
+    """
+    This method takes a module_path as input and creates an import structure digestible by a _LazyModule.
+
+    Here's an example of an output import structure at the src.transformers.models level:
+
+    {
+        frozenset({'tokenizers'}): {
+            'albert.tokenization_albert_fast': {'AlbertTokenizerFast'}
+        },
+        frozenset(): {
+            'albert.configuration_albert': {'AlbertConfig', 'AlbertOnnxConfig'},
+            'align.processing_align': {'AlignProcessor'},
+            'align.configuration_align': {'AlignConfig', 'AlignTextConfig', 'AlignVisionConfig'},
+            'altclip.configuration_altclip': {'AltCLIPConfig', 'AltCLIPTextConfig', 'AltCLIPVisionConfig'},
+            'altclip.processing_altclip': {'AltCLIPProcessor'}
+        }
+    }
+
+    The import structure is a dict defined with frozensets as keys, and dicts of strings to sets of objects.
+    """
+    import_structure = create_import_structure_from_path(module_path)
+    return spread_import_structure(import_structure)

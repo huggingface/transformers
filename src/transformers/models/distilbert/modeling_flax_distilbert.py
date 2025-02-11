@@ -16,11 +16,10 @@
 import math
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
@@ -42,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
-_TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 
 FLAX_DISTILBERT_START_DOCSTRING = r"""
@@ -50,9 +48,10 @@ FLAX_DISTILBERT_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -72,7 +71,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -147,7 +146,7 @@ class FlaxEmbeddings(nn.Module):
             position_embeds = self.position_embeddings(position_ids.astype("i4"))
         else:
             position_embeds = self.pos_encoding[:, :seq_length, :]
-            # explictly cast the positions here, since self.embed_positions are not registered as parameters
+            # explicitly cast the positions here, since self.embed_positions are not registered as parameters
             position_embeds = position_embeds.astype(inputs_embeds.dtype)
 
         # Sum all embeddings
@@ -201,7 +200,6 @@ class FlaxMultiHeadSelfAttention(nn.Module):
         deterministic: bool = True,
         output_attentions: bool = False,
     ):
-
         bs, q_len, dim = query.shape
         k_len = key.shape[1]
         # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
@@ -306,7 +304,7 @@ class FlaxTransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output
         else:
-            assert type(sa_output) == tuple
+            assert type(sa_output) is tuple
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + hidden_states)
 
@@ -430,7 +428,7 @@ class FlaxDistilBertPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -536,7 +534,7 @@ class FlaxDistilBertModel(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertModule
 
 
-append_call_sample_docstring(FlaxDistilBertModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, None, _CONFIG_FOR_DOC)
+append_call_sample_docstring(FlaxDistilBertModel, _CHECKPOINT_FOR_DOC, None, _CONFIG_FOR_DOC)
 
 
 class FlaxDistilBertForMaskedLMModule(nn.Module):
@@ -609,9 +607,7 @@ class FlaxDistilBertForMaskedLM(FlaxDistilBertPreTrainedModel):
     module_class = FlaxDistilBertForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxDistilBertForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxDistilBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxDistilBertForSequenceClassificationModule(nn.Module):
@@ -680,7 +676,6 @@ class FlaxDistilBertForSequenceClassification(FlaxDistilBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxDistilBertForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -763,7 +758,6 @@ overwrite_call_docstring(
 )
 append_call_sample_docstring(
     FlaxDistilBertForMultipleChoice,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxMultipleChoiceModelOutput,
     _CONFIG_FOR_DOC,
@@ -826,7 +820,6 @@ class FlaxDistilBertForTokenClassification(FlaxDistilBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxDistilBertForTokenClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxTokenClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -896,8 +889,18 @@ class FlaxDistilBertForQuestionAnswering(FlaxDistilBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxDistilBertForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxDistilBertForMaskedLM",
+    "FlaxDistilBertForMultipleChoice",
+    "FlaxDistilBertForQuestionAnswering",
+    "FlaxDistilBertForSequenceClassification",
+    "FlaxDistilBertForTokenClassification",
+    "FlaxDistilBertModel",
+    "FlaxDistilBertPreTrainedModel",
+]

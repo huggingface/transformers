@@ -5,13 +5,13 @@ import copy
 import logging
 import random
 
+import joblib
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-import joblib
 from transformers import AdamW, GPT2LMHeadModel, get_linear_schedule_with_warmup
 
 
@@ -69,9 +69,9 @@ def compute_perplexity(model, test_data, context_len):
     return perplexity
 
 
-def load_gpt2(model_name="gpt2"):
+def load_gpt2(model_name="openai-community/gpt2"):
     """
-    load original gpt2 and save off for quicker loading
+    load original openai-community/gpt2 and save off for quicker loading
 
     Args:
         model_name: GPT-2
@@ -119,7 +119,6 @@ def recopy_gpt2(orig_model, device, max_steps):
 
 
 def intermittent_save(contexts, real_perps, past_perps, filename):
-
     """
     save the perplexity differences to filename
 
@@ -152,7 +151,6 @@ def collect_objective_set(
     filename="dev.jbl",
     recopy_model=recopy_gpt2,
 ):
-
     """
     Collect individual IGF values from pre-trained transformer model
     max_steps samples of training data to train secondary model
@@ -271,7 +269,6 @@ def generate_datasets(
 def train_secondary_learner(
     secondary_learner, train_dataset, max_epochs, batch_size, eval_freq=50, igf_model_path="secondary_learner.pt"
 ):
-
     """
     Train the secondary learner (igf_model)
 

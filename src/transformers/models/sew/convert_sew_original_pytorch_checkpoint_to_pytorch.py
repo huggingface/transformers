@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert SEW checkpoint."""
 
-
 import argparse
 import json
 import os
@@ -25,6 +24,7 @@ from fairseq.data import Dictionary
 
 # Register SEW's fairseq modules
 from sew_asapp import tasks  # noqa: F401
+
 from transformers import (
     SEWConfig,
     SEWForCTC,

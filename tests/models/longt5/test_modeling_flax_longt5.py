@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -45,6 +45,7 @@ if is_flax_available():
     import jax.numpy as jnp
     from flax.core.frozen_dict import unfreeze
     from flax.traverse_util import flatten_dict
+
     from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING, AutoTokenizer, LongT5Config
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
     from transformers.models.longt5.modeling_flax_longt5 import (
@@ -70,7 +71,7 @@ class FlaxLongT5ModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -82,7 +83,6 @@ class FlaxLongT5ModelTester:
         scope=None,
         decoder_layers=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -236,7 +236,6 @@ class FlaxLongT5ModelTester:
 
 @require_flax
 class FlaxLongT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxLongT5Model, FlaxLongT5ForConditionalGeneration) if is_flax_available() else ()
     all_generative_model_classes = (FlaxLongT5ForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True

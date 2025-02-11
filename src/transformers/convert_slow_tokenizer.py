@@ -22,10 +22,61 @@ allow to make our dependency on SentencePiece optional.
 import warnings
 from typing import Dict, List, Tuple
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from packaging import version
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .utils import requires_backends
+from .utils import is_protobuf_available, is_sentencepiece_available, logging, requires_backends
+from .utils.import_utils import PROTOBUF_IMPORT_ERROR
+
+
+logger = logging.get_logger(__name__)
+
+
+def import_protobuf(error_message=""):
+    if is_sentencepiece_available():
+        from sentencepiece import sentencepiece_model_pb2
+
+        return sentencepiece_model_pb2
+    if is_protobuf_available():
+        import google.protobuf
+
+        if version.parse(google.protobuf.__version__) < version.parse("4.0.0"):
+            from transformers.utils import sentencepiece_model_pb2
+        else:
+            from transformers.utils import sentencepiece_model_pb2_new as sentencepiece_model_pb2
+        return sentencepiece_model_pb2
+    else:
+        raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
+
+
+def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
+    if add_prefix_space:
+        prepend_scheme = "always"
+        if not getattr(original_tokenizer, "legacy", True):
+            prepend_scheme = "first"
+    else:
+        prepend_scheme = "never"
+    return prepend_scheme
+
+
+def generate_merges(vocab, vocab_scores):
+    reverse = vocab_scores is not None
+    vocab_scores = dict(vocab_scores) if reverse else vocab
+
+    merges = []
+    for merge, piece_score in vocab_scores.items():
+        local = []
+        for index in range(1, len(merge)):
+            piece_l, piece_r = merge[:index], merge[index:]
+            if piece_l in vocab and piece_r in vocab:
+                local.append((piece_l, piece_r, piece_score))
+        local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
+        merges.extend(local)
+
+    merges = sorted(merges, key=lambda val: (val[2], len(val[0]), len(val[1])), reverse=reverse)
+    merges = [(val[0], val[1]) for val in merges]
+    return merges
 
 
 class SentencePieceExtractor:
@@ -40,21 +91,33 @@ class SentencePieceExtractor:
         self.sp = SentencePieceProcessor()
         self.sp.Load(model)
 
-    def extract(self) -> Tuple[Dict[str, int], List[Tuple]]:
+    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+        """
+        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
+        order the merges with respect to the piece scores instead.
+        """
         sp = self.sp
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
-        # Merges
-        merges = []
-        for piece_l in vocab.keys():
-            for piece_r in vocab.keys():
-                merge = f"{piece_l}{piece_r}"
-                piece_id = vocab.get(merge, None)
-                if piece_id:
-                    merges += [(piece_l, piece_r, piece_id)]
-        merges = sorted(merges, key=lambda val: val[2])
-        merges = [(val[0], val[1]) for val in merges]
+        merges = generate_merges(vocab, vocab_scores)
 
+        return vocab, merges
+
+
+class GemmaSentencePieceExtractor(SentencePieceExtractor):
+    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+        """
+        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
+        order the merges with respect to the piece scores instead.
+        """
+        sp = self.sp
+        vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+
+        # there is a missing token in the vocab. We have to do this to support merges
+        # "<0x09>" is the bytefallback for `\t`
+        vocab["\t"] = vocab.get("<0x09>")
+
+        merges = generate_merges(vocab, vocab_scores)
         return vocab, merges
 
 
@@ -265,9 +328,11 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self) -> Tokenizer:
-        vocab = self.original_tokenizer.encoder
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks)
 
         tokenizer = Tokenizer(
             BPE(
@@ -280,13 +345,14 @@ class GPT2Converter(Converter):
             )
         )
 
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        add_prefix_space = getattr(self.original_tokenizer, "add_prefix_space", False)
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        if self.original_tokenizer.add_bos_token:
+        if getattr(self.original_tokenizer, "add_bos_token", False):
             bos = self.original_tokenizer.bos_token
             bos_token_id = self.original_tokenizer.bos_token_id
             tokenizer.post_processor = processors.TemplateProcessing(
-                single=f"{bos}:0 $A:0",  # token_type_id is 2 for Funnel transformer
+                single=f"{bos}:0 $A:0",
                 pair=f"{bos}:0 $A:0 $B:1",
                 special_tokens=[
                     (bos, bos_token_id),
@@ -326,6 +392,50 @@ class HerbertConverter(Converter):
             sep=(self.original_tokenizer.sep_token, self.original_tokenizer.sep_token_id),
             cls=(self.original_tokenizer.cls_token, self.original_tokenizer.cls_token_id),
         )
+
+        return tokenizer
+
+
+class Qwen2Converter(Converter):
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                unk_token=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+                byte_fallback=False,
+            )
+        )
+
+        tokenizer.normalizer = normalizers.NFC()
+
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(
+                    Regex(
+                        r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"""
+                    ),
+                    behavior="isolated",
+                    invert=False,
+                ),
+                pre_tokenizers.ByteLevel(
+                    add_prefix_space=getattr(self.original_tokenizer, "add_prefix_space", False),
+                    use_regex=False,
+                ),
+            ]
+        )
+
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
         return tokenizer
 
@@ -430,19 +540,24 @@ class DebertaConverter(Converter):
 
 
 class SpmConverter(Converter):
+    handle_byte_fallback = False
+    SpmExtractor = SentencePieceExtractor
+    special_tokens = {}
+
     def __init__(self, *args):
         requires_backends(self, "protobuf")
 
         super().__init__(*args)
 
-        from .utils import sentencepiece_model_pb2 as model_pb2
+        # from .utils import sentencepiece_model_pb2 as model_pb2
+        model_pb2 = import_protobuf()
 
         m = model_pb2.ModelProto()
         with open(self.original_tokenizer.vocab_file, "rb") as f:
             m.ParseFromString(f.read())
         self.proto = m
 
-        if self.proto.trainer_spec.byte_fallback:
+        if self.proto.trainer_spec.byte_fallback and not self.handle_byte_fallback:
             warnings.warn(
                 "The sentencepiece tokenizer that you are converting to a fast tokenizer uses the byte fallback option"
                 " which is not implemented in the fast tokenizers. In practice this means that the fast version of the"
@@ -458,54 +573,94 @@ class SpmConverter(Converter):
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
-        vocab = self.vocab(proto)
-        unk_id = self.unk_id(proto)
+        vocab_scores = self.vocab(proto)
 
         if model_type == 1:
-            tokenizer = Tokenizer(Unigram(vocab, unk_id))
+            tokenizer = Tokenizer(
+                Unigram(
+                    vocab_scores,
+                    unk_id=self.unk_id(proto),
+                    byte_fallback=self.handle_byte_fallback,
+                )
+            )
+
         elif model_type == 2:
-            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
-            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab)}
+            _, merges = self.SpmExtractor(self.original_tokenizer.vocab_file).extract(vocab_scores)
+            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
             tokenizer = Tokenizer(
                 BPE(
                     bpe_vocab,
                     merges,
                     unk_token=proto.trainer_spec.unk_piece,
                     fuse_unk=True,
+                    byte_fallback=self.handle_byte_fallback,
+                    dropout=None,
                 )
             )
+
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
 
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
+
         return tokenizer
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        _normalizers = [
+            normalizers.Strip(left=False, right=True),  # stripping is important
+            normalizers.Replace(Regex(" {2,}"), "▁"),
+        ]
         if not precompiled_charsmap:
-            return normalizers.Sequence([normalizers.Replace(Regex(" {2,}"), " ")])
+            return normalizers.Sequence(_normalizers)
         else:
-            return normalizers.Sequence(
-                [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
-            )
+            return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def post_processor(self):
         return None
+
+    def decoder(self, replacement, add_prefix_space):
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        return decoders.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme)
 
     def converted(self) -> Tokenizer:
         tokenizer = self.tokenizer(self.proto)
 
         # Tokenizer assemble
-        tokenizer.normalizer = self.normalizer(self.proto)
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
 
         replacement = "▁"
         add_prefix_space = True
-        tokenizer.pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
-        tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
         post_processor = self.post_processor()
         if post_processor:
             tokenizer.post_processor = post_processor
@@ -532,7 +687,10 @@ class AlbertConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
 
@@ -597,7 +755,8 @@ class DebertaV2Converter(SpmConverter):
         list_pretokenizers = []
         if self.original_tokenizer.split_by_punct:
             list_pretokenizers.append(pre_tokenizers.Punctuation(behavior="isolated"))
-        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space))
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+        list_pretokenizers.append(pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme))
         return pre_tokenizers.Sequence(list_pretokenizers)
 
     def normalizer(self, proto):
@@ -686,9 +845,7 @@ class MBart50Converter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        # fmt: off
-        vocab += [("ar_AR", 0.0), ("cs_CZ", 0.0), ("de_DE", 0.0), ("en_XX", 0.0), ("es_XX", 0.0), ("et_EE", 0.0), ("fi_FI", 0.0), ("fr_XX", 0.0), ("gu_IN", 0.0), ("hi_IN", 0.0), ("it_IT", 0.0), ("ja_XX", 0.0), ("kk_KZ", 0.0), ("ko_KR", 0.0), ("lt_LT", 0.0), ("lv_LV", 0.0), ("my_MM", 0.0), ("ne_NP", 0.0), ("nl_XX", 0.0), ("ro_RO", 0.0), ("ru_RU", 0.0), ("si_LK", 0.0), ("tr_TR", 0.0), ("vi_VN", 0.0), ("zh_CN", 0.0), ("af_ZA", 0.0), ("az_AZ", 0.0), ("bn_IN", 0.0), ("fa_IR", 0.0), ("he_IL", 0.0), ("hr_HR", 0.0), ("id_ID", 0.0), ("ka_GE", 0.0), ("km_KH", 0.0), ("mk_MK", 0.0), ("ml_IN", 0.0), ("mn_MN", 0.0), ("mr_IN", 0.0), ("pl_PL", 0.0), ("ps_AF", 0.0), ("pt_XX", 0.0), ("sv_SE", 0.0), ("sw_KE", 0.0), ("ta_IN", 0.0), ("te_IN", 0.0), ("th_TH", 0.0), ("tl_XX", 0.0), ("uk_UA", 0.0), ("ur_PK", 0.0), ("xh_ZA", 0.0), ("gl_ES", 0.0), ("sl_SI", 0.0)]
-        # fmt: on
+        vocab += [("ar_AR", 0.0), ("cs_CZ", 0.0), ("de_DE", 0.0), ("en_XX", 0.0), ("es_XX", 0.0), ("et_EE", 0.0), ("fi_FI", 0.0), ("fr_XX", 0.0), ("gu_IN", 0.0), ("hi_IN", 0.0), ("it_IT", 0.0), ("ja_XX", 0.0), ("kk_KZ", 0.0), ("ko_KR", 0.0), ("lt_LT", 0.0), ("lv_LV", 0.0), ("my_MM", 0.0), ("ne_NP", 0.0), ("nl_XX", 0.0), ("ro_RO", 0.0), ("ru_RU", 0.0), ("si_LK", 0.0), ("tr_TR", 0.0), ("vi_VN", 0.0), ("zh_CN", 0.0), ("af_ZA", 0.0), ("az_AZ", 0.0), ("bn_IN", 0.0), ("fa_IR", 0.0), ("he_IL", 0.0), ("hr_HR", 0.0), ("id_ID", 0.0), ("ka_GE", 0.0), ("km_KH", 0.0), ("mk_MK", 0.0), ("ml_IN", 0.0), ("mn_MN", 0.0), ("mr_IN", 0.0), ("pl_PL", 0.0), ("ps_AF", 0.0), ("pt_XX", 0.0), ("sv_SE", 0.0), ("sw_KE", 0.0), ("ta_IN", 0.0), ("te_IN", 0.0), ("th_TH", 0.0), ("tl_XX", 0.0), ("uk_UA", 0.0), ("ur_PK", 0.0), ("xh_ZA", 0.0), ("gl_ES", 0.0), ("sl_SI", 0.0)]  # fmt: skip
         vocab += [("<mask>", 0.0)]
         return vocab
 
@@ -715,12 +872,6 @@ class NllbConverter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        vocab += [
-            # fmt: off
-            ('ace_Arab', 0.0), ('ace_Latn', 0.0), ('acm_Arab', 0.0), ('acq_Arab', 0.0), ('aeb_Arab', 0.0), ('afr_Latn', 0.0), ('ajp_Arab', 0.0), ('aka_Latn', 0.0), ('amh_Ethi', 0.0), ('apc_Arab', 0.0), ('arb_Arab', 0.0), ('ars_Arab', 0.0), ('ary_Arab', 0.0), ('arz_Arab', 0.0), ('asm_Beng', 0.0), ('ast_Latn', 0.0), ('awa_Deva', 0.0), ('ayr_Latn', 0.0), ('azb_Arab', 0.0), ('azj_Latn', 0.0), ('bak_Cyrl', 0.0), ('bam_Latn', 0.0), ('ban_Latn', 0.0), ('bel_Cyrl', 0.0), ('bem_Latn', 0.0), ('ben_Beng', 0.0), ('bho_Deva', 0.0), ('bjn_Arab', 0.0), ('bjn_Latn', 0.0), ('bod_Tibt', 0.0), ('bos_Latn', 0.0), ('bug_Latn', 0.0), ('bul_Cyrl', 0.0), ('cat_Latn', 0.0), ('ceb_Latn', 0.0), ('ces_Latn', 0.0), ('cjk_Latn', 0.0), ('ckb_Arab', 0.0), ('crh_Latn', 0.0), ('cym_Latn', 0.0), ('dan_Latn', 0.0), ('deu_Latn', 0.0), ('dik_Latn', 0.0), ('dyu_Latn', 0.0), ('dzo_Tibt', 0.0), ('ell_Grek', 0.0), ('eng_Latn', 0.0), ('epo_Latn', 0.0), ('est_Latn', 0.0), ('eus_Latn', 0.0), ('ewe_Latn', 0.0), ('fao_Latn', 0.0), ('pes_Arab', 0.0), ('fij_Latn', 0.0), ('fin_Latn', 0.0), ('fon_Latn', 0.0), ('fra_Latn', 0.0), ('fur_Latn', 0.0), ('fuv_Latn', 0.0), ('gla_Latn', 0.0), ('gle_Latn', 0.0), ('glg_Latn', 0.0), ('grn_Latn', 0.0), ('guj_Gujr', 0.0), ('hat_Latn', 0.0), ('hau_Latn', 0.0), ('heb_Hebr', 0.0), ('hin_Deva', 0.0), ('hne_Deva', 0.0), ('hrv_Latn', 0.0), ('hun_Latn', 0.0), ('hye_Armn', 0.0), ('ibo_Latn', 0.0), ('ilo_Latn', 0.0), ('ind_Latn', 0.0), ('isl_Latn', 0.0), ('ita_Latn', 0.0), ('jav_Latn', 0.0), ('jpn_Jpan', 0.0), ('kab_Latn', 0.0), ('kac_Latn', 0.0), ('kam_Latn', 0.0), ('kan_Knda', 0.0), ('kas_Arab', 0.0), ('kas_Deva', 0.0), ('kat_Geor', 0.0), ('knc_Arab', 0.0), ('knc_Latn', 0.0), ('kaz_Cyrl', 0.0), ('kbp_Latn', 0.0), ('kea_Latn', 0.0), ('khm_Khmr', 0.0), ('kik_Latn', 0.0), ('kin_Latn', 0.0), ('kir_Cyrl', 0.0), ('kmb_Latn', 0.0), ('kon_Latn', 0.0), ('kor_Hang', 0.0), ('kmr_Latn', 0.0), ('lao_Laoo', 0.0), ('lvs_Latn', 0.0), ('lij_Latn', 0.0), ('lim_Latn', 0.0), ('lin_Latn', 0.0), ('lit_Latn', 0.0), ('lmo_Latn', 0.0), ('ltg_Latn', 0.0), ('ltz_Latn', 0.0), ('lua_Latn', 0.0), ('lug_Latn', 0.0), ('luo_Latn', 0.0), ('lus_Latn', 0.0), ('mag_Deva', 0.0), ('mai_Deva', 0.0), ('mal_Mlym', 0.0), ('mar_Deva', 0.0), ('min_Latn', 0.0), ('mkd_Cyrl', 0.0), ('plt_Latn', 0.0), ('mlt_Latn', 0.0), ('mni_Beng', 0.0), ('khk_Cyrl', 0.0), ('mos_Latn', 0.0), ('mri_Latn', 0.0), ('zsm_Latn', 0.0), ('mya_Mymr', 0.0), ('nld_Latn', 0.0), ('nno_Latn', 0.0), ('nob_Latn', 0.0), ('npi_Deva', 0.0), ('nso_Latn', 0.0), ('nus_Latn', 0.0), ('nya_Latn', 0.0), ('oci_Latn', 0.0), ('gaz_Latn', 0.0), ('ory_Orya', 0.0), ('pag_Latn', 0.0), ('pan_Guru', 0.0), ('pap_Latn', 0.0), ('pol_Latn', 0.0), ('por_Latn', 0.0), ('prs_Arab', 0.0), ('pbt_Arab', 0.0), ('quy_Latn', 0.0), ('ron_Latn', 0.0), ('run_Latn', 0.0), ('rus_Cyrl', 0.0), ('sag_Latn', 0.0), ('san_Deva', 0.0), ('sat_Beng', 0.0), ('scn_Latn', 0.0), ('shn_Mymr', 0.0), ('sin_Sinh', 0.0), ('slk_Latn', 0.0), ('slv_Latn', 0.0), ('smo_Latn', 0.0), ('sna_Latn', 0.0), ('snd_Arab', 0.0), ('som_Latn', 0.0), ('sot_Latn', 0.0), ('spa_Latn', 0.0), ('als_Latn', 0.0), ('srd_Latn', 0.0), ('srp_Cyrl', 0.0), ('ssw_Latn', 0.0), ('sun_Latn', 0.0), ('swe_Latn', 0.0), ('swh_Latn', 0.0), ('szl_Latn', 0.0), ('tam_Taml', 0.0), ('tat_Cyrl', 0.0), ('tel_Telu', 0.0), ('tgk_Cyrl', 0.0), ('tgl_Latn', 0.0), ('tha_Thai', 0.0), ('tir_Ethi', 0.0), ('taq_Latn', 0.0), ('taq_Tfng', 0.0), ('tpi_Latn', 0.0), ('tsn_Latn', 0.0), ('tso_Latn', 0.0), ('tuk_Latn', 0.0), ('tum_Latn', 0.0), ('tur_Latn', 0.0), ('twi_Latn', 0.0), ('tzm_Tfng', 0.0), ('uig_Arab', 0.0), ('ukr_Cyrl', 0.0), ('umb_Latn', 0.0), ('urd_Arab', 0.0), ('uzn_Latn', 0.0), ('vec_Latn', 0.0), ('vie_Latn', 0.0), ('war_Latn', 0.0), ('wol_Latn', 0.0), ('xho_Latn', 0.0), ('ydd_Hebr', 0.0), ('yor_Latn', 0.0), ('yue_Hant', 0.0), ('zho_Hans', 0.0), ('zho_Hant', 0.0), ('zul_Latn', 0.0)
-            # fmt: on
-        ]
-        vocab += [("<mask>", 0.0)]
         return vocab
 
     def unk_id(self, proto):
@@ -732,6 +883,31 @@ class NllbConverter(SpmConverter):
             pair="eng_Latn $A $B </s>",
             special_tokens=[
                 ("eng_Latn", self.original_tokenizer.convert_tokens_to_ids("eng_Latn")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
+class SeamlessM4TConverter(SpmConverter):
+    def vocab(self, proto):
+        vocab = [
+            ("<pad>", 0.0),
+            ("<unk>", 0.0),
+            ("<s>", 0.0),
+            ("</s>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        return self.original_tokenizer.unk_token_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="__eng__ $A </s>",
+            pair="__eng__ $A $B </s>",
+            special_tokens=[
+                ("__eng__", self.original_tokenizer.convert_tokens_to_ids("__eng__")),
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
@@ -783,7 +959,10 @@ class XLNetConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
         list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
         return normalizers.Sequence(list_normalizers)
 
@@ -817,7 +996,10 @@ class RemBertConverter(SpmConverter):
             list_normalizers.append(normalizers.Lowercase())
 
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
+        if precompiled_charsmap:
+            list_normalizers.append(normalizers.Precompiled(precompiled_charsmap))
+
         return normalizers.Sequence(list_normalizers)
 
     def post_processor(self):
@@ -859,10 +1041,11 @@ class PegasusConverter(SpmConverter):
         return proto.trainer_spec.unk_id + self.original_tokenizer.offset
 
     def pre_tokenizer(self, replacement, add_prefix_space):
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
         return pre_tokenizers.Sequence(
             [
                 pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
+                pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme),
             ]
         )
 
@@ -889,6 +1072,53 @@ class T5Converter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
+
+
+class UdopConverter(SpmConverter):
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
+class WhisperConverter(Converter):
+    def converted(self) -> Tokenizer:
+        vocab = self.original_tokenizer.encoder
+        merges = list(self.original_tokenizer.bpe_ranks.keys())
+
+        tokenizer = Tokenizer(
+            BPE(
+                vocab=vocab,
+                merges=merges,
+                dropout=None,
+                continuing_subword_prefix="",
+                end_of_word_suffix="",
+                fuse_unk=False,
+            )
+        )
+
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        tokenizer.decoder = decoders.ByteLevel()
+
+        prefix_token_ids = self.original_tokenizer.prefix_tokens
+        prefixes = self.original_tokenizer.convert_ids_to_tokens(prefix_token_ids)
+        eos = self.original_tokenizer.eos_token
+        eos_token_id = self.original_tokenizer.eos_token_id
+        prefix_template = " ".join([f"{token}:0" for token in prefixes])
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{prefix_template} $A:0 {eos}:0",
+            pair=f"{prefix_template} $A:0 $B:1 {eos}:1",
+            special_tokens=[
+                (eos, eos_token_id),
+                *zip(prefixes, prefix_token_ids),
+            ],
+        )
+
+        return tokenizer
 
 
 class BigBirdConverter(SpmConverter):
@@ -1023,9 +1253,7 @@ class XGLMConverter(SpmConverter):
             ("<unk>", 0.0),
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        # fmt: off
-        vocab += [("<madeupword0>", 0.0), ("<madeupword1>", 0.0), ("<madeupword2>", 0.0), ("<madeupword3>", 0.0), ("<madeupword4>", 0.0), ("<madeupword5>", 0.0), ("<madeupword6>", 0.0)]
-        # fmt: on
+        vocab += [("<madeupword0>", 0.0), ("<madeupword1>", 0.0), ("<madeupword2>", 0.0), ("<madeupword3>", 0.0), ("<madeupword4>", 0.0), ("<madeupword5>", 0.0), ("<madeupword6>", 0.0)]  # fmt: skip
         return vocab
 
     def unk_id(self, proto):
@@ -1041,6 +1269,102 @@ class XGLMConverter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
+
+
+class GemmaConverter(SpmConverter):
+    handle_byte_fallback = True
+    SpmExtractor = GemmaSentencePieceExtractor
+    # start and end of turn tokens must be marked as special
+    special_tokens = {"<start_of_turn>", "<end_of_turn>"}
+
+    """"
+    split_by_unicode_script: true
+    split_by_number: true
+    split_by_whitespace: true
+    treat_whitespace_as_suffix: false
+    allow_whitespace_only_pieces: true
+    split_digits: true
+    byte_fallback: true
+    """
+
+    def normalizer(self, proto):
+        return normalizers.Replace(" ", "▁")
+
+    def vocab(self, proto):
+        vocab = [
+            (self.original_tokenizer.pad_token, 0.0),
+            (self.original_tokenizer.eos_token, 0.0),
+            (self.original_tokenizer.bos_token, 0.0),
+        ]
+        for piece in proto.pieces[3:]:
+            if piece.piece == "<0x09>":
+                vocab += [("\t", piece.score)]
+            else:
+                vocab += [(piece.piece, piece.score)]
+        # vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Split(" ", "merged_with_previous")
+
+    def unk_id(self, proto):
+        unk_id = 3
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Sequence(
+            [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+            ]
+        )
+
+
+class LlamaConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def vocab(self, proto):
+        vocab = [
+            (self.original_tokenizer.convert_ids_to_tokens(0), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(1), 0.0),
+            (self.original_tokenizer.convert_ids_to_tokens(2), 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def normalizer(self, proto):
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        if not getattr(self.original_tokenizer, "legacy", True):  # non-legacy, we need a replace
+            prepend_scheme = _get_prepend_scheme(add_prefix_space, self.original_tokenizer)
+            return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+        return None
+
+    def post_processor(self):
+        # the processor is defined in the LlamaTokenizerFast class.
+        return None
 
 
 class MarkupLMConverter(Converter):
@@ -1077,6 +1401,235 @@ class MarkupLMConverter(Converter):
                 (sep, sep_token_id),
             ],
         )
+
+        return tokenizer
+
+
+class MoshiConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file, model_max_length=None, **kwargs):
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        # from .utils import sentencepiece_model_pb2 as model_pb2
+        model_pb2 = import_protobuf()
+
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def normalizer(self, proto):
+        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        _normalizers = [
+            normalizers.Replace(" ", "▁"),
+        ]
+        if not precompiled_charsmap:
+            return normalizers.Sequence(_normalizers)
+        else:
+            return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        prepend_scheme = "first"
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+
+
+class HeliumConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file=None, *args):
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        model_pb2 = import_protobuf()
+
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(proto)
+        tokenizer = Tokenizer(
+            Unigram(
+                vocab_scores,
+                unk_id=self.unk_id(proto),
+                byte_fallback=self.handle_byte_fallback,
+            )
+        )
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special, single_word=True)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
+        tokenizer.add_tokens([AddedToken("\n", normalized=False, special=False)])
+        tokenizer.enable_padding(pad_token="<pad>", pad_id=3)
+        return tokenizer
+
+    def vocab(self, proto):
+        vocab = []
+        for piece in proto.pieces:
+            if piece.piece == "<0x0A>":
+                vocab += [("\n", piece.score)]
+            else:
+                vocab += [(piece.piece, piece.score)]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def normalizer(self, proto):
+        return normalizers.Sequence([normalizers.Prepend(" "), normalizers.Replace(r" ", "▁")])
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Sequence([pre_tokenizers.Split("\n", "contiguous")])
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=[
+                "<s>",
+                "$A",
+            ],
+            pair=[
+                "<s>",
+                "$A",
+                "<s>",
+                "$B",
+            ],
+            special_tokens=[
+                ("<s>", 1),
+            ],
+        )
+
+
+# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
+def bytes_to_unicode():
+    """
+    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
+    characters the bpe code barfs on.
+
+    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
+    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
+    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    tables between utf-8 bytes and unicode strings.
+    """
+    bs = (
+        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+    )
+    cs = bs[:]
+    n = 0
+    for b in range(2**8):
+        if b not in bs:
+            bs.append(b)
+            cs.append(2**8 + n)
+            n += 1
+    cs = [chr(n) for n in cs]
+    return dict(zip(bs, cs))
+
+
+class TikTokenConverter:
+    """
+    A general tiktoken converter.
+    """
+
+    def __init__(
+        self,
+        vocab_file=None,
+        pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
+        add_prefix_space=False,
+        additional_special_tokens=None,
+        *args,
+        **kwargs,
+    ):
+        super().__init__(*args)
+        self.vocab_file = vocab_file
+        self.pattern = pattern
+        self.add_prefix_space = add_prefix_space
+        self.additional_special_tokens = additional_special_tokens
+
+    def extract_vocab_merges_from_model(self, tiktoken_url: str):
+        try:
+            from tiktoken.load import load_tiktoken_bpe
+        except Exception:
+            raise ValueError(
+                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
+            )
+
+        bpe_ranks = load_tiktoken_bpe(tiktoken_url)
+        byte_encoder = bytes_to_unicode()
+
+        def token_bytes_to_string(b):
+            return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
+
+        merges = []
+        vocab = {}
+        for token, rank in bpe_ranks.items():
+            vocab[token_bytes_to_string(token)] = rank
+            if len(token) == 1:
+                continue
+            local = []
+            for index in range(1, len(token)):
+                piece_l, piece_r = token[:index], token[index:]
+                if piece_l in bpe_ranks and piece_r in bpe_ranks and (piece_l + piece_r) in bpe_ranks:
+                    local.append((piece_l, piece_r, rank))
+            local = sorted(local, key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]), reverse=False)
+            merges.extend(local)
+        merges = sorted(merges, key=lambda val: val[2], reverse=False)
+        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
+        return vocab, merges
+
+    def tokenizer(self):
+        vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab_file)
+        tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
+        if hasattr(tokenizer.model, "ignore_merges"):
+            tokenizer.model.ignore_merges = True
+        return tokenizer
+
+    def converted(self) -> Tokenizer:
+        tokenizer = self.tokenizer()
+        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
+                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
+            ]
+        )
+        tokenizer.decoder = decoders.ByteLevel()
+        tokenizer.add_special_tokens(self.additional_special_tokens)
+
+        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
         return tokenizer
 
@@ -1119,22 +1672,30 @@ SLOW_TO_FAST_CONVERTERS = {
     "NllbTokenizer": NllbConverter,
     "OpenAIGPTTokenizer": OpenAIGPTConverter,
     "PegasusTokenizer": PegasusConverter,
+    "Qwen2Tokenizer": Qwen2Converter,
     "RealmTokenizer": BertConverter,
     "ReformerTokenizer": ReformerConverter,
     "RemBertTokenizer": RemBertConverter,
     "RetriBertTokenizer": BertConverter,
     "RobertaTokenizer": RobertaConverter,
     "RoFormerTokenizer": RoFormerConverter,
+    "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "UdopTokenizer": UdopConverter,
+    "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
     "SplinterTokenizer": SplinterConverter,
     "XGLMTokenizer": XGLMConverter,
+    "LlamaTokenizer": LlamaConverter,
+    "CodeLlamaTokenizer": LlamaConverter,
+    "GemmaTokenizer": GemmaConverter,
+    "Phi3Tokenizer": LlamaConverter,
 }
 
 
-def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
+def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokenizer:
     """
     Utilities to convert a slow tokenizer instance in a fast tokenizer instance.
 
@@ -1142,6 +1703,8 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
         transformer_tokenizer ([`~tokenization_utils_base.PreTrainedTokenizer`]):
             Instance of a slow tokenizer to convert in the backend tokenizer for
             [`~tokenization_utils_base.PreTrainedTokenizerFast`].
+       from_tiktoken (bool, optional): Whether to use the `tiktoken` library to convert the tokenizer instead of sentencepiece.
+            Defaults to False.
 
     Return:
         A instance of [`~tokenizers.Tokenizer`] to be used as the backend tokenizer of a
@@ -1149,14 +1712,20 @@ def convert_slow_tokenizer(transformer_tokenizer) -> Tokenizer:
     """
 
     tokenizer_class_name = transformer_tokenizer.__class__.__name__
+    if tokenizer_class_name in SLOW_TO_FAST_CONVERTERS and not from_tiktoken:
+        converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
+        return converter_class(transformer_tokenizer).converted()
 
-    if tokenizer_class_name not in SLOW_TO_FAST_CONVERTERS:
-        raise ValueError(
-            f"An instance of tokenizer class {tokenizer_class_name} cannot be converted in a Fast tokenizer instance."
-            " No converter was found. Currently available slow->fast convertors:"
-            f" {list(SLOW_TO_FAST_CONVERTERS.keys())}"
-        )
-
-    converter_class = SLOW_TO_FAST_CONVERTERS[tokenizer_class_name]
-
-    return converter_class(transformer_tokenizer).converted()
+    else:
+        try:
+            logger.info("Converting from Tiktoken")
+            return TikTokenConverter(
+                vocab_file=transformer_tokenizer.vocab_file,
+                additional_special_tokens=transformer_tokenizer.additional_special_tokens,
+            ).converted()
+        except Exception:
+            raise ValueError(
+                f"Converting from Tiktoken failed, if a converter for SentencePiece is available, provide a model path "
+                f"with a SentencePiece tokenizer.model file."
+                f"Currently available slow->fast convertors: {list(SLOW_TO_FAST_CONVERTERS.keys())}"
+            )

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LED model configuration"""
+"""LED model configuration"""
 
 from typing import List, Union
 
@@ -21,11 +21,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-LED_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/config.json",
-    # See all LED models at https://huggingface.co/models?filter=led
-}
 
 
 class LEDConfig(PretrainedConfig):
@@ -97,6 +92,7 @@ class LEDConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "led"
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
@@ -132,7 +128,7 @@ class LEDConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         attention_window: Union[List[int], int] = 512,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_encoder_position_embeddings = max_encoder_position_embeddings
@@ -164,3 +160,6 @@ class LEDConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+
+__all__ = ["LEDConfig"]

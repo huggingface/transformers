@@ -12,20 +12,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch MBART model. """
-
+"""Testing suite for the PyTorch MBART model."""
 
 import copy
 import tempfile
 import unittest
 
 from transformers import MBartConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -113,12 +120,6 @@ class MBartModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -148,8 +149,6 @@ class MBartModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -224,17 +223,48 @@ class MBartModelTester:
 
 
 @require_torch
-class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MBartModel, MBartForConditionalGeneration, MBartForSequenceClassification, MBartForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MBartModel,
+            "fill-mask": MBartForConditionalGeneration,
+            "question-answering": MBartForQuestionAnswering,
+            "summarization": MBartForConditionalGeneration,
+            "text-classification": MBartForSequenceClassification,
+            "text-generation": MBartForCausalLM,
+            "text2text-generation": MBartForConditionalGeneration,
+            "translation": MBartForConditionalGeneration,
+            "zero-shot": MBartForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
-    fx_compatible = True
+    fx_compatible = False  # Fix me Michael
     test_pruning = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = MBartModelTester(self)
@@ -291,15 +321,70 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = MBartForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_ensure_weights_are_shared(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        config.tie_word_embeddings = True
+        model = MBartForConditionalGeneration(config)
+
+        # MBart shares four weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.embed_tokens.weight.data_ptr(),
+                    model.base_model.encoder.embed_tokens.weight.data_ptr(),
+                }
+            ),
+            1,
+        )
+
+        config.tie_word_embeddings = False
+        model = MBartForConditionalGeneration(config)
+
+        # MBart shares four weights.
+        # Not an issue to not have these correctly tied for torch.load, but it is an issue for safetensors.
+        self.assertEqual(
+            len(
+                {
+                    model.get_output_embeddings().weight.data_ptr(),
+                    model.get_input_embeddings().weight.data_ptr(),
+                    model.base_model.decoder.embed_tokens.weight.data_ptr(),
+                    model.base_model.encoder.embed_tokens.weight.data_ptr(),
+                }
+            ),
+            2,
+        )
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    def test_resize_embeddings_persists_embeddings_type(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        config.scale_embedding = True
+        model = MBartForConditionalGeneration(config)
+        old_type = type(model.model.decoder.embed_tokens)
+
+        model.resize_token_embeddings(new_num_tokens=config.vocab_size)
+
+        new_type = type(model.model.decoder.embed_tokens)
+        self.assertIs(old_type, new_type)
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -428,7 +513,7 @@ class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
     ]
     tgt_text = ["Şeful ONU declară că nu există o soluţie militară în Siria", "to be padded"]
 
-    @unittest.skip("This test is broken, still generates english")
+    @unittest.skip(reason="This test is broken, still generates english")
     def test_cc25_generate(self):
         inputs = self.tokenizer([self.src_text[0]], return_tensors="pt").to(torch_device)
         translated_tokens = self.model.generate(
@@ -465,7 +550,7 @@ class MBartStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,
@@ -663,6 +748,6 @@ class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, u
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return

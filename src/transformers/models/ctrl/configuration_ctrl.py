@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Salesforce CTRL configuration"""
+"""Salesforce CTRL configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,15 +20,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://huggingface.co/ctrl/resolve/main/config.json"}
-
 
 class CTRLConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`CTRLModel`] or a [`TFCTRLModel`]. It is used to
     instantiate a CTRL model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
-    [ctrl](https://huggingface.co/ctrl) architecture from SalesForce.
+    [Salesforce/ctrl](https://huggingface.co/Salesforce/ctrl) architecture from SalesForce.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -52,9 +50,7 @@ class CTRLConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (`int`, *optional*, defaults to 0.1):
             The dropout ratio for the embeddings.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-6):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-06):
             The epsilon to use in the layer normalization layers
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -96,16 +92,10 @@ class CTRLConfig(PretrainedConfig):
         n_head=16,
         resid_pdrop=0.1,
         embd_pdrop=0.1,
-        attn_pdrop=0.1,
         layer_norm_epsilon=1e-6,
         initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.n_positions = n_positions
@@ -115,15 +105,12 @@ class CTRLConfig(PretrainedConfig):
         self.dff = dff
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
 
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
         self.use_cache = use_cache
 
         super().__init__(**kwargs)
+
+
+__all__ = ["CTRLConfig"]

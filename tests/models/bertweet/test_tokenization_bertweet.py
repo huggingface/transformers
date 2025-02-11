@@ -22,7 +22,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "vinai/bertweet-base"
     tokenizer_class = BertweetTokenizer
     test_rust_tokenizer = False
 

@@ -16,6 +16,8 @@ import shutil
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import WhisperTokenizer, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
@@ -24,6 +26,10 @@ from .test_feature_extraction_whisper import floats_list
 
 if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
+
+
+TRANSCRIBE = 50358
+NOTIMESTAMPS = 50362
 
 
 @require_torch
@@ -116,3 +122,58 @@ class WhisperProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            feature_extractor.model_input_names,
+            msg="`processor` and `feature_extractor` model input names do not match",
+        )
+
+    def test_get_decoder_prompt_ids(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+
+        processor = WhisperProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        forced_decoder_ids = processor.get_decoder_prompt_ids(task="transcribe", no_timestamps=True)
+
+        self.assertIsInstance(forced_decoder_ids, list)
+        for ids in forced_decoder_ids:
+            self.assertIsInstance(ids, (list, tuple))
+
+        expected_ids = [TRANSCRIBE, NOTIMESTAMPS]
+        self.assertListEqual([ids[-1] for ids in forced_decoder_ids], expected_ids)
+
+    def test_get_prompt_ids(self):
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        prompt_ids = processor.get_prompt_ids("Mr. Quilter")
+        decoded_prompt = processor.tokenizer.decode(prompt_ids)
+
+        self.assertListEqual(prompt_ids.tolist(), [50360, 1770, 13, 2264, 346, 353])
+        self.assertEqual(decoded_prompt, "<|startofprev|> Mr. Quilter")
+
+    def test_empty_get_prompt_ids(self):
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        prompt_ids = processor.get_prompt_ids("")
+        decoded_prompt = processor.tokenizer.decode(prompt_ids)
+
+        self.assertListEqual(prompt_ids.tolist(), [50360, 220])
+        self.assertEqual(decoded_prompt, "<|startofprev|> ")
+
+    def test_get_prompt_ids_with_special_tokens(self):
+        processor = WhisperProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+
+        def _test_prompt_error_raised_helper(prompt, special_token):
+            with pytest.raises(ValueError) as excinfo:
+                processor.get_prompt_ids(prompt)
+            expected = f"Encountered text in the prompt corresponding to disallowed special token: {special_token}."
+            self.assertEqual(expected, str(excinfo.value))
+
+        _test_prompt_error_raised_helper("<|startofprev|> test", "<|startofprev|>")
+        _test_prompt_error_raised_helper("test <|notimestamps|>", "<|notimestamps|>")
+        _test_prompt_error_raised_helper("test <|zh|> test <|transcribe|>", "<|zh|>")

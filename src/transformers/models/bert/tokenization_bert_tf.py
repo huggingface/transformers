@@ -2,14 +2,14 @@ import os
 from typing import List, Union
 
 import tensorflow as tf
-
 from tensorflow_text import BertTokenizer as BertTokenizerLayer
 from tensorflow_text import FastBertTokenizer, ShrinkLongestTrimmer, case_fold_utf8, combine_segments, pad_model_inputs
 
+from ...modeling_tf_utils import keras
 from .tokenization_bert import BertTokenizer
 
 
-class TFBertTokenizer(tf.keras.layers.Layer):
+class TFBertTokenizer(keras.layers.Layer):
     """
     This is an in-graph tokenizer for BERT. It should be initialized similarly to other tokenizers, using the
     `from_pretrained()` method. It can also be initialized with the `from_tokenizer()` method, which imports settings
@@ -49,7 +49,9 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         return_attention_mask (`bool`, *optional*, defaults to `True`):
             Whether to return the attention_mask.
         use_fast_bert_tokenizer (`bool`, *optional*, defaults to `True`):
-            If set to false will use standard TF Text BertTokenizer, making it servable by TF Serving.
+            If True, will use the FastBertTokenizer class from Tensorflow Text. If False, will use the BertTokenizer
+            class instead. BertTokenizer supports some additional options, but is slower and cannot be exported to
+            TFLite.
     """
 
     def __init__(
@@ -66,11 +68,12 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         return_token_type_ids: bool = True,
         return_attention_mask: bool = True,
         use_fast_bert_tokenizer: bool = True,
+        **tokenizer_kwargs,
     ):
         super().__init__()
         if use_fast_bert_tokenizer:
             self.tf_tokenizer = FastBertTokenizer(
-                vocab_list, token_out_type=tf.int64, lower_case_nfd_strip_accents=do_lower_case
+                vocab_list, token_out_type=tf.int64, lower_case_nfd_strip_accents=do_lower_case, **tokenizer_kwargs
             )
         else:
             lookup_table = tf.lookup.StaticVocabularyTable(
@@ -82,13 +85,15 @@ class TFBertTokenizer(tf.keras.layers.Layer):
                 ),
                 num_oov_buckets=1,
             )
-            self.tf_tokenizer = BertTokenizerLayer(lookup_table, token_out_type=tf.int64, lower_case=do_lower_case)
+            self.tf_tokenizer = BertTokenizerLayer(
+                lookup_table, token_out_type=tf.int64, lower_case=do_lower_case, **tokenizer_kwargs
+            )
 
         self.vocab_list = vocab_list
         self.do_lower_case = do_lower_case
-        self.cls_token_id = cls_token_id or vocab_list.index("[CLS]")
-        self.sep_token_id = sep_token_id or vocab_list.index("[SEP]")
-        self.pad_token_id = pad_token_id or vocab_list.index("[PAD]")
+        self.cls_token_id = vocab_list.index("[CLS]") if cls_token_id is None else cls_token_id
+        self.sep_token_id = vocab_list.index("[SEP]") if sep_token_id is None else sep_token_id
+        self.pad_token_id = vocab_list.index("[PAD]") if pad_token_id is None else pad_token_id
         self.paired_trimmer = ShrinkLongestTrimmer(max_length - 3, axis=1)  # Allow room for special tokens
         self.max_length = max_length
         self.padding = padding
@@ -111,19 +116,28 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         ```python
         from transformers import AutoTokenizer, TFBertTokenizer
 
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
         tf_tokenizer = TFBertTokenizer.from_tokenizer(tokenizer)
         ```
         """
+        do_lower_case = kwargs.pop("do_lower_case", None)
+        do_lower_case = tokenizer.do_lower_case if do_lower_case is None else do_lower_case
+        cls_token_id = kwargs.pop("cls_token_id", None)
+        cls_token_id = tokenizer.cls_token_id if cls_token_id is None else cls_token_id
+        sep_token_id = kwargs.pop("sep_token_id", None)
+        sep_token_id = tokenizer.sep_token_id if sep_token_id is None else sep_token_id
+        pad_token_id = kwargs.pop("pad_token_id", None)
+        pad_token_id = tokenizer.pad_token_id if pad_token_id is None else pad_token_id
+
         vocab = tokenizer.get_vocab()
-        vocab = sorted([(wordpiece, idx) for wordpiece, idx in vocab.items()], key=lambda x: x[1])
+        vocab = sorted(vocab.items(), key=lambda x: x[1])
         vocab_list = [entry[0] for entry in vocab]
         return cls(
             vocab_list=vocab_list,
-            do_lower_case=tokenizer.do_lower_case,
-            cls_token_id=tokenizer.cls_token_id,
-            sep_token_id=tokenizer.sep_token_id,
-            pad_token_id=tokenizer.pad_token_id,
+            do_lower_case=do_lower_case,
+            cls_token_id=cls_token_id,
+            sep_token_id=sep_token_id,
+            pad_token_id=pad_token_id,
             **kwargs,
         )
 
@@ -141,7 +155,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         ```python
         from transformers import TFBertTokenizer
 
-        tf_tokenizer = TFBertTokenizer.from_pretrained("bert-base-uncased")
+        tf_tokenizer = TFBertTokenizer.from_pretrained("google-bert/bert-base-uncased")
         ```
         """
         try:
@@ -238,3 +252,6 @@ class TFBertTokenizer(tf.keras.layers.Layer):
             "sep_token_id": self.sep_token_id,
             "pad_token_id": self.pad_token_id,
         }
+
+
+__all__ = ["TFBertTokenizer"]

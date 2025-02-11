@@ -16,15 +16,15 @@
 
 URL: https://github.com/microsoft/CvT"""
 
-
 import argparse
 import json
 from collections import OrderedDict
+from pathlib import Path
 
 import torch
+from huggingface_hub import hf_hub_download
 
-from huggingface_hub import cached_download, hf_hub_url
-from transformers import AutoFeatureExtractor, CvtConfig, CvtForImageClassification
+from transformers import AutoImageProcessor, CvtConfig, CvtForImageClassification
 
 
 def embeddings(idx):
@@ -284,7 +284,7 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, img_labels_file, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, img_labels_file, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -307,8 +307,8 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
         config.embed_dim = [192, 768, 1024]
 
     model = CvtForImageClassification(config)
-    feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k")
-    feature_extractor.size = image_size
+    image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k")
+    image_processor.size["shortest_edge"] = image_size
     original_weights = torch.load(cvt_file_name, map_location=torch.device("cpu"))
 
     huggingface_weights = OrderedDict()
@@ -329,7 +329,7 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
 
     model.load_state_dict(huggingface_weights)
     model.save_pretrained(pytorch_dump_folder)
-    feature_extractor.save_pretrained(pytorch_dump_folder)
+    image_processor.save_pretrained(pytorch_dump_folder)
 
 
 # Download the weights from zoo: https://1drv.ms/u/s!AhIXJn_J-blW9RzF3rMW7SsLHa8h?e=blQ0Al
@@ -350,7 +350,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--cvt_file_name",
-        default="cvtmodels\CvT-w24-384x384-IN-22k.pth",
+        default=r"cvtmodels\CvT-w24-384x384-IN-22k.pth",
         type=str,
         help="Input Image Size",
     )

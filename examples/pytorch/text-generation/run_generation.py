@@ -14,23 +14,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)
-"""
-
+"""Conditional text generation with the auto-regressive models of the library (GPT/GPT-2/CTRL/Transformer-XL/XLNet)"""
 
 import argparse
+import inspect
 import logging
+from typing import Tuple
 
-import numpy as np
 import torch
+from accelerate import PartialState
+from accelerate.utils import set_seed
 
 from transformers import (
+    AutoTokenizer,
+    BloomForCausalLM,
+    BloomTokenizerFast,
     CTRLLMHeadModel,
     CTRLTokenizer,
+    GenerationMixin,
     GPT2LMHeadModel,
     GPT2Tokenizer,
+    GPTJForCausalLM,
+    LlamaForCausalLM,
+    LlamaTokenizer,
     OpenAIGPTLMHeadModel,
     OpenAIGPTTokenizer,
+    OPTForCausalLM,
     TransfoXLLMHeadModel,
     TransfoXLTokenizer,
     XLMTokenizer,
@@ -38,6 +47,7 @@ from transformers import (
     XLNetLMHeadModel,
     XLNetTokenizer,
 )
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 
 logging.basicConfig(
@@ -56,6 +66,10 @@ MODEL_CLASSES = {
     "xlnet": (XLNetLMHeadModel, XLNetTokenizer),
     "transfo-xl": (TransfoXLLMHeadModel, TransfoXLTokenizer),
     "xlm": (XLMWithLMHeadModel, XLMTokenizer),
+    "gptj": (GPTJForCausalLM, AutoTokenizer),
+    "bloom": (BloomForCausalLM, BloomTokenizerFast),
+    "llama": (LlamaForCausalLM, LlamaTokenizer),
+    "opt": (OPTForCausalLM, GPT2Tokenizer),
 }
 
 # Padding text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -71,13 +85,6 @@ father initially slaps him for making such an accusation, Rasputin watches as th
 man is chased outside and beaten. Twenty years later, Rasputin sees a vision of
 the Virgin Mary, prompting him to become a priest. Rasputin quickly becomes famous,
 with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
-
-
-def set_seed(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
 
 
 #
@@ -151,6 +158,129 @@ def adjust_length_to_model(length, max_sequence_length):
     return length
 
 
+def sparse_model_config(model_config):
+    embedding_size = None
+    if hasattr(model_config, "hidden_size"):
+        embedding_size = model_config.hidden_size
+    elif hasattr(model_config, "n_embed"):
+        embedding_size = model_config.n_embed
+    elif hasattr(model_config, "n_embd"):
+        embedding_size = model_config.n_embd
+
+    num_head = None
+    if hasattr(model_config, "num_attention_heads"):
+        num_head = model_config.num_attention_heads
+    elif hasattr(model_config, "n_head"):
+        num_head = model_config.n_head
+
+    if embedding_size is None or num_head is None or num_head == 0:
+        raise ValueError("Check the model config")
+
+    num_embedding_size_per_head = int(embedding_size / num_head)
+    if hasattr(model_config, "n_layer"):
+        num_layer = model_config.n_layer
+    elif hasattr(model_config, "num_hidden_layers"):
+        num_layer = model_config.num_hidden_layers
+    else:
+        raise ValueError("Number of hidden layers couldn't be determined from the model config")
+
+    return num_layer, num_head, num_embedding_size_per_head
+
+
+def generate_past_key_values(model, batch_size, seq_len):
+    num_block_layers, num_attention_heads, num_embedding_size_per_head = sparse_model_config(model.config)
+    if model.config.model_type == "bloom":
+        past_key_values = tuple(
+            (
+                torch.empty(int(num_attention_heads * batch_size), num_embedding_size_per_head, seq_len)
+                .to(model.dtype)
+                .to(model.device),
+                torch.empty(int(num_attention_heads * batch_size), seq_len, num_embedding_size_per_head)
+                .to(model.dtype)
+                .to(model.device),
+            )
+            for _ in range(num_block_layers)
+        )
+    else:
+        past_key_values = tuple(
+            (
+                torch.empty(batch_size, num_attention_heads, seq_len, num_embedding_size_per_head)
+                .to(model.dtype)
+                .to(model.device),
+                torch.empty(batch_size, num_attention_heads, seq_len, num_embedding_size_per_head)
+                .to(model.dtype)
+                .to(model.device),
+            )
+            for _ in range(num_block_layers)
+        )
+    return past_key_values
+
+
+def prepare_jit_inputs(inputs, model, tokenizer):
+    batch_size = len(inputs)
+    dummy_input = tokenizer.batch_encode_plus(inputs, return_tensors="pt")
+    dummy_input = dummy_input.to(model.device)
+    if model.config.use_cache:
+        dummy_input["past_key_values"] = generate_past_key_values(model, batch_size, 1)
+    dummy_input["attention_mask"] = torch.cat(
+        [
+            torch.zeros(dummy_input["attention_mask"].shape[0], 1)
+            .to(dummy_input["attention_mask"].dtype)
+            .to(model.device),
+            dummy_input["attention_mask"],
+        ],
+        -1,
+    )
+    return dummy_input
+
+
+class _ModelFallbackWrapper(GenerationMixin):
+    __slots__ = ("_optimized", "_default")
+
+    def __init__(self, optimized, default):
+        self._optimized = optimized
+        self._default = default
+
+    def __call__(self, *args, **kwargs):
+        if kwargs["past_key_values"] is None and self._default.config.use_cache:
+            kwargs["past_key_values"] = generate_past_key_values(self._default, kwargs["input_ids"].shape[0], 0)
+        kwargs.pop("position_ids", None)
+        for k in list(kwargs.keys()):
+            if kwargs[k] is None or isinstance(kwargs[k], bool):
+                kwargs.pop(k)
+        outputs = self._optimized(**kwargs)
+        lm_logits = outputs[0]
+        past_key_values = outputs[1]
+        fixed_output = CausalLMOutputWithPast(
+            loss=None,
+            logits=lm_logits,
+            past_key_values=past_key_values,
+            hidden_states=None,
+            attentions=None,
+        )
+        return fixed_output
+
+    def __getattr__(self, item):
+        return getattr(self._default, item)
+
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, inputs_embeds=None, use_cache=None, **kwargs
+    ):
+        return self._default.prepare_inputs_for_generation(
+            input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, use_cache=use_cache, **kwargs
+        )
+
+    def _reorder_cache(
+        self, past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the `past_key_values` cache if [`~PretrainedModel.beam_search`] or
+        [`~PretrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
+        """
+        return self._default._reorder_cache(past_key_values, beam_idx)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -189,21 +319,27 @@ def main():
     parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-    parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
+    parser.add_argument(
+        "--use_cpu",
+        action="store_true",
+        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+    )
     parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
     parser.add_argument(
         "--fp16",
         action="store_true",
         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
     )
+    parser.add_argument("--jit", action="store_true", help="Whether or not to use jit trace to accelerate inference")
     args = parser.parse_args()
 
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
+    # Initialize the distributed state.
+    distributed_state = PartialState(cpu=args.use_cpu)
 
-    logger.warning(f"device: {args.device}, n_gpu: {args.n_gpu}, 16-bits training: {args.fp16}")
+    logger.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
 
-    set_seed(args)
+    if args.seed is not None:
+        set_seed(args.seed)
 
     # Initialize the model and tokenizer
     try:
@@ -213,13 +349,17 @@ def main():
         raise KeyError("the model {} you specified is not supported. You are welcome to add it and open a PR :)")
 
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
     model = model_class.from_pretrained(args.model_name_or_path)
-    model.to(args.device)
+
+    # Set the model to the right device
+    model.to(distributed_state.device)
 
     if args.fp16:
         model.half()
-
-    args.length = adjust_length_to_model(args.length, max_sequence_length=model.config.max_position_embeddings)
+    max_seq_length = getattr(model.config, "max_position_embeddings", 0)
+    args.length = adjust_length_to_model(args.length, max_sequence_length=max_seq_length)
     logger.info(args)
 
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
@@ -241,12 +381,29 @@ def main():
     else:
         prefix = args.prefix if args.prefix else args.padding_text
         encoded_prompt = tokenizer.encode(prefix + prompt_text, add_special_tokens=False, return_tensors="pt")
-    encoded_prompt = encoded_prompt.to(args.device)
+    encoded_prompt = encoded_prompt.to(distributed_state.device)
 
     if encoded_prompt.size()[-1] == 0:
         input_ids = None
     else:
         input_ids = encoded_prompt
+
+    if args.jit:
+        jit_input_texts = ["enable jit"]
+        jit_inputs = prepare_jit_inputs(jit_input_texts, model, tokenizer)
+        torch._C._jit_set_texpr_fuser_enabled(False)
+        model.config.return_dict = False
+        if hasattr(model, "forward"):
+            sig = inspect.signature(model.forward)
+        else:
+            sig = inspect.signature(model.__call__)
+        jit_inputs = tuple(jit_inputs[key] for key in sig.parameters if jit_inputs.get(key, None) is not None)
+        traced_model = torch.jit.trace(model, jit_inputs, strict=False)
+        traced_model = torch.jit.freeze(traced_model.eval())
+        traced_model(*jit_inputs)
+        traced_model(*jit_inputs)
+
+        model = _ModelFallbackWrapper(traced_model, model)
 
     output_sequences = model.generate(
         input_ids=input_ids,

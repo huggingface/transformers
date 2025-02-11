@@ -1,0 +1,684 @@
+- sections:
+    - local: index
+      title: 🤗 Transformers
+    - local: quicktour
+      title: Lawatan cepat
+    - local: installation
+      title: Pemasangan
+  title: Mulakan
+- sections:
+    - local: pipeline_tutorial
+      title: Jalankan inferens dengan saluran paip
+    - local: autoclass_tutorial
+      title: Tulis kod mudah alih dengan AutoClass
+    - local: preprocessing
+      title: Praproses data
+    - local: training
+      title: Perhalusi model yang telah dilatih
+    - local: run_scripts
+      title: Latih dengan skrip
+    - local: accelerate
+      title: Sediakan latihan yang diedarkan dengan 🤗 Accelerate
+    - local: model_sharing
+      title: Kongsi model anda
+    - local: transformers_agents
+      title: Ejen
+  title: Tutorials
+- sections:
+    - sections:
+        - local: tasks/sequence_classification
+          title: Klasifikasi teks
+        - local: tasks/token_classification
+          title: Klasifikasi token
+        - local: tasks/question_answering
+          title: Soalan menjawab
+        - local: tasks/language_modeling
+          title: Pemodelan bahasa sebab-akibat
+        - local: tasks/masked_language_modeling
+          title: Pemodelan bahasa Masked
+        - local: tasks/translation
+          title: Terjemahan
+        - local: tasks/summarization
+          title: Rumusan
+        - local: tasks/multiple_choice
+          title: Pilihan
+      title: Natural Language Processing
+      isExpanded: false
+    - sections:
+        - local: tasks/audio_classification
+          title: Klasifikasi audio
+        - local: tasks/asr
+          title: Pengecaman pertuturan automatik
+      title: Audio
+      isExpanded: false
+    - sections:
+        - local: tasks/image_classification
+          title: Klasifikasi imej
+        - local: tasks/semantic_segmentation
+          title: Segmentasi semantik
+        - local: tasks/video_classification
+          title: Klasifikasi video
+        - local: tasks/object_detection
+          title: Pengesanan objek
+        - local: tasks/zero_shot_object_detection
+          title: Pengesanan objek Zero-Shot
+        - local: tasks/zero_shot_image_classification
+          title: Klasifikasi imej tangkapan Zero-Shot
+        - local: tasks/monocular_depth_estimation
+          title: Anggaran kedalaman
+      title: Visi komputer
+      isExpanded: false
+    - sections:
+        - local: tasks/image_captioning
+          title: Kapsyen imej
+        - local: tasks/document_question_answering
+          title: Menjawab Soalan Dokumen
+        - local: tasks/text-to-speech
+          title: Teks kepada ucapan
+      title: Multimodal
+      isExpanded: false
+  title: Panduan Tugasan
+- sections:
+    - local: fast_tokenizers
+      title: Gunakan tokenizer cepat dari 🤗 Tokenizers
+    - local: multilingual
+      title: Jalankan inferens dengan model berbilang bahasa
+    - local: generation_strategies
+      title: Sesuaikan strategi penjanaan teks
+    - local: create_a_model
+      title: Gunakan API khusus model
+    - local: custom_models
+      title: Kongsi model tersuai
+    - local: sagemaker
+      title: Jalankan latihan di Amazon SageMaker
+    - local: serialization
+      title: Eksport ke ONNX
+    - local: torchscript
+      title: Eksport ke TorchScript
+    - local: Buku nota dengan contoh
+      title: Notebooks with examples
+    - local: Sumber komuniti
+      title: Community resources
+    - local: Sumber komuniti
+      title: Custom Tools and Prompts
+    - local: Alat dan Gesaan Tersuai
+      title: Selesaikan masalah
+  title: Panduan Developer
+- sections:
+    - local: performance
+      title: Gambaran keseluruhan
+    - local: perf_train_gpu_one
+      title: Latihan pada satu GPU
+    - local: perf_train_gpu_many
+      title: Latihan pada banyak GPU
+    - local: perf_train_cpu
+      title: Latihan mengenai CPU
+    - local: perf_train_cpu_many
+      title: Latihan pada banyak CPU
+    - local: perf_train_tpu
+      title: Latihan mengenai TPU
+    - local: perf_train_tpu_tf
+      title: Latihan tentang TPU dengan TensorFlow
+    - local: perf_train_special
+      title: Latihan mengenai Perkakasan Khusus
+    - local: perf_infer_cpu
+      title: Inferens pada CPU
+    - local: perf_infer_gpu_one
+      title: Inferens pada satu GPU
+    - local: perf_infer_gpu_many
+      title: Inferens pada banyak GPUs
+    - local: perf_infer_special
+      title: Inferens pada Perkakasan Khusus
+    - local: perf_hardware
+      title: Perkakasan tersuai untuk latihan
+    - local: big_models
+      title: Menghidupkan model besar
+    - local: debugging
+      title: Penyahpepijatan
+    - local: hpo_train
+      title: Carian Hiperparameter menggunakan API Pelatih
+    - local: tf_xla
+      title: Penyepaduan XLA untuk Model TensorFlow
+  title: Prestasi dan kebolehskalaan
+- sections:
+    - local: contributing
+      title: Bagaimana untuk menyumbang kepada transformer?
+    - local: add_new_model
+      title: Bagaimana untuk menambah model pada 🤗 Transformers?
+    - local: add_new_pipeline
+      title: Bagaimana untuk menambah saluran paip ke 🤗 Transformers?
+    - local: testing
+      title: Ujian
+    - local: pr_checks
+      title: Menyemak Permintaan Tarik
+  title: Sumbangkan
+
+- sections:
+    - local: philosophy
+      title: Falsafah
+    - local: glossary
+      title: Glosari
+    - local: task_summary
+      title: Apa 🤗 Transformers boleh buat
+    - local: tasks_explained
+      title: Bagaimana 🤗 Transformers menyelesaikan tugasan
+    - local: model_summary
+      title: Keluarga model Transformer
+    - local: tokenizer_summary
+      title: Ringkasan tokenizer
+    - local: attention
+      title: Mekanisme perhatian
+    - local: pad_truncation
+      title: Padding dan pemotongan
+    - local: bertology
+      title: BERTology
+    - local: perplexity
+      title: Kekeliruan model panjang tetap
+    - local: pipeline_webserver
+      title: Saluran paip untuk inferens pelayan web
+  title: Panduan konsep
+- sections:
+    - sections:
+        - local: main_classes/agent
+          title: Ejen dan Alat
+        - local: model_doc/auto
+          title: Kelas Auto
+        - local: main_classes/callback
+          title: Panggilan balik
+        - local: main_classes/configuration
+          title: Configuration
+        - local: main_classes/data_collator
+          title: Data Collator
+        - local: main_classes/keras_callbacks
+          title: Keras callbacks
+        - local: main_classes/logging
+          title: Logging
+        - local: main_classes/model
+          title: Models
+        - local: main_classes/text_generation
+          title: Text Generation
+        - local: main_classes/onnx
+          title: ONNX
+        - local: main_classes/optimizer_schedules
+          title: Optimization
+        - local: main_classes/output
+          title: Model outputs
+        - local: main_classes/pipelines
+          title: Pipelines
+        - local: main_classes/processors
+          title: Processors
+        - local: main_classes/quantization
+          title: Quantization
+        - local: main_classes/tokenizer
+          title: Tokenizer
+        - local: main_classes/trainer
+          title: Trainer
+        - local: main_classes/deepspeed
+          title: DeepSpeed Integration
+        - local: main_classes/feature_extractor
+          title: Feature Extractor
+        - local: main_classes/image_processor
+          title: Image Processor
+      title: Main Classes
+    - sections:
+        - isExpanded: false
+          sections:
+            - local: model_doc/albert
+              title: ALBERT
+            - local: model_doc/bart
+              title: BART
+            - local: model_doc/barthez
+              title: BARThez
+            - local: model_doc/bartpho
+              title: BARTpho
+            - local: model_doc/bert
+              title: BERT
+            - local: model_doc/bert-generation
+              title: BertGeneration
+            - local: model_doc/bert-japanese
+              title: BertJapanese
+            - local: model_doc/bertweet
+              title: Bertweet
+            - local: model_doc/big_bird
+              title: BigBird
+            - local: model_doc/bigbird_pegasus
+              title: BigBirdPegasus
+            - local: model_doc/biogpt
+              title: BioGpt
+            - local: model_doc/blenderbot
+              title: Blenderbot
+            - local: model_doc/blenderbot-small
+              title: Blenderbot Small
+            - local: model_doc/bloom
+              title: BLOOM
+            - local: model_doc/bort
+              title: BORT
+            - local: model_doc/byt5
+              title: ByT5
+            - local: model_doc/camembert
+              title: CamemBERT
+            - local: model_doc/canine
+              title: CANINE
+            - local: model_doc/codegen
+              title: CodeGen
+            - local: model_doc/convbert
+              title: ConvBERT
+            - local: model_doc/cpm
+              title: CPM
+            - local: model_doc/cpmant
+              title: CPMANT
+            - local: model_doc/ctrl
+              title: CTRL
+            - local: model_doc/deberta
+              title: DeBERTa
+            - local: model_doc/deberta-v2
+              title: DeBERTa-v2
+            - local: model_doc/dialogpt
+              title: DialoGPT
+            - local: model_doc/distilbert
+              title: DistilBERT
+            - local: model_doc/dpr
+              title: DPR
+            - local: model_doc/electra
+              title: ELECTRA
+            - local: model_doc/encoder-decoder
+              title: Encoder Decoder Models
+            - local: model_doc/ernie
+              title: ERNIE
+            - local: model_doc/ernie_m
+              title: ErnieM
+            - local: model_doc/esm
+              title: ESM
+            - local: model_doc/flan-t5
+              title: FLAN-T5
+            - local: model_doc/flan-ul2
+              title: FLAN-UL2
+            - local: model_doc/flaubert
+              title: FlauBERT
+            - local: model_doc/fnet
+              title: FNet
+            - local: model_doc/fsmt
+              title: FSMT
+            - local: model_doc/funnel
+              title: Funnel Transformer
+            - local: model_doc/openai-gpt
+              title: GPT
+            - local: model_doc/gpt_neo
+              title: GPT Neo
+            - local: model_doc/gpt_neox
+              title: GPT NeoX
+            - local: model_doc/gpt_neox_japanese
+              title: GPT NeoX Japanese
+            - local: model_doc/gptj
+              title: GPT-J
+            - local: model_doc/gpt2
+              title: GPT2
+            - local: model_doc/gpt_bigcode
+              title: GPTBigCode
+            - local: model_doc/gptsan-japanese
+              title: GPTSAN Japanese
+            - local: model_doc/gpt-sw3
+              title: GPTSw3
+            - local: model_doc/herbert
+              title: HerBERT
+            - local: model_doc/ibert
+              title: I-BERT
+            - local: model_doc/jukebox
+              title: Jukebox
+            - local: model_doc/led
+              title: LED
+            - local: model_doc/llama
+              title: LLaMA
+            - local: model_doc/longformer
+              title: Longformer
+            - local: model_doc/longt5
+              title: LongT5
+            - local: model_doc/luke
+              title: LUKE
+            - local: model_doc/m2m_100
+              title: M2M100
+            - local: model_doc/marian
+              title: MarianMT
+            - local: model_doc/markuplm
+              title: MarkupLM
+            - local: model_doc/mbart
+              title: MBart and MBart-50
+            - local: model_doc/mega
+              title: MEGA
+            - local: model_doc/megatron-bert
+              title: MegatronBERT
+            - local: model_doc/megatron_gpt2
+              title: MegatronGPT2
+            - local: model_doc/mluke
+              title: mLUKE
+            - local: model_doc/mobilebert
+              title: MobileBERT
+            - local: model_doc/mpnet
+              title: MPNet
+            - local: model_doc/mt5
+              title: MT5
+            - local: model_doc/mvp
+              title: MVP
+            - local: model_doc/nezha
+              title: NEZHA
+            - local: model_doc/nllb
+              title: NLLB
+            - local: model_doc/nllb-moe
+              title: NLLB-MoE
+            - local: model_doc/nystromformer
+              title: Nyströmformer
+            - local: model_doc/open-llama
+              title: Open-Llama
+            - local: model_doc/opt
+              title: OPT
+            - local: model_doc/pegasus
+              title: Pegasus
+            - local: model_doc/pegasus_x
+              title: PEGASUS-X
+            - local: model_doc/phobert
+              title: PhoBERT
+            - local: model_doc/plbart
+              title: PLBart
+            - local: model_doc/prophetnet
+              title: ProphetNet
+            - local: model_doc/qdqbert
+              title: QDQBert
+            - local: model_doc/rag
+              title: RAG
+            - local: model_doc/realm
+              title: REALM
+            - local: model_doc/reformer
+              title: Reformer
+            - local: model_doc/rembert
+              title: RemBERT
+            - local: model_doc/retribert
+              title: RetriBERT
+            - local: model_doc/roberta
+              title: RoBERTa
+            - local: model_doc/roberta-prelayernorm
+              title: RoBERTa-PreLayerNorm
+            - local: model_doc/roc_bert
+              title: RoCBert
+            - local: model_doc/roformer
+              title: RoFormer
+            - local: model_doc/rwkv
+              title: RWKV
+            - local: model_doc/splinter
+              title: Splinter
+            - local: model_doc/squeezebert
+              title: SqueezeBERT
+            - local: model_doc/switch_transformers
+              title: SwitchTransformers
+            - local: model_doc/t5
+              title: T5
+            - local: model_doc/t5v1.1
+              title: T5v1.1
+            - local: model_doc/tapex
+              title: TAPEX
+            - local: model_doc/transfo-xl
+              title: Transformer XL
+            - local: model_doc/ul2
+              title: UL2
+            - local: model_doc/xmod
+              title: X-MOD
+            - local: model_doc/xglm
+              title: XGLM
+            - local: model_doc/xlm
+              title: XLM
+            - local: model_doc/xlm-prophetnet
+              title: XLM-ProphetNet
+            - local: model_doc/xlm-roberta
+              title: XLM-RoBERTa
+            - local: model_doc/xlm-roberta-xl
+              title: XLM-RoBERTa-XL
+            - local: model_doc/xlm-v
+              title: XLM-V
+            - local: model_doc/xlnet
+              title: XLNet
+            - local: model_doc/yoso
+              title: YOSO
+          title: Text models
+        - isExpanded: false
+          sections:
+            - local: model_doc/beit
+              title: BEiT
+            - local: model_doc/bit
+              title: BiT
+            - local: model_doc/conditional_detr
+              title: Conditional DETR
+            - local: model_doc/convnext
+              title: ConvNeXT
+            - local: model_doc/convnextv2
+              title: ConvNeXTV2
+            - local: model_doc/cvt
+              title: CvT
+            - local: model_doc/deformable_detr
+              title: Deformable DETR
+            - local: model_doc/deit
+              title: DeiT
+            - local: model_doc/deta
+              title: DETA
+            - local: model_doc/detr
+              title: DETR
+            - local: model_doc/dinat
+              title: DiNAT
+            - local: model_doc/dit
+              title: DiT
+            - local: model_doc/dpt
+              title: DPT
+            - local: model_doc/efficientformer
+              title: EfficientFormer
+            - local: model_doc/efficientnet
+              title: EfficientNet
+            - local: model_doc/focalnet
+              title: FocalNet
+            - local: model_doc/glpn
+              title: GLPN
+            - local: model_doc/imagegpt
+              title: ImageGPT
+            - local: model_doc/levit
+              title: LeViT
+            - local: model_doc/mask2former
+              title: Mask2Former
+            - local: model_doc/maskformer
+              title: MaskFormer
+            - local: model_doc/mobilenet_v1
+              title: MobileNetV1
+            - local: model_doc/mobilenet_v2
+              title: MobileNetV2
+            - local: model_doc/mobilevit
+              title: MobileViT
+            - local: model_doc/nat
+              title: NAT
+            - local: model_doc/poolformer
+              title: PoolFormer
+            - local: model_doc/regnet
+              title: RegNet
+            - local: model_doc/resnet
+              title: ResNet
+            - local: model_doc/segformer
+              title: SegFormer
+            - local: model_doc/swiftformer
+              title: SwiftFormer
+            - local: model_doc/swin
+              title: Swin Transformer
+            - local: model_doc/swinv2
+              title: Swin Transformer V2
+            - local: model_doc/swin2sr
+              title: Swin2SR
+            - local: model_doc/table-transformer
+              title: Table Transformer
+            - local: model_doc/timesformer
+              title: TimeSformer
+            - local: model_doc/upernet
+              title: UperNet
+            - local: model_doc/van
+              title: VAN
+            - local: model_doc/videomae
+              title: VideoMAE
+            - local: model_doc/vit
+              title: Vision Transformer (ViT)
+            - local: model_doc/vit_hybrid
+              title: ViT Hybrid
+            - local: model_doc/vit_mae
+              title: ViTMAE
+            - local: model_doc/vit_msn
+              title: ViTMSN
+            - local: model_doc/yolos
+              title: YOLOS
+          title: Vision models
+        - isExpanded: false
+          sections:
+            - local: model_doc/audio-spectrogram-transformer
+              title: Audio Spectrogram Transformer
+            - local: model_doc/clap
+              title: CLAP
+            - local: model_doc/hubert
+              title: Hubert
+            - local: model_doc/mctct
+              title: MCTCT
+            - local: model_doc/sew
+              title: SEW
+            - local: model_doc/sew-d
+              title: SEW-D
+            - local: model_doc/speech_to_text
+              title: Speech2Text
+            - local: model_doc/speech_to_text_2
+              title: Speech2Text2
+            - local: model_doc/speecht5
+              title: SpeechT5
+            - local: model_doc/unispeech
+              title: UniSpeech
+            - local: model_doc/unispeech-sat
+              title: UniSpeech-SAT
+            - local: model_doc/wav2vec2
+              title: Wav2Vec2
+            - local: model_doc/wav2vec2-conformer
+              title: Wav2Vec2-Conformer
+            - local: model_doc/wav2vec2_phoneme
+              title: Wav2Vec2Phoneme
+            - local: model_doc/wavlm
+              title: WavLM
+            - local: model_doc/whisper
+              title: Whisper
+            - local: model_doc/xls_r
+              title: XLS-R
+            - local: model_doc/xlsr_wav2vec2
+              title: XLSR-Wav2Vec2
+          title: Audio models
+        - isExpanded: false
+          sections:
+            - local: model_doc/align
+              title: ALIGN
+            - local: model_doc/altclip
+              title: AltCLIP
+            - local: model_doc/blip
+              title: BLIP
+            - local: model_doc/blip-2
+              title: BLIP-2
+            - local: model_doc/bridgetower
+              title: BridgeTower
+            - local: model_doc/chinese_clip
+              title: Chinese-CLIP
+            - local: model_doc/clip
+              title: CLIP
+            - local: model_doc/clipseg
+              title: CLIPSeg
+            - local: model_doc/data2vec
+              title: Data2Vec
+            - local: model_doc/deplot
+              title: DePlot
+            - local: model_doc/donut
+              title: Donut
+            - local: model_doc/flava
+              title: FLAVA
+            - local: model_doc/git
+              title: GIT
+            - local: model_doc/groupvit
+              title: GroupViT
+            - local: model_doc/layoutlm
+              title: LayoutLM
+            - local: model_doc/layoutlmv2
+              title: LayoutLMV2
+            - local: model_doc/layoutlmv3
+              title: LayoutLMV3
+            - local: model_doc/layoutxlm
+              title: LayoutXLM
+            - local: model_doc/lilt
+              title: LiLT
+            - local: model_doc/lxmert
+              title: LXMERT
+            - local: model_doc/matcha
+              title: MatCha
+            - local: model_doc/mgp-str
+              title: MGP-STR
+            - local: model_doc/oneformer
+              title: OneFormer
+            - local: model_doc/owlvit
+              title: OWL-ViT
+            - local: model_doc/perceiver
+              title: Perceiver
+            - local: model_doc/pix2struct
+              title: Pix2Struct
+            - local: model_doc/sam
+              title: Segment Anything
+            - local: model_doc/speech-encoder-decoder
+              title: Speech Encoder Decoder Models
+            - local: model_doc/tapas
+              title: TAPAS
+            - local: model_doc/trocr
+              title: TrOCR
+            - local: model_doc/tvlt
+              title: TVLT
+            - local: model_doc/vilt
+              title: ViLT
+            - local: model_doc/vision-encoder-decoder
+              title: Vision Encoder Decoder Models
+            - local: model_doc/vision-text-dual-encoder
+              title: Vision Text Dual Encoder
+            - local: model_doc/visual_bert
+              title: VisualBERT
+            - local: model_doc/xclip
+              title: X-CLIP
+          title: Multimodal models
+        - isExpanded: false
+          sections:
+            - local: model_doc/decision_transformer
+              title: Decision Transformer
+            - local: model_doc/trajectory_transformer
+              title: Trajectory Transformer
+          title: Reinforcement learning models
+        - isExpanded: false
+          sections:
+            - local: model_doc/informer
+              title: Informer
+            - local: model_doc/time_series_transformer
+              title: Time Series Transformer
+          title: Time series models
+        - isExpanded: false
+          sections:
+            - local: model_doc/graphormer
+              title: Graphormer
+          title: Graph models
+      title: Models
+    - sections:
+        - local: internal/modeling_utils
+          title: Custom Layers and Utilities
+        - local: internal/pipelines_utils
+          title: Utilities for pipelines
+        - local: internal/tokenization_utils
+          title: Utilities for Tokenizers
+        - local: internal/trainer_utils
+          title: Utilities for Trainer
+        - local: internal/generation_utils
+          title: Utilities for Generation
+        - local: internal/image_processing_utils
+          title: Utilities for Image Processors
+        - local: internal/audio_utils
+          title: Utilities for Audio processing
+        - local: internal/file_utils
+          title: General Utilities
+        - local: internal/time_series_utils
+          title: Utilities for Time Series
+      title: Internal Helpers
+  title: API

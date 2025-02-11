@@ -26,7 +26,6 @@ from ..utils import (
     TensorType,
     is_tf_available,
     is_torch_available,
-    is_torch_onnx_dict_inputs_support_available,
     logging,
 )
 from .config import OnnxConfig
@@ -34,7 +33,6 @@ from .config import OnnxConfig
 
 if is_torch_available():
     from ..modeling_utils import PreTrainedModel
-    from ..pytorch_utils import is_torch_less_than_1_11
 
 if is_tf_available():
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -145,7 +143,21 @@ def export_pytorch(
             device = torch.device(device)
             if device.type == "cuda" and torch.cuda.is_available():
                 model.to(device)
-                model_inputs = dict((k, v.to(device)) for k, v in model_inputs.items())
+                model_inputs_device = {}
+                for k, v in model_inputs.items():
+                    if isinstance(v, Tuple):
+                        model_inputs_device[k] = tuple(
+                            x.to(device) if isinstance(x, torch.Tensor) else None for x in v
+                        )
+                    elif isinstance(v, List):
+                        model_inputs_device[k] = [
+                            tuple(x.to(device) if isinstance(x, torch.Tensor) else None for x in t) for t in v
+                        ]
+                    else:
+                        model_inputs_device[k] = v.to(device)
+
+                model_inputs = model_inputs_device
+
             inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
             onnx_outputs = list(config.outputs.keys())
 
@@ -154,51 +166,16 @@ def export_pytorch(
 
             config.patch_ops()
 
-            # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
-            # so we check the torch version for backwards compatibility
-            if is_torch_less_than_1_11:
-                # export can work with named args but the dict containing named args
-                # has to be the last element of the args tuple.
-                try:
-                    onnx_export(
-                        model,
-                        (model_inputs,),
-                        f=output.as_posix(),
-                        input_names=list(config.inputs.keys()),
-                        output_names=onnx_outputs,
-                        dynamic_axes={
-                            name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())
-                        },
-                        do_constant_folding=True,
-                        use_external_data_format=config.use_external_data_format(model.num_parameters()),
-                        enable_onnx_checker=True,
-                        opset_version=opset,
-                    )
-                except RuntimeError as err:
-                    message = str(err)
-                    if (
-                        message
-                        == "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export without"
-                        " setting use_external_data_format parameter."
-                    ):
-                        message = (
-                            "Exporting model exceed maximum protobuf size of 2GB. Please call torch.onnx.export"
-                            " without setting use_external_data_format parameter or try with torch 1.10+."
-                        )
-                        raise RuntimeError(message)
-                    else:
-                        raise err
-            else:
-                onnx_export(
-                    model,
-                    (model_inputs,),
-                    f=output.as_posix(),
-                    input_names=list(config.inputs.keys()),
-                    output_names=onnx_outputs,
-                    dynamic_axes={name: axes for name, axes in chain(config.inputs.items(), config.outputs.items())},
-                    do_constant_folding=True,
-                    opset_version=opset,
-                )
+            onnx_export(
+                model,
+                (model_inputs,),
+                f=output.as_posix(),
+                input_names=list(config.inputs.keys()),
+                output_names=onnx_outputs,
+                dynamic_axes=dict(chain(config.inputs.items(), config.outputs.items())),
+                do_constant_folding=True,
+                opset_version=opset,
+            )
 
             config.restore_ops()
 
@@ -232,9 +209,8 @@ def export_tensorflow(
         `Tuple[List[str], List[str]]`: A tuple with an ordered list of the model's inputs, and the named inputs from
         the ONNX configuration.
     """
-    import tensorflow as tf
-
     import onnx
+    import tensorflow as tf
     import tf2onnx
 
     if isinstance(preprocessor, PreTrainedTokenizerBase) and tokenizer is not None:
@@ -324,15 +300,12 @@ def export(
         preprocessor = tokenizer
 
     if is_torch_available():
-        from ..utils import torch_version
-
-        if not is_torch_onnx_dict_inputs_support_available():
-            raise AssertionError(f"Unsupported PyTorch version, minimum required is 1.8.0, got: {torch_version}")
+        from ..utils import get_torch_version
 
         if not config.is_torch_support_available:
             logger.warning(
                 f"Unsupported PyTorch version for this model. Minimum required is {config.torch_onnx_minimum_version},"
-                f" got: {torch_version}"
+                f" got: {get_torch_version()}"
             )
 
     if is_torch_available() and issubclass(type(model), PreTrainedModel):
@@ -404,9 +377,12 @@ def validate_model_outputs(
         else:
             ref_outputs_dict[name] = value
 
+    # Create onnxruntime inputs from the reference model inputs
+    reference_model_inputs_onnxruntime = config.generate_dummy_inputs_onnxruntime(reference_model_inputs)
+
     # We flatten potential collection of inputs (i.e. past_keys)
     onnx_inputs = {}
-    for name, value in reference_model_inputs.items():
+    for name, value in reference_model_inputs_onnxruntime.items():
         if isinstance(value, (list, tuple)):
             value = config.flatten_output_collection_property(name, value)
             onnx_inputs.update({tensor_name: pt_tensor.numpy() for tensor_name, pt_tensor in value.items()})

@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model T5."""
-
+"""Tokenization class for model T5."""
 
 import os
+import re
 import warnings
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -34,32 +34,8 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
-        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
-        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
-        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
-        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
-    },
-    "tokenizer_file": {
-        "t5-small": "https://huggingface.co/t5-small/resolve/main/tokenizer.json",
-        "t5-base": "https://huggingface.co/t5-base/resolve/main/tokenizer.json",
-        "t5-large": "https://huggingface.co/t5-large/resolve/main/tokenizer.json",
-        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/tokenizer.json",
-        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/tokenizer.json",
-    },
-}
-
 
 # TODO(PVP) - this should be removed in Transformers v5
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "t5-small": 512,
-    "t5-base": 512,
-    "t5-large": 512,
-    "t5-3b": 512,
-    "t5-11b": 512,
-}
 
 
 class T5TokenizerFast(PreTrainedTokenizerFast):
@@ -90,18 +66,18 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
         extra_ids (`int`, *optional*, defaults to 100):
-            Add a number of extra ids added to the end of the vocabulary for use as sentinels. These tokens are
-            accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. Extra tokens are
-            indexed from the end of the vocabulary up to beginning ("<extra_id_0>" is the last token in the vocabulary
-            like in T5 preprocessing see
-            [here](https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117)).
+            Add a number of extra ids added to the vocabulary for use as sentinels. These tokens are accessible as
+            "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. These tokens can be retrieved by
+            calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids method
         additional_special_tokens (`List[str]`, *optional*):
             Additional special tokens used by the tokenizer.
+        add_prefix_space (`bool`, *optional*):
+            Whether or not the tokenizer should automatically add a prefix space
+        from_slow (`book`, *optional*, defaults to `False`):
+            Whether or not the tokenizer should be converted from a slow one. If `add_prefix_space` is set, this will be set to `True`.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = T5Tokenizer
 
@@ -116,35 +92,48 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         extra_ids=100,
         additional_special_tokens=None,
-        **kwargs
+        add_prefix_space=None,
+        **kwargs,
     ):
         # Add extra_ids to the special token list
-        if extra_ids > 0 and additional_special_tokens is None:
-            additional_special_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
-        elif extra_ids > 0 and additional_special_tokens is not None:
-            # Check that we have the right number of extra special tokens
-            extra_tokens = len(set(filter(lambda x: bool("extra_id_" in str(x)), additional_special_tokens)))
-            if extra_tokens != extra_ids:
+        if additional_special_tokens is not None:
+            extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
+            if len(extra_tokens) < 1:
+                additional_special_tokens += [f"<extra_id_{i}>" for i in range(extra_ids)]
+            elif extra_ids > 0 and extra_ids != len(extra_tokens):
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
                     " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
                     " tokens"
                 )
+        else:
+            extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
+            additional_special_tokens = extra_tokens
+
+        if add_prefix_space is not None:
+            logger.warning_once(
+                "You set `add_prefix_space`. The tokenizer needs to be converted from the slow tokenizers"
+            )
+            kwargs["from_slow"] = True
 
         super().__init__(
-            vocab_file,
+            vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
         self._extra_ids = extra_ids
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     @staticmethod
     def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
@@ -235,3 +224,14 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(token_ids_0 + eos) * [0]
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
+
+    def get_sentinel_tokens(self):
+        return list(
+            set(filter(lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
+        )
+
+    def get_sentinel_token_ids(self):
+        return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
+
+
+__all__ = ["T5TokenizerFast"]

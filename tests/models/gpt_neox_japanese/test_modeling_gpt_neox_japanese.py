@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch GPTNeoXJapanese model. """
-
+"""Testing suite for the PyTorch GPTNeoXJapanese model."""
 
 import unittest
 
@@ -21,8 +20,10 @@ from transformers import GPTNeoXJapaneseConfig, is_torch_available
 from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -43,7 +44,7 @@ class GPTNeoXJapaneseModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_multiple_size=4,
         hidden_act="gelu",
@@ -56,6 +57,8 @@ class GPTNeoXJapaneseModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        bos_token_id=1,
+        eos_token_id=0,
         scope=None,
     ):
         self.parent = parent
@@ -81,6 +84,8 @@ class GPTNeoXJapaneseModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -112,6 +117,8 @@ class GPTNeoXJapaneseModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.bos_token_id,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -189,10 +196,14 @@ class GPTNeoXJapaneseModelTester:
 
 
 @require_torch
-class GPTNeoXModelJapaneseTest(ModelTesterMixin, unittest.TestCase):
-
+class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoXJapaneseForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_missing_keys = False
     test_model_parallel = False
@@ -233,7 +244,7 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, unittest.TestCase):
     def test_generation(self):
         model_id = "abeja/gpt-neox-japanese-2.7b"
 
-        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]
+        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]  # fmt: skip
 
         EXPECTED_OUTPUTS = [
             "データサイエンティストとは、データを分析し、ビジネスに役立つ知見を導き出す専門家のことです。",
@@ -253,3 +264,7 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, unittest.TestCase):
             generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
             predicted_outputs += generated_string
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
+
+    @unittest.skip("GPTNeoXJapanese applies bias to attention scores")
+    def test_custom_4d_attention_mask(self):
+        pass

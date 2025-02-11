@@ -13,19 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Tokenization class for Blenderbot."""
-import json
-from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from tokenizers import pre_tokenizers, processors
+import json
+from typing import List, Optional, Tuple
+
+from tokenizers import processors
 
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_blenderbot import BlenderbotTokenizer
 
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -36,16 +34,6 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
-    "merges_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
-    "tokenizer_config_file": {
-        "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
-
 
 class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -55,12 +43,14 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import BlenderbotTokenizerFast
+
     >>> tokenizer = BlenderbotTokenizerFast.from_pretrained("facebook/blenderbot-3B")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [6950, 1085, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [6950, 1085, 2]
     ```
 
@@ -127,8 +117,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = BlenderbotTokenizer
 
@@ -148,8 +136,13 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         add_prefix_space=False,
         trim_offsets=True,
-        **kwargs
+        **kwargs,
     ):
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
         super().__init__(
             vocab_file,
             merges_file,
@@ -166,14 +159,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             trim_offsets=trim_offsets,
             **kwargs,
         )
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
         tokenizer_component = "post_processor"
         tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
@@ -208,8 +193,8 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
         having been set.
 
-        Blenderbot tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will
-        greedily comprise the space before the *<mask>*.
+        Blenderbot tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
+        comprise the space before the *<mask>*.
         """
         if self._mask_token is None:
             if self.verbose:
@@ -260,8 +245,8 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -284,6 +269,7 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A Blenderbot sequence has the following format:
         - single sequence: ` X </s>`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added
@@ -294,19 +280,5 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         """
         return token_ids_0 + [self.eos_token_id]
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        inputs = []
-        for is_user, text in conversation.iter_texts():
-            if is_user:
-                # We need to space prefix as it's being done within blenderbot
-                inputs.append(" " + text)
-            else:
-                # Generated responses should contain them already.
-                inputs.append(text)
 
-        full_string = "  ".join(inputs)
-        input_ids = self.encode(full_string)
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-            logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
-        return input_ids
+__all__ = ["BlenderbotTokenizerFast"]

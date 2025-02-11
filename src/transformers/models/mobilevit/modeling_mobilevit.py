@@ -14,8 +14,7 @@
 # limitations under the License.
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
-""" PyTorch MobileViT model."""
-
+"""PyTorch MobileViT model."""
 
 import math
 from typing import Dict, Optional, Set, Tuple, Union
@@ -40,6 +39,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_mobilevit import MobileViTConfig
 
@@ -49,7 +49,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "MobileViTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "MobileViTFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "apple/mobilevit-small"
@@ -58,17 +57,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 640, 8, 8]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "apple/mobilevit-small"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "apple/mobilevit-small",
-    "apple/mobilevit-x-small",
-    "apple/mobilevit-xx-small",
-    "apple/deeplabv3-mobilevit-small",
-    "apple/deeplabv3-mobilevit-x-small",
-    "apple/deeplabv3-mobilevit-xx-small",
-    # See all MobileViT models at https://huggingface.co/models?filter=mobilevit
-]
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
@@ -450,8 +438,16 @@ class MobileViTLayer(nn.Module):
 
         batch_size, channels, orig_height, orig_width = features.shape
 
-        new_height = int(math.ceil(orig_height / patch_height) * patch_height)
-        new_width = int(math.ceil(orig_width / patch_width) * patch_width)
+        new_height = (
+            torch_int(torch.ceil(orig_height / patch_height) * patch_height)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_height / patch_height) * patch_height)
+        )
+        new_width = (
+            torch_int(torch.ceil(orig_width / patch_width) * patch_width)
+            if torch.jit.is_tracing()
+            else int(math.ceil(orig_width / patch_width) * patch_width)
+        )
 
         interpolate = False
         if new_width != orig_width or new_height != orig_height:
@@ -627,15 +623,8 @@ class MobileViTEncoder(nn.Module):
 
         for i, layer_module in enumerate(self.layer):
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                hidden_states = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                 )
             else:
@@ -660,6 +649,7 @@ class MobileViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "mobilevit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["MobileViTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -672,10 +662,6 @@ class MobileViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, MobileViTEncoder):
-            module.gradient_checkpointing = value
 
 
 MOBILEVIT_START_DOCSTRING = r"""
@@ -692,8 +678,8 @@ MOBILEVIT_START_DOCSTRING = r"""
 MOBILEVIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileViTFeatureExtractor`]. See
-            [`MobileViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`MobileViTImageProcessor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -745,7 +731,6 @@ class MobileViTModel(MobileViTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -819,7 +804,6 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -1027,17 +1011,18 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MobileViTFeatureExtractor, MobileViTForSemanticSegmentation
-        >>> from PIL import Image
         >>> import requests
+        >>> import torch
+        >>> from PIL import Image
+        >>> from transformers import AutoImageProcessor, MobileViTForSemanticSegmentation
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-small")
         >>> model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-small")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -1049,6 +1034,9 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None and self.config.num_labels == 1:
+            raise ValueError("The number of labels should be greater than one")
 
         outputs = self.mobilevit(
             pixel_values,
@@ -1062,15 +1050,12 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.num_labels == 1:
-                raise ValueError("The number of labels should be greater than one")
-            else:
-                # upsample logits to the images' original size
-                upsampled_logits = nn.functional.interpolate(
-                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-                )
-                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-                loss = loss_fct(upsampled_logits, labels)
+            # upsample logits to the images' original size
+            upsampled_logits = nn.functional.interpolate(
+                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            )
+            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+            loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:
             if output_hidden_states:
@@ -1085,3 +1070,11 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = [
+    "MobileViTForImageClassification",
+    "MobileViTForSemanticSegmentation",
+    "MobileViTModel",
+    "MobileViTPreTrainedModel",
+]

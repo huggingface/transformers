@@ -12,21 +12,55 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that prepares the repository for releases (or patches) by updating all versions in the relevant places. It
+also performs some post-release cleanup, by updating the links in the main README to respective model doc pages (from
+main to stable).
+
+To prepare for a release, use from the root of the repo on the release branch with:
+
+```bash
+python release.py
+```
+
+or use `make pre-release`.
+
+To prepare for a patch release, use from the root of the repo on the release branch with:
+
+```bash
+python release.py --patch
+```
+
+or use `make pre-patch`.
+
+To do the post-release cleanup, use from the root of the repo on the main branch with:
+
+```bash
+python release.py --post_release
+```
+
+or use `make post-release`.
+"""
 
 import argparse
 import os
 import re
+from pathlib import Path
 
 import packaging.version
 
 
+# All paths are defined with the intent that this script should be run from the root of the repo.
 PATH_TO_EXAMPLES = "examples/"
+PATH_TO_MODELS = "src/transformers/models"
+# This maps a type of file to the pattern to look for when searching where the version is defined, as well as the
+# template to follow when replacing it with the new version.
 REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"([^"]+)"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
-    "doc": (re.compile(r'^(\s*)release\s*=\s*"[^"]+"$', re.MULTILINE), 'release = "VERSION"\n'),
 }
+# This maps a type of file to its path in Transformers
 REPLACE_FILES = {
     "init": "src/transformers/__init__.py",
     "setup": "setup.py",
@@ -34,19 +68,31 @@ REPLACE_FILES = {
 README_FILE = "README.md"
 
 
-def update_version_in_file(fname, version, pattern):
-    """Update the version in one file using a specific pattern."""
+def update_version_in_file(fname: str, version: str, file_type: str):
+    """
+    Update the version of Transformers in one file.
+
+    Args:
+        fname (`str`): The path to the file where we want to update the version.
+        version (`str`): The new version to set in the file.
+        file_type (`str`): The type of the file (should be a key in `REPLACE_PATTERNS`).
+    """
     with open(fname, "r", encoding="utf-8", newline="\n") as f:
         code = f.read()
-    re_pattern, replace = REPLACE_PATTERNS[pattern]
+    re_pattern, replace = REPLACE_PATTERNS[file_type]
     replace = replace.replace("VERSION", version)
     code = re_pattern.sub(replace, code)
     with open(fname, "w", encoding="utf-8", newline="\n") as f:
         f.write(code)
 
 
-def update_version_in_examples(version):
-    """Update the version in all examples files."""
+def update_version_in_examples(version: str):
+    """
+    Update the version in all examples files.
+
+    Args:
+        version (`str`): The new version to set in the examples.
+    """
     for folder, directories, fnames in os.walk(PATH_TO_EXAMPLES):
         # Removing some of the folders with non-actively maintained examples from the walk
         if "research_projects" in directories:
@@ -55,55 +101,55 @@ def update_version_in_examples(version):
             directories.remove("legacy")
         for fname in fnames:
             if fname.endswith(".py"):
-                update_version_in_file(os.path.join(folder, fname), version, pattern="examples")
+                update_version_in_file(os.path.join(folder, fname), version, file_type="examples")
 
 
-def global_version_update(version, patch=False):
-    """Update the version in all needed files."""
+def global_version_update(version: str, patch: bool = False):
+    """
+    Update the version in all needed files.
+
+    Args:
+        version (`str`): The new version to set everywhere.
+        patch (`bool`, *optional*, defaults to `False`): Whether or not this is a patch release.
+    """
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
     if not patch:
+        # We don't update the version in the examples for patch releases.
         update_version_in_examples(version)
 
 
-def clean_main_ref_in_model_list():
-    """Replace the links from main doc tp stable doc in the model list of the README."""
-    # If the introduction or the conclusion of the list change, the prompts may need to be updated.
-    _start_prompt = "🤗 Transformers currently provides the following architectures"
-    _end_prompt = "1. Want to contribute a new model?"
-    with open(README_FILE, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-
-    # Find the start of the list.
-    start_index = 0
-    while not lines[start_index].startswith(_start_prompt):
-        start_index += 1
-    start_index += 1
-
-    index = start_index
-    # Update the lines in the model list.
-    while not lines[index].startswith(_end_prompt):
-        if lines[index].startswith("1."):
-            lines[index] = lines[index].replace(
-                "https://huggingface.co/docs/transformers/main/model_doc",
-                "https://huggingface.co/docs/transformers/model_doc",
-            )
-        index += 1
-
-    with open(README_FILE, "w", encoding="utf-8", newline="\n") as f:
-        f.writelines(lines)
+def remove_conversion_scripts():
+    """
+    Delete the scripts that convert models from older, unsupported formats. We don't want to include these
+    in release wheels because they often have to open insecure file types (pickle, Torch .bin models). This results in
+    vulnerability scanners flagging us and can cause compliance issues for users with strict security policies.
+    """
+    model_dir = Path(PATH_TO_MODELS)
+    for conversion_script in list(model_dir.glob("**/convert*.py")):
+        conversion_script.unlink()
 
 
-def get_version():
-    """Reads the current version in the __init__."""
+def get_version() -> packaging.version.Version:
+    """
+    Reads the current version in the main __init__.
+    """
     with open(REPLACE_FILES["init"], "r") as f:
         code = f.read()
     default_version = REPLACE_PATTERNS["init"][0].search(code).groups()[0]
     return packaging.version.parse(default_version)
 
 
-def pre_release_work(patch=False):
-    """Do all the necessary pre-release steps."""
+def pre_release_work(patch: bool = False):
+    """
+    Do all the necessary pre-release steps:
+    - figure out the next minor release version and ask confirmation
+    - update the version everywhere
+    - clean-up the model list in the main README
+
+    Args:
+        patch (`bool`, *optional*, defaults to `False`): Whether or not this is a patch release.
+    """
     # First let's get the default version: base version if we are in dev, bump minor otherwise.
     default_version = get_version()
     if patch and default_version.is_devrelease:
@@ -115,20 +161,24 @@ def pre_release_work(patch=False):
     else:
         default_version = f"{default_version.major}.{default_version.minor + 1}.0"
 
-    # Now let's ask nicely if that's the right one.
+    # Now let's ask nicely if we have found the right version.
     version = input(f"Which version are you releasing? [{default_version}]")
     if len(version) == 0:
         version = default_version
 
     print(f"Updating version to {version}.")
     global_version_update(version, patch=patch)
-    if not patch:
-        print("Cleaning main README, don't forget to run `make fix-copies`.")
-        clean_main_ref_in_model_list()
+    print("Deleting conversion scripts.")
+    remove_conversion_scripts()
 
 
 def post_release_work():
-    """Do all the necesarry post-release steps."""
+    """
+    Do all the necessary post-release steps:
+    - figure out the next dev version and ask confirmation
+    - update the version everywhere
+    - clean-up the model list in the main README
+    """
     # First let's get the current version
     current_version = get_version()
     dev_version = f"{current_version.major}.{current_version.minor + 1}.0.dev0"
@@ -141,8 +191,6 @@ def post_release_work():
 
     print(f"Updating version to {version}.")
     global_version_update(version)
-    print("Cleaning main README, don't forget to run `make fix-copies`.")
-    clean_main_ref_in_model_list()
 
 
 if __name__ == "__main__":

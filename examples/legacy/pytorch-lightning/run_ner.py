@@ -7,11 +7,10 @@ from importlib import import_module
 
 import numpy as np
 import torch
+from lightning_base import BaseTransformer, add_generic_args, generic_train
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader, TensorDataset
-
-from lightning_base import BaseTransformer, add_generic_args, generic_train
 from utils_ner import TokenClassificationTask
 
 
@@ -26,7 +25,7 @@ class NERTransformer(BaseTransformer):
     mode = "token-classification"
 
     def __init__(self, hparams):
-        if type(hparams) == dict:
+        if isinstance(hparams, dict):
             hparams = Namespace(**hparams)
         module = import_module("tasks")
         try:
@@ -123,7 +122,7 @@ class NERTransformer(BaseTransformer):
         preds = np.argmax(preds, axis=2)
         out_label_ids = np.concatenate([x["target"] for x in outputs], axis=0)
 
-        label_map = {i: label for i, label in enumerate(self.labels)}
+        label_map = dict(enumerate(self.labels))
         out_label_list = [[] for _ in range(out_label_ids.shape[0])]
         preds_list = [[] for _ in range(out_label_ids.shape[0])]
 
@@ -141,7 +140,7 @@ class NERTransformer(BaseTransformer):
             "f1": f1_score(out_label_list, preds_list),
         }
 
-        ret = {k: v for k, v in results.items()}
+        ret = dict(results.items())
         ret["log"] = results
         return ret, preds_list, out_label_list
 
@@ -212,6 +211,6 @@ if __name__ == "__main__":
         # pl use this default format to create a checkpoint:
         # https://github.com/PyTorchLightning/pytorch-lightning/blob/master\
         # /pytorch_lightning/callbacks/model_checkpoint.py#L322
-        checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "checkpoint-epoch=*.ckpt"), recursive=True)))
+        checkpoints = sorted(glob.glob(os.path.join(args.output_dir, "checkpoint-epoch=*.ckpt"), recursive=True))
         model = model.load_from_checkpoint(checkpoints[-1])
         trainer.test(model)

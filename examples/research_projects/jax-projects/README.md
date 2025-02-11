@@ -159,13 +159,13 @@ to be used, but that everybody in team is on the same page on what type of model
 To give an example, a well-defined project would be the following:
 
 - task: summarization
-- model: [t5-small](https://huggingface.co/t5-small)
+- model: [google-t5/t5-small](https://huggingface.co/google-t5/t5-small)
 - dataset: [CNN/Daily mail](https://huggingface.co/datasets/cnn_dailymail)
 - training script: [run_summarization_flax.py](https://github.com/huggingface/transformers/blob/main/examples/flax/summarization/run_summarization_flax.py)
 - outcome: t5 model that can summarize news
-- work flow: adapt `run_summarization_flax.py` to work with `t5-small`.
+- work flow: adapt `run_summarization_flax.py` to work with `google-t5/t5-small`.
 
-This example is a very easy and not the most interesting project since a `t5-small`
+This example is a very easy and not the most interesting project since a `google-t5/t5-small`
 summarization model exists already for CNN/Daily mail and pretty much no code has to be 
 written. 
 A well-defined project does not need to have the dataset be part of 
@@ -227,7 +227,7 @@ the forum and making use of the [🤗 hub](http://huggingface.co/) to have a ver
 control for your models and training logs.
 - When debugging, it is important that the debugging cycle is kept as short as possible to 
 be able to effectively debug. *E.g.* if there is a problem with your training script, 
-you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming.html?highlight=streaming) or by selecting just the first 
+you should run it with just a couple of hundreds of examples and not the whole dataset script. This can be done by either making use of [datasets streaming](https://huggingface.co/docs/datasets/master/dataset_streaming?highlight=streaming) or by selecting just the first 
 X number of data samples after loading:
 
 ```python
@@ -311,7 +311,7 @@ library from source to profit from the most current additions during the communi
 
 Simply run the following steps:
 
-```
+```bash
 $ cd ~/
 $ git clone https://github.com/huggingface/datasets.git
 $ cd datasets
@@ -335,7 +335,7 @@ dataset = load_dataset('oscar', "unshuffled_deduplicated_en", split='train', str
 
 dummy_input = next(iter(dataset))["text"]
 
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
 input_ids = tokenizer(dummy_input, return_tensors="np").input_ids[:, :10]
 
 model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
@@ -389,13 +389,13 @@ source ~/<your-venv-name>/bin/activate
 
 Next you should install JAX's TPU version on TPU by running the following command: 
 
-```
+```bash
 $ pip install requests
 ```
 
 and then:
 
-```
+```bash
 $ pip install "jax[tpu]>=0.2.16" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 ```
 
@@ -468,7 +468,7 @@ library from source to profit from the most current additions during the communi
 
 Simply run the following steps:
 
-```
+```bash
 $ cd ~/
 $ git clone https://github.com/huggingface/datasets.git
 $ cd datasets
@@ -492,7 +492,7 @@ dataset = load_dataset('oscar', "unshuffled_deduplicated_en", split='train', str
 
 dummy_input = next(iter(dataset))["text"]
 
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
 input_ids = tokenizer(dummy_input, return_tensors="np").input_ids[:, :10]
 
 model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
@@ -518,7 +518,7 @@ be available in a couple of days.
 - [BigBird](https://github.com/huggingface/transformers/blob/main/src/transformers/models/big_bird/modeling_flax_big_bird.py)
 - [CLIP](https://github.com/huggingface/transformers/blob/main/src/transformers/models/clip/modeling_flax_clip.py)
 - [ELECTRA](https://github.com/huggingface/transformers/blob/main/src/transformers/models/electra/modeling_flax_electra.py)
-- [GPT2](https://github.com/huggingface/transformers/blob/main/src/transformers/models/gpt2/modeling_flax_gpt2.py)
+- [GPT2](https://github.com/huggingface/transformers/blob/main/src/transformers/models/openai-community/gpt2/modeling_flax_gpt2.py)
 - [(TODO) MBART](https://github.com/huggingface/transformers/blob/main/src/transformers/models/mbart/modeling_flax_mbart.py)
 - [RoBERTa](https://github.com/huggingface/transformers/blob/main/src/transformers/models/roberta/modeling_flax_roberta.py)
 - [T5](https://github.com/huggingface/transformers/blob/main/src/transformers/models/t5/modeling_flax_t5.py)
@@ -568,7 +568,7 @@ class ModelPyTorch:
 
 Instantiating an object `model_pytorch` of the class `ModelPyTorch` would actually allocate memory for the model weights and attach them to the attributes `self.key_proj`, `self.value_proj`, `self.query_proj`, and `self.logits.proj`. We could access the weights via:
 
-```
+```python
 key_projection_matrix = model_pytorch.key_proj.weight.data
 ```
 
@@ -710,7 +710,7 @@ class FlaxMLPModel(FlaxMLPPreTrainedModel):
    module_class = FlaxMLPModule
 ```
 
-Now the `FlaxMLPModel` will have a similar interface as PyTorch or Tensorflow models and allows us to attach loaded or randomely initialized weights to the model instance.
+Now the `FlaxMLPModel` will have a similar interface as PyTorch or Tensorflow models and allows us to attach loaded or randomly initialized weights to the model instance.
 
 So the important point to remember is that the `model` is not an instance of `nn.Module`; it's an abstract class, like a container that holds a Flax module, its parameters and provides convenient methods for initialization and forward pass. The key take-away here is that an instance of `FlaxMLPModel` is very much stateful now since it holds all the model parameters, whereas the underlying Flax module `FlaxMLPModule` is still stateless. Now to make `FlaxMLPModel` fully compliant with JAX transformations, it is always possible to pass the parameters to `FlaxMLPModel` as well to make it stateless and easier to work with during training. Feel free to take a look at the code to see how exactly this is implemented for ex. [`modeling_flax_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_flax_bert.py#L536)
 
@@ -729,7 +729,7 @@ Let's use the base `FlaxRobertaModel` without any heads as an example.
 from transformers import FlaxRobertaModel, RobertaTokenizerFast
 import jax
 
-tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+tokenizer = RobertaTokenizerFast.from_pretrained("FacebookAI/roberta-base")
 inputs = tokenizer("JAX/Flax is amazing ", padding="max_length", max_length=128, return_tensors="np")
 
 model = FlaxRobertaModel.from_pretrained("julien-c/dummy-unknown")
@@ -1011,7 +1011,7 @@ and run the following commands in a Python shell to save a config.
 ```python
 from transformers import RobertaConfig
 
-config = RobertaConfig.from_pretrained("roberta-base")
+config = RobertaConfig.from_pretrained("FacebookAI/roberta-base")
 config.save_pretrained("./")
 ```
 
@@ -1117,7 +1117,7 @@ params = model.init(key2, x)
 
 bytes_output = serialization.to_bytes(params)
 
-repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", use_auth_token=True)
+repo = Repository("flax-model", clone_from="flax-community/flax-model-dummy", token=True)
 with repo.commit("My cool Flax model :)"):
     with open("flax_model.msgpack", "wb") as f:
         f.write(bytes_output)
@@ -1153,7 +1153,7 @@ In the following, we will describe how to do so using a standard console, but yo
 2. Once you've installed the google cloud sdk, you should set your account by running the following command. Make sure that `<your-email-address>` corresponds to the gmail address you used to sign up for this event.
 
 ```bash
-$ gcloud config set account <your-email-adress>
+$ gcloud config set account <your-email-address>
 ```
 
 3. Let's also make sure the correct project is set in case your email is used for multiple gcloud projects:
@@ -1193,12 +1193,12 @@ All the widgets are open sourced in the `huggingface_hub` [repo](https://github.
 **NLP**
 * **Conversational:** To have the best conversations!. [Example](https://huggingface.co/microsoft/DialoGPT-large?).
 * **Feature Extraction:** Retrieve the input embeddings. [Example](https://huggingface.co/sentence-transformers/distilbert-base-nli-mean-tokens?text=test).
-* **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/bert-base-uncased?).
-* **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/bert-large-uncased-whole-word-masking-finetuned-squad).
+* **Fill Mask:** Predict potential words for a mask token. [Example](https://huggingface.co/google-bert/bert-base-uncased?).
+* **Question Answering:** Given a context and a question, predict the answer. [Example](https://huggingface.co/google-bert/bert-large-uncased-whole-word-masking-finetuned-squad).
 * **Sentence Simmilarity:** Predict how similar a set of sentences are. Useful for Sentence Transformers.
 * **Summarization:** Given a text, output a summary of it. [Example](https://huggingface.co/sshleifer/distilbart-cnn-12-6).
 * **Table Question Answering:** Given a table and a question, predict the answer. [Example](https://huggingface.co/google/tapas-base-finetuned-wtq).
-* **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/gpt2)
+* **Text Generation:** Generate text based on a prompt. [Example](https://huggingface.co/openai-community/gpt2)
 * **Token Classification:** Useful for tasks such as Named Entity Recognition and Part of Speech. [Example](https://huggingface.co/dslim/bert-base-NER).
 * **Zero-Shot Classification:** Too cool to explain with words. Here is an [example](https://huggingface.co/typeform/distilbert-base-uncased-mnli)
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/99)) **Table to Text Generation**.
@@ -1209,7 +1209,7 @@ All the widgets are open sourced in the `huggingface_hub` [repo](https://github.
 * **Text to Speech**: Convert text to audio.
 
 **Image**
-* **Image Classification:** Given an image, predict its class. [Example](https://huggingface.co/osanseviero/llamastic).
+* **Image Classification:** Given an image, predict its class. [Example](https://huggingface.co/osanseviero/llamastic).
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/100)) **Zero Shot Image Classification**
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/112)) **Image Captioning**
 * ([WIP](https://github.com/huggingface/huggingface_hub/issues/113)) **Text to Image Generation**
@@ -1224,25 +1224,25 @@ Sometimes you might be using different libraries or a very specific application 
 
 A common use case is how to load files you have in your model repository in the Hub from the Streamlit demo. The `huggingface_hub` library is here to help you!
 
-```
+```bash
 pip install huggingface_hub
 ```
 
 Here is an example downloading (and caching!) a specific file directly from the Hub
-```
+```python
 from huggingface_hub import hf_hub_download
 filepath = hf_hub_download("flax-community/roberta-base-als", "flax_model.msgpack");
 ```
 
 In many cases you will want to download the full repository. Here is an example downloading all the files from a repo. You can even specify specific revisions!
 
-```
+```python
 from huggingface_hub import snapshot_download
 local_path = snapshot_download("flax-community/roberta-base-als");
 ```
 
 Note that if you're using 🤗 Transformers library, you can quickly load the model and tokenizer as follows
-```
+```python
 from transformers import AutoTokenizer, AutoModelForMaskedLM
   
 tokenizer = AutoTokenizer.from_pretrained("REPO_ID")

@@ -19,13 +19,16 @@ Feature extractor class for Speech2Text
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
-import torchaudio.compliance.kaldi as ta_kaldi
 
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import PaddingStrategy, TensorType, logging
+from ...utils import PaddingStrategy, TensorType, is_speech_available, logging
 
+
+if is_speech_available():
+    import torch
+    import torchaudio.compliance.kaldi as ta_kaldi
 
 logger = logging.get_logger(__name__)
 
@@ -37,17 +40,17 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`Speech2TextFeatureExtractor`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
-    mean and variance normalization to the extracted features.
+    This class extracts mel-filter bank features from raw speech using TorchAudio if installed or using numpy
+    otherwise, and applies utterance-level cepstral mean and variance normalization to the extracted features.
 
     Args:
-        feature_size (`int`, defaults to 80):
+        feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        num_mel_bins (`int`, defaults to 80):
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        num_mel_bins (`int`, *optional*, defaults to 80):
             Number of Mel-frequency bins.
-        padding_value (`float`, defaults to 0.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding vectors.
         do_ceptral_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
@@ -68,7 +71,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         do_ceptral_normalize=True,
         normalize_means=True,
         normalize_vars=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
@@ -76,6 +79,21 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
         self.return_attention_mask = True
+
+        if not is_speech_available():
+            mel_filters = mel_filter_bank(
+                num_frequency_bins=256,
+                num_mel_filters=self.num_mel_bins,
+                min_frequency=20,
+                max_frequency=sampling_rate // 2,
+                sampling_rate=sampling_rate,
+                norm=None,
+                mel_scale="kaldi",
+                triangularize_in_mel_space=True,
+            )
+
+            self.mel_filters = np.pad(mel_filters, ((0, 1), (0, 0)))
+            self.window = window_function(400, "povey", periodic=False)
 
     def _extract_fbank_features(
         self,
@@ -86,9 +104,27 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
-        waveform = torch.from_numpy(waveform).unsqueeze(0)
-        features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
-        return features.numpy()
+        if is_speech_available():
+            waveform = torch.from_numpy(waveform).unsqueeze(0)
+            features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
+            features = features.numpy()
+        else:
+            waveform = np.squeeze(waveform)
+            features = spectrogram(
+                waveform,
+                self.window,
+                frame_length=400,
+                hop_length=160,
+                fft_length=512,
+                power=2.0,
+                center=False,
+                preemphasis=0.97,
+                mel_filters=self.mel_filters,
+                log_mel="log",
+                mel_floor=1.192092955078125e-07,
+                remove_dc_offset=True,
+            ).T
+        return features
 
     @staticmethod
     def utterance_cmvn(
@@ -133,7 +169,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -141,7 +177,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
+                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -160,7 +197,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -169,7 +206,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For Speech2TextTransoformer models, `attention_mask` should alwys be passed for batched inference, to
+                For Speech2TextTransformer models, `attention_mask` should always be passed for batched inference, to
                 avoid subtle bugs.
 
                 </Tip>
@@ -183,7 +220,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors.
-            padding_value (`float`, defaults to 0.0):
+            padding_value (`float`, *optional*, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
         """
 
@@ -200,9 +237,11 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
@@ -256,3 +295,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["Speech2TextFeatureExtractor"]

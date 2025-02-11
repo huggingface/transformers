@@ -138,20 +138,20 @@ For bigger datasets, we recommend to train Wav2Vec2 locally instead of in a goog
 
 First, you need to clone the `transformers` repo with:
 
-```
+```bash
 $ git clone https://github.com/huggingface/transformers.git
 ```
 
 Second, head over to the `examples/research_projects/wav2vec2` directory, where the `run_common_voice.py` script is located.
 
-```
+```bash
 $ cd transformers/examples/research_projects/wav2vec2
 ```
 
 Third, install the required packages. The
 packages are listed in the `requirements.txt` file and can be installed with
 
-```
+```bash
 $ pip install -r requirements.txt
 ```
 
@@ -182,7 +182,7 @@ Here we will run the script on the *Turkish* Common Voice dataset for demonstrat
 		--per_device_train_batch_size="16" \
 		--learning_rate="3e-4" \
 		--warmup_steps="500" \
-		--evaluation_strategy="steps" \
+		--eval_strategy="steps" \
 		--save_steps="400" \
 		--eval_steps="400" \
 		--logging_steps="400" \
@@ -209,7 +209,7 @@ Here we will run the script on the *Turkish* Common Voice dataset for demonstrat
 		--per_device_train_batch_size="16" \
 		--learning_rate="3e-4" \
 		--warmup_steps="500" \
-		--evaluation_strategy="steps" \
+		--eval_strategy="steps" \
 		--save_steps="400" \
 		--eval_steps="400" \
 		--logging_steps="400" \
@@ -259,7 +259,7 @@ Then and add the following files that fully define a XLSR-Wav2Vec2 checkpoint in
 - `pytorch_model.bin`
 
 Having added the above files, you should run the following to push files to your model repository.  
-```
+```bash
 git add . && git commit -m "Add model files" && git push
 ```
 

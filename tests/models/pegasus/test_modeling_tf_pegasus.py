@@ -13,15 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
+from __future__ import annotations
+
 import unittest
 
 from transformers import AutoTokenizer, PegasusConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow, tooslow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -45,7 +47,7 @@ class TFPegasusModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_dropout_prob=0.1,
@@ -175,9 +177,19 @@ def prepare_pegasus_inputs_dict(
 
 
 @require_tf
-class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFPegasusModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFPegasusForConditionalGeneration, TFPegasusModel) if is_tf_available() else ()
     all_generative_model_classes = (TFPegasusForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFPegasusModel,
+            "summarization": TFPegasusForConditionalGeneration,
+            "text2text-generation": TFPegasusForConditionalGeneration,
+            "translation": TFPegasusForConditionalGeneration,
+        }
+        if is_tf_available()
+        else {}
+    )
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = False
@@ -192,61 +204,6 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        model_class = self.all_generative_model_classes[0]
-        input_ids = {
-            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
-        }
-
-        # Prepare our model
-        model = model_class(config)
-        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-        # Let's load it from the disk to be sure we can use pretrained weights
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            model = model_class.from_pretrained(tmpdirname)
-
-        outputs_dict = model(input_ids)
-        hidden_states = outputs_dict[0]
-
-        # Add a dense layer on top to test integration with other keras modules
-        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-        # Compile extended model
-        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
-        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
 
 
 @require_sentencepiece

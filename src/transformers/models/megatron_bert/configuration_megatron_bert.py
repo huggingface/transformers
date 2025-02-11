@@ -12,17 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MEGATRON_BERT model configuration"""
+"""MEGATRON_BERT model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    # See all MEGATRON_BERT models at https://huggingface.co/models?filter=bert
-}
 
 
 class MegatronBertConfig(PretrainedConfig):
@@ -70,6 +66,8 @@ class MegatronBertConfig(PretrainedConfig):
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -79,15 +77,16 @@ class MegatronBertConfig(PretrainedConfig):
     ```python
     >>> from transformers import MegatronBertConfig, MegatronBertModel
 
-    >>> # Initializing a MEGATRON_BERT bert-base-uncased style configuration
+    >>> # Initializing a MEGATRON_BERT google-bert/bert-base-uncased style configuration
     >>> configuration = MegatronBertConfig()
 
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the google-bert/bert-base-uncased style configuration
     >>> model = MegatronBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "megatron-bert"
 
     def __init__(
@@ -107,7 +106,7 @@ class MegatronBertConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -125,3 +124,6 @@ class MegatronBertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
+
+
+__all__ = ["MegatronBertConfig"]

@@ -1,11 +1,9 @@
 import datasets
+import faiss
 import numpy as np
 import streamlit as st
 import torch
 from elasticsearch import Elasticsearch
-
-import faiss
-import transformers
 from eli5_utils import (
     embed_questions_for_retrieval,
     make_qa_s2s_model,
@@ -13,6 +11,8 @@ from eli5_utils import (
     query_es_index,
     query_qa_dense_index,
 )
+
+import transformers
 from transformers import AutoModel, AutoModelForSeq2SeqLM, AutoTokenizer
 
 
@@ -36,7 +36,7 @@ def load_models():
         _ = s2s_model.eval()
     else:
         s2s_tokenizer, s2s_model = make_qa_s2s_model(
-            model_name="t5-small", from_file="seq2seq_models/eli5_t5_model_1024_4.pth", device="cuda:0"
+            model_name="google-t5/t5-small", from_file="seq2seq_models/eli5_t5_model_1024_4.pth", device="cuda:0"
         )
     return (qar_tokenizer, qar_model, s2s_tokenizer, s2s_model)
 
@@ -158,9 +158,7 @@ header_full = """
     </span>
   </body>
 </html>
-""" % (
-    header_html,
-)
+""" % (header_html,)
 st.sidebar.markdown(
     header_full,
     unsafe_allow_html=True,

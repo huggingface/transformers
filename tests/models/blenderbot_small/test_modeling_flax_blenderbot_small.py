@@ -20,7 +20,7 @@ import timeout_decorator  # noqa
 from transformers import BlenderbotSmallConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -34,6 +34,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers.models.blenderbot_small.modeling_flax_blenderbot_small import (
         FlaxBlenderbotSmallForConditionalGeneration,
         FlaxBlenderbotSmallModel,
@@ -85,7 +86,7 @@ class FlaxBlenderbotSmallModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=32,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -318,6 +319,18 @@ class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, Flax
         else ()
     )
     all_generative_model_classes = (FlaxBlenderbotSmallForConditionalGeneration,) if is_flax_available() else ()
+
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        return pipeline_test_case_name == "TextGenerationPipelineTests"
 
     def setUp(self):
         self.model_tester = FlaxBlenderbotSmallModelTester(self)

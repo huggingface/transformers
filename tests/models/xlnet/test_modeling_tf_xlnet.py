@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import inspect
 import random
 import unittest
@@ -23,13 +25,13 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.xlnet.modeling_tf_xlnet import (
-        TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXLNetForMultipleChoice,
         TFXLNetForQuestionAnsweringSimple,
         TFXLNetForSequenceClassification,
@@ -58,7 +60,7 @@ class TFXLNetModelTester:
         self.hidden_size = 32
         self.num_attention_heads = 4
         self.d_inner = 128
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.type_sequence_label_size = 2
         self.untie_r = True
         self.bi_data = False
@@ -331,8 +333,7 @@ class TFXLNetModelTester:
 
 
 @require_tf
-class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFXLNetModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFXLNetModel,
@@ -348,8 +349,40 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFXLNetLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFXLNetModel,
+            "question-answering": TFXLNetForQuestionAnsweringSimple,
+            "text-classification": TFXLNetForSequenceClassification,
+            "text-generation": TFXLNetLMHeadModel,
+            "token-classification": TFXLNetForTokenClassification,
+            "zero-shot": TFXLNetForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
+
+    # Note that `TFXLNetModelTest` is not a subclass of `GenerationTesterMixin`, so no contrastive generation tests
+    # from there is run against `TFXLNetModel`.
+    @unittest.skip("XLNet has special cache mechanism and is currently not working with contrastive generation")
+    def test_xla_generate_contrastive(self):
+        super().test_xla_generate_contrastive()
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        # Exception encountered when calling layer '...'
+        return True
 
     def setUp(self):
         self.model_tester = TFXLNetModelTester(self)
@@ -388,9 +421,13 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFXLNetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "xlnet/xlnet-base-cased"
+        model = TFXLNetModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
+    @unittest.skip("Some of the XLNet models misbehave with flexible input shapes.")
+    def test_compile_tf_model(self):
+        pass
 
     # overwrite since `TFXLNetLMHeadModel` doesn't cut logits/labels
     def test_loss_computation(self):
@@ -401,7 +438,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 added_label = prepared_for_class[
-                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                    sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
                 ]
                 expected_loss_size = added_label.shape.as_list()[:1]
 
@@ -460,7 +497,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFXLNetModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlnet_base_cased(self):
-        model = TFXLNetLMHeadModel.from_pretrained("xlnet-base-cased")
+        model = TFXLNetLMHeadModel.from_pretrained("xlnet/xlnet-base-cased")
         # fmt: off
         input_ids = tf.convert_to_tensor(
             [

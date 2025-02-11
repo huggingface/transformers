@@ -15,41 +15,63 @@
 """
 Image/Text processor class for OWL-ViT
 """
-from typing import List
+
+import warnings
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers import is_flax_available, is_tf_available, is_torch_available
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available
+
+
+if TYPE_CHECKING:
+    from .modeling_owlvit import OwlViTImageGuidedObjectDetectionOutput, OwlViTObjectDetectionOutput
 
 
 class OwlViTProcessor(ProcessorMixin):
     r"""
-    Constructs an OWL-ViT processor which wraps [`OwlViTFeatureExtractor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
-    into a single processor that interits both the feature extractor and tokenizer functionalities. See the
+    Constructs an OWL-ViT processor which wraps [`OwlViTImageProcessor`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`]
+    into a single processor that interits both the image processor and tokenizer functionalities. See the
     [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`OwlViTFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
+        image_processor ([`OwlViTImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`], *optional*):
             The tokenizer is a required input.
     """
-    feature_extractor_class = "OwlViTFeatureExtractor"
+
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "OwlViTImageProcessor"
     tokenizer_class = ("CLIPTokenizer", "CLIPTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
 
-    def __call__(self, text=None, images=None, padding="max_length", return_tensors="np", **kwargs):
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
+
+    def __call__(self, text=None, images=None, query_images=None, padding="max_length", return_tensors="np", **kwargs):
         """
         Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
         `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
+        of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -59,8 +81,11 @@ class OwlViTProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`,
             `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
+                tensor. Both channels-first and channels-last formats are supported.
+            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The query image to be prepared, one query image is expected per target image to be queried. Each image
+                can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
+                should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -76,8 +101,10 @@ class OwlViTProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        if text is None and images is None:
-            raise ValueError("You have to specify at least one text or image. Both cannot be none.")
+        if text is None and query_images is None and images is None:
+            raise ValueError(
+                "You have to specify at least one text or query image or image. All three cannot be none."
+            )
 
         if text is not None:
             if isinstance(text, str) or (isinstance(text, List) and not isinstance(text[0], List)):
@@ -128,23 +155,126 @@ class OwlViTProcessor(ProcessorMixin):
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
 
+        if query_images is not None:
+            encoding = BatchEncoding()
+            query_pixel_values = self.image_processor(
+                query_images, return_tensors=return_tensors, **kwargs
+            ).pixel_values
+            encoding["query_pixel_values"] = query_pixel_values
+
         if images is not None:
-            image_features = self.feature_extractor(images, return_tensors=return_tensors, **kwargs)
+            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
 
         if text is not None and images is not None:
             encoding["pixel_values"] = image_features.pixel_values
             return encoding
-        elif text is not None:
+        elif query_images is not None and images is not None:
+            encoding["pixel_values"] = image_features.pixel_values
+            return encoding
+        elif text is not None or query_images is not None:
             return encoding
         else:
             return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
 
     def post_process(self, *args, **kwargs):
         """
-        This method forwards all its arguments to [`OwlViTFeatureExtractor.post_process`]. Please refer to the
-        docstring of this method for more information.
+        This method forwards all its arguments to [`OwlViTImageProcessor.post_process`]. Please refer to the docstring
+        of this method for more information.
         """
-        return self.feature_extractor.post_process(*args, **kwargs)
+        return self.image_processor.post_process(*args, **kwargs)
+
+    def post_process_object_detection(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to [`OwlViTImageProcessor.post_process_object_detection`]. Please refer
+        to the docstring of this method for more information.
+        """
+        warnings.warn(
+            "`post_process_object_detection` method is deprecated for OwlVitProcessor and will be removed in v5. "
+            "Use `post_process_grounded_object_detection` instead.",
+            FutureWarning,
+        )
+        return self.image_processor.post_process_object_detection(*args, **kwargs)
+
+    def post_process_grounded_object_detection(
+        self,
+        outputs: "OwlViTObjectDetectionOutput",
+        threshold: float = 0.1,
+        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        text_labels: Optional[List[List[str]]] = None,
+    ):
+        """
+        Converts the raw output of [`OwlViTForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format.
+
+        Args:
+            outputs ([`OwlViTObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.1):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            text_labels (`List[List[str]]`, *optional*):
+                List of lists of text labels for each image in the batch. If unset, "text_labels" in output will be
+                set to `None`.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            - "scores": The confidence scores for each predicted box on the image.
+            - "labels": Indexes of the classes predicted by the model on the image.
+            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
+            - "text_labels": The text labels for each predicted bounding box on the image.
+        """
+        output = self.image_processor.post_process_object_detection(
+            outputs=outputs, threshold=threshold, target_sizes=target_sizes
+        )
+
+        if text_labels is not None and len(text_labels) != len(output):
+            raise ValueError("Make sure that you pass in as many lists of text labels as images")
+
+        # adding text labels to the output
+        if text_labels is not None:
+            for image_output, image_text_labels in zip(output, text_labels):
+                object_text_labels = [image_text_labels[i] for i in image_output["labels"]]
+                image_output["text_labels"] = object_text_labels
+        else:
+            for image_output in output:
+                image_output["text_labels"] = None
+
+        return output
+
+    def post_process_image_guided_detection(
+        self,
+        outputs: "OwlViTImageGuidedObjectDetectionOutput",
+        threshold: float = 0.0,
+        nms_threshold: float = 0.3,
+        target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+    ):
+        """
+        Converts the output of [`OwlViTForObjectDetection.image_guided_detection`] into the format expected by the COCO
+        api.
+
+        Args:
+            outputs ([`OwlViTImageGuidedObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*, defaults to 0.0):
+                Minimum confidence threshold to use to filter out predicted boxes.
+            nms_threshold (`float`, *optional*, defaults to 0.3):
+                IoU threshold for non-maximum suppression of overlapping boxes.
+            target_sizes (`torch.Tensor`, *optional*):
+                Tensor of shape (batch_size, 2) where each entry is the (height, width) of the corresponding image in
+                the batch. If set, predicted normalized bounding boxes are rescaled to the target sizes. If left to
+                None, predictions will not be unnormalized.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the following keys:
+            - "scores": The confidence scores for each predicted box on the image.
+            - "boxes": Image bounding boxes in (top_left_x, top_left_y, bottom_right_x, bottom_right_y) format.
+            - "labels": Set to `None`.
+        """
+        return self.image_processor.post_process_image_guided_detection(
+            outputs=outputs, threshold=threshold, nms_threshold=nms_threshold, target_sizes=target_sizes
+        )
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -159,3 +289,22 @@ class OwlViTProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor
+
+
+__all__ = ["OwlViTProcessor"]

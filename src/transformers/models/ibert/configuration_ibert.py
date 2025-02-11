@@ -14,25 +14,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" I-BERT configuration"""
+"""I-BERT configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
-from transformers.onnx import OnnxConfig
-
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "kssteven/ibert-roberta-base": "https://huggingface.co/kssteven/ibert-roberta-base/resolve/main/config.json",
-    "kssteven/ibert-roberta-large": "https://huggingface.co/kssteven/ibert-roberta-large/resolve/main/config.json",
-    "kssteven/ibert-roberta-large-mnli": (
-        "https://huggingface.co/kssteven/ibert-roberta-large-mnli/resolve/main/config.json"
-    ),
-}
 
 
 class IBertConfig(PretrainedConfig):
@@ -111,7 +103,7 @@ class IBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         quant_mode=False,
         force_dequant="none",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
@@ -145,3 +137,6 @@ class IBertOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["IBertConfig", "IBertOnnxConfig"]

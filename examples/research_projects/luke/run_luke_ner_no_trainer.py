@@ -27,14 +27,14 @@ from pathlib import Path
 
 import datasets
 import torch
+from accelerate import Accelerator, DistributedDataParallelKwargs
 from datasets import ClassLabel, load_dataset, load_metric
+from huggingface_hub import Repository, create_repo
+from luke_utils import DataCollatorForLukeTokenClassification, is_punctuation, padding_tensor
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator, DistributedDataParallelKwargs
-from huggingface_hub import Repository
-from luke_utils import DataCollatorForLukeTokenClassification, is_punctuation, padding_tensor
 from transformers import (
     AdamW,
     LukeConfig,
@@ -45,7 +45,6 @@ from transformers import (
     get_scheduler,
     set_seed,
 )
-from transformers.file_utils import get_full_repo_name
 from transformers.utils.versions import require_version
 
 
@@ -258,11 +257,14 @@ def main():
     # Handle the repository creation
     if accelerator.is_main_process:
         if args.push_to_hub:
-            if args.hub_model_id is None:
-                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
-            else:
-                repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            # Retrieve of infer repo_name
+            repo_name = args.hub_model_id
+            if repo_name is None:
+                repo_name = Path(args.output_dir).absolute().name
+            # Create repo and retrieve repo_id
+            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            # Clone repo locally
+            repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -283,16 +285,17 @@ def main():
         data_files = {}
         if args.train_file is not None:
             data_files["train"] = args.train_file
+            extension = args.train_file.split(".")[-1]
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
-        extension = args.train_file.split(".")[-1]
+            extension = args.validation_file.split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files)
     # Trim a number of training examples
     if args.debug:
         for split in raw_datasets.keys():
             raw_datasets[split] = raw_datasets[split].select(range(100))
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if raw_datasets["train"] is not None:
         column_names = raw_datasets["train"].column_names
@@ -355,7 +358,7 @@ def main():
     tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
     if not tokenizer_name_or_path:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -539,9 +542,14 @@ def main():
         # Otherwise, `DataCollatorForTokenClassification` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-        data_collator = DataCollatorForLukeTokenClassification(
-            tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None)
-        )
+        # For fp8, we pad to multiple of 16.
+        if accelerator.mixed_precision == "fp8":
+            pad_to_multiple_of = 16
+        elif accelerator.mixed_precision != "no":
+            pad_to_multiple_of = 8
+        else:
+            pad_to_multiple_of = None
+        data_collator = DataCollatorForLukeTokenClassification(tokenizer, pad_to_multiple_of=pad_to_multiple_of)
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
@@ -610,7 +618,7 @@ def main():
             predicted_sequence = [label_list[0]] * len(true_tags)
 
             for _, span, label in sorted(predictions, key=lambda o: o[0], reverse=True):
-                if all([o == label_list[0] for o in predicted_sequence[span[0] : span[1]]]):
+                if all(o == label_list[0] for o in predicted_sequence[span[0] : span[1]]):
                     predicted_sequence[span[0]] = label
                     if span[1] - span[0] > 1:
                         predicted_sequence[span[0] + 1 : span[1]] = [label] * (span[1] - span[0] - 1)

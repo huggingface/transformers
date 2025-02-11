@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST, Wav2Vec2Config, Wav2Vec2FeatureExtractor
+from transformers import Wav2Vec2Config, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import require_torch, slow
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
@@ -29,6 +29,7 @@ from ...test_sequence_feature_extraction_common import SequenceFeatureExtraction
 global_rng = random.Random()
 
 
+# Copied from tests.models.whisper.test_feature_extraction_whisper.floats_list
 def floats_list(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
@@ -43,7 +44,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
+class Wav2Vec2FeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -96,7 +97,6 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
 
 
 class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-
     feature_extraction_class = Wav2Vec2FeatureExtractor
 
     def setUp(self):
@@ -119,6 +119,14 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
+        encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
         encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
         encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
@@ -216,10 +224,10 @@ class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         # this test makes sure that models that are using
         # group norm don't have their feature extractor return the
         # attention_mask
-        for model_id in WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST:
-            config = Wav2Vec2Config.from_pretrained(model_id)
-            feat_extract = Wav2Vec2FeatureExtractor.from_pretrained(model_id)
+        model_id = "facebook/wav2vec2-base-960h"
+        config = Wav2Vec2Config.from_pretrained(model_id)
+        feat_extract = Wav2Vec2FeatureExtractor.from_pretrained(model_id)
 
-            # only "layer" feature extraction norm should make use of
-            # attention_mask
-            self.assertEqual(feat_extract.return_attention_mask, config.feat_extract_norm == "layer")
+        # only "layer" feature extraction norm should make use of
+        # attention_mask
+        self.assertEqual(feat_extract.return_attention_mask, config.feat_extract_norm == "layer")

@@ -29,47 +29,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/vocab.json",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/merges.txt",
-        "allenai/longformer-large-4096": (
-            "https://huggingface.co/allenai/longformer-large-4096/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-finetuned-triviaqa": (
-            "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-base-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-        "allenai/longformer-large-4096-extra.pos.embd.only": (
-            "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/longformer-base-4096": 4096,
-    "allenai/longformer-large-4096": 4096,
-    "allenai/longformer-large-4096-finetuned-triviaqa": 4096,
-    "allenai/longformer-base-4096-extra.pos.embd.only": 4096,
-    "allenai/longformer-large-4096-extra.pos.embd.only": 4096,
-}
-
 
 @lru_cache()
 # Copied from transformers.models.roberta.tokenization_roberta.bytes_to_unicode
@@ -112,7 +71,7 @@ def get_pairs(word):
     return pairs
 
 
-# Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer with roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, RobertaTokenizer->LongformerTokenizer
+# Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer with FacebookAI/roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, RobertaTokenizer->LongformerTokenizer
 class LongformerTokenizer(PreTrainedTokenizer):
     """
     Constructs a Longformer tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
@@ -120,12 +79,14 @@ class LongformerTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import LongformerTokenizer
+
     >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
-    >>> tokenizer("Hello world")['input_ids']
-    [0, 31414, 232, 328, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
+    [0, 31414, 232, 2]
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 
@@ -190,8 +151,6 @@ class LongformerTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -207,30 +166,23 @@ class LongformerTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
         )
+
+        # these special tokens are not part of the vocab.json, let's add them in the correct order
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -248,12 +200,27 @@ class LongformerTokenizer(PreTrainedTokenizer):
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+
     @property
     def vocab_size(self):
         return len(self.encoder)
 
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = dict(self.encoder).copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def bpe(self, token):
         if token in self.cache:
@@ -406,8 +373,8 @@ class LongformerTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Longformer does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Longformer does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -430,3 +397,6 @@ class LongformerTokenizer(PreTrainedTokenizer):
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
+
+
+__all__ = ["LongformerTokenizer"]

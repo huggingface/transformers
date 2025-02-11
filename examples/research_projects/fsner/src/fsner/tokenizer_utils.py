@@ -3,7 +3,7 @@ import torch
 from transformers import AutoTokenizer
 
 
-class FSNERTokenizerUtils(object):
+class FSNERTokenizerUtils:
     def __init__(self, pretrained_model_name_or_path):
         self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
 
@@ -17,7 +17,7 @@ class FSNERTokenizerUtils(object):
             `transformers.tokenization_utils_base.BatchEncoding` dict with additional keys and values for start_token_id, end_token_id and sizes of example lists for each entity type
         """
 
-        if isinstance(x, list) and all([isinstance(_x, list) for _x in x]):
+        if isinstance(x, list) and all(isinstance(_x, list) for _x in x):
             d = None
             for l in x:
                 t = self.tokenizer(
@@ -37,7 +37,7 @@ class FSNERTokenizerUtils(object):
             d["start_token_id"] = torch.tensor(self.tokenizer.convert_tokens_to_ids("[E]"))
             d["end_token_id"] = torch.tensor(self.tokenizer.convert_tokens_to_ids("[/E]"))
 
-        elif isinstance(x, list) and all([isinstance(_x, str) for _x in x]):
+        elif isinstance(x, list) and all(isinstance(_x, str) for _x in x):
             d = self.tokenizer(
                 x,
                 padding="max_length",

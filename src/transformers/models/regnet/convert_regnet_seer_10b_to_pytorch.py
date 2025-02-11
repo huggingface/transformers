@@ -29,14 +29,14 @@ from typing import Dict, List, Tuple
 
 import torch
 import torch.nn as nn
-from torch import Tensor
-
 from classy_vision.models.regnet import RegNet, RegNetParams
-from huggingface_hub import cached_download, hf_hub_url
-from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
+from huggingface_hub import hf_hub_download
+from torch import Tensor
+from vissl.models.model_helpers import get_trunk_forward_outputs
+
+from transformers import AutoImageProcessor, RegNetConfig, RegNetForImageClassification, RegNetModel
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
-from vissl.models.model_helpers import get_trunk_forward_outputs
 
 
 logging.set_verbosity_info()
@@ -60,7 +60,7 @@ class Tracker:
         for name, m in self.module.named_modules():
             self.handles.append(m.register_forward_hook(partial(self._forward_hook, name=name)))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property
@@ -165,7 +165,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -262,10 +262,10 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         )
         size = 384
         # we can use the convnext one
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
-        feature_extractor.push_to_hub(
+        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
+        image_processor.push_to_hub(
             repo_path_or_name=save_directory / model_name,
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             output_dir=save_directory / model_name,
         )
 
@@ -294,7 +294,7 @@ if __name__ == "__main__":
         default=True,
         type=bool,
         required=False,
-        help="If True, push model and feature extractor to the hub.",
+        help="If True, push model and image processor to the hub.",
     )
 
     args = parser.parse_args()

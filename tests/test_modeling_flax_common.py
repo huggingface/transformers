@@ -17,26 +17,16 @@ import inspect
 import json
 import random
 import tempfile
-import unittest
 from typing import List, Tuple
 
 import numpy as np
 
 import transformers
-from huggingface_hub import HfFolder, delete_repo, set_access_token
-from requests.exceptions import HTTPError
-from transformers import BertConfig, is_flax_available, is_torch_available
+from transformers import is_flax_available, is_torch_available
+from transformers.cache_utils import DynamicCache
 from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    TOKEN,
-    USER,
-    CaptureLogger,
-    is_pt_flax_cross_test,
-    is_staging_test,
-    require_flax,
-    torch_device,
-)
-from transformers.utils import logging
+from transformers.testing_utils import CaptureLogger, is_pt_flax_cross_test, require_flax, torch_device
+from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, logging
 from transformers.utils.generic import ModelOutput
 
 
@@ -48,6 +38,7 @@ if is_flax_available():
     from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
     from flax.serialization import from_bytes
     from flax.traverse_util import flatten_dict, unflatten_dict
+
     from transformers import (
         FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -66,14 +57,6 @@ if is_flax_available():
 
 if is_torch_available():
     import torch
-
-
-def _config_zero_init(config):
-    configs_no_init = copy.deepcopy(config)
-    for key in configs_no_init.__dict__.keys():
-        if "_range" in key or "_std" in key or "initializer_factor" in key:
-            setattr(configs_no_init, key, 1e-10)
-    return configs_no_init
 
 
 def ids_tensor(shape, vocab_size, rng=None):
@@ -117,6 +100,30 @@ def random_attention_mask(shape, rng=None):
     return attn_mask
 
 
+def get_params(params, from_head_prefix=None):
+    """Function extracts relevant parameters into flatten dict from model params,
+    appends batch normalization statistics if present"""
+
+    # If Both parameters and batch normalization statistics are present
+    if "batch_stats" in params:
+        # Extract only parameters for the specified head prefix (if specified) and add batch statistics
+        if from_head_prefix is not None:
+            extracted_params = flatten_dict(unfreeze(params["params"][from_head_prefix]))
+            extracted_params.update(flatten_dict(params["batch_stats"][from_head_prefix]))
+        else:
+            extracted_params = flatten_dict(unfreeze(params["params"]))
+            extracted_params.update(flatten_dict(params["batch_stats"]))
+
+    # Only parameters are present
+    else:
+        if from_head_prefix is not None:
+            extracted_params = flatten_dict(unfreeze(params[from_head_prefix]))
+        else:
+            extracted_params = flatten_dict(unfreeze(params))
+
+    return extracted_params
+
+
 @require_flax
 class FlaxModelTesterMixin:
     model_tester = None
@@ -133,7 +140,7 @@ class FlaxModelTesterMixin:
         if "ForMultipleChoice" in model_class.__name__:
             inputs_dict = {
                 k: jnp.broadcast_to(v[:, None], (v.shape[0], self.model_tester.num_choices, v.shape[-1]))
-                if isinstance(v, (jnp.ndarray, np.ndarray))
+                if isinstance(v, (jnp.ndarray, np.ndarray)) and k != "indices_prng_key"
                 else v
                 for k, v in inputs_dict.items()
             }
@@ -174,7 +181,7 @@ class FlaxModelTesterMixin:
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
     # (Copied from tests.test_modeling_common.ModelTesterMixin.check_pt_flax_outputs)
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
+    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
         """
         Args:
             model_class: The class of the model that is currently testing. For example, ..., etc.
@@ -184,7 +191,6 @@ class FlaxModelTesterMixin:
                 Currently unused, but in the future, we could use this information to make the error message clearer
                 by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
         """
-
         self.assertEqual(type(name), str)
         if attributes is not None:
             self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
@@ -229,6 +235,8 @@ class FlaxModelTesterMixin:
                 attributes = tuple([f"{name}_{idx}" for idx in range(len(fx_outputs))])
 
             for fx_output, pt_output, attr in zip(fx_outputs, pt_outputs, attributes):
+                if isinstance(pt_output, DynamicCache):
+                    pt_output = pt_output.to_legacy_cache()
                 self.check_pt_flax_outputs(fx_output, pt_output, model_class, tol=tol, name=attr)
 
         elif isinstance(fx_outputs, jnp.ndarray):
@@ -275,7 +283,6 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # Output all for aggressive testing
                 config.output_hidden_states = True
                 config.output_attentions = self.has_attentions
@@ -328,7 +335,6 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
-
                 # Output all for aggressive testing
                 config.output_hidden_states = True
                 config.output_attentions = self.has_attentions
@@ -367,7 +373,9 @@ class FlaxModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     fx_model.save_pretrained(tmpdirname)
-                    pt_model_loaded = pt_model_class.from_pretrained(tmpdirname, from_flax=True)
+                    pt_model_loaded = pt_model_class.from_pretrained(
+                        tmpdirname, from_flax=True, attn_implementation=fx_model.config._attn_implementation
+                    )
 
                 # send pytorch model to the correct device
                 pt_model_loaded.to(torch_device)
@@ -395,6 +403,13 @@ class FlaxModelTesterMixin:
                 # verify that normal save_pretrained works as expected
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
+
+                    # the config file (and the generation config file, if it can generate) should be saved
+                    self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                    self.assertEqual(
+                        model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                    )
+
                     model_loaded = model_class.from_pretrained(tmpdirname)
 
                 outputs_loaded = model_loaded(**prepared_inputs_dict).to_tuple()
@@ -420,14 +435,14 @@ class FlaxModelTesterMixin:
                 continue
 
             model = base_class(config)
-            base_params = flatten_dict(unfreeze(model.params))
+            base_params = get_params(model.params)
 
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 head_model = model_class.from_pretrained(tmpdirname)
 
-                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
+                base_param_from_head = get_params(head_model.params, from_head_prefix=head_model.base_model_prefix)
 
                 for key in base_param_from_head.keys():
                     max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
@@ -442,14 +457,14 @@ class FlaxModelTesterMixin:
                 continue
 
             model = model_class(config)
-            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+            base_params_from_head = get_params(model.params, from_head_prefix=model.base_model_prefix)
 
             # check that all base model weights are loaded correctly
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 base_model = base_class.from_pretrained(tmpdirname)
 
-                base_params = flatten_dict(unfreeze(base_model.params))
+                base_params = get_params(base_model.params)
 
                 for key in base_params_from_head.keys():
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
@@ -465,7 +480,7 @@ class FlaxModelTesterMixin:
                 continue
 
             model = base_class(config)
-            base_params = flatten_dict(unfreeze(model.params))
+            base_params = get_params(model.params)
 
             # convert Flax model to PyTorch model
             pt_model_class = getattr(transformers, base_class.__name__[4:])  # Skip the "Flax" at the beginning
@@ -478,7 +493,7 @@ class FlaxModelTesterMixin:
                 pt_model.save_pretrained(tmpdirname)
                 head_model = model_class.from_pretrained(tmpdirname, from_pt=True)
 
-                base_param_from_head = flatten_dict(unfreeze(head_model.params[head_model.base_model_prefix]))
+                base_param_from_head = get_params(head_model.params, from_head_prefix=head_model.base_model_prefix)
 
                 for key in base_param_from_head.keys():
                     max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
@@ -494,7 +509,7 @@ class FlaxModelTesterMixin:
                 continue
 
             model = model_class(config)
-            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+            base_params_from_head = get_params(model.params, from_head_prefix=model.base_model_prefix)
 
             # convert Flax model to PyTorch model
             pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
@@ -506,7 +521,7 @@ class FlaxModelTesterMixin:
                 pt_model.save_pretrained(tmpdirname)
                 base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
 
-                base_params = flatten_dict(unfreeze(base_model.params))
+                base_params = get_params(base_model.params)
 
                 for key in base_params_from_head.keys():
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
@@ -523,7 +538,7 @@ class FlaxModelTesterMixin:
 
             model = model_class(config)
             model.params = model.to_bf16(model.params)
-            base_params_from_head = flatten_dict(unfreeze(model.params[model.base_model_prefix]))
+            base_params_from_head = get_params(model.params, from_head_prefix=model.base_model_prefix)
 
             # convert Flax model to PyTorch model
             pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
@@ -535,7 +550,7 @@ class FlaxModelTesterMixin:
                 pt_model.save_pretrained(tmpdirname)
                 base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
 
-                base_params = flatten_dict(unfreeze(base_model.params))
+                base_params = get_params(base_model.params)
 
                 for key in base_params_from_head.keys():
                     max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
@@ -562,7 +577,6 @@ class FlaxModelTesterMixin:
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_forward_signature(self):
@@ -600,7 +614,6 @@ class FlaxModelTesterMixin:
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
-
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
@@ -645,6 +658,9 @@ class FlaxModelTesterMixin:
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_attention_outputs(self):
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
@@ -780,7 +796,7 @@ class FlaxModelTesterMixin:
             types = flatten_dict(types)
 
             for name, type_ in types.items():
-                self.assertEquals(type_, jnp.float32, msg=f"param {name} is not initialized in fp32.")
+                self.assertEqual(type_, jnp.float32, msg=f"param {name} is not initialized in fp32.")
 
     def test_to_bf16(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -972,7 +988,7 @@ class FlaxModelTesterMixin:
 
             # Check if we params can be properly initialized when calling init_weights
             params = model.init_weights(model.key, model.input_shape)
-            self.assertIsInstance(params, FrozenDict)
+            assert isinstance(params, (dict, FrozenDict)), f"params are not an instance of {FrozenDict}"
             # Check if all required parmas are initialized
             keys = set(flatten_dict(unfreeze(params)).keys())
             self.assertTrue(all(k in keys for k in model.required_params))
@@ -1091,7 +1107,7 @@ class FlaxModelTesterMixin:
                     index = json.loads(f.read())
 
                 all_shards = set(index["weight_map"].values())
-                shards_found = set(f for f in os.listdir(tmp_dir) if f.endswith(".msgpack"))
+                shards_found = {f for f in os.listdir(tmp_dir) if f.endswith(".msgpack")}
                 self.assertSetEqual(all_shards, shards_found)
 
                 # Finally, check the model can be reloaded
@@ -1133,91 +1149,3 @@ class FlaxModelTesterMixin:
             # ensure that the outputs remain precisely equal
             for output, remat_output in zip(outputs, remat_outputs):
                 self.assertTrue((output == remat_output).all())
-
-
-@require_flax
-@is_staging_test
-class FlaxModelPushToHubTester(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls._token = TOKEN
-        set_access_token(TOKEN)
-        HfFolder.save_token(TOKEN)
-
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            delete_repo(token=cls._token, repo_id="test-model-flax")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-model-flax-org")
-        except HTTPError:
-            pass
-
-    def test_push_to_hub(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = FlaxBertModel(config)
-        model.push_to_hub("test-model-flax", use_auth_token=self._token)
-
-        new_model = FlaxBertModel.from_pretrained(f"{USER}/test-model-flax")
-
-        base_params = flatten_dict(unfreeze(model.params))
-        new_params = flatten_dict(unfreeze(new_model.params))
-
-        for key in base_params.keys():
-            max_diff = (base_params[key] - new_params[key]).sum().item()
-            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-        # Reset repo
-        delete_repo(token=self._token, repo_id="test-model-flax")
-
-        # Push to hub via save_pretrained
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, repo_id="test-model-flax", push_to_hub=True, use_auth_token=self._token)
-
-        new_model = FlaxBertModel.from_pretrained(f"{USER}/test-model-flax")
-
-        base_params = flatten_dict(unfreeze(model.params))
-        new_params = flatten_dict(unfreeze(new_model.params))
-
-        for key in base_params.keys():
-            max_diff = (base_params[key] - new_params[key]).sum().item()
-            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-    def test_push_to_hub_in_organization(self):
-        config = BertConfig(
-            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-        )
-        model = FlaxBertModel(config)
-        model.push_to_hub("valid_org/test-model-flax-org", use_auth_token=self._token)
-
-        new_model = FlaxBertModel.from_pretrained("valid_org/test-model-flax-org")
-
-        base_params = flatten_dict(unfreeze(model.params))
-        new_params = flatten_dict(unfreeze(new_model.params))
-
-        for key in base_params.keys():
-            max_diff = (base_params[key] - new_params[key]).sum().item()
-            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-        # Reset repo
-        delete_repo(token=self._token, repo_id="valid_org/test-model-flax-org")
-
-        # Push to hub via save_pretrained
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-model-flax-org", push_to_hub=True, use_auth_token=self._token
-            )
-
-        new_model = FlaxBertModel.from_pretrained("valid_org/test-model-flax-org")
-
-        base_params = flatten_dict(unfreeze(model.params))
-        new_params = flatten_dict(unfreeze(new_model.params))
-
-        for key in base_params.keys():
-            max_diff = (base_params[key] - new_params[key]).sum().item()
-            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")

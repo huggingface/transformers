@@ -25,7 +25,7 @@ if is_torch_available():
     from transformers import AutoModelForImageClassification
 
 if is_vision_available():
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 @require_torch
@@ -33,7 +33,7 @@ if is_vision_available():
 class DiTIntegrationTest(unittest.TestCase):
     @slow
     def test_for_image_classification(self):
-        feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
+        image_processor = AutoImageProcessor.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
         model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
         model.to(torch_device)
 
@@ -43,7 +43,7 @@ class DiTIntegrationTest(unittest.TestCase):
 
         image = dataset["train"][0]["image"].convert("RGB")
 
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -58,4 +58,4 @@ class DiTIntegrationTest(unittest.TestCase):
             device=torch_device,
             dtype=torch.float,
         )
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

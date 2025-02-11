@@ -30,33 +30,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
 # See all BART models at https://huggingface.co/models?filter=bart
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/bart-base": "https://huggingface.co/facebook/bart-base/resolve/main/vocab.json",
-        "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/vocab.json",
-        "facebook/bart-large-mnli": "https://huggingface.co/facebook/bart-large-mnli/resolve/main/vocab.json",
-        "facebook/bart-large-cnn": "https://huggingface.co/facebook/bart-large-cnn/resolve/main/vocab.json",
-        "facebook/bart-large-xsum": "https://huggingface.co/facebook/bart-large-xsum/resolve/main/vocab.json",
-        "yjernite/bart_eli5": "https://huggingface.co/yjernite/bart_eli5/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "facebook/bart-base": "https://huggingface.co/facebook/bart-base/resolve/main/merges.txt",
-        "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/merges.txt",
-        "facebook/bart-large-mnli": "https://huggingface.co/facebook/bart-large-mnli/resolve/main/merges.txt",
-        "facebook/bart-large-cnn": "https://huggingface.co/facebook/bart-large-cnn/resolve/main/merges.txt",
-        "facebook/bart-large-xsum": "https://huggingface.co/facebook/bart-large-xsum/resolve/main/merges.txt",
-        "yjernite/bart_eli5": "https://huggingface.co/yjernite/bart_eli5/resolve/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/bart-base": 1024,
-    "facebook/bart-large": 1024,
-    "facebook/bart-large-mnli": 1024,
-    "facebook/bart-large-cnn": 1024,
-    "facebook/bart-large-xsum": 1024,
-    "yjernite/bart_eli5": 1024,
-}
 
 
 @lru_cache()
@@ -105,12 +78,14 @@ class BartTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import BartTokenizer
+
     >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-base")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [0, 31414, 232, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [0, 20920, 232, 2]
     ```
 
@@ -175,8 +150,6 @@ class BartTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -192,7 +165,7 @@ class BartTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -203,19 +176,6 @@ class BartTokenizer(PreTrainedTokenizer):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
-        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -232,6 +192,19 @@ class BartTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):
@@ -415,3 +388,6 @@ class BartTokenizer(PreTrainedTokenizer):
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
+
+
+__all__ = ["BartTokenizer"]

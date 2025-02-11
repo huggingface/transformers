@@ -18,9 +18,10 @@ import unittest
 from transformers import XLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -35,42 +36,69 @@ if is_torch_available():
         XLMModel,
         XLMWithLMHeadModel,
     )
-    from transformers.models.xlm.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.xlm.modeling_xlm import create_sinusoidal_embeddings
 
 
 class XLMModelTester:
     def __init__(
         self,
         parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_lengths=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        gelu_activation=True,
+        sinusoidal_embeddings=False,
+        causal=False,
+        asm=False,
+        n_langs=2,
+        vocab_size=99,
+        n_special=0,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=2,
+        num_choices=4,
+        summary_type="last",
+        use_proj=True,
+        scope=None,
+        bos_token_id=0,
     ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_input_lengths = True
-        self.use_token_type_ids = True
-        self.use_labels = True
-        self.gelu_activation = True
-        self.sinusoidal_embeddings = False
-        self.causal = False
-        self.asm = False
-        self.n_langs = 2
-        self.vocab_size = 99
-        self.n_special = 0
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 512
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 2
-        self.num_choices = 4
-        self.summary_type = "last"
-        self.use_proj = True
-        self.scope = None
-        self.bos_token_id = 0
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_lengths = use_input_lengths
+        self.use_token_type_ids = use_token_type_ids
+        self.use_labels = use_labels
+        self.gelu_activation = gelu_activation
+        self.sinusoidal_embeddings = sinusoidal_embeddings
+        self.causal = causal
+        self.asm = asm
+        self.n_langs = n_langs
+        self.vocab_size = vocab_size
+        self.n_special = n_special
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
+        self.summary_type = summary_type
+        self.use_proj = use_proj
+        self.scope = scope
+        self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -332,8 +360,7 @@ class XLMModelTester:
 
 
 @require_torch
-class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLMModel,
@@ -350,6 +377,42 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (XLMWithLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": XLMModel,
+            "fill-mask": XLMWithLMHeadModel,
+            "question-answering": XLMForQuestionAnsweringSimple,
+            "text-classification": XLMForSequenceClassification,
+            "text-generation": XLMWithLMHeadModel,
+            "token-classification": XLMForTokenClassification,
+            "zero-shot": XLMForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if (
+            pipeline_test_case_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     # XLM has 2 QA models -> need to manually set the correct labels for one of them here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -377,6 +440,14 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_model(*config_and_inputs)
 
+    # Copied from tests/models/distilbert/test_modeling_distilbert.py with Distilbert->XLM
+    def test_xlm_model_with_sinusoidal_encodings(self):
+        config = XLMConfig(sinusoidal_embeddings=True)
+        model = XLMModel(config=config)
+        sinusoidal_pos_embds = torch.empty((config.max_position_embeddings, config.emb_dim), dtype=torch.float32)
+        create_sinusoidal_embeddings(config.max_position_embeddings, config.emb_dim, sinusoidal_pos_embds)
+        self.model_tester.parent.assertTrue(torch.equal(model.position_embeddings.weight, sinusoidal_pos_embds))
+
     def test_xlm_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_lm_head(*config_and_inputs)
@@ -402,63 +473,37 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        # adds PAD dummy token, expected shape is off by 1
+        prompt_length += 1
+        output_length += 1
+        super()._check_attentions_for_generate(
+            batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            # adds PAD dummy token
-            tgt_len = min_length + idx + 1
-            src_len = min_length + idx + 1
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
+        # adds PAD dummy token, expected shape is off by 1
+        prompt_length += 1
+        output_length += 1
+        super()._check_hidden_states_for_generate(
+            batch_size, hidden_states, prompt_length, output_length, config, use_cache
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            # adds PAD dummy token
-            seq_len = min_length + idx + 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-        pass
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/xlm-mlm-en-2048"
+        model = XLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
 class XLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
-        model = XLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        model = XLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-mlm-en-2048")
         model.to(torch_device)
         input_ids = torch.tensor([[14, 447]], dtype=torch.long, device=torch_device)  # the president
         expected_output_ids = [

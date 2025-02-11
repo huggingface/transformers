@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert data2vec checkpoint."""
 
-
 import argparse
 import os
 import pathlib
@@ -24,7 +23,12 @@ import torch
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers import Data2VecTextConfig, Data2VecTextForMaskedLM, Data2VecTextForSequenceClassification
+from transformers import (
+    Data2VecTextConfig,
+    Data2VecTextForMaskedLM,
+    Data2VecTextForSequenceClassification,
+    Data2VecTextModel,
+)
 from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
@@ -35,7 +39,6 @@ from transformers.models.bert.modeling_bert import (
 
 # IMPORTANT: In order for this script to run, please make sure to download the dictionary: `dict.txt` from wget https://dl.fbaipublicfiles.com/fairseq/models/roberta.large.tar.gz
 # File copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_text.py
-from transformers.models.data2vec.data2vec_text import Data2VecTextModel
 from transformers.utils import logging
 
 

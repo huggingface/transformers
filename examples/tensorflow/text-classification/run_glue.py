@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on GLUE."""
+"""Finetuning the library models for sequence classification on GLUE."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import json
@@ -23,11 +23,11 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import evaluate
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -47,7 +47,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -164,12 +164,22 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -239,13 +249,13 @@ def main():
     # Downloading and loading a dataset from the hub. In distributed training, the load_dataset function guarantee
     # that only one local process can concurrently download the dataset.
     datasets = load_dataset(
-        "glue",
+        "nyu-mll/glue",
         data_args.task_name,
         cache_dir=model_args.cache_dir,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     is_regression = data_args.task_name == "stsb"
     if not is_regression:
@@ -284,14 +294,16 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     # endregion
 
@@ -310,12 +322,12 @@ def main():
     if config.label2id != PretrainedConfig(num_labels=num_labels).label2id and not is_regression:
         # Some have all caps in their config, some don't.
         label_name_to_id = {k.lower(): v for k, v in config.label2id.items()}
-        if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+        if sorted(label_name_to_id.keys()) == sorted(label_list):
             label_to_id = {i: int(label_name_to_id[label_list[i]]) for i in range(num_labels)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
+                "Your model seems to have been trained with labels, but they don't match the dataset: "
+                f"model labels: {sorted(label_name_to_id.keys())}, dataset labels: {sorted(label_list)}."
                 "\nIgnoring the model labels as a result.",
             )
             label_to_id = {label: i for i, label in enumerate(label_list)}
@@ -328,7 +340,7 @@ def main():
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
-            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
@@ -345,13 +357,13 @@ def main():
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
     if data_args.pad_to_max_length:
-        data_collator = DefaultDataCollator(return_tensors="tf")
+        data_collator = DefaultDataCollator(return_tensors="np")
     else:
-        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="tf")
+        data_collator = DataCollatorWithPadding(tokenizer, return_tensors="np")
     # endregion
 
     # region Metric function
-    metric = evaluate.load("glue", data_args.task_name)
+    metric = evaluate.load("glue", data_args.task_name, cache_dir=model_args.cache_dir)
 
     def compute_metrics(preds, label_ids):
         preds = preds["logits"]
@@ -374,7 +386,8 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
         # endregion
 
@@ -383,7 +396,7 @@ def main():
         dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         num_replicas = training_args.strategy.num_replicas_in_sync
 
-        tf_data = dict()
+        tf_data = {}
         max_samples = {
             "train": data_args.max_train_samples,
             "validation": data_args.max_eval_samples,
@@ -448,11 +461,13 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = "adam"  # Just write anything because we won't be using it
+            optimizer = "sgd"  # Just write anything because we won't be using it
         if is_regression:
             metrics = []
         else:
             metrics = ["accuracy"]
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, metrics=metrics, jit_compile=training_args.xla)
         # endregion
 
@@ -469,9 +484,8 @@ def main():
             callbacks = [
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )

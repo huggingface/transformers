@@ -12,23 +12,53 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that sorts the names in the auto mappings defines in the auto modules in alphabetical order.
+
+Use from the root of the repo with:
+
+```bash
+python utils/sort_auto_mappings.py
+```
+
+to auto-fix all the auto mappings (used in `make style`).
+
+To only check if the mappings are properly sorted (as used in `make quality`), do:
+
+```bash
+python utils/sort_auto_mappings.py --check_only
+```
+"""
 
 import argparse
 import os
 import re
+from typing import Optional
 
 
+# Path are set with the intent you should run this script from the root of the repo.
 PATH_TO_AUTO_MODULE = "src/transformers/models/auto"
 
 
 # re pattern that matches mapping introductions:
 #    SUPER_MODEL_MAPPING_NAMES = OrderedDict or SUPER_MODEL_MAPPING = OrderedDict
-_re_intro_mapping = re.compile("[A-Z_]+_MAPPING(\s+|_[A-Z_]+\s+)=\s+OrderedDict")
+_re_intro_mapping = re.compile(r"[A-Z_]+_MAPPING(\s+|_[A-Z_]+\s+)=\s+OrderedDict")
 # re pattern that matches identifiers in mappings
 _re_identifier = re.compile(r'\s*\(\s*"(\S[^"]+)"')
 
 
-def sort_auto_mapping(fname, overwrite: bool = False):
+def sort_auto_mapping(fname: str, overwrite: bool = False) -> Optional[bool]:
+    """
+    Sort all auto mappings in a file.
+
+    Args:
+        fname (`str`): The name of the file where we want to sort auto-mappings.
+        overwrite (`bool`, *optional*, defaults to `False`): Whether or not to fix and overwrite the file.
+
+    Returns:
+        `Optional[bool]`: Returns `None` if `overwrite=True`. Otherwise returns `True` if the file has an auto-mapping
+        improperly sorted, `False` if the file is okay.
+    """
     with open(fname, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -37,8 +67,8 @@ def sort_auto_mapping(fname, overwrite: bool = False):
     line_idx = 0
     while line_idx < len(lines):
         if _re_intro_mapping.search(lines[line_idx]) is not None:
-            indent = len(re.search(r"^(\s*)\S", lines[line_idx]).groups()[0]) + 8
             # Start of a new mapping!
+            indent = len(re.search(r"^(\s*)\S", lines[line_idx]).groups()[0]) + 8
             while not lines[line_idx].startswith(" " * indent + "("):
                 new_lines.append(lines[line_idx])
                 line_idx += 1
@@ -65,11 +95,17 @@ def sort_auto_mapping(fname, overwrite: bool = False):
     if overwrite:
         with open(fname, "w", encoding="utf-8") as f:
             f.write("\n".join(new_lines))
-    elif "\n".join(new_lines) != content:
-        return True
+    else:
+        return "\n".join(new_lines) != content
 
 
 def sort_all_auto_mappings(overwrite: bool = False):
+    """
+    Sort all auto mappings in the library.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`): Whether or not to fix and overwrite the file.
+    """
     fnames = [os.path.join(PATH_TO_AUTO_MODULE, f) for f in os.listdir(PATH_TO_AUTO_MODULE) if f.endswith(".py")]
     diffs = [sort_auto_mapping(fname, overwrite=overwrite) for fname in fnames]
 

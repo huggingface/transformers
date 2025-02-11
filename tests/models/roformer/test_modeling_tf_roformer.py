@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import RoFormerConfig, is_tf_available
@@ -21,6 +23,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -53,7 +56,7 @@ class TFRoFormerModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -76,7 +79,7 @@ class TFRoFormerModelTester:
         self.use_labels = True
         self.vocab_size = 99
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -239,8 +242,7 @@ class TFRoFormerModelTester:
 
 
 @require_tf
-class TFRoFormerModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFRoFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFRoFormerModel,
@@ -254,9 +256,38 @@ class TFRoFormerModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFRoFormerModel,
+            "fill-mask": TFRoFormerForMaskedLM,
+            "question-answering": TFRoFormerForQuestionAnswering,
+            "text-classification": TFRoFormerForSequenceClassification,
+            "text-generation": TFRoFormerForCausalLM,
+            "token-classification": TFRoFormerForTokenClassification,
+            "zero-shot": TFRoFormerForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
 
     test_head_masking = False
     test_onnx = False
+
+    # TODO: add `prepare_inputs_for_generation` for `TFRoFormerForCausalLM`
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "TextGenerationPipelineTests":
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = TFRoFormerModelTester(self)
@@ -344,7 +375,6 @@ class TFRoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
         tf.debugging.assert_near(emb, desired_weights, atol=self.tolerance)
 
     def test_positional_emb_weights_against_roformer(self):
-
         desired_weights = tf.constant(
             [
                 [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],

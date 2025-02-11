@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data """
+"""Pre-Training a 🤗 Wav2Vec2 model on unlabeled audio data"""
 
 import argparse
 import math
@@ -24,14 +24,14 @@ from typing import Dict, List, Optional, Union
 
 import datasets
 import torch
+from accelerate import Accelerator
+from accelerate.logging import get_logger
 from datasets import DatasetDict, concatenate_datasets, load_dataset
+from huggingface_hub import HfApi
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator
-from accelerate.logging import get_logger
-from huggingface_hub import Repository
 from transformers import (
     AdamW,
     SchedulerType,
@@ -43,7 +43,7 @@ from transformers import (
     set_seed,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices, _sample_negative_indices
-from transformers.utils import get_full_repo_name, send_example_telemetry
+from transformers.utils import send_example_telemetry
 
 
 logger = get_logger(__name__)
@@ -70,6 +70,15 @@ def parse_args():
         type=str,
         required=True,
         help="The names of the training data set splits to use (via the datasets library).",
+    )
+    parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -247,6 +256,24 @@ def parse_args():
         "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
     )
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--mask_time_prob",
+        type=float,
+        default=None,
+        help=(
+            "Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked in the"
+            " contrastive task. If omitted, will pull value from model config."
+        ),
+    )
+    parser.add_argument(
+        "--mask_time_length",
+        type=int,
+        default=None,
+        help=(
+            "Length of each vector mask span to mask along the time axis in the contrastive task."
+            " If omitted, will pull value from model config."
+        ),
+    )
     args = parser.parse_args()
 
     if args.push_to_hub:
@@ -285,12 +312,22 @@ class DataCollatorForWav2Vec2Pretraining:
             If set will pad the sequence to a multiple of the provided value.
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
+        mask_time_prob (:obj:`float`, `optional`, defaults to :obj:`0.65`):
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked for the contrastive task.
+            Note that overlap between masked sequences may decrease the actual percentage of masked vectors.
+            The default value is taken from the original wav2vec 2.0 article (https://arxiv.org/abs/2006.11477),
+            and results in about 49 percent of each sequence being masked on average.
+        mask_time_length (:obj:`int`, `optional`, defaults to :obj:`10`):
+            Length of each vector mask span to mask along the time axis in the contrastive task. The default value
+            originates from the original wav2vec 2.0 article and corresponds to the ``M`` variable mentioned there.
     """
 
     model: Wav2Vec2ForPreTraining
     feature_extractor: Wav2Vec2FeatureExtractor
     padding: Union[bool, str] = "longest"
     pad_to_multiple_of: Optional[int] = None
+    mask_time_prob: Optional[float] = 0.65
+    mask_time_length: Optional[int] = 10
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
@@ -320,8 +357,8 @@ class DataCollatorForWav2Vec2Pretraining:
         # sample randomly masked indices
         mask_time_indices = _compute_mask_indices(
             features_shape,
-            self.model.config.mask_time_prob,
-            self.model.config.mask_time_length,
+            self.mask_time_prob,
+            self.mask_time_length,
             attention_mask=batch.get("sub_attention_mask"),
         )
 
@@ -390,11 +427,19 @@ def main():
     # Handle the repository creation
     if accelerator.is_main_process:
         if args.push_to_hub and not args.preprocessing_only:
-            if args.hub_model_id is None:
-                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
-            else:
-                repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            # Retrieve of infer repo_name
+            repo_name = args.hub_model_id
+            if repo_name is None:
+                repo_name = Path(args.output_dir).absolute().name
+            # Create repo and retrieve repo_id
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+
+            with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
+                if "step_*" not in gitignore:
+                    gitignore.write("step_*\n")
+                if "epoch_*" not in gitignore:
+                    gitignore.write("epoch_*\n")
         elif args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
@@ -410,6 +455,7 @@ def main():
             dataset_config_name,
             split=train_split_name,
             cache_dir=args.cache_dir,
+            trust_remote_code=args.trust_remote_code,
         )
         datasets_splits.append(dataset_split)
 
@@ -515,8 +561,16 @@ def main():
         model.gradient_checkpointing_enable()
 
     # 4. Define data collator, optimizer and scheduler
+
+    mask_time_prob = config.mask_time_prob if args.mask_time_prob is None else args.mask_time_prob
+    mask_time_length = config.mask_time_length if args.mask_time_length is None else args.mask_time_length
+
     data_collator = DataCollatorForWav2Vec2Pretraining(
-        model=model, feature_extractor=feature_extractor, pad_to_multiple_of=args.pad_to_multiple_of
+        model=model,
+        feature_extractor=feature_extractor,
+        pad_to_multiple_of=args.pad_to_multiple_of,
+        mask_time_prob=mask_time_prob,
+        mask_time_length=mask_time_length,
     )
     train_dataloader = DataLoader(
         vectorized_datasets["train"],
@@ -604,7 +658,6 @@ def main():
 
             # update step
             if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
-
                 # compute grad norm for monitoring
                 scale = (
                     accelerator.scaler._scale.item()
@@ -681,10 +734,12 @@ def main():
                     )
 
                 if (args.push_to_hub and epoch < args.num_train_epochs - 1) and accelerator.is_main_process:
-                    repo.push_to_hub(
-                        commit_message=f"Training in progress step {completed_steps}",
-                        blocking=False,
-                        auto_lfs_prune=True,
+                    api.upload_folder(
+                        commit_message=f"Training in progress epoch {epoch}",
+                        folder_path=args.output_dir,
+                        repo_id=repo_id,
+                        repo_type="model",
+                        token=args.hub_token,
                     )
 
             # if completed steps > `args.max_train_steps` stop
@@ -734,7 +789,13 @@ def main():
             )
             if accelerator.is_main_process:
                 if args.push_to_hub:
-                    repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                    api.upload_folder(
+                        commit_message="End of training",
+                        folder_path=args.output_dir,
+                        repo_id=repo_id,
+                        repo_type="model",
+                        token=args.hub_token,
+                    )
 
 
 if __name__ == "__main__":

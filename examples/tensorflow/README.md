@@ -15,7 +15,7 @@ limitations under the License.
 
 # Examples
 
-This folder contains actively maintained examples of use of 🤗 Transformers organized into different ML tasks. All examples in this folder are **TensorFlow** examples, and are written using native Keras rather than classes like `TFTrainer`, which we now consider deprecated. If you've previously only used 🤗 Transformers via `TFTrainer`, we highly recommend taking a look at the new style - we think it's a big improvement!
+This folder contains actively maintained examples of the use of 🤗 Transformers organized into different ML tasks. All examples in this folder are **TensorFlow** examples and are written using native Keras. If you've previously only used 🤗 Transformers via `TFTrainer`, we highly recommend taking a look at the new style - we think it's a big improvement!
 
 In addition, all scripts here now support the [🤗 Datasets](https://github.com/huggingface/datasets) library - you can grab entire datasets just by changing one command-line argument!
 
@@ -32,13 +32,13 @@ Here is the list of all our examples:
 | Task | Example datasets |
 |---|---|
 | [**`language-modeling`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling) | WikiText-2
-| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) | SWAG 
+| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice) | SWAG
 | [**`question-answering`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) | SQuAD
-| [**`summarization`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) | XSum 
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/summarization) | XSum
 | [**`text-classification`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification) | GLUE
 | [**`token-classification`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification) | CoNLL NER
 | [**`translation`**](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/translation) | WMT
 
 ## Coming soon
 
-- **Colab notebooks** to easily run through these scripts! 
+- **Colab notebooks** to easily run through these scripts!

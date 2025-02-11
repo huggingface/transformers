@@ -23,9 +23,9 @@ from pathlib import Path
 import datasets
 import numpy as np
 from datasets import load_dataset
-from packaging import version
+from parameterized import parameterized
 
-from transformers import AutoProcessor
+from transformers import AutoFeatureExtractor, AutoProcessor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pyctcdecode, require_torch, require_torchaudio, slow
@@ -37,6 +37,7 @@ from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 if is_pyctcdecode_available():
     from huggingface_hub import snapshot_download
     from pyctcdecode import BeamSearchDecoderCTC
+
     from transformers.models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from transformers.models.wav2vec2_with_lm.processing_wav2vec2_with_lm import Wav2Vec2DecoderWithLMOutput
 
@@ -156,6 +157,35 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         for key in input_feat_extract.keys():
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
 
+    def test_another_feature_extractor(self):
+        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
+        tokenizer = self.get_tokenizer()
+        decoder = self.get_decoder()
+
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+
+        raw_speech = floats_list((3, 1000))
+
+        input_feat_extract = feature_extractor(raw_speech, return_tensors="np")
+        input_processor = processor(raw_speech, return_tensors="np")
+
+        for key in input_feat_extract.keys():
+            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            feature_extractor.model_input_names,
+            msg="`processor` and `feature_extractor` model input names do not match",
+        )
+
+    def test_wrong_feature_extractor_raises_error(self):
+        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-large-v3")
+        tokenizer = self.get_tokenizer()
+        decoder = self.get_decoder()
+
+        with self.assertRaises(ValueError):
+            Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+
     def test_tokenizer(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
@@ -194,7 +224,8 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertEqual(decoded_decoder[-2], decoded_processor.logit_score)
         self.assertEqual(decoded_decoder[-1], decoded_processor.lm_score)
 
-    def test_decoder_batch(self):
+    @parameterized.expand([[None], ["fork"], ["spawn"]])
+    def test_decoder_batch(self, pool_context):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
         decoder = self.get_decoder()
@@ -203,17 +234,25 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         logits = self._get_dummy_logits()
 
-        decoded_processor = processor.batch_decode(logits)
+        # note: pool should be instantiated *after* Wav2Vec2ProcessorWithLM.
+        #       otherwise, the LM won't be available to the pool's sub-processes.
+        # manual logic used to allow parameterized test for both pool=None and pool=Pool(...)
+        if pool_context is None:
+            decoded_processor = processor.batch_decode(logits)
+        else:
+            with get_context(pool_context).Pool() as pool:
+                decoded_processor = processor.batch_decode(logits, pool)
 
-        logits_list = [array for array in logits]
-        pool = get_context("fork").Pool()
-        decoded_beams = decoder.decode_beams_batch(pool, logits_list)
+        logits_list = list(logits)
+
+        with get_context("fork").Pool() as p:
+            decoded_beams = decoder.decode_beams_batch(p, logits_list)
+
         texts_decoder, logit_scores_decoder, lm_scores_decoder = [], [], []
         for beams in decoded_beams:
             texts_decoder.append(beams[0][0])
             logit_scores_decoder.append(beams[0][-2])
             lm_scores_decoder.append(beams[0][-1])
-        pool.close()
 
         self.assertListEqual(texts_decoder, decoded_processor.text)
         self.assertListEqual(["<s> <s> </s>", "<s> <s> <s>"], decoded_processor.text)
@@ -229,7 +268,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         logits = self._get_dummy_logits()
 
-        beam_width = 20
+        beam_width = 15
         beam_prune_logp = -20.0
         token_min_logp = -4.0
 
@@ -241,21 +280,29 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
-        pool = get_context("fork").Pool()
-        decoded_decoder_out = decoder.decode_beams_batch(
-            pool,
-            logits_list,
-            beam_width=beam_width,
-            beam_prune_logp=beam_prune_logp,
-            token_min_logp=token_min_logp,
-        )
-        pool.close()
+        logits_list = list(logits)
+
+        with get_context("fork").Pool() as pool:
+            decoded_decoder_out = decoder.decode_beams_batch(
+                pool,
+                logits_list,
+                beam_width=beam_width,
+                beam_prune_logp=beam_prune_logp,
+                token_min_logp=token_min_logp,
+            )
 
         decoded_decoder = [d[0][0] for d in decoded_decoder_out]
+        logit_scores = [d[0][2] for d in decoded_decoder_out]
+        lm_scores = [d[0][3] for d in decoded_decoder_out]
 
         self.assertListEqual(decoded_decoder, decoded_processor)
-        self.assertListEqual(["<s> </s> </s>", "<s> <s> </s>"], decoded_processor)
+        self.assertListEqual(["</s> <s> <s>", "<s> <s> <s>"], decoded_processor)
+
+        self.assertTrue(np.array_equal(logit_scores, decoded_processor_out.logit_score))
+        self.assertTrue(np.allclose([-20.054, -18.447], logit_scores, atol=1e-3))
+
+        self.assertTrue(np.array_equal(lm_scores, decoded_processor_out.lm_score))
+        self.assertTrue(np.allclose([-15.554, -13.9474], lm_scores, atol=1e-3))
 
     def test_decoder_with_params_of_lm(self):
         feature_extractor = self.get_feature_extractor()
@@ -280,19 +327,19 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         )
         decoded_processor = decoded_processor_out.text
 
-        logits_list = [array for array in logits]
+        logits_list = list(logits)
         decoder.reset_params(
             alpha=alpha,
             beta=beta,
             unk_score_offset=unk_score_offset,
             lm_score_boundary=lm_score_boundary,
         )
-        pool = get_context("fork").Pool()
-        decoded_decoder_out = decoder.decode_beams_batch(
-            pool,
-            logits_list,
-        )
-        pool.close()
+
+        with get_context("fork").Pool() as pool:
+            decoded_decoder_out = decoder.decode_beams_batch(
+                pool,
+                logits_list,
+            )
 
         decoded_decoder = [d[0][0] for d in decoded_decoder_out]
 
@@ -357,6 +404,19 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         self.assertListEqual(decoded_wav2vec2.text, decoded_auto.text)
 
+    def test_model_input_names(self):
+        feature_extractor = self.get_feature_extractor()
+        tokenizer = self.get_tokenizer()
+        decoder = self.get_decoder()
+
+        processor = Wav2Vec2ProcessorWithLM(tokenizer=tokenizer, feature_extractor=feature_extractor, decoder=decoder)
+
+        self.assertListEqual(
+            processor.model_input_names,
+            feature_extractor.model_input_names,
+            msg="`processor` and `feature_extractor` model input names do not match",
+        )
+
     @staticmethod
     def get_from_offsets(offsets, key):
         retrieved_list = [d[key] for d in offsets]
@@ -403,7 +463,9 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
     def test_word_time_stamp_integration(self):
         import torch
 
-        ds = load_dataset("common_voice", "en", split="train", streaming=True)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_11_0", "en", split="train", streaming=True, trust_remote_code=True
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         ds_iter = iter(ds)
         sample = next(ds_iter)
@@ -411,7 +473,6 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
-        # compare to filename `common_voice_en_100038.mp3` of dataset viewer on https://huggingface.co/datasets/common_voice/viewer/en/train
         input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values
 
         with torch.no_grad():
@@ -429,7 +490,8 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
             for d in output["word_offsets"]
         ]
 
-        EXPECTED_TEXT = "WHY DOES A MILE SANDRA LOOK LIKE SHE WANTS TO CONSUME JOHN SNOW ON THE RIVER AT THE WALL"
+        EXPECTED_TEXT = "WHY DOES MILISANDRA LOOK LIKE SHE WANTS TO CONSUME JOHN SNOW ON THE RIVER AT THE WALL"
+        EXPECTED_TEXT = "THE TRACK APPEARS ON THE COMPILATION ALBUM CRAFT FORKS"
 
         # output words
         self.assertEqual(" ".join(self.get_from_offsets(word_time_stamps, "word")), EXPECTED_TEXT)
@@ -440,15 +502,9 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         end_times = torch.tensor(self.get_from_offsets(word_time_stamps, "end_time"))
 
         # fmt: off
-        expected_start_tensor = torch.tensor([1.42, 1.64, 2.12, 2.26, 2.54, 3.0, 3.24, 3.6, 3.8, 4.1, 4.26, 4.94, 5.28, 5.66, 5.78, 5.94, 6.32, 6.54, 6.66])
-
-        # TODO(Patrick): This if-else version statement should be removed once
-        # https://github.com/huggingface/datasets/issues/4889 is resolved
-        if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.12.0"):
-            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.16, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
-        else:
-            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
+        expected_start_tensor = torch.tensor([0.6800, 0.8800, 1.1800, 1.8600, 1.9600, 2.1000, 3.0000, 3.5600, 3.9800])
+        expected_end_tensor = torch.tensor([0.7800, 1.1000, 1.6600, 1.9200, 2.0400, 2.8000, 3.3000, 3.8800, 4.2800])
         # fmt: on
 
-        self.assertTrue(torch.allclose(start_times, expected_start_tensor, atol=0.01))
-        self.assertTrue(torch.allclose(end_times, expected_end_tensor, atol=0.01))
+        torch.testing.assert_close(start_times, expected_start_tensor, rtol=0.01, atol=0.01)
+        torch.testing.assert_close(end_times, expected_end_tensor, rtol=0.01, atol=0.01)

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 from transformers import RoFormerTokenizer, RoFormerTokenizerFast
@@ -24,7 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_rjieba
 @require_tokenizers
 class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "junnyu/roformer_chinese_small"
     tokenizer_class = RoFormerTokenizer
     rust_tokenizer_class = RoFormerTokenizerFast
     space_between_special_tokens = True
@@ -55,7 +56,7 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
-    def test_rust_tokenizer(self):
+    def test_rust_tokenizer(self):  # noqa: F811
         tokenizer = self.get_rust_tokenizer()
         input_text, output_text = self.get_chinese_input_output_texts()
         tokens = tokenizer.tokenize(input_text)
@@ -64,14 +65,20 @@ class RoFormerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         exp_tokens = [22943, 21332, 34431, 45904, 117, 306, 1231, 1231, 2653, 33994, 1266, 100]
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), exp_tokens)
 
-    # can't train new_tokenizer via Tokenizers lib
+    @unittest.skip(reason="Cannot train new tokenizer via Tokenizers lib")
     def test_training_new_tokenizer(self):
         pass
 
-    # can't train new_tokenizer via Tokenizers lib
+    @unittest.skip(reason="Cannot train new tokenizer via Tokenizers lib")
     def test_training_new_tokenizer_with_special_tokens_change(self):
         pass
 
-    # can't serialise custom PreTokenizer
     def test_save_slow_from_fast_and_reload_fast(self):
-        pass
+        for cls in [RoFormerTokenizer, RoFormerTokenizerFast]:
+            original = cls.from_pretrained("alchemab/antiberta2")
+            self.assertEqual(original.encode("生活的真谛是"), [1, 4, 4, 4, 4, 4, 4, 2])
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                original.save_pretrained(tmp_dir)
+                new = cls.from_pretrained(tmp_dir)
+            self.assertEqual(new.encode("生活的真谛是"), [1, 4, 4, 4, 4, 4, 4, 2])

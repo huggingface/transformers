@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow LayoutLMv3 model. """
+"""Testing suite for the TensorFlow LayoutLMv3 model."""
+
+from __future__ import annotations
 
 import copy
 import inspect
@@ -27,13 +29,13 @@ from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -48,7 +50,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3FeatureExtractor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 class TFLayoutLMv3ModelTester:
@@ -66,7 +68,7 @@ class TFLayoutLMv3ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=36,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -263,8 +265,7 @@ class TFLayoutLMv3ModelTester:
 
 
 @require_tf
-class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFLayoutLMv3Model,
@@ -275,10 +276,28 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"document-question-answering": TFLayoutLMv3ForQuestionAnswering, "feature-extraction": TFLayoutLMv3Model}
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False
     test_onnx = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        return True
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -321,7 +340,7 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
                 added_label = prepared_for_class[
-                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                    sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
                 ]
                 expected_loss_size = added_label.shape.as_list()[:1]
 
@@ -455,9 +474,9 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFLayoutLMv3Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/layoutlmv3-base"
+        model = TFLayoutLMv3Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -469,16 +488,16 @@ def prepare_img():
 @require_tf
 class TFLayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return LayoutLMv3FeatureExtractor(apply_ocr=False) if is_vision_available() else None
+    def default_image_processor(self):
+        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
         model = TFLayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
+        pixel_values = image_processor(images=image, return_tensors="tf").pixel_values
 
         input_ids = tf.constant([[1, 2]])
         bbox = tf.expand_dims(tf.constant([[1, 2, 3, 4], [5, 6, 7, 8]]), axis=0)

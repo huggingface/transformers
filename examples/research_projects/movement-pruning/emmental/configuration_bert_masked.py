@@ -13,9 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Masked BERT model configuration. It replicates the class `~transformers.BertConfig`
+"""Masked BERT model configuration. It replicates the class `~transformers.BertConfig`
 and adapts it to the specificities of MaskedBert (`pruning_method`, `mask_init` and `mask_scale`."""
-
 
 import logging
 
@@ -50,7 +49,7 @@ class MaskedBertConfig(PretrainedConfig):
         pruning_method="topK",
         mask_init="constant",
         mask_scale=0.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 

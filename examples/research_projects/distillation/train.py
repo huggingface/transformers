@@ -16,6 +16,7 @@
 Training the distilled model.
 Supported architectures include: BERT -> DistilBERT, RoBERTa -> DistilRoBERTa, GPT2 -> DistilGPT2.
 """
+
 import argparse
 import json
 import os
@@ -24,9 +25,9 @@ import shutil
 
 import numpy as np
 import torch
-
 from distiller import Distiller
 from lm_seqs_dataset import LmSeqsDataset
+
 from transformers import (
     BertConfig,
     BertForMaskedLM,
@@ -208,7 +209,7 @@ def main():
         type=str,
         default="O1",
         help=(
-            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
             "See details at https://nvidia.github.io/apex/amp.html"
         ),
     )

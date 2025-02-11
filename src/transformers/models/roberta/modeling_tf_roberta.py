@@ -13,7 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 RoBERTa model."""
+"""TF 2.0 RoBERTa model."""
+
+from __future__ import annotations
 
 import math
 import warnings
@@ -43,13 +45,12 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    DUMMY_INPUTS,
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -60,20 +61,11 @@ from .configuration_roberta import RobertaConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "roberta-base"
+_CHECKPOINT_FOR_DOC = "FacebookAI/roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
-_TOKENIZER_FOR_DOC = "RobertaTokenizer"
-
-TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "roberta-base",
-    "roberta-large",
-    "roberta-large-mnli",
-    "distilroberta-base",
-    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
-]
 
 
-class TFRobertaEmbeddings(tf.keras.layers.Layer):
+class TFRobertaEmbeddings(keras.layers.Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -82,26 +74,25 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.padding_idx = 1
-        self.vocab_size = config.vocab_size
-        self.type_vocab_size = config.type_vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.config.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
+                shape=[self.config.type_vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -112,7 +103,12 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(self.initializer_range),
             )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
     def create_position_ids_from_input_ids(self, input_ids, past_key_values_length=0):
         """
@@ -146,16 +142,7 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
@@ -184,16 +171,17 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Roberta
-class TFRobertaPooler(tf.keras.layers.Layer):
+class TFRobertaPooler(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -203,9 +191,17 @@ class TFRobertaPooler(tf.keras.layers.Layer):
 
         return pooled_output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Roberta
-class TFRobertaSelfAttention(tf.keras.layers.Layer):
+class TFRobertaSelfAttention(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -220,18 +216,19 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
+        self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -321,17 +318,32 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
             outputs = outputs + (past_key_value,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Roberta
-class TFRobertaSelfOutput(tf.keras.layers.Layer):
+class TFRobertaSelfOutput(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -340,9 +352,20 @@ class TFRobertaSelfOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Roberta
-class TFRobertaAttention(tf.keras.layers.Layer):
+class TFRobertaAttention(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -381,13 +404,24 @@ class TFRobertaAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "dense_output", None) is not None:
+            with tf.name_scope(self.dense_output.name):
+                self.dense_output.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Roberta
-class TFRobertaIntermediate(tf.keras.layers.Layer):
+class TFRobertaIntermediate(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -395,6 +429,7 @@ class TFRobertaIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -402,17 +437,26 @@ class TFRobertaIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Roberta
-class TFRobertaOutput(tf.keras.layers.Layer):
+class TFRobertaOutput(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -421,9 +465,20 @@ class TFRobertaOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Roberta
-class TFRobertaLayer(tf.keras.layers.Layer):
+class TFRobertaLayer(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -442,9 +497,9 @@ class TFRobertaLayer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
-        past_key_value: Optional[Tuple[tf.Tensor]],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
+        past_key_value: Tuple[tf.Tensor] | None,
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -508,9 +563,26 @@ class TFRobertaLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "bert_output", None) is not None:
+            with tf.name_scope(self.bert_output.name):
+                self.bert_output.build(None)
+        if getattr(self, "crossattention", None) is not None:
+            with tf.name_scope(self.crossattention.name):
+                self.crossattention.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Roberta
-class TFRobertaEncoder(tf.keras.layers.Layer):
+class TFRobertaEncoder(keras.layers.Layer):
     def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -521,9 +593,9 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
-        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None,
         use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
@@ -578,9 +650,18 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-class TFRobertaMainLayer(tf.keras.layers.Layer):
+class TFRobertaMainLayer(keras.layers.Layer):
     config_class = RobertaConfig
 
     def __init__(self, config, add_pooling_layer=True, **kwargs):
@@ -600,7 +681,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
@@ -620,14 +701,14 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
+        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -635,7 +716,6 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
-
         if not self.config.is_decoder:
             use_cache = False
 
@@ -776,6 +856,20 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+
 
 class TFRobertaPreTrainedModel(TFPreTrainedModel):
     """
@@ -786,38 +880,6 @@ class TFRobertaPreTrainedModel(TFPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    @property
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainedModel.dummy_inputs
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        dummy = {"input_ids": tf.constant(DUMMY_INPUTS)}
-        # Add `encoder_hidden_states` to make the cross-attention layers' weights initialized
-        if self.config.add_cross_attention:
-            batch_size, seq_len = tf.constant(DUMMY_INPUTS).shape
-            shape = (batch_size, seq_len) + (self.config.hidden_size,)
-            h = tf.random.uniform(shape=shape)
-            dummy["encoder_hidden_states"] = h
-
-        return dummy
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
 
 ROBERTA_START_DOCSTRING = r"""
 
@@ -825,7 +887,7 @@ ROBERTA_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -866,7 +928,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RobertaTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -929,21 +991,20 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
+        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -990,50 +1051,45 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
 
         return outputs
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
-    def serving_output(
-        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
-    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
-        output_cache = self.config.use_cache and self.config.is_decoder
-        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
-        if not (self.config.output_attentions and self.config.add_cross_attention):
-            cross_attns = None
-
-        return TFBaseModelOutputWithPoolingAndCrossAttentions(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-            cross_attentions=cross_attns,
-        )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "roberta", None) is not None:
+            with tf.name_scope(self.roberta.name):
+                self.roberta.build(None)
 
 
-class TFRobertaLMHead(tf.keras.layers.Layer):
+class TFRobertaLMHead(keras.layers.Layer):
     """Roberta Head for masked language modeling."""
 
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.act = get_tf_activation("gelu")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder = input_embeddings
 
-    def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+    def build(self, input_shape=None):
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "layer_norm", None) is not None:
+            with tf.name_scope(self.layer_norm.name):
+                self.layer_norm.build([None, None, self.config.hidden_size])
 
     def get_output_embeddings(self):
         return self.decoder
@@ -1047,7 +1103,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 
     def set_bias(self, value):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -1058,7 +1114,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.decoder.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
@@ -1085,7 +1141,6 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1095,16 +1150,16 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1142,12 +1197,16 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "roberta", None) is not None:
+            with tf.name_scope(self.roberta.name):
+                self.roberta.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
 
 
 class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLoss):
@@ -1171,42 +1230,41 @@ class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLos
         return self.name + "/" + self.lm_head.name
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = tf.ones(input_shape)
 
         # cut decoder_input_ids if past is used
-        if past is not None:
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        encoder_hidden_states: np.ndarray | tf.Tensor | None = None,
+        encoder_attention_mask: np.ndarray | tf.Tensor | None = None,
         past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFCausalLMOutputWithCrossAttentions, Tuple[tf.Tensor]]:
         r"""
@@ -1272,35 +1330,24 @@ class TFRobertaForCausalLM(TFRobertaPreTrainedModel, TFCausalLanguageModelingLos
             cross_attentions=outputs.cross_attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
-    def serving_output(self, output: TFCausalLMOutputWithCrossAttentions) -> TFCausalLMOutputWithCrossAttentions:
-        output_cache = self.config.use_cache and self.config.is_decoder
-        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
-        if not (self.config.output_attentions and self.config.add_cross_attention):
-            cross_attns = None
-
-        return TFCausalLMOutputWithCrossAttentions(
-            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns, cross_attentions=cross_attns
-        )
-
-    @staticmethod
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel._reorder_cache
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(tf.gather(past_state, beam_idx, axis=0) for past_state in layer_past),)
-        return reordered_past
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "roberta", None) is not None:
+            with tf.name_scope(self.roberta.name):
+                self.roberta.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
 
 
-class TFRobertaClassificationHead(tf.keras.layers.Layer):
+class TFRobertaClassificationHead(keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
@@ -1309,10 +1356,11 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.out_proj = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.out_proj = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
+        self.config = config
 
     def call(self, features, training=False):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
@@ -1321,6 +1369,17 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
         x = self.dropout(x, training=training)
         x = self.out_proj(x)
         return x
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "out_proj", None) is not None:
+            with tf.name_scope(self.out_proj.name):
+                self.out_proj.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1344,7 +1403,6 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="cardiffnlp/twitter-roberta-base-emotion",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1353,16 +1411,16 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1399,12 +1457,16 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "roberta", None) is not None:
+            with tf.name_scope(self.roberta.name):
+                self.roberta.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build(None)
 
 
 @add_start_docstrings(
@@ -1423,41 +1485,31 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
         super().__init__(config, *inputs, **kwargs)
 
         self.roberta = TFRobertaMainLayer(config, name="roberta")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
+        self.classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
-
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            tf.Tensor with dummy inputs
-        """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1507,25 +1559,16 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             attentions=outputs.attentions,
         )
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "roberta", None) is not None:
+            with tf.name_scope(self.roberta.name):
+                self.roberta.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1548,15 +1591,15 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(classifier_dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(classifier_dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="ydshieh/roberta-large-ner-english",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1565,16 +1608,16 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1611,12 +1654,16 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "roberta", None) is not None:
+            with tf.name_scope(self.roberta.name):
+                self.roberta.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1635,14 +1682,14 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
         self.num_labels = config.num_labels
 
         self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="ydshieh/roberta-base-squad2",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1651,17 +1698,17 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        start_positions: np.ndarray | tf.Tensor | None = None,
+        end_positions: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1711,11 +1758,26 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "roberta", None) is not None:
+            with tf.name_scope(self.roberta.name):
+                self.roberta.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])
 
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
-        )
+
+__all__ = [
+    "TFRobertaForCausalLM",
+    "TFRobertaForMaskedLM",
+    "TFRobertaForMultipleChoice",
+    "TFRobertaForQuestionAnswering",
+    "TFRobertaForSequenceClassification",
+    "TFRobertaForTokenClassification",
+    "TFRobertaMainLayer",
+    "TFRobertaModel",
+    "TFRobertaPreTrainedModel",
+]

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Wav2Vec2 checkpoint."""
 
-
 import argparse
 import os
 from functools import reduce
@@ -227,7 +226,7 @@ def convert_wav2vec2_checkpoint(
 
     processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
 
-    ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+    ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
     input_audio = [x["array"] for x in ds[:4]["audio"]]
 
     inputs = processor(input_audio, return_tensors="pt", padding=True)

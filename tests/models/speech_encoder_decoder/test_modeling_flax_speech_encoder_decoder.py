@@ -33,6 +33,7 @@ if is_flax_available():
     import jax.numpy as jnp
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
+
     from transformers import (
         FlaxBartForCausalLM,
         FlaxBertForCausalLM,
@@ -73,7 +74,7 @@ class FlaxEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
@@ -103,7 +104,7 @@ class FlaxEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
@@ -142,7 +143,7 @@ class FlaxEncoderDecoderMixin:
         decoder_input_ids,
         decoder_attention_mask,
         return_dict,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
@@ -169,7 +170,7 @@ class FlaxEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model}
@@ -208,7 +209,7 @@ class FlaxEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         # assert that loading encoder and decoder models from configs has been correctly executed
@@ -253,7 +254,7 @@ class FlaxEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
@@ -307,7 +308,7 @@ class FlaxEncoderDecoderMixin:
         eos_token_id = enc_dec_model.config.decoder.eos_token_id
         decoder_start_token_id = enc_dec_model.config.decoder.decoder_start_token_id
 
-        # Copied from generation_utils (GPT2 doesn't have `pad_token_id`)
+        # Copied from generation.utils (GPT2 doesn't have `pad_token_id`)
         if pad_token_id is None and eos_token_id is not None:
             pad_token_id = eos_token_id
         if decoder_start_token_id is None:
@@ -336,7 +337,7 @@ class FlaxEncoderDecoderMixin:
         decoder_config,
         decoder_input_ids,
         decoder_attention_mask,
-        **kwargs
+        **kwargs,
     ):
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
         enc_dec_model = FlaxSpeechEncoderDecoderModel(encoder_decoder_config)
@@ -406,13 +407,12 @@ class FlaxEncoderDecoderMixin:
             self.assertTrue((grad == grad_frozen).all())
 
     def check_pt_flax_equivalence(self, pt_model, fx_model, inputs_dict):
-
         pt_model.to(torch_device)
         pt_model.eval()
 
         # prepare inputs
         flax_inputs = inputs_dict
-        pt_inputs = {k: torch.tensor(v.tolist()) for k, v in flax_inputs.items()}
+        pt_inputs = {k: torch.tensor(v.tolist()).to(torch_device) for k, v in flax_inputs.items()}
 
         with torch.no_grad():
             pt_outputs = pt_model(**pt_inputs).to_tuple()
@@ -420,7 +420,7 @@ class FlaxEncoderDecoderMixin:
         fx_outputs = fx_model(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-            self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output, pt_output.numpy(force=True), 1e-5)
 
         # PT -> Flax
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -430,7 +430,7 @@ class FlaxEncoderDecoderMixin:
         fx_outputs_loaded = fx_model_loaded(**inputs_dict).to_tuple()
         self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
         for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
-            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output_loaded, pt_output.numpy(force=True), 1e-5)
 
         # Flax -> PT
         with tempfile.TemporaryDirectory() as tmpdirname:
@@ -445,10 +445,9 @@ class FlaxEncoderDecoderMixin:
 
         self.assertEqual(len(fx_outputs), len(pt_outputs_loaded), "Output lengths differ between Flax and PyTorch")
         for fx_output, pt_output_loaded in zip(fx_outputs, pt_outputs_loaded):
-            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 1e-5)
+            self.assert_almost_equals(fx_output, pt_output_loaded.numpy(force=True), 1e-5)
 
     def check_equivalence_pt_to_flax(self, config, decoder_config, inputs_dict):
-
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
 
         pt_model = SpeechEncoderDecoderModel(encoder_decoder_config)
@@ -460,7 +459,6 @@ class FlaxEncoderDecoderMixin:
         self.check_pt_flax_equivalence(pt_model, fx_model, inputs_dict)
 
     def check_equivalence_flax_to_pt(self, config, decoder_config, inputs_dict):
-
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
 
         pt_model = SpeechEncoderDecoderModel(encoder_decoder_config)
@@ -508,7 +506,6 @@ class FlaxEncoderDecoderMixin:
 
     @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
-
         config_inputs_dict = self.prepare_config_and_inputs()
         config = config_inputs_dict.pop("config")
         decoder_config = config_inputs_dict.pop("decoder_config")
@@ -581,7 +578,7 @@ class FlaxEncoderDecoderMixin:
 class FlaxWav2Vec2GPT2ModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-large-lv60", "gpt2-medium"
+            "facebook/wav2vec2-large-lv60", "openai-community/gpt2-medium"
         )
         batch_size = 13
         input_values = floats_tensor([batch_size, 512], scale=1.0)
@@ -815,7 +812,7 @@ class FlaxWav2Vec2BartModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
 class FlaxWav2Vec2BertModelTest(FlaxEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
         model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-large-lv60", "bert-large-uncased"
+            "facebook/wav2vec2-large-lv60", "google-bert/bert-large-uncased"
         )
         batch_size = 13
         input_values = floats_tensor([batch_size, 512], model.config.encoder.vocab_size)

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch OPT model. """
-
+"""Testing suite for the PyTorch OPT model."""
 
 import copy
 import tempfile
@@ -22,11 +21,18 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import OPTConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -69,7 +75,7 @@ class OPTModelTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -83,6 +89,7 @@ class OPTModelTester:
         num_labels=3,
         word_embed_proj_dim=16,
         type_sequence_label_size=2,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -106,6 +113,7 @@ class OPTModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -135,6 +143,7 @@ class OPTModelTester:
             embed_dim=self.embed_dim,
             is_encoder_decoder=False,
             word_embed_proj_dim=self.word_embed_proj_dim,
+            attn_implementation=self.attn_implementation,
         )
 
     def get_pipeline_config(self):
@@ -181,19 +190,66 @@ class OPTModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
+        # test no attention_mask works
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        _, past_key_values = outputs.to_tuple()
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 @require_torch
-class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (OPTModel, OPTForCausalLM, OPTForSequenceClassification, OPTForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (OPTForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": OPTModel,
+            "question-answering": OPTForQuestionAnswering,
+            "text-classification": OPTForSequenceClassification,
+            "text-generation": OPTForCausalLM,
+            "zero-shot": OPTForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = False
     fx_compatible = True
     test_pruning = False
     test_missing_keys = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if (
+            pipeline_test_case_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = OPTModelTester(self)
@@ -245,13 +301,13 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = OPTForCausalLM(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -281,6 +337,10 @@ class OPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -469,7 +529,8 @@ class OPTGenerationTest(unittest.TestCase):
 
         self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
 
-    @require_torch_gpu
+    @require_torch_accelerator
+    @require_torch_fp16
     def test_batched_nan_fp16(self):
         # a bug manifested starting at models facebook/opt-1.3 and larger when running batched generations,
         # therefore not using a tiny model, but the smallest model the problem was seen with which is opt-1.3b.
@@ -477,16 +538,47 @@ class OPTGenerationTest(unittest.TestCase):
         model_name = "facebook/opt-1.3b"
         tokenizer = GPT2Tokenizer.from_pretrained(model_name, use_fast=False, padding_side="left")
 
-        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).cuda()
+        model = OPTForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, use_cache=True).to(torch_device)
         model = model.eval()
 
         batch = tokenizer(["Who are you?", "Joe Biden is the president of"], padding=True, return_tensors="pt")
 
-        input_ids = batch["input_ids"].cuda()
-        attention_mask = batch["attention_mask"].cuda()
+        input_ids = batch["input_ids"].to(torch_device)
+        attention_mask = batch["attention_mask"].to(torch_device)
 
         with torch.no_grad():
             outputs = model(input_ids, attention_mask=attention_mask)
             self.assertFalse(
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
+
+    @slow
+    def test_contrastive_search_opt(self):
+        article = (
+            "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I am the "
+            "Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have you lived "
+            "there?"
+        )
+
+        opt_tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-1.3b")
+        opt_model = OPTForCausalLM.from_pretrained("facebook/opt-1.3b").to(torch_device)
+        input_ids = opt_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = opt_model.generate(input_ids, penalty_alpha=0.6, top_k=5, max_length=256)
+        generated_text = opt_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "A chat between a curious human and the Statue of Liberty.\n\nHuman: What is your name?\nStatue: I "
+                "am the Statue of Liberty.\nHuman: Where do you live?\nStatue: New York City.\nHuman: How long have "
+                "you lived there?\nStatue: A hundred years.\nHuman: And you’re from what country?\nStatue: The United "
+                "States of America.\nHuman: Why did you come to America?\nStatue: I came to escape the tyranny of my "
+                "country.\nHuman: What tyranny?\nStatue: They didn’t let me speak my mind.\nHuman: What was your "
+                "country?\nStatue: It was a country of immigrants.\nHuman: Who were the immigrants?\nStatue: They "
+                "were from all over the world.\nHuman: What language did they speak?\nStatue: French, Spanish, "
+                "Italian, German, English—you name it.\nHuman: And where did they come from?\nStatue: They came from "
+                "every country in the world.\nHuman: And you were born in what country?\nStatue: I was born in "
+                "France.\nHuman: And your parents were French?\nStatue"
+            ],
+        )

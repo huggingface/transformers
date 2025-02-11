@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch MPNet model."""
 
-
 import math
 from typing import Optional, Tuple, Union
 
@@ -43,17 +42,10 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/mpnet-base"
 _CONFIG_FOR_DOC = "MPNetConfig"
-_TOKENIZER_FOR_DOC = "MPNetTokenizer"
-
-
-MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/mpnet-base",
-]
 
 
 class MPNetPreTrainedModel(PreTrainedModel):
     config_class = MPNetConfig
-    pretrained_model_archive_map = MPNET_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "mpnet"
 
     def _init_weights(self, module):
@@ -84,7 +76,9 @@ class MPNetEmbeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, **kwargs):
         if position_ids is None:
@@ -164,7 +158,6 @@ class MPNetSelfAttention(nn.Module):
         output_attentions=False,
         **kwargs,
     ):
-
         q = self.q(hidden_states)
         k = self.k(hidden_states)
         v = self.v(hidden_states)
@@ -439,7 +432,7 @@ MPNET_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MPNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -481,9 +474,6 @@ MPNET_INPUTS_DOCSTRING = r"""
     MPNET_START_DOCSTRING,
 )
 class MPNetModel(MPNetPreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -511,7 +501,6 @@ class MPNetModel(MPNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -537,6 +526,7 @@ class MPNetModel(MPNetPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -574,8 +564,7 @@ class MPNetModel(MPNetPreTrainedModel):
 
 
 class MPNetForMaskedLM(MPNetPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["lm_head.decoder"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -591,10 +580,10 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
+        self.lm_head.bias = new_embeddings.bias
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -664,6 +653,9 @@ class MPNetLMHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
+    def _tie_weights(self):
+        self.decoder.bias = self.bias
+
     def forward(self, features, **kwargs):
         x = self.dense(features)
         x = gelu(x)
@@ -683,8 +675,6 @@ class MPNetLMHead(nn.Module):
     MPNET_START_DOCSTRING,
 )
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -697,7 +687,6 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -778,8 +767,6 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
     MPNET_START_DOCSTRING,
 )
 class MPNetForMultipleChoice(MPNetPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -792,7 +779,6 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -869,9 +855,6 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
     MPNET_START_DOCSTRING,
 )
 class MPNetForTokenClassification(MPNetPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -885,7 +868,6 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -969,9 +951,6 @@ class MPNetClassificationHead(nn.Module):
     MPNET_START_DOCSTRING,
 )
 class MPNetForQuestionAnswering(MPNetPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -984,7 +963,6 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1072,3 +1050,15 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = [
+    "MPNetForMaskedLM",
+    "MPNetForMultipleChoice",
+    "MPNetForQuestionAnswering",
+    "MPNetForSequenceClassification",
+    "MPNetForTokenClassification",
+    "MPNetLayer",
+    "MPNetModel",
+    "MPNetPreTrainedModel",
+]

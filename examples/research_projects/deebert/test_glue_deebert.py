@@ -4,6 +4,7 @@ import sys
 from unittest.mock import patch
 
 import run_glue_deebert
+
 from transformers.testing_utils import TestCasePlus, get_gpu_count, require_torch_non_multi_gpu, slow
 
 
@@ -45,10 +46,9 @@ class DeeBertTests(TestCasePlus):
     @slow
     @require_torch_non_multi_gpu
     def test_glue_deebert_train(self):
-
         train_args = """
             --model_type roberta
-            --model_name_or_path roberta-base
+            --model_name_or_path FacebookAI/roberta-base
             --task_name MRPC
             --do_train
             --do_eval
@@ -61,7 +61,7 @@ class DeeBertTests(TestCasePlus):
             --num_train_epochs 3
             --overwrite_output_dir
             --seed 42
-            --output_dir ./examples/deebert/saved_models/roberta-base/MRPC/two_stage
+            --output_dir ./examples/deebert/saved_models/FacebookAI/roberta-base/MRPC/two_stage
             --plot_data_dir ./examples/deebert/results/
             --save_steps 0
             --overwrite_cache
@@ -71,12 +71,12 @@ class DeeBertTests(TestCasePlus):
 
         eval_args = """
             --model_type roberta
-            --model_name_or_path ./examples/deebert/saved_models/roberta-base/MRPC/two_stage
+            --model_name_or_path ./examples/deebert/saved_models/FacebookAI/roberta-base/MRPC/two_stage
             --task_name MRPC
             --do_eval
             --do_lower_case
             --data_dir ./tests/fixtures/tests_samples/MRPC/
-            --output_dir ./examples/deebert/saved_models/roberta-base/MRPC/two_stage
+            --output_dir ./examples/deebert/saved_models/FacebookAI/roberta-base/MRPC/two_stage
             --plot_data_dir ./examples/deebert/results/
             --max_seq_length 128
             --eval_each_highway
@@ -88,12 +88,12 @@ class DeeBertTests(TestCasePlus):
 
         entropy_eval_args = """
             --model_type roberta
-            --model_name_or_path ./examples/deebert/saved_models/roberta-base/MRPC/two_stage
+            --model_name_or_path ./examples/deebert/saved_models/FacebookAI/roberta-base/MRPC/two_stage
             --task_name MRPC
             --do_eval
             --do_lower_case
             --data_dir ./tests/fixtures/tests_samples/MRPC/
-            --output_dir ./examples/deebert/saved_models/roberta-base/MRPC/two_stage
+            --output_dir ./examples/deebert/saved_models/FacebookAI/roberta-base/MRPC/two_stage
             --plot_data_dir ./examples/deebert/results/
             --max_seq_length 128
             --early_exit_entropy 0.1

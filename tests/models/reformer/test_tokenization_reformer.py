@@ -27,7 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "google/reformer-crime-and-punishment"
     tokenizer_class = ReformerTokenizer
     rust_tokenizer_class = ReformerTokenizerFast
     test_rust_tokenizer = True
@@ -61,7 +61,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -125,7 +125,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
 
-    # tokenizer has no padding token
+    @unittest.skip(reason="Tokenizer has no padding token")
     def test_padding_different_model_input_name(self):
         pass
 
@@ -352,9 +352,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        # fmt: off
-        expected_encoding = {'input_ids': [[108, 265, 24, 111, 4, 258, 156, 7, 51, 279, 58, 7, 76, 25, 69, 278], [140, 243, 264, 134, 17, 267, 77, 263, 22, 262, 297, 258, 304, 177, 279, 266, 14, 89, 13, 35, 261, 299, 272, 137, 275, 278]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
-        # fmt: on
+        expected_encoding = {'input_ids': [[108, 265, 24, 111, 4, 258, 156, 7, 51, 279, 58, 7, 76, 25, 69, 278], [140, 243, 264, 134, 17, 267, 77, 263, 22, 262, 297, 258, 304, 177, 279, 266, 14, 89, 13, 35, 261, 299, 272, 137, 275, 278]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
 
         # This tokenizer does not know some characters like ")".
         # That is the reason why we use very simple texts here.

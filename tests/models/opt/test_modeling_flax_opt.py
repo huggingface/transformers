@@ -19,7 +19,7 @@ import timeout_decorator  # noqa
 from transformers import OPTConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, slow
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -33,6 +33,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers import FlaxOPTForCausalLM, FlaxOPTModel, GPT2Tokenizer
 
 
@@ -69,6 +70,7 @@ class FlaxOPTModelTester:
         embed_dim=16,
         word_embed_proj_dim=16,
         initializer_range=0.02,
+        attn_implemetation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -91,6 +93,7 @@ class FlaxOPTModelTester:
         self.word_embed_proj_dim = word_embed_proj_dim
         self.initializer_range = initializer_range
         self.is_encoder_decoder = False
+        self.attn_implementation = attn_implemetation
 
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
@@ -113,6 +116,7 @@ class FlaxOPTModelTester:
             word_embed_proj_dim=self.word_embed_proj_dim,
             initializer_range=self.initializer_range,
             use_cache=False,
+            attn_implementation=self.attn_implementation,
         )
         inputs_dict = prepare_opt_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -364,43 +368,39 @@ class FlaxOPTGenerationTest(unittest.TestCase):
 
         self.assertIsNotNone(output_string, EXPECTED_OUTPUTS)
 
-    # TODO fix in the following PR
-    # def test_batch_generation(self):
-    #     model_id = "facebook/opt-350m"
+    def test_batch_generation(self):
+        model_id = "facebook/opt-350m"
 
-    #     tokenizer = GPT2Tokenizer.from_pretrained(model_id)
-    #     model = FlaxOPTForCausalLM.from_pretrained(model_id)
+        tokenizer = GPT2Tokenizer.from_pretrained(model_id)
+        model = FlaxOPTForCausalLM.from_pretrained(model_id)
 
-    #     tokenizer.padding_side = "left"
+        tokenizer.padding_side = "left"
 
-    #     # use different length sentences to test batching
-    #     sentences = [
-    #         "Hello, my dog is a little",
-    #         "Today, I",
-    #     ]
+        # use different length sentences to test batching
+        sentences = [
+            "Hello, my dog is a little",
+            "Today, I",
+        ]
 
-    #     inputs = tokenizer(sentences, return_tensors="jax", padding=True)
-    #     input_ids = inputs["input_ids"]
+        inputs = tokenizer(sentences, return_tensors="jax", padding=True)
+        input_ids = inputs["input_ids"]
 
-    #     outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"], trace=False)
+        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"], trace=False)
 
-    #     inputs_non_padded = tokenizer(sentences[0], return_tensors="jax").input_ids
-    #     output_non_padded = model.generate(input_ids=inputs_non_padded)
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="jax").input_ids
+        output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-    #     num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].sum()
-    #     inputs_padded = tokenizer(sentences[1], return_tensors="jax").input_ids
-    #     output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].sum()
+        inputs_padded = tokenizer(sentences[1], return_tensors="jax").input_ids
+        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
 
-    #     batch_out_sentence = tokenizer.batch_decode(outputs[0], skip_special_tokens=True)
-    #     non_padded_sentence = tokenizer.decode(output_non_padded[0][0], skip_special_tokens=True)
-    #     padded_sentence = tokenizer.decode(output_padded[0][0], skip_special_tokens=True)
+        batch_out_sentence = tokenizer.batch_decode(outputs[0], skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0][0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0][0], skip_special_tokens=True)
 
-    #     expected_output_sentence = [
-    #         "Hello, my dog is a little bit of a dork.\nI'm a little bit",
-    #         "Today, I<s><s><s><s><s><s><s><s><s><s><s><s>"
-    #         # TODO fix this test in next PR
-    #         # "Today, I was in the middle of a conversation with a friend about the",
-    #     ]
-    #     self.assertListEqual(expected_output_sentence, batch_out_sentence)
-    #     # TODO outputs will be similar, fix in next PR
-    #     self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])
+        expected_output_sentence = [
+            "Hello, my dog is a little bit of a dork.\nI'm a little bit",
+            "Today, I was in the middle of a conversation with a friend about the",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(batch_out_sentence, [non_padded_sentence, padded_sentence])

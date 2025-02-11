@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import GPT2Config, is_tf_available
@@ -20,6 +22,7 @@ from transformers.testing_utils import require_tf, require_tf2onnx, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
@@ -28,7 +31,6 @@ if is_tf_available():
 
     from transformers import GPT2Tokenizer
     from transformers.models.gpt2.modeling_tf_gpt2 import (
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
         TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
@@ -52,7 +54,7 @@ class TFGPT2ModelTester:
         self.use_mc_token_ids = True
         self.vocab_size = 99
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -180,7 +182,7 @@ class TFGPT2ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -191,7 +193,9 @@ class TFGPT2ModelTester:
         next_token_type_ids = tf.concat([token_type_ids, next_token_types], axis=-1)
 
         output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -213,7 +217,7 @@ class TFGPT2ModelTester:
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
+        output, past_key_values = model(input_ids, attention_mask=attn_mask).to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -233,7 +237,9 @@ class TFGPT2ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), shape_list(output_from_past)[-1]))
@@ -256,7 +262,7 @@ class TFGPT2ModelTester:
         # first forward pass
         outputs = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, use_cache=True)
 
-        output, past = outputs.to_tuple()
+        output, past_key_values = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
@@ -272,7 +278,10 @@ class TFGPT2ModelTester:
             next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past=past
+            next_tokens,
+            token_type_ids=next_token_types,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
         )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
@@ -354,14 +363,23 @@ class TFGPT2ModelTester:
 
 
 @require_tf
-class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-
+class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel)
         if is_tf_available()
         else ()
     )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFGPT2Model,
+            "text-classification": TFGPT2ForSequenceClassification,
+            "text-generation": TFGPT2LMHeadModel,
+            "zero-shot": TFGPT2ForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = True
     onnx_min_opset = 10
@@ -397,33 +415,15 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert name is None
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
-
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGPT2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai-community/gpt2"
+        model = TFGPT2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwrite from common since ONNX runtime optimization doesn't work with tf.gather() when the argument
     # `batch_dims` > 0"
@@ -439,13 +439,12 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-
             # Skip these 2 classes which uses `tf.gather` with `batch_dims=1`
             if model_class in [TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel]:
                 continue
 
             model = model_class(config)
-            model(model.dummy_inputs)
+            model.build_in_name_scope()
 
             onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
@@ -461,8 +460,8 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_greedy_distilgpt2_batch_special(self):
-        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
-        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+        model = TFGPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilbert/distilgpt2")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -488,8 +487,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_sample_distilgpt2_batch_special(self):
-        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
-        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+        model = TFGPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilbert/distilgpt2")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -522,8 +521,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_greedy_distilgpt2_beam_search_special(self):
-        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
-        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+        model = TFGPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilbert/distilgpt2")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -550,8 +549,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_distilgpt2_left_padding(self):
         """Tests that the generated text is the same, regarless of left padding"""
-        model = TFGPT2LMHeadModel.from_pretrained("distilgpt2")
-        tokenizer = GPT2Tokenizer.from_pretrained("distilgpt2")
+        model = TFGPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("distilbert/distilgpt2")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -582,8 +581,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_gpt2_greedy_xla(self):
-        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = TFGPT2LMHeadModel.from_pretrained("openai-community/gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -612,8 +611,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         # forces the generation to happen on CPU, to avoid GPU-related quirks
         with tf.device(":/CPU:0"):
-            model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-            tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+            model = TFGPT2LMHeadModel.from_pretrained("openai-community/gpt2")
+            tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
             tokenizer.pad_token = tokenizer.eos_token
             tokenizer.padding_side = "left"
@@ -642,8 +641,8 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_lm_generate_gpt2_beam_search_xla(self):
-        model = TFGPT2LMHeadModel.from_pretrained("gpt2")
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = TFGPT2LMHeadModel.from_pretrained("openai-community/gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -663,3 +662,72 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_ids = xla_generate(**input_ids, do_sample=False, num_beams=2)
         output_strings = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertListEqual(output_strings, expected_output_strings)
+
+    @slow
+    def test_contrastive_search_gpt2(self):
+        article = (
+            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+            "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
+        )
+
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
+        gpt2_model = TFGPT2LMHeadModel.from_pretrained("openai-community/gpt2-large")
+        input_ids = gpt2_tokenizer(article, return_tensors="tf")
+
+        outputs = gpt2_model.generate(**input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+
+        generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
+                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
+                "Google Now, which helps users find the information they're looking for on the web. But the company "
+                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
+                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
+                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
+                "concerned about the company's ability to keep users' information private. In a blog post last "
+                'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
+                'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
+                'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
+                'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
+                "but said in a statement to The Associated Press that"
+            ],
+        )
+
+    @slow
+    def test_contrastive_search_gpt2_xla(self):
+        article = (
+            "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+            "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based"
+        )
+
+        gpt2_tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2-large")
+        gpt2_model = TFGPT2LMHeadModel.from_pretrained("openai-community/gpt2-large")
+        input_ids = gpt2_tokenizer(article, return_tensors="tf")
+
+        xla_generate = tf.function(gpt2_model.generate, jit_compile=True)
+        outputs = xla_generate(**input_ids, penalty_alpha=0.6, top_k=4, max_length=256)
+
+        generated_text = gpt2_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "DeepMind Technologies is a British artificial intelligence subsidiary of Alphabet Inc. and research "
+                "laboratory founded in 2010. DeepMind was acquired by Google in 2014. The company is based in London, "
+                "United Kingdom\n\nGoogle has a lot of data on its users and uses it to improve its products, such as "
+                "Google Now, which helps users find the information they're looking for on the web. But the company "
+                "is not the only one to collect data on its users. Facebook, for example, has its own facial "
+                "recognition technology, as well as a database of millions of photos that it uses to personalize its "
+                "News Feed.\n\nFacebook's use of data is a hot topic in the tech industry, with privacy advocates "
+                "concerned about the company's ability to keep users' information private. In a blog post last "
+                'year, Facebook CEO Mark Zuckerberg said his company would "do our best to be transparent about our '
+                'data use and how we use it."\n\n"We have made it clear that we do not sell or share your data with '
+                'third parties," Zuckerberg wrote. "If you have questions or concerns, please reach out to us at '
+                'privacy@facebook.com."\n\nGoogle declined to comment on the privacy implications of its use of data, '
+                "but said in a statement to The Associated Press that"
+            ],
+        )

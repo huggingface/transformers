@@ -12,33 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LayoutLMv2 model. """
+"""Testing suite for the PyTorch LayoutLMv2 model."""
 
-
-import os
-import random
-import tempfile
 import unittest
 
-from transformers.testing_utils import require_detectron2, require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import (
+    require_detectron2,
+    require_non_xpu,
+    require_torch,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_detectron2_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
-        MODEL_MAPPING,
         LayoutLMv2Config,
         LayoutLMv2ForQuestionAnswering,
         LayoutLMv2ForSequenceClassification,
         LayoutLMv2ForTokenClassification,
         LayoutLMv2Model,
     )
-    from transformers.models.layoutlmv2.modeling_layoutlmv2 import LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_detectron2_available():
     from detectron2.structures.image_list import ImageList
@@ -58,7 +61,7 @@ class LayoutLMv2ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=36,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -255,10 +258,10 @@ class LayoutLMv2ModelTester:
         return config, inputs_dict
 
 
+@require_non_xpu
 @require_torch
 @require_detectron2
-class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
-
+class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = True
     test_mismatched_shapes = False
@@ -272,6 +275,11 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {"document-question-answering": LayoutLMv2ForQuestionAnswering, "feature-extraction": LayoutLMv2Model}
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
@@ -312,54 +320,6 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    def test_save_load_fast_init_from_base(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = MODEL_MAPPING[config.__class__]
-
-        if isinstance(base_class, tuple):
-            base_class = base_class[0]
-
-        for model_class in self.all_model_classes:
-            if model_class == base_class:
-                continue
-
-            # make a copy of model class to not break future tests
-            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
-            class CopyClass(model_class):
-                pass
-
-            model_class_copy = CopyClass
-
-            # make sure that all keys are expected for test
-            model_class_copy._keys_to_ignore_on_load_missing = []
-
-            # make init deterministic, but make sure that
-            # non-initialized weights throw errors nevertheless
-            model_class_copy._init_weights = self._mock_init_weights
-
-            model = base_class(config)
-            state_dict = model.state_dict()
-
-            # this will often delete a single weight of a multi-weight module
-            # to test an edge case
-            random_key_to_del = random.choice(list(state_dict.keys()))
-            del state_dict[random_key_to_del]
-
-            # check that certain keys didn't get saved with the model
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
-
-                model_fast_init = model_class_copy.from_pretrained(tmpdirname)
-                model_slow_init = model_class_copy.from_pretrained(tmpdirname, _fast_init=False)
-
-                for key in model_fast_init.state_dict().keys():
-                    if key == "layoutlmv2.visual_segment_embedding":
-                        # we skip the visual segment embedding as it has a custom initialization scheme
-                        continue
-                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -462,11 +422,15 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip(reason="We cannot configure detectron2 to output a smaller backbone")
+    def test_model_is_small(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LayoutLMv2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/layoutlmv2-base-uncased"
+        model = LayoutLMv2Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -484,6 +448,64 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    def test_batching_equivalence(self):
+        def equivalence(tensor1, tensor2):
+            return 1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=0)
+
+        def recursive_check(batched_object, single_row_object, model_name, key):
+            if isinstance(batched_object, (list, tuple)):
+                for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
+                    recursive_check(batched_object_value, single_row_object_value, model_name, key)
+            elif batched_object is None:
+                return
+            else:
+                batched_row = batched_object[:1]
+                self.assertFalse(
+                    torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(batched_row).any(), f"Batched output has `inf` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isnan(single_row_object).any(), f"Single row output has `nan` in {model_name} for key={key}"
+                )
+                self.assertFalse(
+                    torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
+                )
+                self.assertTrue(
+                    (equivalence(batched_row, single_row_object)) <= 1e-03,
+                    msg=(
+                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
+                        f"Difference={equivalence(batched_row, single_row_object)}."
+                    ),
+                )
+
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            config.output_hidden_states = True
+
+            model_name = model_class.__name__
+            batched_input_prepared = self._prepare_for_class(batched_input, model_class)
+            model = model_class(config).to(torch_device).eval()
+            batch_size = self.model_tester.batch_size
+
+            single_row_input = {}
+            for key, value in batched_input_prepared.items():
+                if isinstance(value, torch.Tensor) and value.shape[0] % batch_size == 0:
+                    single_batch_shape = value.shape[0] // batch_size
+                    single_row_input[key] = value[:single_batch_shape]
+                elif hasattr(value, "tensor"):
+                    # layoutlmv2uses ImageList intead of pixel values (needs for torchscript)
+                    single_row_input[key] = value.tensor[:single_batch_shape]
+
+            with torch.no_grad():
+                model_batched_output = model(**batched_input_prepared)
+                model_row_output = model(**single_row_input)
+
+            for key in model_batched_output:
+                recursive_check(model_batched_output[key], model_row_output[key], model_name, key)
 
 
 def prepare_layoutlmv2_batch_inputs():
@@ -537,7 +559,7 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.1087, 0.0727, -0.3075], [0.0799, -0.0427, -0.0751], [-0.0367, 0.0480, -0.1358]], device=torch_device
         )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
         # verify the pooled output
         expected_shape = torch.Size((2, model.config.hidden_size))

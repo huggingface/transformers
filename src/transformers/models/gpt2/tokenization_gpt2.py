@@ -14,11 +14,10 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 import json
 import os
 from functools import lru_cache
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import regex as re
 
@@ -26,39 +25,11 @@ from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "gpt2": "https://huggingface.co/gpt2/resolve/main/vocab.json",
-        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/vocab.json",
-        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/vocab.json",
-        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/vocab.json",
-        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "gpt2": "https://huggingface.co/gpt2/resolve/main/merges.txt",
-        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/merges.txt",
-        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/merges.txt",
-        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/merges.txt",
-        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gpt2": 1024,
-    "gpt2-medium": 1024,
-    "gpt2-large": 1024,
-    "gpt2-xl": 1024,
-    "distilgpt2": 1024,
 }
 
 
@@ -108,12 +79,14 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import GPT2Tokenizer
-    >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    >>> tokenizer("Hello world")['input_ids']
+
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+    >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [18435, 995]
     ```
 
@@ -137,21 +110,24 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*):
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (GPT2 tokenizer detect beginning of words by the preceding space).
+        add_bos_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial beginning of sentence token to the input. This allows to treat the leading
+            word just as any other word.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -165,22 +141,13 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         pad_token=None,
         add_prefix_space=False,
         add_bos_token=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
-            **kwargs,
-        )
+
         self.add_bos_token = add_bos_token
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -198,6 +165,17 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            add_prefix_space=add_prefix_space,
+            add_bos_token=add_bos_token,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):
@@ -352,10 +330,5 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+
+__all__ = ["GPT2Tokenizer"]

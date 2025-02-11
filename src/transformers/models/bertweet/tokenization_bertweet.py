@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for BERTweet"""
-
+"""Tokenization classes for BERTweet"""
 
 import html
 import os
@@ -33,19 +32,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.txt",
     "merges_file": "bpe.codes",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/vocab.txt",
-    },
-    "merges_file": {
-        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/bpe.codes",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "vinai/bertweet-base": 128,
 }
 
 
@@ -77,7 +63,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
-        normalization (`bool`, *optional*, defaults to `False`)
+        normalization (`bool`, *optional*, defaults to `False`):
             Whether or not to apply a normalization preprocess.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
@@ -117,8 +103,6 @@ class BertweetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -132,20 +116,8 @@ class BertweetTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            normalization=normalization,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            **kwargs,
-        )
-
         try:
             from emoji import demojize
 
@@ -161,10 +133,10 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self.merges_file = merges_file
 
         self.encoder = {}
-        self.encoder[self.bos_token] = 0
-        self.encoder[self.pad_token] = 1
-        self.encoder[self.eos_token] = 2
-        self.encoder[self.unk_token] = 3
+        self.encoder[str(bos_token)] = 0
+        self.encoder[str(pad_token)] = 1
+        self.encoder[str(eos_token)] = 2
+        self.encoder[str(unk_token)] = 3
 
         self.add_from_file(vocab_file)
 
@@ -178,8 +150,19 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
         self.normalization = normalization
         self.tweetPreprocessor = TweetTokenizer()
-
         self.special_puncts = {"’": "'", "…": "..."}
+
+        super().__init__(
+            normalization=normalization,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -318,7 +301,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         split_tokens = []
         words = re.findall(r"\S+\n?", text)
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def normalizeTweet(self, tweet):
@@ -398,8 +381,12 @@ class BertweetTokenizer(PreTrainedTokenizer):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         if os.path.abspath(self.merges_file) != os.path.abspath(out_merge_file):
             copyfile(self.merges_file, out_merge_file)
@@ -640,9 +627,17 @@ def _replace_html_entities(text, keep=(), remove_illegal=True, encoding="utf-8")
 
     See https://github.com/scrapy/w3lib/blob/master/w3lib/html.py
 
-        >>> from nltk.tokenize.casual import _replace_html_entities >>> _replace_html_entities(b'Price: &pound;100')
-        'Price: \\xa3100' >>> print(_replace_html_entities(b'Price: &pound;100')) Price: £100 >>>
-    """
+    Examples:
+
+    ```python
+    >>> from nltk.tokenize.casual import _replace_html_entities
+
+    >>> _replace_html_entities(b"Price: &pound;100")
+    'Price: \\xa3100'
+
+    >>> print(_replace_html_entities(b"Price: &pound;100"))
+    Price: £100
+    ```"""
 
     def _convert_entity(match):
         entity_body = match.group(3)
@@ -726,7 +721,7 @@ class TweetTokenizer:
         words = WORD_RE.findall(safe_text)
         # Possibly alter the case, but avoid changing emoticons like :D into :d:
         if not self.preserve_case:
-            words = list(map((lambda x: x if EMOTICON_RE.search(x) else x.lower()), words))
+            words = [x if EMOTICON_RE.search(x) else x.lower() for x in words]
         return words
 
 
@@ -769,3 +764,6 @@ def casual_tokenize(text, preserve_case=True, reduce_len=False, strip_handles=Fa
 
 
 ###############################################################################
+
+
+__all__ = ["BertweetTokenizer"]

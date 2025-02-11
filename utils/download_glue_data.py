@@ -1,4 +1,4 @@
-""" Script for downloading all GLUE data.
+"""Script for downloading all GLUE data.
 Original source: https://gist.github.com/W4ngatang/60c2bdb54d156a41194446737ce03e2e
 
 Note: for legal reasons, we are unable to host MRPC.

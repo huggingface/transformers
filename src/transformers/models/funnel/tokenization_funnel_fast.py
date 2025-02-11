@@ -12,12 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for Funnel Transformer."""
+"""Tokenization class for Funnel Transformer."""
 
-from typing import List, Optional
+import json
+from typing import List, Optional, Tuple
 
+from tokenizers import normalizers
+
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_funnel import FunnelTokenizer
 
 
@@ -38,70 +41,52 @@ _model_names = [
     "xlarge-base",
 ]
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/vocab.txt",
-        "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/vocab.txt",
-        "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/vocab.txt",
-        "funnel-transformer/medium-base": (
-            "https://huggingface.co/funnel-transformer/medium-base/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/intermediate": (
-            "https://huggingface.co/funnel-transformer/intermediate/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/intermediate-base": (
-            "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/vocab.txt"
-        ),
-        "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/vocab.txt",
-        "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/vocab.txt",
-        "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/vocab.txt",
-        "funnel-transformer/xlarge-base": (
-            "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/tokenizer.json",
-        "funnel-transformer/small-base": (
-            "https://huggingface.co/funnel-transformer/small-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/tokenizer.json",
-        "funnel-transformer/medium-base": (
-            "https://huggingface.co/funnel-transformer/medium-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/intermediate": (
-            "https://huggingface.co/funnel-transformer/intermediate/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/intermediate-base": (
-            "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/tokenizer.json",
-        "funnel-transformer/large-base": (
-            "https://huggingface.co/funnel-transformer/large-base/resolve/main/tokenizer.json"
-        ),
-        "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/tokenizer.json",
-        "funnel-transformer/xlarge-base": (
-            "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {f"funnel-transformer/{name}": 512 for name in _model_names}
-PRETRAINED_INIT_CONFIGURATION = {f"funnel-transformer/{name}": {"do_lower_case": True} for name in _model_names}
 
-
-class FunnelTokenizerFast(BertTokenizerFast):
+class FunnelTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's *tokenizers* library).
+    Construct a "fast" Funnel Transformer tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
-    [`FunnelTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
-    splitting and wordpiece.
+    This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Args:
+        vocab_file (`str`):
+            File containing the vocabulary.
+        do_lower_case (`bool`, *optional*, defaults to `True`):
+            Whether or not to lowercase the input when tokenizing.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        sep_token (`str`, *optional*, defaults to `"<sep>"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        cls_token (`str`, *optional*, defaults to `"<cls>"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        mask_token (`str`, *optional*, defaults to `"<mask>"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+        clean_text (`bool`, *optional*, defaults to `True`):
+            Whether or not to clean the text before tokenization by removing any control characters and replacing all
+            whitespaces by the classic one.
+        tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
+            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
+            issue](https://github.com/huggingface/transformers/issues/328)).
+        bos_token (`str`, `optional`, defaults to `"<s>"`):
+            The beginning of sentence token.
+        eos_token (`str`, `optional`, defaults to `"</s>"`):
+            The end of sentence token.
+        strip_accents (`bool`, *optional*):
+            Whether or not to strip all accents. If this option is not specified, then it will be determined by the
+            value for `lowercase` (as in the original BERT).
+        wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
+            The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = FunnelTokenizer
     cls_token_type_id: int = 2
 
@@ -121,7 +106,7 @@ class FunnelTokenizerFast(BertTokenizerFast):
         tokenize_chinese_chars=True,
         strip_accents=None,
         wordpieces_prefix="##",
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_file,
@@ -140,6 +125,45 @@ class FunnelTokenizerFast(BertTokenizerFast):
             wordpieces_prefix=wordpieces_prefix,
             **kwargs,
         )
+
+        normalizer_state = json.loads(self.backend_tokenizer.normalizer.__getstate__())
+        if (
+            normalizer_state.get("lowercase", do_lower_case) != do_lower_case
+            or normalizer_state.get("strip_accents", strip_accents) != strip_accents
+            or normalizer_state.get("handle_chinese_chars", tokenize_chinese_chars) != tokenize_chinese_chars
+        ):
+            normalizer_class = getattr(normalizers, normalizer_state.pop("type"))
+            normalizer_state["lowercase"] = do_lower_case
+            normalizer_state["strip_accents"] = strip_accents
+            normalizer_state["handle_chinese_chars"] = tokenize_chinese_chars
+            self.backend_tokenizer.normalizer = normalizer_class(**normalizer_state)
+
+        self.do_lower_case = do_lower_case
+
+    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.build_inputs_with_special_tokens with BERT->Funnel
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A Funnel sequence has the following format:
+
+        - single sequence: `[CLS] X [SEP]`
+        - pair of sequences: `[CLS] A [SEP] B [SEP]`
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        output = [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+
+        if token_ids_1 is not None:
+            output += token_ids_1 + [self.sep_token_id]
+
+        return output
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -169,3 +193,11 @@ class FunnelTokenizerFast(BertTokenizerFast):
         if token_ids_1 is None:
             return len(cls) * [self.cls_token_type_id] + len(token_ids_0 + sep) * [0]
         return len(cls) * [self.cls_token_type_id] + len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.save_vocabulary
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        files = self._tokenizer.model.save(save_directory, name=filename_prefix)
+        return tuple(files)
+
+
+__all__ = ["FunnelTokenizerFast"]

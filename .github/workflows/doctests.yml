@@ -3,76 +3,87 @@ name: Doctests
 on:
   push:
     branches:
-      - doctest*
+      - run_doctest*
   repository_dispatch:
   schedule:
-    - cron: "0 0 * * *"
-
+    - cron: "17 2 * * *"
 
 env:
-  HF_HOME: /mnt/cache
-  TRANSFORMERS_IS_CI: yes
-  RUN_SLOW: yes
-  OMP_NUM_THREADS: 16
-  MKL_NUM_THREADS: 16
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
-  TF_FORCE_GPU_ALLOW_GROWTH: true
+  NUM_SLICES: 3
 
 jobs:
-  run_doctests:
-    runs-on: [self-hosted, doc-tests-gpu]
+  setup:
+    name: Setup
+    runs-on: 
+      group: aws-g4dn-2xlarge-cache
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    outputs:
+      job_splits: ${{ steps.set-matrix.outputs.job_splits }}
+      split_keys: ${{ steps.set-matrix.outputs.split_keys }}
     steps:
-      - uses: actions/checkout@v2
-      - name: NVIDIA-SMI
+      - name: Update clone
+        working-directory: /transformers
         run: |
-          nvidia-smi
+          git fetch && git checkout ${{ github.sha }}
 
-      - name: GPU visibility
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Check values for matrix
+        working-directory: /transformers
         run: |
-          python3 utils/print_env.py
+          python3 utils/split_doctest_jobs.py
+          python3 utils/split_doctest_jobs.py --only_return_keys --num_splits ${{ env.NUM_SLICES }}
 
-      - name: Prepare files for doctests
+      - id: set-matrix
+        working-directory: /transformers
+        name: Set values for matrix
         run: |
-          python3 utils/prepare_for_doc_test.py src docs
+          echo "job_splits=$(python3 utils/split_doctest_jobs.py)" >> $GITHUB_OUTPUT
+          echo "split_keys=$(python3 utils/split_doctest_jobs.py --only_return_keys --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
 
-      - name: Run doctests
-        run: |
-          python3 -m pytest -v --make-reports doc_tests_gpu --doctest-modules $(cat utils/documentation_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.mdx"
-
-      - name: Clean files after doctests
-        run: |
-          python3 utils/prepare_for_doc_test.py src docs --remove_new_line
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat reports/doc_tests_gpu/failures_short.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: doc_tests_gpu_test_reports
-          path: reports/doc_tests_gpu
-
+  call_doctest_job:
+    name: "Call doctest jobs"
+    needs: setup
+    strategy:
+      max-parallel: 1  # 1 split at a time (in `doctest_job.yml`, we set `8` to run 8 jobs at the same time)
+      fail-fast: false
+      matrix:
+        split_keys: ${{ fromJson(needs.setup.outputs.split_keys) }}
+    uses: ./.github/workflows/doctest_job.yml
+    with:
+      job_splits: ${{ needs.setup.outputs.job_splits }}
+      split_keys: ${{ toJson(matrix.split_keys) }}
+    secrets: inherit
 
   send_results:
     name: Send results to webhook
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     if: always()
-    needs: [run_doctests]
+    needs: [call_doctest_job]
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v2
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
       - name: Send message to Slack
         env:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-          CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY_DOCS }}
-          CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY_DOCS }}
-          CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
+          ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+          # Use `CI_SLACK_CHANNEL_DUMMY_TESTS` when doing experimentation
+          SLACK_REPORT_CHANNEL: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY_DOCS }}
         run: |
           pip install slack_sdk
           python utils/notification_service_doc_tests.py
+
+      - name: "Upload results"
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: doc_test_results
+          path: doc_test_results

@@ -38,7 +38,7 @@ from torchvision.transforms.functional import InterpolationMode
 
 import transformers
 from transformers import (
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModel,
     AutoTokenizer,
     HfArgumentParser,
@@ -54,7 +54,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/contrastive-image-text/requirements.txt")
 
@@ -74,7 +74,7 @@ class ModelArguments:
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
@@ -86,12 +86,22 @@ class ModelArguments:
         default=True,
         metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -176,9 +186,6 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension == "json", "`validation_file` should be a json file."
 
 
 dataset_name_mapping = {
@@ -198,7 +205,8 @@ class Transform(torch.nn.Module):
             Normalize(mean, std),
         )
 
-    def forward(self, x: Image) -> torch.Tensor:
+    def forward(self, x) -> torch.Tensor:
+        """`x` should be an instance of `PIL.Image.Image`"""
         with torch.no_grad():
             x = self.transforms(x)
         return x
@@ -241,6 +249,10 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
+
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
     transformers.utils.logging.set_verbosity(log_level)
@@ -249,12 +261,12 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
-    # 3. Detecting last checkpoint and eventualy continue from last checkpoint
+    # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
@@ -285,7 +297,8 @@ def main():
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
             data_dir=data_args.data_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -295,46 +308,53 @@ def main():
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
             extension = data_args.validation_file.split(".")[-1]
-        if data_args.test_file is not None:
-            data_files["test"] = data_args.test_file
-            extension = data_args.test_file.split(".")[-1]
         dataset = load_dataset(
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
-    # 5. Load pretrained model, tokenizer, and feature extractor
+    # 5. Load pretrained model, tokenizer, and image processor
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.tokenizer_name,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            use_fast=model_args.use_fast_tokenizer,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    # Load feature_extractor, in this script we only use this to get the mean and std for normalization.
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.feature_extractor_name or model_args.model_name_or_path,
+    # Load image_processor, in this script we only use this to get the mean and std for normalization.
+    image_processor = AutoImageProcessor.from_pretrained(
+        model_args.image_processor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     model = AutoModel.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     config = model.config
 
@@ -357,8 +377,6 @@ def main():
         column_names = dataset["train"].column_names
     elif training_args.do_eval:
         column_names = dataset["validation"].column_names
-    elif training_args.do_predict:
-        column_names = dataset["test"].column_names
     else:
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
         return
@@ -385,14 +403,14 @@ def main():
     # 7. Preprocessing the datasets.
     # Initialize torchvision transforms and jit it for faster processing.
     image_transformations = Transform(
-        config.vision_config.image_size, feature_extractor.image_mean, feature_extractor.image_std
+        config.vision_config.image_size, image_processor.image_mean, image_processor.image_std
     )
     image_transformations = torch.jit.script(image_transformations)
 
     # Preprocessing the datasets.
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
-        captions = [caption for caption in examples[caption_column]]
+        captions = list(examples[caption_column])
         text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
@@ -460,30 +478,7 @@ def main():
         # Transform images on the fly as doing it on the whole dataset takes too much time.
         eval_dataset.set_transform(transform_images)
 
-    if training_args.do_predict:
-        if "test" not in dataset:
-            raise ValueError("--do_predict requires a test dataset")
-        test_dataset = dataset["test"]
-        if data_args.max_eval_samples is not None:
-            max_eval_samples = min(len(test_dataset), data_args.max_eval_samples)
-            test_dataset = test_dataset.select(range(max_eval_samples))
-
-        test_dataset = test_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
-        )
-        test_dataset = test_dataset.map(
-            function=tokenize_captions,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[col for col in column_names if col != image_column],
-            load_from_cache_file=not data_args.overwrite_cache,
-            desc="Running tokenizer on test dataset",
-        )
-
-        # Transform images on the fly as doing it on the whole dataset takes too much time.
-        test_dataset.set_transform(transform_images)
-
-    # 8. Initalize our trainer
+    # 8. Initialize our trainer
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -501,6 +496,8 @@ def main():
             checkpoint = last_checkpoint
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
+        tokenizer.save_pretrained(training_args.output_dir)
+        image_processor.save_pretrained(training_args.output_dir)
         trainer.log_metrics("train", train_result.metrics)
         trainer.save_metrics("train", train_result.metrics)
         trainer.save_state()
@@ -512,7 +509,11 @@ def main():
         trainer.save_metrics("eval", metrics)
 
     # 11. Write Training Stats and push to hub.
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
+    finetuned_from = model_args.model_name_or_path
+    # If from a local directory, don't set `finetuned_from` as this is required to be a valid repo. id on the Hub.
+    if os.path.isdir(finetuned_from):
+        finetuned_from = None
+    kwargs = {"finetuned_from": finetuned_from, "tasks": "contrastive-image-text-modeling"}
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:

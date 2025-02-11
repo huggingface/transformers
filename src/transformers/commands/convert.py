@@ -71,7 +71,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         pytorch_dump_output: str,
         config: str,
         finetuning_task_name: str,
-        *args
+        *args,
     ):
         self._logger = logging.get_logger("transformers-cli/converting")
 
@@ -123,23 +123,6 @@ class ConvertCommand(BaseTransformersCLICommand):
             )
 
             convert_openai_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
-        elif self._model_type == "transfo_xl":
-            try:
-                from ..models.transfo_xl.convert_transfo_xl_original_tf_checkpoint_to_pytorch import (
-                    convert_transfo_xl_checkpoint_to_pytorch,
-                )
-            except ImportError:
-                raise ImportError(IMPORT_ERROR_MESSAGE)
-
-            if "ckpt" in self._tf_checkpoint.lower():
-                TF_CHECKPOINT = self._tf_checkpoint
-                TF_DATASET_FILE = ""
-            else:
-                TF_DATASET_FILE = self._tf_checkpoint
-                TF_CHECKPOINT = ""
-            convert_transfo_xl_checkpoint_to_pytorch(
-                TF_CHECKPOINT, self._config, self._pytorch_dump_output, TF_DATASET_FILE
-            )
         elif self._model_type == "gpt2":
             try:
                 from ..models.gpt2.convert_gpt2_original_tf_checkpoint_to_pytorch import (
@@ -167,7 +150,7 @@ class ConvertCommand(BaseTransformersCLICommand):
 
             convert_xlm_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
         elif self._model_type == "lxmert":
-            from ..models.lxmert.convert_lxmert_original_pytorch_checkpoint_to_pytorch import (
+            from ..models.lxmert.convert_lxmert_original_tf_checkpoint_to_pytorch import (
                 convert_lxmert_checkpoint_to_pytorch,
             )
 
@@ -179,6 +162,4 @@ class ConvertCommand(BaseTransformersCLICommand):
 
             convert_rembert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         else:
-            raise ValueError(
-                "--model_type should be selected in the list [bert, gpt, gpt2, t5, transfo_xl, xlnet, xlm, lxmert]"
-            )
+            raise ValueError("--model_type should be selected in the list [bert, gpt, gpt2, t5, xlnet, xlm, lxmert]")

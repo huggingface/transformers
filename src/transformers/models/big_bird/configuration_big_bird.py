@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BigBird model configuration"""
+"""BigBird model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,13 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/config.json",
-    "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/config.json",
-    "google/bigbird-base-trivia-itc": "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/config.json",
-    # See all BigBird models at https://huggingface.co/models?filter=big_bird
-}
 
 
 class BigBirdConfig(PretrainedConfig):
@@ -58,7 +52,7 @@ class BigBirdConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -70,6 +64,8 @@ class BigBirdConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
@@ -102,6 +98,7 @@ class BigBirdConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "big_bird"
 
     def __init__(
@@ -119,7 +116,6 @@ class BigBirdConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         use_cache=True,
-        is_encoder_decoder=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -130,7 +126,7 @@ class BigBirdConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
@@ -153,7 +149,6 @@ class BigBirdConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.is_encoder_decoder = is_encoder_decoder
 
         self.rescale_embeddings = rescale_embeddings
         self.attention_type = attention_type
@@ -176,3 +171,6 @@ class BigBirdOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["BigBirdConfig", "BigBirdOnnxConfig"]

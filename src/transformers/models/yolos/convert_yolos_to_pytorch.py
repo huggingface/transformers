@@ -14,17 +14,16 @@
 # limitations under the License.
 """Convert YOLOS checkpoints from the original repository. URL: https://github.com/hustvl/YOLOS"""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
-from transformers import YolosConfig, YolosFeatureExtractor, YolosForObjectDetection
+from transformers import YolosConfig, YolosForObjectDetection, YolosImageProcessor
 from transformers.utils import logging
 
 
@@ -32,7 +31,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_yolos_config(yolos_name):
+def get_yolos_config(yolos_name: str) -> YolosConfig:
     config = YolosConfig()
 
     # size of the architecture
@@ -68,7 +67,7 @@ def get_yolos_config(yolos_name):
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config, base_model=False):
+def read_in_q_k_v(state_dict: dict, config: YolosConfig, base_model: bool = False):
     for i in range(config.num_hidden_layers):
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
@@ -86,7 +85,7 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
-def rename_key(name):
+def rename_key(name: str) -> str:
     if "backbone" in name:
         name = name.replace("backbone", "vit")
     if "cls_token" in name:
@@ -123,7 +122,7 @@ def rename_key(name):
     return name
 
 
-def convert_state_dict(orig_state_dict, model):
+def convert_state_dict(orig_state_dict: dict, model: YolosForObjectDetection) -> dict:
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
@@ -148,14 +147,16 @@ def convert_state_dict(orig_state_dict, model):
 
 
 # We will verify our results on an image of cute cats
-def prepare_img():
+def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
     return im
 
 
 @torch.no_grad()
-def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_yolos_checkpoint(
+    yolos_name: str, checkpoint_path: str, pytorch_dump_folder_path: str, push_to_hub: bool = False
+):
     """
     Copy/paste/tweak model's weights to our YOLOS structure.
     """
@@ -170,10 +171,10 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     new_state_dict = convert_state_dict(state_dict, model)
     model.load_state_dict(new_state_dict)
 
-    # Check outputs on an image, prepared by YolosFeatureExtractor
+    # Check outputs on an image, prepared by YolosImageProcessor
     size = 800 if yolos_name != "yolos_ti" else 512
-    feature_extractor = YolosFeatureExtractor(format="coco_detection", size=size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    image_processor = YolosImageProcessor(format="coco_detection", size=size)
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     outputs = model(**encoding)
     logits, pred_boxes = outputs.logits, outputs.pred_boxes
 
@@ -222,8 +223,8 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {yolos_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         model_mapping = {
@@ -236,7 +237,7 @@ def convert_yolos_checkpoint(yolos_name, checkpoint_path, pytorch_dump_folder_pa
 
         print("Pushing to the hub...")
         model_name = model_mapping[yolos_name]
-        feature_extractor.push_to_hub(model_name, organization="hustvl")
+        image_processor.push_to_hub(model_name, organization="hustvl")
         model.push_to_hub(model_name, organization="hustvl")
 
 

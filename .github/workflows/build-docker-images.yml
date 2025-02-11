@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - docker-image*
+      - build_ci_docker_image*
   repository_dispatch:
   workflow_call:
     inputs:
@@ -11,7 +11,7 @@ on:
         required: true
         type: string
   schedule:
-    - cron: "0 1 * * *"
+    - cron: "17 0 * * *"
 
 concurrency:
   group: docker-images-builds
@@ -20,23 +20,24 @@ concurrency:
 jobs:
   latest-docker:
     name: "Latest PyTorch + TensorFlow [dev]"
-    runs-on: ubuntu-latest
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
@@ -49,7 +50,7 @@ jobs:
         # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
         # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
         if: inputs.image_postfix != '-push-ci'
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: ./docker/transformers-all-latest-gpu
           build-args: |
@@ -57,67 +58,76 @@ jobs:
           push: true
           tags: huggingface/transformers-all-latest-gpu-push-ci
 
-  latest-with-torch-nightly-docker:
-    name: "Nightly PyTorch + Stable TensorFlow"
-    # Push CI doesn't need this image
-    if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-latest
-    steps:
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      -
-        name: Check out code
-        uses: actions/checkout@v2
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v1
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      -
-        name: Build and push
-        uses: docker/build-push-action@v2
-        with:
-          context: ./docker/transformers-all-latest-gpu
-          build-args: |
-            REF=main
-            PYTORCH=pre
-          push: true
-          tags: huggingface/transformers-all-latest-torch-nightly-gpu
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-all-latest-gpu-push-ci docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   latest-torch-deepspeed-docker:
     name: "Latest PyTorch + DeepSpeed"
-    runs-on: ubuntu-latest
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
             REF=main
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu${{ inputs.image_postfix }}
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER}}
+          title: 🤗 Results of the transformers-pytorch-deepspeed-latest-gpu docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
+  # Can't build 2 images in a single job `latest-torch-deepspeed-docker` (for `nvcr.io/nvidia`)
+  latest-torch-deepspeed-docker-for-push-ci-daily-build:
+    name: "Latest PyTorch + DeepSpeed (Push CI - Daily Build)"
+    runs-on:
+      group: aws-general-8-plus
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      -
+        name: Check out code
+        uses: actions/checkout@v4
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
       # Push CI images still need to be re-built daily
       -
         name: Build and push (for Push CI) in a daily basis
         # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
         # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
         if: inputs.image_postfix != '-push-ci'
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: ./docker/transformers-pytorch-deepspeed-latest-gpu
           build-args: |
@@ -125,81 +135,73 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
 
-  nightly-torch-deepspeed-docker:
-    name: "Nightly PyTorch + DeepSpeed"
-    # Push CI doesn't need this image
-    if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-latest
-    steps:
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      -
-        name: Check out code
-        uses: actions/checkout@v2
-      -
-        name: Login to DockerHub
-        uses: docker/login-action@v1
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-      -
-        name: Build and push
-        uses: docker/build-push-action@v2
-        with:
-          context: ./docker/transformers-pytorch-deepspeed-nightly-gpu
-          build-args: |
-            REF=main
-          push: true
-          tags: huggingface/transformers-pytorch-deepspeed-nightly-gpu
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-pytorch-deepspeed-latest-gpu-push-ci docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
 
   doc-builder:
     name: "Doc builder"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-latest
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: ./docker/transformers-doc-builder
           push: true
           tags: huggingface/transformers-doc-builder
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-doc-builder docker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-pytorch:
     name: "Latest PyTorch [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-latest
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: ./docker/transformers-pytorch-gpu
           build-args: |
@@ -207,30 +209,185 @@ jobs:
           push: true
           tags: huggingface/transformers-pytorch-gpu
 
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-pytorch-gpudocker build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
+  latest-pytorch-amd:
+    name: "Latest PyTorch (AMD) [dev]"
+    runs-on:
+      group: aws-general-8-plus
+    steps:
+      - 
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - 
+        name: Check out code
+        uses: actions/checkout@v4
+      - 
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - 
+        name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-amd-gpu${{ inputs.image_postfix }}
+      # Push CI images still need to be re-built daily
+      -
+        name: Build and push (for Push CI) in a daily basis
+        # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
+        # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
+        if: inputs.image_postfix != '-push-ci'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-amd-gpu-push-ci
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-pytorch-amd-gpu-push-ci build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
   latest-tensorflow:
     name: "Latest TensorFlow [dev]"
     # Push CI doesn't need this image
     if: inputs.image_postfix != '-push-ci'
-    runs-on: ubuntu-latest
+    runs-on:
+      group: aws-general-8-plus
     steps:
       -
         name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
       -
         name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       -
         name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
       -
         name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: ./docker/transformers-tensorflow-gpu
           build-args: |
             REF=main
           push: true
           tags: huggingface/transformers-tensorflow-gpu
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the huggingface/transformers-tensorflow-gpu build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
+  latest-pytorch-deepspeed-amd:
+    name: "PyTorch + DeepSpeed (AMD) [dev]"
+    runs-on:
+      group: aws-general-8-plus
+    steps:
+      - 
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - 
+        name: Check out code
+        uses: actions/checkout@v4
+      - 
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      - 
+        name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-deepspeed-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu${{ inputs.image_postfix }}
+      # Push CI images still need to be re-built daily
+      -
+        name: Build and push (for Push CI) in a daily basis
+        # This condition allows `schedule` events, or `push` events that trigger this workflow NOT via `workflow_call`.
+        # The later case is useful for manual image building for debugging purpose. Use another tag in this case!
+        if: inputs.image_postfix != '-push-ci'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-pytorch-deepspeed-amd-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-pytorch-deepspeed-amd-gpu-push-ci
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-pytorch-deepspeed-amd-gpu build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
+
+  latest-quantization-torch-docker:
+    name: "Latest Pytorch + Quantization [dev]"
+     # Push CI doesn't need this image
+    if: inputs.image_postfix != '-push-ci'
+    runs-on:
+      group: aws-general-8-plus
+    steps:
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      -
+        name: Check out code
+        uses: actions/checkout@v4
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/transformers-quantization-latest-gpu
+          build-args: |
+            REF=main
+          push: true
+          tags: huggingface/transformers-quantization-latest-gpu${{ inputs.image_postfix }}
+
+      - name: Post to Slack
+        if: always()
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
+        with:
+          slack_channel: ${{ secrets.CI_SLACK_CHANNEL_DOCKER }}
+          title: 🤗 Results of the transformers-quantization-latest-gpu build 
+          status: ${{ job.status }}
+          slack_token: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

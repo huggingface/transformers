@@ -14,8 +14,6 @@
 
 import unittest
 
-import numpy as np
-
 from transformers import BigBirdConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
@@ -24,6 +22,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 
 if is_flax_available():
     import jax
+
     from transformers.models.big_bird.modeling_flax_big_bird import (
         FlaxBigBirdForCausalLM,
         FlaxBigBirdForMaskedLM,
@@ -36,7 +35,7 @@ if is_flax_available():
     )
 
 
-class FlaxBigBirdModelTester(unittest.TestCase):
+class FlaxBigBirdModelTester:
     def __init__(
         self,
         parent,
@@ -128,13 +127,16 @@ class FlaxBigBirdModelTester(unittest.TestCase):
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, token_type_ids, attention_mask = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": attention_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": attention_mask,
+        }
         return config, inputs_dict
 
 
 @require_flax
 class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             FlaxBigBirdForCausalLM,
@@ -180,8 +182,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("google/bigbird-roberta-base")
-            outputs = model(np.ones((1, 1)))
-            self.assertIsNotNone(outputs)
+            self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         if self.test_attn_probs:
@@ -210,7 +211,6 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     # overwrite from common in order to skip the check on `attentions`

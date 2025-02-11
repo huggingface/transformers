@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LeViT model configuration"""
+"""LeViT model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -25,11 +25,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/levit-128S": "https://huggingface.co/facebook/levit-128S/resolve/main/config.json",
-    # See all LeViT models at https://huggingface.co/models?filter=levit
-}
 
 
 class LevitConfig(PretrainedConfig):
@@ -87,6 +82,7 @@ class LevitConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "levit"
 
     def __init__(
@@ -105,7 +101,7 @@ class LevitConfig(PretrainedConfig):
         mlp_ratio=[2, 2, 2],
         attention_ratio=[2, 2, 2],
         initializer_range=0.02,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.image_size = image_size
@@ -130,7 +126,6 @@ class LevitConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class LevitOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
@@ -144,3 +139,6 @@ class LevitOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["LevitConfig", "LevitOnnxConfig"]

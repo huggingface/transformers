@@ -16,12 +16,16 @@
 
 import unittest
 
-from transformers import AlbertConfig, is_torch_available
+from packaging import version
+from parameterized import parameterized
+
+from transformers import AlbertConfig, AutoTokenizer, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_sdpa, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,38 +41,61 @@ if is_torch_available():
         AlbertForTokenClassification,
         AlbertModel,
     )
-    from transformers.models.albert.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class AlbertModelTester:
     def __init__(
         self,
         parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        embedding_size=16,
+        hidden_size=36,
+        num_hidden_layers=2,
+        # this needs to be the same as `num_hidden_layers`!
+        num_hidden_groups=2,
+        num_attention_heads=6,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_input_mask = True
-        self.use_token_type_ids = True
-        self.use_labels = True
-        self.vocab_size = 99
-        self.embedding_size = 16
-        self.hidden_size = 36
-        self.num_hidden_layers = 6
-        self.num_hidden_groups = 6
-        self.num_attention_heads = 6
-        self.intermediate_size = 37
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 512
-        self.type_vocab_size = 16
-        self.type_sequence_label_size = 2
-        self.initializer_range = 0.02
-        self.num_labels = 3
-        self.num_choices = 4
-        self.scope = None
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+        self.use_token_type_ids = use_token_type_ids
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.embedding_size = embedding_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_hidden_groups = num_hidden_groups
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.type_sequence_label_size = type_sequence_label_size
+        self.initializer_range = initializer_range
+        self.num_labels = num_labels
+        self.num_choices = num_choices
+        self.scope = scope
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -216,8 +243,7 @@ class AlbertModelTester:
 
 
 @require_torch
-class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             AlbertModel,
@@ -230,6 +256,18 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": AlbertModel,
+            "fill-mask": AlbertForMaskedLM,
+            "question-answering": AlbertForQuestionAnswering,
+            "text-classification": AlbertForSequenceClassification,
+            "token-classification": AlbertForTokenClassification,
+            "zero-shot": AlbertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     fx_compatible = True
 
@@ -250,6 +288,12 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = AlbertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=37)
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Albert requires `head_mask` which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -286,16 +330,16 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = AlbertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "albert/albert-base-v1"
+        model = AlbertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
 class AlbertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = AlbertModel.from_pretrained("albert-base-v2")
+        model = AlbertModel.from_pretrained("albert/albert-base-v2")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
@@ -306,4 +350,46 @@ class AlbertModelIntegrationTest(unittest.TestCase):
             [[[-0.6513, 1.5035, -0.2766], [-0.6515, 1.5046, -0.2780], [-0.6512, 1.5049, -0.2784]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    def test_export(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        distilbert_model = "albert/albert-base-v2"
+        device = "cpu"
+        attn_implementation = "sdpa"
+        max_length = 64
+
+        tokenizer = AutoTokenizer.from_pretrained(distilbert_model)
+        inputs = tokenizer(
+            f"Paris is the {tokenizer.mask_token} of France.",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        model = AlbertForMaskedLM.from_pretrained(
+            distilbert_model,
+            device_map=device,
+            attn_implementation=attn_implementation,
+        )
+
+        logits = model(**inputs).logits
+        eg_predicted_mask = tokenizer.decode(logits[0, 4].topk(5).indices)
+        self.assertEqual(
+            eg_predicted_mask.split(),
+            ["capital", "capitol", "comune", "arrondissement", "bastille"],
+        )
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
+            strict=True,
+        )
+
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
+        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

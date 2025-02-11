@@ -18,10 +18,10 @@ import argparse
 
 import torch
 from datasets import load_dataset
-
 from donut import DonutModel
+
 from transformers import (
-    DonutFeatureExtractor,
+    DonutImageProcessor,
     DonutProcessor,
     DonutSwinConfig,
     DonutSwinModel,
@@ -106,22 +106,22 @@ def convert_state_dict(orig_state_dict, model):
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
                 ] = val[:dim, :]
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
-                ] = val[dim : dim * 2, :]
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = (
+                    val[dim : dim * 2, :]
+                )
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
                 ] = val[-dim:, :]
             else:
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
-                ] = val[:dim]
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"
-                ] = val[dim : dim * 2]
-                orig_state_dict[
-                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
-                ] = val[-dim:]
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = (
+                    val[:dim]
+                )
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = (
+                    val[dim : dim * 2]
+                )
+                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = (
+                    val[-dim:]
+                )
         elif "attn_mask" in key or key in ["encoder.model.norm.weight", "encoder.model.norm.bias"]:
             # HuggingFace implementation doesn't use attn_mask buffer
             # and model doesn't use final LayerNorms for the encoder
@@ -148,14 +148,14 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     model.load_state_dict(new_state_dict)
 
     # verify results on scanned document
-    dataset = load_dataset("hf-internal-testing/example-documents")
+    dataset = load_dataset("hf-internal-testing/example-documents")  # no-script
     image = dataset["test"][0]["image"].convert("RGB")
 
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)
-    feature_extractor = DonutFeatureExtractor(
+    image_processor = DonutImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
     )
-    processor = DonutProcessor(feature_extractor, tokenizer)
+    processor = DonutProcessor(image_processor, tokenizer)
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
     if model_name == "naver-clova-ix/donut-base-finetuned-docvqa":

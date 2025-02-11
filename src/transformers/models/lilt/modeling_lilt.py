@@ -40,11 +40,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LiltConfig"
 
-LILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "SCUT-DLVCLab/lilt-roberta-en-base",
-    # See all LiLT models at https://huggingface.co/models?filter=lilt
-]
-
 
 class LiltTextEmbeddings(nn.Module):
     def __init__(self, config):
@@ -59,7 +54,9 @@ class LiltTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         # End copy
@@ -239,7 +236,6 @@ class LiltSelfAttention(nn.Module):
         head_mask=None,
         output_attentions=False,
     ):
-
         layout_value_layer = self.transpose_for_scores(self.layout_value(layout_inputs), r=self.channel_shrink_ratio)
         layout_key_layer = self.transpose_for_scores(self.layout_key(layout_inputs), r=self.channel_shrink_ratio)
         layout_query_layer = self.transpose_for_scores(self.layout_query(layout_inputs), r=self.channel_shrink_ratio)
@@ -513,19 +509,13 @@ class LiltEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     layout_inputs,
                     attention_mask,
                     layer_head_mask,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -578,7 +568,6 @@ class LiltPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->Lilt,roberta->lilt
 class LiltPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -588,6 +577,7 @@ class LiltPreTrainedModel(PreTrainedModel):
     config_class = LiltConfig
     base_model_prefix = "lilt"
     supports_gradient_checkpointing = True
+    _no_split_modules = []
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -605,19 +595,6 @@ class LiltPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LiltEncoder):
-            module.gradient_checkpointing = value
-
-    def update_keys_to_ignore(self, config, del_keys_to_ignore):
-        """Remove some keys from ignore list"""
-        if not config.tie_word_embeddings:
-            # must make a new list, or the class variable gets modified!
-            self._keys_to_ignore_on_save = [k for k in self._keys_to_ignore_on_save if k not in del_keys_to_ignore]
-            self._keys_to_ignore_on_load_missing = [
-                k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
-            ]
 
 
 LILT_START_DOCSTRING = r"""
@@ -640,7 +617,7 @@ LILT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`RobertaTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -697,8 +674,6 @@ LILT_INPUTS_DOCSTRING = r"""
     LILT_START_DOCSTRING,
 )
 class LiltModel(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -754,7 +729,7 @@ class LiltModel(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModel.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -773,6 +748,7 @@ class LiltModel(LiltPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -847,8 +823,6 @@ class LiltModel(LiltPreTrainedModel):
     LILT_START_DOCSTRING,
 )
 class LiltForSequenceClassification(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
@@ -894,7 +868,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForSequenceClassification.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -924,6 +898,8 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -965,9 +941,6 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
     LILT_START_DOCSTRING,
 )
 class LiltForTokenClassification(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
@@ -1014,7 +987,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForTokenClassification.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -1046,6 +1019,8 @@ class LiltForTokenClassification(LiltPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
@@ -1092,9 +1067,6 @@ class LiltClassificationHead(nn.Module):
     LILT_START_DOCSTRING,
 )
 class LiltForQuestionAnswering(LiltPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
@@ -1144,7 +1116,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
         >>> model = AutoModelForQuestionAnswering.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train", trust_remote_code=True)
         >>> example = dataset[0]
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
@@ -1209,3 +1181,12 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "LiltForQuestionAnswering",
+    "LiltForSequenceClassification",
+    "LiltForTokenClassification",
+    "LiltModel",
+    "LiltPreTrainedModel",
+]

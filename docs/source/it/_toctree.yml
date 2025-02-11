@@ -33,6 +33,26 @@
     title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
+  - local: perf_train_cpu
+    title: Addestramento efficiente su CPU
+  - local: perf_train_cpu_many
+    title: Addestramento efficiente su multiple CPU
+  - local: perf_train_tpu
+    title: Addestramento su TPU
+  - local: perf_train_special
+    title: Addestramento su Hardware Specializzato
+  - local: perf_infer_cpu
+    title: Inferenza Efficiente su CPU
+  - local: perf_infer_gpu_one
+    title: Inferenza su una GPU
+  - local: perf_infer_gpu_many
+    title: Inferenza Efficiente su GPU Multiple
+  - local: perf_infer_special
+    title: Inferenza su Hardware Specializzato
+  - local: big_models
+    title: Istanziare un big model
+  - local: migration
+    title: Passaggio da pacchetti precedenti
   - local: debugging
     title: Debugging
   title: Guide pratiche
@@ -41,5 +61,11 @@
     title: Come aggiungere una pipeline a 🤗 Transformers?
   - local: add_new_model
     title: Come aggiungere un modello a 🤗 Transformers?
+  - local: perf_hardware
+    title: Hardware ottimizzato per l'addestramento
+  - local: community
+    title: Risorse della comunità
+  - local: pr_checks
+    title: Controlli su una Pull Request
   title: Guide How-to
   

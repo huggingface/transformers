@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import doctest
 import logging
 import os
@@ -27,7 +26,7 @@ from transformers.testing_utils import require_tf, require_torch, slow
 logger = logging.getLogger()
 
 
-@unittest.skip("Temporarily disable the doc tests.")
+@unittest.skip(reason="Temporarily disable the doc tests.")
 @require_torch
 @require_tf
 @slow

@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for the Blenderbot small tokenizer."""
+
 import json
 import os
 import unittest
@@ -27,7 +28,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "facebook/blenderbot_small-90M"
     tokenizer_class = BlenderbotSmallTokenizer
     test_rust_tokenizer = False
 

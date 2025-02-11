@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PoolFormer model."""
-
+"""PyTorch PoolFormer model."""
 
 import collections.abc
 from typing import Optional, Tuple, Union
@@ -34,7 +33,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "PoolFormerConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "PoolFormerFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "sail/poolformer_s12"
@@ -44,14 +42,9 @@ _EXPECTED_OUTPUT_SHAPE = [1, 512, 7, 7]
 _IMAGE_CLASS_CHECKPOINT = "sail/poolformer_s12"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
-POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sail/poolformer_s12",
-    # See all PoolFormer models at https://huggingface.co/models?filter=poolformer
-]
-
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -79,8 +72,8 @@ class PoolFormerDropPath(nn.Module):
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
@@ -271,7 +264,7 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     config_class = PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    _no_split_modules = ["PoolFormerLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -282,10 +275,6 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, PoolFormerEncoder):
-            module.gradient_checkpointing = value
 
 
 POOLFORMER_START_DOCSTRING = r"""
@@ -302,8 +291,8 @@ POOLFORMER_START_DOCSTRING = r"""
 POOLFORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`PoolFormerFeatureExtractor`]. See
-            [`PoolFormerFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`PoolFormerImageProcessor.__call__`] for details.
 """
 
 
@@ -326,7 +315,6 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -397,7 +385,6 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(POOLFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
@@ -456,3 +443,6 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+
+
+__all__ = ["PoolFormerForImageClassification", "PoolFormerModel", "PoolFormerPreTrainedModel"]

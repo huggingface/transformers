@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert RegNet checkpoints from timm and vissl."""
 
-
 import argparse
 import json
 from dataclasses import dataclass, field
@@ -22,16 +21,16 @@ from functools import partial
 from pathlib import Path
 from typing import Callable, Dict, List, Tuple
 
+import timm
 import torch
 import torch.nn as nn
-from torch import Tensor
-
-import timm
 from classy_vision.models.regnet import RegNet, RegNetParams, RegNetY32gf, RegNetY64gf, RegNetY128gf
-from huggingface_hub import cached_download, hf_hub_url
-from transformers import AutoFeatureExtractor, RegNetConfig, RegNetForImageClassification, RegNetModel
-from transformers.utils import logging
+from huggingface_hub import hf_hub_download
+from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
+
+from transformers import AutoImageProcessor, RegNetConfig, RegNetForImageClassification, RegNetModel
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()
@@ -53,7 +52,7 @@ class Tracker:
         for m in self.module.modules():
             self.handles.append(m.register_forward_hook(self._forward_hook))
         self.module(x)
-        list(map(lambda x: x.remove(), self.handles))
+        [x.remove() for x in self.handles]
         return self
 
     @property
@@ -192,7 +191,7 @@ def convert_weight_and_push(
     )
 
     from_output = from_model(x)
-    from_output = from_output[-1] if type(from_output) is list else from_output
+    from_output = from_output[-1] if isinstance(from_output, list) else from_output
 
     # now since I don't want to use any config files, vissl seer model doesn't actually have an head, so let's just check the last hidden state
     if "seer" in name and "in1k" in name:
@@ -209,10 +208,10 @@ def convert_weight_and_push(
 
         size = 224 if "seer" not in name else 384
         # we can use the convnext one
-        feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
-        feature_extractor.push_to_hub(
+        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
+        image_processor.push_to_hub(
             repo_path_or_name=save_directory / name,
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             use_temp_dir=True,
         )
 
@@ -226,7 +225,7 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename, repo_type="dataset")), "r"))
+    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
@@ -449,7 +448,7 @@ if __name__ == "__main__":
         default=True,
         type=bool,
         required=False,
-        help="If True, push model and feature extractor to the hub.",
+        help="If True, push model and image processor to the hub.",
     )
 
     args = parser.parse_args()

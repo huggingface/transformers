@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" SqueezeBERT model configuration"""
+"""SqueezeBERT model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -22,16 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "squeezebert/squeezebert-uncased": (
-        "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/config.json"
-    ),
-    "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/config.json",
-    "squeezebert/squeezebert-mnli-headless": (
-        "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/config.json"
-    ),
-}
 
 
 class SqueezeBertConfig(PretrainedConfig):
@@ -94,22 +85,19 @@ class SqueezeBertConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import SqueezeBertModel, SqueezeBertConfig
+    >>> from transformers import SqueezeBertConfig, SqueezeBertModel
 
     >>> # Initializing a SqueezeBERT configuration
     >>> configuration = SqueezeBertConfig()
 
-    >>> # Initializing a model from the configuration above
+    >>> # Initializing a model (with random weights) from the configuration above
     >>> model = SqueezeBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-
-    Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained
-    checkpoints.
     """
-    pretrained_config_archive_map = SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP
+
     model_type = "squeezebert"
 
     def __init__(
@@ -134,7 +122,7 @@ class SqueezeBertConfig(PretrainedConfig):
         post_attention_groups=1,
         intermediate_groups=4,
         output_groups=4,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
@@ -174,3 +162,6 @@ class SqueezeBertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["SqueezeBertConfig", "SqueezeBertOnnxConfig"]

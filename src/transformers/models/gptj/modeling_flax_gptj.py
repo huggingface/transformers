@@ -16,11 +16,10 @@
 from functools import partial
 from typing import Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
@@ -37,7 +36,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "gptj"
 _CONFIG_FOR_DOC = "GPTJConfig"
-_TOKENIZER_FOR_DOC = "GPTJTokenizer"
 
 
 GPTJ_START_DOCSTRING = r"""
@@ -80,7 +78,7 @@ GPTJ_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length`. Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`GPTJTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -196,7 +194,8 @@ class FlaxGPTJAttention(nn.Module):
             cached_value.value = value
             num_updated_cache_vectors = query.shape[1]
             cache_index.value = cache_index.value + num_updated_cache_vectors
-            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key
+            # positions that have already been generated and cached, not the remaining zero elements.
             pad_mask = jnp.broadcast_to(
                 jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
                 tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
@@ -213,7 +212,6 @@ class FlaxGPTJAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -270,7 +268,7 @@ class FlaxGPTJAttention(nn.Module):
         attention_bias = lax.select(
             attention_mask > 0,
             jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-            jnp.full(attention_mask.shape, -1e9).astype(self.dtype),
+            jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
         )
 
         # usual dot product attention
@@ -622,7 +620,6 @@ class FlaxGPTJModel(FlaxGPTJPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxGPTJModel,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutput,
     _CONFIG_FOR_DOC,
@@ -686,7 +683,7 @@ class FlaxGPTJForCausalLMModule(nn.Module):
 class FlaxGPTJForCausalLM(FlaxGPTJPreTrainedModel):
     module_class = FlaxGPTJForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -715,8 +712,10 @@ class FlaxGPTJForCausalLM(FlaxGPTJPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxGPTJForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = ["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"]

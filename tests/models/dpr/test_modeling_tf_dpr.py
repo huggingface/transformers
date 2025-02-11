@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import is_tf_available
@@ -20,6 +22,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -27,9 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
         BertConfig,
         DPRConfig,
         TFDPRContextEncoder,
@@ -50,7 +50,7 @@ class TFDPRModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -171,8 +171,7 @@ class TFDPRModelTester:
 
 
 @require_tf
-class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFDPRModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFDPRContextEncoder,
@@ -182,6 +181,7 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    pipeline_model_mapping = {"feature-extraction": TFDPRQuestionEncoder} if is_tf_available() else {}
 
     test_resize_embeddings = False
     test_missing_keys = False
@@ -210,21 +210,21 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRContextEncoder.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = TFDPRContextEncoder.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRContextEncoder.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = TFDPRContextEncoder.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-        for model_name in TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRQuestionEncoder.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = TFDPRQuestionEncoder.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-        for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRReader.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "facebook/dpr-ctx_encoder-single-nq-base"
+        model = TFDPRReader.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

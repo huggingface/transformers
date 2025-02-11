@@ -3,8 +3,8 @@ from copy import deepcopy
 
 import numpy as np
 from datasets import ClassLabel, DatasetDict, load_dataset
-
 from evaluate import load
+
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -100,7 +100,7 @@ def main():
         output_dir=args.output_dir,
         learning_rate=args.learning_rate,
         lr_scheduler_type=args.lr_scheduler_type,
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="epoch",
         per_device_train_batch_size=args.batch_size,

@@ -28,7 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "google/fnet-base"
     tokenizer_class = FNetTokenizer
     rust_tokenizer_class = FNetTokenizerFast
     test_rust_tokenizer = True
@@ -69,7 +69,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -145,7 +145,6 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
@@ -195,7 +194,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         if not self.test_slow_tokenizer:
             # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
+            self.skipTest(reason="test_slow_tokenizer is set to False")
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
@@ -427,11 +426,15 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         model_main_input_name: str = "input_ids",
     ):
         for i_r in input_r.values():
-            self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                len(i_r[1]), max_length
+            (
+                self.assertEqual(len(i_r), 2),
+                self.assertEqual(len(i_r[0]), max_length),
+                self.assertEqual(len(i_r[1]), max_length),
             )
-            self.assertEqual(len(i_r), 2), self.assertEqual(len(i_r[0]), max_length), self.assertEqual(
-                len(i_r[1]), max_length
+            (
+                self.assertEqual(len(i_r), 2),
+                self.assertEqual(len(i_r[0]), max_length),
+                self.assertEqual(len(i_r[1]), max_length),
             )
 
         for i_r, i_p in zip(input_r[model_main_input_name], input_p[model_main_input_name]):
@@ -439,9 +442,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        # fmt: off
-        expected_encoding = {'input_ids': [[4, 4616, 107, 163, 328, 14, 63, 1726, 106, 11954, 16659, 23, 83, 16688, 11427, 328, 107, 36, 11954, 16659, 23, 83, 16688, 6153, 82, 961, 16688, 3474, 16710, 1696, 2306, 16688, 10854, 2524, 3827, 561, 163, 3474, 16680, 62, 226, 2092, 16680, 379, 3474, 16660, 16680, 2436, 16667, 16671, 16680, 999, 87, 3474, 16680, 2436, 16667, 5208, 800, 16710, 68, 2018, 2959, 3037, 163, 16663, 11617, 16710, 36, 2018, 2959, 4737, 163, 16663, 16667, 16674, 16710, 91, 372, 5087, 16745, 2205, 82, 961, 3608, 38, 1770, 16745, 7984, 36, 2565, 751, 9017, 1204, 864, 218, 1244, 16680, 11954, 16659, 23, 83, 36, 14686, 23, 7619, 16678, 5], [4, 28, 532, 65, 1929, 33, 391, 16688, 3979, 9, 2565, 7849, 299, 225, 34, 2040, 305, 167, 289, 16667, 16078, 32, 1966, 181, 4626, 63, 10575, 71, 851, 1491, 36, 624, 4757, 38, 208, 8038, 16678, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [4, 13, 1467, 5187, 26, 2521, 4567, 16664, 372, 13, 16209, 3314, 16678, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
-        # fmt: on
+        expected_encoding = {'input_ids': [[4, 4616, 107, 163, 328, 14, 63, 1726, 106, 11954, 16659, 23, 83, 16688, 11427, 328, 107, 36, 11954, 16659, 23, 83, 16688, 6153, 82, 961, 16688, 3474, 16710, 1696, 2306, 16688, 10854, 2524, 3827, 561, 163, 3474, 16680, 62, 226, 2092, 16680, 379, 3474, 16660, 16680, 2436, 16667, 16671, 16680, 999, 87, 3474, 16680, 2436, 16667, 5208, 800, 16710, 68, 2018, 2959, 3037, 163, 16663, 11617, 16710, 36, 2018, 2959, 4737, 163, 16663, 16667, 16674, 16710, 91, 372, 5087, 16745, 2205, 82, 961, 3608, 38, 1770, 16745, 7984, 36, 2565, 751, 9017, 1204, 864, 218, 1244, 16680, 11954, 16659, 23, 83, 36, 14686, 23, 7619, 16678, 5], [4, 28, 532, 65, 1929, 33, 391, 16688, 3979, 9, 2565, 7849, 299, 225, 34, 2040, 305, 167, 289, 16667, 16078, 32, 1966, 181, 4626, 63, 10575, 71, 851, 1491, 36, 624, 4757, 38, 208, 8038, 16678, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3], [4, 13, 1467, 5187, 26, 2521, 4567, 16664, 372, 13, 16209, 3314, 16678, 5, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,

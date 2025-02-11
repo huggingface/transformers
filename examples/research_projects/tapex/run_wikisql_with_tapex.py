@@ -32,9 +32,10 @@ import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import pandas as pd
 from datasets import load_dataset
+from filelock import FileLock
+from wikisql_utils import _TYPE_CONVERTER, retrieve_wikisql_query_answer_tapas
 
 import transformers
-from filelock import FileLock
 from transformers import (
     AutoConfig,
     BartForConditionalGeneration,
@@ -48,7 +49,6 @@ from transformers import (
 from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version
-from wikisql_utils import _TYPE_CONVERTER, retrieve_wikisql_query_answer_tapas
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -170,7 +170,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
                 "during ``evaluate`` and ``predict``."
             )
@@ -317,7 +317,7 @@ def main():
         datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
     #
@@ -329,7 +329,7 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     # IMPORTANT: the initial BART model's decoding is penalized by no_repeat_ngram_size, and thus
@@ -344,7 +344,7 @@ def main():
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
         add_prefix_space=True,
     )
 
@@ -355,7 +355,7 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     if model.config.decoder_start_token_id is None:
@@ -379,7 +379,7 @@ def main():
 
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
         logger.warning(
-            "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
+            "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for "
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 

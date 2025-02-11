@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for model DeBERTa."""
+"""Tokenization class for model DeBERTa."""
 
 import json
 import os
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import regex as re
 
@@ -24,49 +24,9 @@ from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/vocab.json",
-        "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/vocab.json",
-        "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/merges.txt",
-        "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/merges.txt",
-        "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/deberta-base": 512,
-    "microsoft/deberta-large": 512,
-    "microsoft/deberta-xlarge": 512,
-    "microsoft/deberta-base-mnli": 512,
-    "microsoft/deberta-large-mnli": 512,
-    "microsoft/deberta-xlarge-mnli": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/deberta-base": {"do_lower_case": False},
-    "microsoft/deberta-large": {"do_lower_case": False},
-}
 
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
@@ -116,13 +76,15 @@ class DebertaTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import DebertaTokenizer
+
     >>> tokenizer = DebertaTokenizer.from_pretrained("microsoft/deberta-base")
-    >>> tokenizer("Hello world")['input_ids']
-    [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
-    [18435, 995]
+    >>> tokenizer("Hello world")["input_ids"]
+    [1, 31414, 232, 2]
+
+    >>> tokenizer(" Hello world")["input_ids"]
+    [1, 20920, 232, 2]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
@@ -173,8 +135,6 @@ class DebertaTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
 
     def __init__(
@@ -191,31 +151,17 @@ class DebertaTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         add_prefix_space=False,
         add_bos_token=False,
-        **kwargs
+        **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, special=True) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, special=True) if isinstance(cls_token, str) else cls_token
+        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
-            **kwargs,
-        )
         self.add_bos_token = add_bos_token
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -233,6 +179,20 @@ class DebertaTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            add_bos_token=add_bos_token,
+            **kwargs,
+        )
 
     @property
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.vocab_size
@@ -432,11 +392,5 @@ class DebertaTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+
+__all__ = ["DebertaTokenizer"]

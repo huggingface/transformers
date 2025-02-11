@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for FSMT."""
 
-
 import json
 import os
 import re
@@ -31,26 +30,6 @@ VOCAB_FILES_NAMES = {
     "src_vocab_file": "vocab-src.json",
     "tgt_vocab_file": "vocab-tgt.json",
     "merges_file": "merges.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "src_vocab_file": {
-        "stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/vocab-src.json"
-    },
-    "tgt_vocab_file": {
-        "stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/vocab-tgt.json"
-    },
-    "merges_file": {"stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/merges.txt"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"stas/tiny-wmt19-en-de": 1024}
-PRETRAINED_INIT_CONFIGURATION = {
-    "stas/tiny-wmt19-en-de": {
-        "langs": ["en", "de"],
-        "model_max_length": 1024,
-        "special_tokens_map_file": None,
-        "full_tokenizer_file": None,
-    }
 }
 
 
@@ -146,13 +125,13 @@ class FSMTTokenizer(PreTrainedTokenizer):
     this superclass for more information regarding those methods.
 
     Args:
-        langs (`List[str]`):
+        langs (`List[str]`, *optional*):
             A list of two languages to translate from and to, for instance `["en", "ru"]`.
-        src_vocab_file (`str`):
+        src_vocab_file (`str`, *optional*):
             File containing the vocabulary for the source language.
-        tgt_vocab_file (`st`):
+        tgt_vocab_file (`st`, *optional*):
             File containing the vocabulary for the target language.
-        merges_file (`str`):
+        merges_file (`str`, *optional*):
             File containing the merges.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
@@ -179,9 +158,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -195,21 +171,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         bos_token="<s>",
         sep_token="</s>",
         pad_token="<pad>",
-        **kwargs
+        **kwargs,
     ):
-        super().__init__(
-            langs=langs,
-            src_vocab_file=src_vocab_file,
-            tgt_vocab_file=tgt_vocab_file,
-            merges_file=merges_file,
-            do_lower_case=do_lower_case,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            **kwargs,
-        )
-
         try:
             import sacremoses
         except ImportError:
@@ -226,10 +189,10 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self.do_lower_case = do_lower_case
 
         # cache of sm.MosesPunctNormalizer instance
-        self.cache_moses_punct_normalizer = dict()
+        self.cache_moses_punct_normalizer = {}
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.cache_moses_detokenizer = dict()
+        self.cache_moses_tokenizer = {}
+        self.cache_moses_detokenizer = {}
 
         if langs and len(langs) == 2:
             self.src_lang, self.tgt_lang = langs
@@ -237,7 +200,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             raise ValueError(
                 f"arg `langs` needs to be a list of 2 langs, e.g. ['en', 'ru'], but got {langs}. "
                 "Usually that means that tokenizer can't find a mapping for the given model path "
-                "in PRETRAINED_VOCAB_FILES_MAP, and other maps of this tokenizer."
+                "in  and other maps of this tokenizer."
             )
 
         with open(src_vocab_file, encoding="utf-8") as src_vocab_handle:
@@ -250,6 +213,18 @@ class FSMTTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+        super().__init__(
+            langs=langs,
+            src_vocab_file=src_vocab_file,
+            tgt_vocab_file=tgt_vocab_file,
+            merges_file=merges_file,
+            do_lower_case=do_lower_case,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            **kwargs,
+        )
 
     # hack override
     def get_vocab(self) -> Dict[str, int]:
@@ -275,8 +250,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         )
 
     def moses_detokenize(self, tokens, lang):
-        if lang not in self.cache_moses_tokenizer:
-            moses_detokenizer = self.sm.MosesDetokenizer(lang=self.tgt_lang)
+        if lang not in self.cache_moses_detokenizer:
+            moses_detokenizer = self.sm.MosesDetokenizer(lang=lang)
             self.cache_moses_detokenizer[lang] = moses_detokenizer
         return self.cache_moses_detokenizer[lang].detokenize(tokens)
 
@@ -379,7 +354,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 
@@ -541,3 +516,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+
+__all__ = ["FSMTTokenizer"]

@@ -1,9 +1,11 @@
 from collections import Counter
+
 import datasets
+
 import transformers
 from transformers.convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
-
 from transformers.utils import logging
+
 
 logging.set_verbosity_info()
 
@@ -11,7 +13,7 @@ TOKENIZER_CLASSES = {
     name: (getattr(transformers, name), getattr(transformers, name + "Fast")) for name in SLOW_TO_FAST_CONVERTERS
 }
 
-dataset = datasets.load_dataset("xnli", split="test+validation")
+dataset = datasets.load_dataset("facebook/xnli", split="test+validation")  # no-script
 
 total = 0
 perfect = 0
@@ -86,7 +88,7 @@ def check_details(line, spm_ids, tok_ids, slow, fast):
                     if tok_ids[first + k : first + k + min_width] == spm_ids[first + i : first + i + min_width]
                 ]
                 for j in possible_matches:
-                    if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], sp, tok) and check_details(
+                    if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], slow, fast) and check_details(
                         line,
                         spm_ids[first + i : last],
                         tok_ids[first + j : last],
@@ -101,8 +103,8 @@ def check_details(line, spm_ids, tok_ids, slow, fast):
     except Exception:
         pass
 
-    ok_start = fast.decode(spm_ids[:first])
-    ok_end = fast.decode(spm_ids[last:])
+    fast.decode(spm_ids[:first])
+    fast.decode(spm_ids[last:])
     wrong = fast.decode(spm_ids[first:last])
     print()
     print(wrong)

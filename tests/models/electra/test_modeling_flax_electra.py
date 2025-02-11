@@ -21,7 +21,7 @@ if is_flax_available():
     )
 
 
-class FlaxElectraModelTester(unittest.TestCase):
+class FlaxElectraModelTester:
     def __init__(
         self,
         parent,
@@ -34,7 +34,7 @@ class FlaxElectraModelTester(unittest.TestCase):
         vocab_size=99,
         embedding_size=24,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -105,7 +105,6 @@ class FlaxElectraModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxElectraModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     test_head_masking = True
 
     all_model_classes = (

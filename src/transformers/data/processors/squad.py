@@ -166,7 +166,6 @@ def squad_convert_example_to_features(
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
-
         # Define the side we want to truncate / pad and the text/pair sorting
         if tokenizer.padding_side == "right":
             texts = truncated_query
@@ -250,7 +249,7 @@ def squad_convert_example_to_features(
         else:
             p_mask[-len(span["tokens"]) : -(len(truncated_query) + sequence_added_tokens)] = 0
 
-        pad_token_indices = np.where(span["input_ids"] == tokenizer.pad_token_id)
+        pad_token_indices = np.where(np.atleast_1d(span["input_ids"] == tokenizer.pad_token_id))
         special_token_indices = np.asarray(
             tokenizer.get_special_tokens_mask(span["input_ids"], already_has_special_tokens=True)
         ).nonzero()

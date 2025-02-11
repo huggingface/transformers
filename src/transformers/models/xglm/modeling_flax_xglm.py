@@ -12,19 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax XGLM model."""
-
+"""Flax XGLM model."""
 
 import math
 import random
 from functools import partial
 from typing import Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen.attention import dot_product_attention_weights
@@ -45,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/xglm-564M"
 _CONFIG_FOR_DOC = "XGLMConfig"
-_TOKENIZER_FOR_DOC = "XGLMTokenizer"
 
 XGLM_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -87,7 +84,7 @@ XGLM_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`~XGLMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -124,18 +121,6 @@ def create_sinusoidal_positions(n_pos, dim, padding_idx=1):
         emb[padding_idx, :] = 0
 
     return jnp.array(emb)
-
-
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = jnp.roll(input_ids, 1, axis=-1)
-    shifted_input_ids = shifted_input_ids.at[(..., 0)].set(decoder_start_token_id)
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
-
-    return shifted_input_ids
 
 
 class FlaxXGLMAttention(nn.Module):
@@ -563,7 +548,7 @@ class FlaxXGLMPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -706,7 +691,6 @@ class FlaxXGLMModel(FlaxXGLMPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXGLMModel,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutputWithPastAndCrossAttentions,
     _CONFIG_FOR_DOC,
@@ -739,7 +723,6 @@ class FlaxXGLMForCausalLMModule(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
         outputs = self.model(
             input_ids,
             attention_mask,
@@ -782,7 +765,7 @@ class FlaxXGLMForCausalLMModule(nn.Module):
 class FlaxXGLMForCausalLM(FlaxXGLMPreTrainedModel):
     module_class = FlaxXGLMForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -811,8 +794,10 @@ class FlaxXGLMForCausalLM(FlaxXGLMPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxXGLMForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = ["FlaxXGLMForCausalLM", "FlaxXGLMModel", "FlaxXGLMPreTrainedModel"]

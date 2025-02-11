@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -46,13 +46,13 @@ class EncoderDecoderConfig(PretrainedConfig):
     ```python
     >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 
-    >>> # Initializing a BERT bert-base-uncased style configuration
+    >>> # Initializing a BERT google-bert/bert-base-uncased style configuration
     >>> config_encoder = BertConfig()
     >>> config_decoder = BertConfig()
 
     >>> config = EncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a Bert2Bert model from the bert-base-uncased style configurations
+    >>> # Initializing a Bert2Bert model (with random weights) from the google-bert/bert-base-uncased style configurations
     >>> model = EncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration
@@ -69,20 +69,22 @@ class EncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = EncoderDecoderConfig.from_pretrained("my-model")
     >>> model = EncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "encoder-decoder"
+    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     is_composition = True
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        assert (
-            "encoder" in kwargs and "decoder" in kwargs
-        ), "Config has to be initialized with encoder and decoder config"
+        if "encoder" not in kwargs or "decoder" not in kwargs:
+            raise ValueError(
+                f"A configuraton of type {self.model_type} cannot be instantiated because "
+                f"both `encoder` and `decoder` sub-configurations were not passed, only {kwargs}"
+            )
         encoder_config = kwargs.pop("encoder")
         encoder_model_type = encoder_config.pop("model_type")
         decoder_config = kwargs.pop("decoder")
         decoder_model_type = decoder_config.pop("model_type")
-
-        from ..auto.configuration_auto import AutoConfig
 
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
@@ -105,15 +107,5 @@ class EncoderDecoderConfig(PretrainedConfig):
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
 
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["encoder"] = self.encoder.to_dict()
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
+__all__ = ["EncoderDecoderConfig"]

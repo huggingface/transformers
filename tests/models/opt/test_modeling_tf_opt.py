@@ -13,15 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 import numpy as np
 
 from transformers import OPTConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, slow, tooslow
+from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -63,6 +66,7 @@ class TFOPTModelTester:
         bos_token_id=0,
         embed_dim=16,
         word_embed_proj_dim=16,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -84,6 +88,7 @@ class TFOPTModelTester:
         self.embed_dim = embed_dim
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
+        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
@@ -105,6 +110,7 @@ class TFOPTModelTester:
             embed_dim=self.embed_dim,
             word_embed_proj_dim=self.word_embed_proj_dim,
             is_encoder_decoder=False,
+            attn_implementation=self.attn_implementation,
             **self.config_updates,
         )
         inputs_dict = prepare_opt_inputs_dict(config, input_ids)
@@ -146,9 +152,12 @@ class TFOPTModelTester:
 
 
 @require_tf
-class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFOPTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFOPTModel, TFOPTForCausalLM) if is_tf_available() else ()
     all_generative_model_classes = (TFOPTForCausalLM,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": TFOPTModel, "text-generation": TFOPTForCausalLM} if is_tf_available() else {}
+    )
     is_encoder_decoder = False
     test_pruning = False
     test_onnx = False
@@ -165,20 +174,6 @@ class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -188,7 +183,7 @@ class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
             else:
                 # Here we build the word embeddings weights if not exists.
                 # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
+                model.build_in_name_scope()
                 if hasattr(embedding_layer, "weight"):
                     return embedding_layer.weight
                 else:
@@ -226,10 +221,6 @@ class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
                         if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                             models_equal = False
                     self.assertTrue(models_equal)
-
-    @tooslow
-    def test_saved_model_creation(self):
-        pass
 
 
 def _long_tensor(tok_lst):

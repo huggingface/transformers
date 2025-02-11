@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Splinter model. """
+"""Testing suite for the PyTorch Splinter model."""
 
 import copy
 import unittest
@@ -22,13 +22,13 @@ from transformers.testing_utils import require_torch, require_torch_multi_gpu, s
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import SplinterConfig, SplinterForPreTraining, SplinterForQuestionAnswering, SplinterModel
-    from transformers.models.splinter.modeling_splinter import SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class SplinterModelTester:
@@ -45,7 +45,7 @@ class SplinterModelTester:
         vocab_size=99,
         hidden_size=32,
         question_token_id=1,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -207,8 +207,7 @@ class SplinterModelTester:
 
 
 @require_torch
-class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
-
+class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             SplinterModel,
@@ -218,6 +217,29 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests when this model gets more usage
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "QAPipelineTests":
+            return True
+        elif pipeline_test_case_name == "FeatureExtractionPipelineTests" and tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -312,9 +334,9 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = SplinterModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "tau/splinter-base"
+        model = SplinterModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     # overwrite from common since `SplinterForPreTraining` could contain different number of question tokens in inputs.
     # When the batch is distributed to multiple devices, each replica could get different values for the maximal number
@@ -338,7 +360,6 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict[k] = v.to(0)
 
         for model_class in self.all_model_classes:
-
             # Skip this case since it will fail sometimes, as described above.
             if model_class == SplinterForPreTraining:
                 continue

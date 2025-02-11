@@ -30,23 +30,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/mpnet-base": "https://huggingface.co/microsoft/mpnet-base/resolve/main/vocab.txt",
-    },
-    "tokenizer_file": {
-        "microsoft/mpnet-base": "https://huggingface.co/microsoft/mpnet-base/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/mpnet-base": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/mpnet-base": {"do_lower_case": True},
-}
-
 
 class MPNetTokenizerFast(PreTrainedTokenizerFast):
     r"""
@@ -98,15 +81,12 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see [this
             issue](https://github.com/huggingface/transformers/issues/328)).
-        strip_accents: (`bool`, *optional*):
+        strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = MPNetTokenizer
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -124,8 +104,18 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         tokenize_chinese_chars=True,
         strip_accents=None,
-        **kwargs
+        **kwargs,
     ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
@@ -214,3 +204,6 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+
+__all__ = ["MPNetTokenizerFast"]

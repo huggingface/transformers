@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Perceiver model configuration"""
+"""Perceiver model configuration"""
 
 from collections import OrderedDict
 from typing import Any, Mapping, Optional, Union
@@ -26,11 +26,6 @@ from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "deepmind/language-perceiver": "https://huggingface.co/deepmind/language-perceiver/resolve/main/config.json",
-    # See all Perceiver models at https://huggingface.co/models?filter=perceiver
-}
 
 
 class PerceiverConfig(PretrainedConfig):
@@ -65,7 +60,7 @@ class PerceiverConfig(PretrainedConfig):
         v_channels (`int`, *optional*):
             Dimension to project the values before applying attention in the cross-attention and self-attention layers
             of the encoder. Will default to preserving the dimension of the queries if not specified.
-        cross_attention_shape_for_attention (`str`, *optional*, defaults to `'kv'`):
+        cross_attention_shape_for_attention (`str`, *optional*, defaults to `"kv"`):
             Dimension to use when downsampling the queries and keys in the cross-attention layer of the encoder.
         self_attention_widening_factor (`int`, *optional*, defaults to 1):
             Dimension of the feed-forward layer in the cross-attention layer of the Transformer encoder.
@@ -89,7 +84,7 @@ class PerceiverConfig(PretrainedConfig):
             this to something large just in case (e.g., 512 or 1024 or 2048).
         image_size (`int`, *optional*, defaults to 56):
             Size of the images after preprocessing, for [`PerceiverForImageClassificationLearned`].
-        train_size (`List[int]`, *optional*, defaults to [368, 496]):
+        train_size (`List[int]`, *optional*, defaults to `[368, 496]`):
             Training size of the images for the optical flow model.
         num_frames (`int`, *optional*, defaults to 16):
             Number of video frames used for the multimodal autoencoding model.
@@ -100,6 +95,8 @@ class PerceiverConfig(PretrainedConfig):
         output_shape (`List[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
             Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
             autoencoding model. This excludes the channel dimension.
+        output_num_channels (`int`, *optional*, defaults to 512):
+            Number of output channels for each modalitiy decoder.
 
     Example:
 
@@ -115,6 +112,7 @@ class PerceiverConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "perceiver"
 
     def __init__(
@@ -133,10 +131,8 @@ class PerceiverConfig(PretrainedConfig):
         cross_attention_widening_factor=1,
         hidden_act="gelu",
         attention_probs_dropout_prob=0.1,
-        position_embedding_init_scale=0.02,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         use_query_residual=True,
         vocab_size=262,
         max_position_embeddings=2048,
@@ -146,7 +142,9 @@ class PerceiverConfig(PretrainedConfig):
         audio_samples_per_frame=1920,
         samples_per_patch=16,
         output_shape=[1, 16, 224, 224],
-        **kwargs
+        output_num_channels=512,
+        _label_trainable_num_channels=1024,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -179,6 +177,8 @@ class PerceiverConfig(PretrainedConfig):
         self.audio_samples_per_frame = audio_samples_per_frame
         self.samples_per_patch = samples_per_patch
         self.output_shape = output_shape
+        self.output_num_channels = output_num_channels
+        self._label_trainable_num_channels = _label_trainable_num_channels
 
 
 class PerceiverOnnxConfig(OnnxConfig):
@@ -239,3 +239,6 @@ class PerceiverOnnxConfig(OnnxConfig):
             raise ValueError(
                 "Unable to generate dummy inputs for the model. Please provide a tokenizer or a preprocessor."
             )
+
+
+__all__ = ["PerceiverConfig", "PerceiverOnnxConfig"]

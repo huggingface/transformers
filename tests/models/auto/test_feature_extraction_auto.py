@@ -19,6 +19,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     FEATURE_EXTRACTOR_MAPPING,
@@ -42,6 +43,9 @@ SAMPLE_CONFIG = get_tests_dir("fixtures/dummy-config.json")
 
 
 class AutoFeatureExtractorTest(unittest.TestCase):
+    def setUp(self):
+        transformers.dynamic_module_utils.TIME_OUT_REMOTE_CODE = 0
+
     def test_feature_extractor_from_model_shortcut(self):
         config = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsInstance(config, Wav2Vec2FeatureExtractor)
@@ -96,10 +100,44 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             _ = AutoFeatureExtractor.from_pretrained("hf-internal-testing/config-no-model")
 
     def test_from_pretrained_dynamic_feature_extractor(self):
-        model = AutoFeatureExtractor.from_pretrained(
+        # If remote code is not set, we will time out when asking whether to load the model.
+        with self.assertRaises(ValueError):
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                "hf-internal-testing/test_dynamic_feature_extractor"
+            )
+        # If remote code is disabled, we can't load this config.
+        with self.assertRaises(ValueError):
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=False
+            )
+
+        feature_extractor = AutoFeatureExtractor.from_pretrained(
             "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
         )
-        self.assertEqual(model.__class__.__name__, "NewFeatureExtractor")
+        self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+
+        # Test the dynamic module is loaded only once.
+        reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(
+            "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
+        )
+        self.assertIs(feature_extractor.__class__, reloaded_feature_extractor.__class__)
+
+        # Test feature extractor can be reloaded.
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            feature_extractor.save_pretrained(tmp_dir)
+            reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir, trust_remote_code=True)
+        self.assertEqual(reloaded_feature_extractor.__class__.__name__, "NewFeatureExtractor")
+
+        # The feature extractor file is cached in the snapshot directory. So the module file is not changed after dumping
+        # to a temp dir. Because the revision of the module file is not changed.
+        # Test the dynamic module is loaded only once if the module file is not changed.
+        self.assertIs(feature_extractor.__class__, reloaded_feature_extractor.__class__)
+
+        # Test the dynamic module is reloaded if we force it.
+        reloaded_feature_extractor = AutoFeatureExtractor.from_pretrained(
+            "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True, force_download=True
+        )
+        self.assertIsNot(feature_extractor.__class__, reloaded_feature_extractor.__class__)
 
     def test_new_feature_extractor_registration(self):
         try:
@@ -115,6 +153,40 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 feature_extractor.save_pretrained(tmp_dir)
                 new_feature_extractor = AutoFeatureExtractor.from_pretrained(tmp_dir)
                 self.assertIsInstance(new_feature_extractor, CustomFeatureExtractor)
+
+        finally:
+            if "custom" in CONFIG_MAPPING._extra_content:
+                del CONFIG_MAPPING._extra_content["custom"]
+            if CustomConfig in FEATURE_EXTRACTOR_MAPPING._extra_content:
+                del FEATURE_EXTRACTOR_MAPPING._extra_content[CustomConfig]
+
+    def test_from_pretrained_dynamic_feature_extractor_conflict(self):
+        class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
+            is_local = True
+
+        try:
+            AutoConfig.register("custom", CustomConfig)
+            AutoFeatureExtractor.register(CustomConfig, NewFeatureExtractor)
+            # If remote code is not set, the default is to use local
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                "hf-internal-testing/test_dynamic_feature_extractor"
+            )
+            self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+            self.assertTrue(feature_extractor.is_local)
+
+            # If remote code is disabled, we load the local one.
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=False
+            )
+            self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+            self.assertTrue(feature_extractor.is_local)
+
+            # If remote is enabled, we load from the Hub
+            feature_extractor = AutoFeatureExtractor.from_pretrained(
+                "hf-internal-testing/test_dynamic_feature_extractor", trust_remote_code=True
+            )
+            self.assertEqual(feature_extractor.__class__.__name__, "NewFeatureExtractor")
+            self.assertTrue(not hasattr(feature_extractor, "is_local"))
 
         finally:
             if "custom" in CONFIG_MAPPING._extra_content:

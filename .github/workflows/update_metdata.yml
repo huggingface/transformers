@@ -4,37 +4,24 @@ on:
   push:
     branches:
       - main
-      - update_transformers_metadata
+      - update_transformers_metadata*
 
 jobs:
   build_and_package:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         shell: bash -l {0}
 
     steps:
-      - uses: actions/checkout@v2
-
-      - name: Load cached virtual environment
-        uses: actions/cache@v2
-        id: cache
-        with:
-          path: ~/venv/
-          key: v3-metadata-${{ hashFiles('setup.py') }}
-
-      - name: Create virtual environment on cache miss
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: |
-          python -m venv ~/venv && . ~/venv/bin/activate
-          pip install --upgrade pip
+      - uses: actions/checkout@v4
 
       - name: Setup environment
         run: |
-          . ~/venv/bin/activate
-          pip install git+https://github.com/huggingface/transformers#egg=transformers[dev]
+          pip install --upgrade pip
+          pip install datasets pandas==2.0.3
+          pip install .[torch,tf,flax]
 
       - name: Update metadata
         run: |
-          . ~/venv/bin/activate
-          python utils/update_metadata.py --token ${{ secrets.SYLVAIN_HF_TOKEN }} --commit_sha ${{ github.sha }}
+          python utils/update_metadata.py --token ${{ secrets.LYSANDRE_HF_TOKEN }} --commit_sha ${{ github.sha }}

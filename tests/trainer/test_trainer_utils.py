@@ -35,6 +35,7 @@ if is_torch_available():
         DistributedLengthGroupedSampler,
         DistributedSamplerWithLoop,
         DistributedTensorGatherer,
+        EvalLoopContainer,
         IterableDatasetShard,
         LabelSmoother,
         LengthGroupedSampler,
@@ -161,7 +162,7 @@ class TrainerUtilsTest(unittest.TestCase):
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
         log_probs = -nn.functional.log_softmax(random_logits, dim=-1)
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.mean()
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
         # With a few -100 labels
         random_labels[0, 1] = -100
@@ -177,7 +178,7 @@ class TrainerUtilsTest(unittest.TestCase):
         log_probs[2, 1] = 0.0
         log_probs[2, 3] = 0.0
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
     def test_group_by_length(self):
         # Get some inputs of random lengths
@@ -189,7 +190,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(lengths[indices[0]], 50)
         # The indices should be a permutation of range(100)
-        self.assertEqual(list(sorted(indices)), list(range(100)))
+        self.assertEqual(sorted(indices), list(range(100)))
 
     def test_group_by_length_with_dict(self):
         # Get some inputs of random lengths
@@ -204,7 +205,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
-        self.assertEqual(list(sorted(indices)), list(range(6)))
+        self.assertEqual(sorted(indices), list(range(6)))
 
     def test_group_by_length_with_batch_encoding(self):
         # Get some inputs of random lengths
@@ -219,7 +220,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(len(data[indices[0]]["input_ids"]), 105)
         # The indices should be a permutation of range(6)
-        self.assertEqual(list(sorted(indices)), list(range(6)))
+        self.assertEqual(sorted(indices), list(range(6)))
 
     def test_distributed_length_grouped(self):
         # Get some inputs of random lengths
@@ -232,7 +233,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # The biggest element should be first
         self.assertEqual(lengths[indices_process_0[0]], 50)
         # The indices should be a permutation of range(100)
-        self.assertEqual(list(sorted(indices_process_0 + indices_process_1)), list(range(100)))
+        self.assertEqual(sorted(indices_process_0 + indices_process_1), list(range(100)))
 
     def test_get_parameter_names(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
@@ -242,6 +243,33 @@ class TrainerUtilsTest(unittest.TestCase):
             ['0.linear1.weight', '0.linear1.bias', '0.linear2.weight', '0.linear2.bias', '0.bias', '1.0.linear1.weight', '1.0.linear1.bias', '1.0.linear2.weight', '1.0.linear2.bias', '1.0.bias', '1.1.linear1.weight', '1.1.linear1.bias', '1.1.linear2.weight', '1.1.linear2.bias', '1.1.bias']
         )
         # fmt: on
+
+    def test_get_parameter_names_rmsnorm(self):
+        class RMSNorm(nn.Module):
+            def __init__(self, hidden_size):
+                super().__init__()
+                self.weight = nn.Parameter(torch.ones(hidden_size))
+                self.bias = nn.Parameter(torch.zeros(hidden_size))
+
+        class ModelWithRMSNorm(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(128, 128)
+                self.rmsnorm = RMSNorm(128)
+                self.bias = nn.Parameter(torch.zeros(128))
+
+        model = ModelWithRMSNorm()
+        # Test both type-based and name-based filtering
+        decay_parameters = get_parameter_names(model, [], ["bias", "rmsnorm"])
+
+        # Parameters that should be in weight decay
+        self.assertIn("linear.weight", decay_parameters)
+
+        # Parameters that should NOT be in weight decay
+        self.assertNotIn("linear.bias", decay_parameters)
+        self.assertNotIn("rmsnorm.weight", decay_parameters)
+        self.assertNotIn("rmsnorm.bias", decay_parameters)
+        self.assertNotIn("bias", decay_parameters)
 
     def test_distributed_sampler_with_loop(self):
         batch_size = 16
@@ -497,3 +525,92 @@ class TrainerUtilsTest(unittest.TestCase):
         remove_columns_collator(data_batch)
         self.assertEqual(logger.called, 1)
         self.assertIn("col3", logger.last_msg)
+
+    def test_eval_loop_container(self):
+        batch_1 = [
+            torch.ones([8, 5]),
+            {"loss": torch.tensor(1.0)},
+            (torch.ones([8, 2, 3]), torch.ones([8, 2])),
+        ]
+        batch_2 = [
+            torch.ones([4, 5]),
+            {"loss": torch.tensor(2.0)},
+            (torch.ones([4, 2, 3]), torch.ones([4, 6])),
+        ]
+
+        concat_container = EvalLoopContainer(do_nested_concat=True, padding_index=-100)
+        concat_container.add(batch_1)
+        concat_container.add(batch_2)
+        concat_container.to_cpu_and_numpy()
+        arrays = concat_container.get_arrays()
+
+        # Test two nested batches concatenation
+        self.assertIsInstance(arrays, list)
+        self.assertEqual(len(arrays), 3)
+        self.assertIsInstance(arrays[0], np.ndarray)
+        self.assertEqual(arrays[0].shape, (12, 5))
+        self.assertIsInstance(arrays[1], dict)
+        self.assertIsInstance(arrays[1]["loss"], np.ndarray)
+        self.assertEqual(arrays[1]["loss"].shape, (2,))
+        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1.0, 2.0])))
+        self.assertIsInstance(arrays[2], tuple)
+        self.assertEqual(len(arrays[2]), 2)
+        self.assertEqual(arrays[2][0].shape, (12, 2, 3))
+        self.assertEqual(arrays[2][1].shape, (12, 6))
+        # check that first batch padded with padding index -100 after concatenation
+        self.assertEqual(arrays[2][1][0][2], -100)
+
+        # Test two batches with no concatenation
+        list_container = EvalLoopContainer(do_nested_concat=False)
+        list_container.add(batch_1)
+        list_container.add(batch_2)
+        list_container.to_cpu_and_numpy()
+        arrays = list_container.get_arrays()
+
+        self.assertEqual(len(arrays), 2)
+        self.assertIsInstance(arrays, list)
+        np_batch_1, np_batch_2 = arrays
+
+        self.assertIsInstance(np_batch_1, list)
+        self.assertEqual(len(np_batch_1), 3)
+        self.assertIsInstance(np_batch_1[0], np.ndarray)
+        self.assertIsInstance(np_batch_1[1], dict)
+        self.assertIsInstance(np_batch_1[2], tuple)
+        self.assertEqual(np_batch_1[0].shape, (8, 5))
+        self.assertEqual(np_batch_1[1]["loss"].shape, ())
+        self.assertEqual(np_batch_1[2][0].shape, (8, 2, 3))
+        self.assertEqual(np_batch_1[2][1].shape, (8, 2))
+
+        self.assertIsInstance(np_batch_2, list)
+        self.assertEqual(len(np_batch_2), 3)
+        self.assertIsInstance(np_batch_2[0], np.ndarray)
+        self.assertIsInstance(np_batch_2[1], dict)
+        self.assertIsInstance(np_batch_2[2], tuple)
+        self.assertEqual(np_batch_2[0].shape, (4, 5))
+        self.assertEqual(np_batch_2[1]["loss"].shape, ())
+        self.assertEqual(np_batch_2[2][0].shape, (4, 2, 3))
+        self.assertEqual(np_batch_2[2][1].shape, (4, 6))
+
+        # Test no batches
+        none_arr = EvalLoopContainer(do_nested_concat=True, padding_index=-100).get_arrays()
+        self.assertIsNone(none_arr)
+
+        none_arr = EvalLoopContainer(do_nested_concat=False).get_arrays()
+        self.assertIsNone(none_arr)
+
+        # Test one batch
+        concat_container = EvalLoopContainer(do_nested_concat=True, padding_index=-100)
+        concat_container.add(batch_1)
+        arrays = concat_container.get_arrays()
+        self.assertIsInstance(arrays, list)
+        self.assertEqual(len(arrays), 3)
+        self.assertIsInstance(arrays[0], np.ndarray)
+        self.assertEqual(arrays[0].shape, (8, 5))
+        self.assertIsInstance(arrays[1], dict)
+        self.assertIsInstance(arrays[1]["loss"], np.ndarray)
+        self.assertEqual(arrays[1]["loss"].shape, ())
+        self.assertTrue(np.allclose(arrays[1]["loss"], np.array([1.0])))
+        self.assertIsInstance(arrays[2], tuple)
+        self.assertEqual(len(arrays[2]), 2)
+        self.assertEqual(arrays[2][0].shape, (8, 2, 3))
+        self.assertEqual(arrays[2][1].shape, (8, 2))

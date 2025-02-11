@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Wav2Vec2 model."""
+"""PyTorch Wav2Vec2 model."""
 
 import math
 import warnings
@@ -26,7 +26,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -37,17 +38,31 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    cached_file,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
+    is_peft_available,
+    is_safetensors_available,
     logging,
     replace_return_docstrings,
 )
 from .configuration_wav2vec2 import Wav2Vec2Config
 
+
+WAV2VEC2_ADAPTER_PT_FILE = "adapter.{}.bin"
+WAV2VEC2_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
+
+if is_safetensors_available():
+    from safetensors.torch import load_file as safe_load_file
+
+
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 logger = logging.get_logger(__name__)
 
@@ -56,7 +71,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
@@ -67,7 +81,6 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 53.48
 
 # Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "superb/wav2vec2-base-superb-ks"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 6.54
@@ -79,15 +92,6 @@ _FRAME_EXPECTED_OUTPUT = [0, 0]
 # Speaker Verification docstring
 _XVECTOR_CHECKPOINT = "anton-l/wav2vec2-base-superb-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.98
-
-
-WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-base-960h",
-    "facebook/wav2vec2-large-960h",
-    "facebook/wav2vec2-large-960h-lv60",
-    "facebook/wav2vec2-large-960h-lv60-self",
-    # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
-]
 
 
 @dataclass
@@ -193,7 +197,7 @@ def _compute_mask_indices(
     )
 
     # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
     spec_aug_mask_idxs = []
 
     max_num_masked_span = compute_num_masked_span(sequence_length)
@@ -266,7 +270,7 @@ def _sample_negative_indices(
     sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
 
     mask_time_indices = (
-        mask_time_indices.astype(np.bool) if mask_time_indices is not None else np.ones(features_shape, dtype=np.bool)
+        mask_time_indices.astype(bool) if mask_time_indices is not None else np.ones(features_shape, dtype=bool)
     )
 
     for batch_idx in range(batch_size):
@@ -370,15 +374,25 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
+            if hasattr(self.conv, "parametrizations"):
+                weight_g = self.conv.parametrizations.weight.original0
+                weight_v = self.conv.parametrizations.weight.original1
+            else:
+                weight_g = self.conv.weight_g
+                weight_v = self.conv.weight_v
+            deepspeed.zero.register_external_parameter(self, weight_v)
+            deepspeed.zero.register_external_parameter(self, weight_g)
         else:
-            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -441,15 +455,8 @@ class Wav2Vec2FeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
+                hidden_states = self._gradient_checkpointing_func(
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -495,12 +502,15 @@ class Wav2Vec2Attention(nn.Module):
         dropout: float = 0.0,
         is_decoder: bool = False,
         bias: bool = True,
+        is_causal: bool = False,
+        config: Optional[Wav2Vec2Config] = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
+        self.config = config
 
         if (self.head_dim * num_heads) != self.embed_dim:
             raise ValueError(
@@ -509,6 +519,7 @@ class Wav2Vec2Attention(nn.Module):
             )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
+        self.is_causal = is_causal
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -538,7 +549,14 @@ class Wav2Vec2Attention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
             # reuse k,v, cross_attentions
             key_states = past_key_value[0]
             value_states = past_key_value[1]
@@ -569,8 +587,8 @@ class Wav2Vec2Attention(nn.Module):
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        key_states = key_states.reshape(*proj_shape)
+        value_states = value_states.reshape(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -616,7 +634,7 @@ class Wav2Vec2Attention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f"`attn_output` should be of size {(bsz * self.num_heads, tgt_len, self.head_dim)}, but is"
                 f" {attn_output.size()}"
             )
 
@@ -624,12 +642,253 @@ class Wav2Vec2Attention(nn.Module):
         attn_output = attn_output.transpose(1, 2)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights_reshaped, past_key_value
+
+
+# Copied from transformers.models.bart.modeling_bart.BartFlashAttention2 with Bart->Wav2Vec2
+class Wav2Vec2FlashAttention2(Wav2Vec2Attention):
+    """
+    Wav2Vec2 flash attention module. This module inherits from `Wav2Vec2Attention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def _reshape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # Wav2Vec2FlashAttention2 attention does not support output_attentions
+        if output_attentions:
+            raise ValueError("Wav2Vec2FlashAttention2 attention does not support output_attentions")
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, q_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self._reshape(self.q_proj(hidden_states), -1, bsz)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0].transpose(1, 2)
+            value_states = past_key_value[1].transpose(1, 2)
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._reshape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._reshape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0].transpose(1, 2), key_states], dim=1)
+            value_states = torch.cat([past_key_value[1].transpose(1, 2), value_states], dim=1)
+        else:
+            # self_attention
+            key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states.transpose(1, 2), value_states.transpose(1, 2))
+
+        kv_seq_len = key_states.shape[-2]
+        if past_key_value is not None:
+            kv_seq_len += past_key_value[0].shape[-2]
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (LlamaRMSNorm handles it correctly)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            q_len,
+            dropout=self.dropout if self.training else 0.0,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.reshape(bsz, q_len, -1)
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+
+class Wav2Vec2SdpaAttention(Wav2Vec2Attention):
+    # Copied from transformers.models.bart.modeling_bart.BartSdpaAttention.forward with Bart->Wav2Vec2
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        if output_attentions or layer_head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "Wav2Vec2Model is using Wav2Vec2SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                key_value_states=key_value_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+            )
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        query_states = self._shape(query_states, tgt_len, bsz)
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+
+        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
+        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned across GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
+WAV2VEC2_ATTENTION_CLASSES = {
+    "eager": Wav2Vec2Attention,
+    "sdpa": Wav2Vec2SdpaAttention,
+    "flash_attention_2": Wav2Vec2FlashAttention2,
+}
 
 
 class Wav2Vec2FeedForward(nn.Module):
@@ -659,12 +918,13 @@ class Wav2Vec2FeedForward(nn.Module):
 class Wav2Vec2EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention(
+        self.attention = WAV2VEC2_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,
         )
+
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
@@ -693,7 +953,7 @@ class Wav2Vec2EncoderLayer(nn.Module):
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = Wav2Vec2Attention(
+        self.attention = WAV2VEC2_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -703,6 +963,11 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        if getattr(config, "adapter_attn_dim", None) is not None:
+            self.adapter_layer = Wav2Vec2AttnAdapterLayer(config)
+        else:
+            self.adapter_layer = None
 
     def forward(
         self,
@@ -718,6 +983,9 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+
+        if self.adapter_layer is not None:
+            hidden_states = hidden_states + self.adapter_layer(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -736,6 +1004,7 @@ class Wav2Vec2Encoder(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -752,43 +1021,40 @@ class Wav2Vec2Encoder(nn.Module):
             # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
-
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+            if self._use_flash_attention_2:
+                # 2d mask is passed through the layers
+                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            else:
+                # extend attention_mask
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+                attention_mask = attention_mask.expand(
+                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(
@@ -825,6 +1091,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
         self.gradient_checkpointing = False
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     def forward(
         self,
@@ -840,44 +1107,41 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens are not attended to
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
-
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+            hidden_states = hidden_states * expand_attention_mask.to(dtype=hidden_states.dtype)
+            if self._use_flash_attention_2:
+                # 2d mask is passed through the layers
+                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            else:
+                # extend attention_mask
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+                attention_mask = attention_mask.expand(
+                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(
@@ -1030,6 +1294,31 @@ class Wav2Vec2AdapterLayer(nn.Module):
         return hidden_states
 
 
+class Wav2Vec2AttnAdapterLayer(nn.Module):
+    def __init__(self, config):
+        """
+        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList to speed
+        up training throughput.
+        """
+        super().__init__()
+        self.input_dim = config.adapter_attn_dim
+        self.hidden_dim = config.hidden_size
+
+        self.norm = nn.LayerNorm(self.hidden_dim)
+        self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
+        self.act_fn = nn.ReLU()
+        self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
+
+    def forward(self, hidden_states: torch.FloatTensor):
+        hidden_states = self.norm(hidden_states)
+
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+
+        return hidden_states
+
+
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -1039,13 +1328,20 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
     config_class = Wav2Vec2Config
     base_model_prefix = "wav2vec2"
     main_input_name = "input_values"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
+        # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
+        if isinstance(module, Wav2Vec2ForPreTraining):
+            module.project_hid.reset_parameters()
+            module.project_q.reset_parameters()
+            module.project_hid._is_hf_initialized = True
+            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
-        if isinstance(module, Wav2Vec2GumbelVectorQuantizer):
+        elif isinstance(module, Wav2Vec2GumbelVectorQuantizer):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
@@ -1087,7 +1383,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1118,9 +1414,225 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Wav2Vec2Encoder, Wav2Vec2EncoderStableLayerNorm, Wav2Vec2FeatureEncoder)):
-            module.gradient_checkpointing = value
+    def _get_adapters(self):
+        if self.config.adapter_attn_dim is None:
+            raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.adapter_attn_dim`.")
+
+        adapter_weights = {}
+        for name, module in self.named_modules():
+            if isinstance(module, Wav2Vec2AttnAdapterLayer):
+                for param_name, param in module.named_parameters():
+                    adapter_weights[".".join([name, param_name])] = param
+
+        if isinstance(self, Wav2Vec2ForCTC):
+            for name, param in self.lm_head.named_parameters():
+                adapter_weights[".".join(["lm_head", name])] = param
+
+        return adapter_weights
+
+    def init_adapter_layers(self):
+        """
+        (Re-)initialize attention adapter layers and lm head for adapter-only fine-tuning
+        """
+        # init attention adapters
+        for module in self.modules():
+            if isinstance(module, Wav2Vec2AttnAdapterLayer):
+                self._init_weights(module)
+
+        # init lm head
+        if isinstance(self, Wav2Vec2ForCTC):
+            self._init_weights(self.lm_head)
+
+    def load_adapter(self, target_lang: str, force_load=True, **kwargs):
+        r"""
+        Load a language adapter model from a pre-trained adapter model.
+
+        Parameters:
+            target_lang (`str`):
+                Has to be a language id of an existing adapter weight. Adapter weights are stored in the format
+                adapter.<lang>.safetensors or adapter.<lang>.bin
+            force_load (`bool`, defaults to `True`):
+                Whether the weights shall be loaded even if `target_lang` matches `self.target_lang`.
+            cache_dir (`Union[str, os.PathLike]`, *optional*):
+                Path to a directory in which a downloaded pretrained model configuration should be cached if the
+                standard cache should not be used.
+            force_download (`bool`, *optional*, defaults to `False`):
+                Whether or not to force the (re-)download of the model weights and configuration files, overriding the
+                cached versions if they exist.
+            resume_download:
+                Deprecated and ignored. All downloads are now resumed by default when possible.
+                Will be removed in v5 of Transformers.
+            proxies (`Dict[str, str]`, *optional*):
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            local_files_only(`bool`, *optional*, defaults to `False`):
+                Whether or not to only look at local files (i.e., do not try to download the model).
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
+
+                </Tip>
+
+            mirror (`str`, *optional*):
+                Mirror source to accelerate downloads in China. If you are from China and have an accessibility
+                problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
+                Please refer to the mirror site for more information.
+
+        <Tip>
+
+        Activate the special ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode) to
+        use this method in a firewalled environment.
+
+        </Tip>
+
+        Examples:
+
+        ```python
+        >>> from transformers import Wav2Vec2ForCTC, AutoProcessor
+
+        >>> ckpt = "facebook/mms-1b-all"
+        >>> processor = AutoProcessor.from_pretrained(ckpt)
+        >>> model = Wav2Vec2ForCTC.from_pretrained(ckpt, target_lang="eng")
+        >>> # set specific language
+        >>> processor.tokenizer.set_target_lang("spa")
+        >>> model.load_adapter("spa")
+        ```
+        """
+        if self.config.adapter_attn_dim is None:
+            raise ValueError(f"Cannot load_adapter for {target_lang} if `config.adapter_attn_dim` is not defined.")
+
+        if target_lang == self.target_lang and not force_load:
+            logger.warning(f"Adapter weights are already set to {target_lang}.")
+            return
+
+        cache_dir = kwargs.pop("cache_dir", None)
+        force_download = kwargs.pop("force_download", False)
+        resume_download = kwargs.pop("resume_download", None)
+        proxies = kwargs.pop("proxies", None)
+        local_files_only = kwargs.pop("local_files_only", False)
+        token = kwargs.pop("token", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        revision = kwargs.pop("revision", None)
+        use_safetensors = kwargs.pop("use_safetensors", None if is_safetensors_available() else False)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+                FutureWarning,
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        model_path_or_id = self.config._name_or_path
+        state_dict = None
+
+        # 1. Let's first try loading a safetensors adapter weight
+        if use_safetensors is not False:
+            filepath = WAV2VEC2_ADAPTER_SAFE_FILE.format(target_lang)
+
+            try:
+                weight_path = cached_file(
+                    model_path_or_id,
+                    filename=filepath,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    revision=revision,
+                    cache_dir=cache_dir,
+                )
+
+                state_dict = safe_load_file(weight_path)
+
+            except EnvironmentError:
+                if use_safetensors:
+                    # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+                    # to the original exception.
+                    raise
+
+            except Exception:
+                # For any other exception, we throw a generic error.
+                if use_safetensors:
+                    raise EnvironmentError(
+                        f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
+                        " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                        f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
+                        f" directory containing a file named {filepath}."
+                    )
+
+        # 2. If this didn't work let's try loading a PyTorch adapter weight
+        if state_dict is None:
+            filepath = WAV2VEC2_ADAPTER_PT_FILE.format(target_lang)
+
+            try:
+                weight_path = cached_file(
+                    model_path_or_id,
+                    filename=filepath,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    revision=revision,
+                    cache_dir=cache_dir,
+                )
+
+                weights_only_kwarg = {"weights_only": True}
+                state_dict = torch.load(
+                    weight_path,
+                    map_location="cpu",
+                    **weights_only_kwarg,
+                )
+
+            except EnvironmentError:
+                # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+                # to the original exception.
+                raise
+
+            except Exception:
+                # For any other exception, we throw a generic error.
+                raise EnvironmentError(
+                    f"Can't load the model for '{model_path_or_id}'. If you were trying to load it"
+                    " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                    f" same name. Otherwise, make sure '{model_path_or_id}' is the correct path to a"
+                    f" directory containing a file named {filepath}."
+                )
+
+        adapter_weights = self._get_adapters()
+        unexpected_keys = set(state_dict.keys()) - set(adapter_weights.keys())
+        missing_keys = set(adapter_weights.keys()) - set(state_dict.keys())
+
+        if len(unexpected_keys) > 0:
+            raise ValueError(f"The adapter weights {weight_path} has unexpected keys: {', '.join(unexpected_keys)}.")
+        elif len(missing_keys) > 0:
+            raise ValueError(f"The adapter weights {weight_path} has missing keys: {', '.join(missing_keys)}.")
+
+        # make sure now vocab size is correct
+        target_vocab_size = state_dict["lm_head.weight"].shape[0]
+        if target_vocab_size != self.config.vocab_size:
+            self.lm_head = nn.Linear(
+                self.config.output_hidden_size, target_vocab_size, device=self.device, dtype=self.dtype
+            )
+            self.config.vocab_size = target_vocab_size
+
+        # make sure that adapter weights are put in exactly the same precision and device placement and overwritten adapter weights
+        state_dict = {k: v.to(adapter_weights[k]) for k, v in state_dict.items()}
+        self.load_state_dict(state_dict, strict=False)
+
+        # set target language corectly
+        self.target_lang = target_lang
 
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
@@ -1145,10 +1657,10 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1193,7 +1705,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
@@ -1211,7 +1723,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1272,7 +1784,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1341,12 +1852,11 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
 
         self.quantizer = Wav2Vec2GumbelVectorQuantizer(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
         self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_gumbel_temperature(self, temperature: int):
         """
@@ -1360,7 +1870,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1492,6 +2002,8 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         quantized_features, codevector_perplexity = self.quantizer(
             extract_features, mask_time_indices=mask_time_indices
         )
+
+        quantized_features = quantized_features.to(self.project_q.weight.dtype)
         quantized_features = self.project_q(quantized_features)
 
         loss = contrastive_loss = diversity_loss = None
@@ -1574,13 +2086,13 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_values,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-    ):
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, MaskedLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2(
@@ -1604,13 +2116,21 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 @add_start_docstrings(
     """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     WAV_2_VEC_2_START_DOCSTRING,
+    """
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`Wav2Vec2ForCTC`] with adapters. Uses 'eng' by
+            default.
+    """,
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
         self.dropout = nn.Dropout(config.final_dropout)
+
+        self.target_lang = target_lang
 
         if config.vocab_size is None:
             raise ValueError(
@@ -1627,13 +2147,34 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def tie_weights(self):
+        """
+        This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
+        passing `target_lang=...` to `from_pretrained(...)`.
+
+        This method is **not** supposed to be called by the user and is prone to be changed in the future.
+        """
+
+        # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
+        # correctly load adapter layers for Wav2Vec2 so that we do not have to introduce a new API to
+        # [`PreTrainedModel`]. While slightly hacky, Wav2Vec2 never has to tie input and output embeddings, so that it is
+        # ok to repurpose this function here.
+        target_lang = self.target_lang
+
+        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
+            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
+        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
+            logger.info("By default `target_lang` is set to 'eng'.")
+        elif target_lang is not None:
+            self.load_adapter(target_lang, force_load=True)
+
     def freeze_feature_extractor(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1646,9 +2187,16 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         """
         self.wav2vec2.feature_extractor._freeze_parameters()
 
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.wav2vec2.parameters():
+            param.requires_grad = False
+
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1671,8 +2219,10 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None and labels.max() >= self.config.vocab_size:
+            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.wav2vec2(
             input_values,
@@ -1689,10 +2239,6 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         loss = None
         if labels is not None:
-
-            if labels.max() >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
@@ -1759,7 +2305,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1782,7 +2328,6 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1830,7 +2375,8 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -1881,7 +2427,7 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1904,7 +2450,6 @@ class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_FRAME_CLASS_CHECKPOINT,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1999,16 +2544,21 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.unsqueeze(1)
-        hidden_states = nn.functional.unfold(
-            hidden_states,
-            (self.kernel_size, self.in_conv_dim),
-            stride=(1, self.in_conv_dim),
-            dilation=(self.dilation, 1),
-        )
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if is_peft_available():
+            from peft.tuners.lora import LoraLayer
+
+            if isinstance(self.kernel, LoraLayer):
+                warnings.warn(
+                    "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "
+                    "You should exclude TDNNLayer from LoRA's target modules.",
+                )
+
+        # for backward compatibility, we keep nn.Linear but call F.conv1d for speed up
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.kernel(hidden_states)
+        weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).transpose(1, 2)
+        hidden_states = nn.functional.conv1d(hidden_states, weight, self.kernel.bias, dilation=self.dilation)
+        hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.activation(hidden_states)
         return hidden_states
@@ -2046,7 +2596,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -2084,7 +2634,6 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_XVECTOR_CHECKPOINT,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2165,3 +2714,15 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Wav2Vec2ForAudioFrameClassification",
+    "Wav2Vec2ForCTC",
+    "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2ForPreTraining",
+    "Wav2Vec2ForSequenceClassification",
+    "Wav2Vec2ForXVector",
+    "Wav2Vec2Model",
+    "Wav2Vec2PreTrainedModel",
+]

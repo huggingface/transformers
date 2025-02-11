@@ -17,27 +17,38 @@ import unittest
 from transformers import (
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-    LEDConfig,
-    LongT5Config,
     SummarizationPipeline,
-    T5Config,
+    TFPreTrainedModel,
     pipeline,
 )
-from transformers.testing_utils import require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
-
-
-class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+class SummarizationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        summarizer = SummarizationPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        summarizer = SummarizationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return summarizer, ["(CNN)The Palestinian Authority officially became", "Some other text"]
 
     def run_pipeline_test(self, summarizer, _):
@@ -54,11 +65,29 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
         )
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 
-        if not isinstance(model.config, (T5Config, LongT5Config, LEDConfig)):
-            # LED, T5, LongT5 can handle it.
-            # Too long.
-            with self.assertRaises(Exception):
-                outputs = summarizer("This " * 1000)
+        # Some models (Switch Transformers, LED, T5, LongT5, etc) can handle long sequences.
+        model_can_handle_longer_seq = [
+            "SwitchTransformersConfig",
+            "T5Config",
+            "LongT5Config",
+            "LEDConfig",
+            "PegasusXConfig",
+            "FSMTConfig",
+            "M2M100Config",
+            "ProphetNetConfig",  # positional embeddings up to a fixed maximum size (otherwise clamping the values)
+        ]
+        if model.config.__class__.__name__ not in model_can_handle_longer_seq:
+            # Too long and exception is expected.
+            # For TF models, if the weights are initialized in GPU context, we won't get expected index error from
+            # the embedding layer.
+            if not (
+                isinstance(model, TFPreTrainedModel)
+                and len(summarizer.model.trainable_weights) > 0
+                and "GPU" in summarizer.model.trainable_weights[0].device
+            ):
+                if str(summarizer.device) == "cpu":
+                    with self.assertRaises(Exception):
+                        outputs = summarizer("This " * 1000)
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch
@@ -90,7 +119,7 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
     @require_torch
     @slow
     def test_integration_torch_summarization(self):
-        summarizer = pipeline(task="summarization", device=DEFAULT_DEVICE_NUM)
+        summarizer = pipeline(task="summarization", device=torch_device)
         cnn_article = (
             " (CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on"
             " Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The"

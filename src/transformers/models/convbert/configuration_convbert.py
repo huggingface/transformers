@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ConvBERT model configuration"""
+"""ConvBERT model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -23,15 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/config.json",
-    "YituTech/conv-bert-medium-small": (
-        "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/config.json"
-    ),
-    "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/config.json",
-    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
-}
 
 
 class ConvBertConfig(PretrainedConfig):
@@ -61,7 +52,7 @@ class ConvBertConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -85,22 +76,24 @@ class ConvBertConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ConvBertModel, ConvBertConfig
+    >>> from transformers import ConvBertConfig, ConvBertModel
 
     >>> # Initializing a ConvBERT convbert-base-uncased style configuration
     >>> configuration = ConvBertConfig()
-    >>> # Initializing a model from the convbert-base-uncased style configuration
+
+    >>> # Initializing a model (with random weights) from the convbert-base-uncased style configuration
     >>> model = ConvBertModel(configuration)
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "convbert"
 
     def __init__(
         self,
         vocab_size=30522,
         hidden_size=768,
-        is_encoder_decoder=False,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
@@ -123,7 +116,6 @@ class ConvBertConfig(PretrainedConfig):
     ):
         super().__init__(
             pad_token_id=pad_token_id,
-            is_encoder_decoder=is_encoder_decoder,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             **kwargs,
@@ -163,3 +155,6 @@ class ConvBertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+__all__ = ["ConvBertConfig", "ConvBertOnnxConfig"]

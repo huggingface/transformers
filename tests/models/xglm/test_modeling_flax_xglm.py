@@ -21,15 +21,15 @@ import transformers
 from transformers import XGLMConfig, XGLMTokenizer, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_sentencepiece, slow
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
-from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
+from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
-    import numpy as np
-
     import jax
     import jax.numpy as jnp
+    import numpy as np
+
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
@@ -53,7 +53,7 @@ class FlaxXGLMModelTester:
         use_labels=True,
         vocab_size=99,
         d_model=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         ffn_dim=37,
         activation_function="gelu",
@@ -115,20 +115,6 @@ class FlaxXGLMModelTester:
         config, input_ids, attention_mask = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
-
-    def prepare_config_and_inputs_for_decoder(self):
-        config, input_ids, attention_mask = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     def check_use_cache_forward(self, model_class_name, config, input_ids, attention_mask):
         max_decoder_length = 20
@@ -196,7 +182,6 @@ class FlaxXGLMModelTester:
 @require_sentencepiece
 @require_flax
 class FlaxXGLMModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (FlaxXGLMModel, FlaxXGLMForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = (FlaxXGLMForCausalLM,) if is_flax_available() else ()
 

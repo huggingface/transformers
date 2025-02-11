@@ -25,7 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 @require_sentencepiece
 @slow  # see https://github.com/huggingface/transformers/issues/11457
 class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "moussaKam/mbarthez"
     tokenizer_class = BarthezTokenizer
     rust_tokenizer_class = BarthezTokenizerFast
     test_rust_tokenizer = True
@@ -75,7 +75,7 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -97,9 +97,7 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        # fmt: off
-        expected_encoding = {'input_ids': [[0, 490, 14328, 4507, 354, 47, 43669, 95, 25, 78117, 20215, 19779, 190, 22, 400, 4, 35343, 80310, 603, 86, 24937, 105, 33438, 94762, 196, 39642, 7, 15, 15933, 173, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 10534, 87, 25, 66, 3358, 196, 55289, 8, 82961, 81, 2204, 75203, 7, 15, 763, 12956, 216, 178, 14328, 9595, 1377, 69693, 7, 448, 71021, 196, 18106, 1437, 13974, 108, 9083, 4, 49315, 7, 39, 86, 1326, 2793, 46333, 4, 448, 196, 74588, 7, 49315, 7, 39, 21, 822, 38470, 74, 21, 66723, 62480, 8, 22050, 5, 2]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
-        # fmt: on
+        expected_encoding = {'input_ids': [[0, 490, 14328, 4507, 354, 47, 43669, 95, 25, 78117, 20215, 19779, 190, 22, 400, 4, 35343, 80310, 603, 86, 24937, 105, 33438, 94762, 196, 39642, 7, 15, 15933, 173, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [0, 10534, 87, 25, 66, 3358, 196, 55289, 8, 82961, 81, 2204, 75203, 7, 15, 763, 12956, 216, 178, 14328, 9595, 1377, 69693, 7, 448, 71021, 196, 18106, 1437, 13974, 108, 9083, 4, 49315, 7, 39, 86, 1326, 2793, 46333, 4, 448, 196, 74588, 7, 49315, 7, 39, 21, 822, 38470, 74, 21, 66723, 62480, 8, 22050, 5, 2]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # fmt: skip
 
         # moussaKam/mbarthez is a french model. So we also use french texts.
         sequences = [

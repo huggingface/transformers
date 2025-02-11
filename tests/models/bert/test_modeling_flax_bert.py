@@ -35,7 +35,7 @@ if is_flax_available():
     )
 
 
-class FlaxBertModelTester(unittest.TestCase):
+class FlaxBertModelTester:
     def __init__(
         self,
         parent,
@@ -47,7 +47,7 @@ class FlaxBertModelTester(unittest.TestCase):
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -133,7 +133,6 @@ class FlaxBertModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     test_head_masking = True
 
     all_model_classes = (
@@ -159,6 +158,6 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         # Only check this for base model, not necessary for all model classes.
         # This will also help speed-up tests.
-        model = FlaxBertModel.from_pretrained("bert-base-cased")
+        model = FlaxBertModel.from_pretrained("google-bert/bert-base-cased")
         outputs = model(np.ones((1, 1)))
         self.assertIsNotNone(outputs)

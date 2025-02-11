@@ -15,6 +15,7 @@
 """
 Speech processor class for Speech2Text
 """
+
 import warnings
 from contextlib import contextmanager
 
@@ -36,6 +37,7 @@ class Speech2TextProcessor(ProcessorMixin):
         tokenizer (`Speech2TextTokenizer`):
             An instance of [`Speech2TextTokenizer`]. The tokenizer is a required input.
     """
+
     feature_extractor_class = "Speech2TextFeatureExtractor"
     tokenizer_class = "Speech2TextTokenizer"
 
@@ -61,6 +63,7 @@ class Speech2TextProcessor(ProcessorMixin):
             audio = kwargs.pop("raw_speech")
         else:
             audio = kwargs.pop("audio", None)
+        sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
             audio = args[0]
@@ -70,7 +73,7 @@ class Speech2TextProcessor(ProcessorMixin):
             raise ValueError("You need to specify either an `audio` or `text` input to process.")
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, **kwargs)
+            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         if text is not None:
             encodings = self.tokenizer(text, **kwargs)
 
@@ -112,3 +115,6 @@ class Speech2TextProcessor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+
+__all__ = ["Speech2TextProcessor"]

@@ -75,7 +75,6 @@ def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
 
 
 def convert_yoso_checkpoint(checkpoint_path, yoso_config_file, pytorch_dump_path):
-
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
     config = YosoConfig.from_json_file(yoso_config_file)
     model = YosoForMaskedLM(config)

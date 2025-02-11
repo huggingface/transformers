@@ -12,28 +12,140 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+import contextlib
+import warnings
+from copy import deepcopy
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.utils.data import Dataset
 
-from .deepspeed import is_deepspeed_zero3_enabled
+from .generation.configuration_utils import GenerationConfig
+from .integrations.deepspeed import is_deepspeed_zero3_enabled
+from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
-from .trainer_utils import PredictionOutput
-from .utils import logging
+from .utils import is_datasets_available, logging
+from .utils.deprecation import deprecate_kwarg
+
+
+if is_datasets_available():
+    import datasets
+
+if TYPE_CHECKING:
+    from torch.utils.data import IterableDataset
+
+    from .data.data_collator import DataCollator
+    from .feature_extraction_utils import FeatureExtractionMixin
+    from .image_processing_utils import BaseImageProcessor
+    from .modeling_utils import PreTrainedModel
+    from .processing_utils import ProcessorMixin
+    from .tokenization_utils_base import PreTrainedTokenizerBase
+    from .trainer_callback import TrainerCallback
+    from .trainer_utils import EvalPrediction, PredictionOutput
+    from .training_args import TrainingArguments
 
 
 logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
+    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
+    def __init__(
+        self,
+        model: Union["PreTrainedModel", nn.Module] = None,
+        args: "TrainingArguments" = None,
+        data_collator: Optional["DataCollator"] = None,
+        train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
+        eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
+        processing_class: Optional[
+            Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
+        ] = None,
+        model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
+        compute_loss_func: Optional[Callable] = None,
+        compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
+        callbacks: Optional[List["TrainerCallback"]] = None,
+        optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
+        preprocess_logits_for_metrics: Optional[Callable[[torch.Tensor, torch.Tensor], torch.Tensor]] = None,
+    ):
+        super().__init__(
+            model=model,
+            args=args,
+            data_collator=data_collator,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            processing_class=processing_class,
+            model_init=model_init,
+            compute_loss_func=compute_loss_func,
+            compute_metrics=compute_metrics,
+            callbacks=callbacks,
+            optimizers=optimizers,
+            preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        )
+
+        # Override self.model.generation_config if a GenerationConfig is specified in args.
+        # Priority: args.generation_config > model.generation_config > default GenerationConfig.
+        if self.args.generation_config is not None:
+            gen_config = self.load_generation_config(self.args.generation_config)
+            self.model.generation_config = gen_config
+
+    @staticmethod
+    def load_generation_config(gen_config_arg: Union[str, GenerationConfig]) -> GenerationConfig:
+        """
+        Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
+
+        Args:
+            gen_config_arg (`str` or [`~generation.GenerationConfig]`):
+                `Seq2SeqTrainingArguments.generation_config` argument.
+
+        Returns:
+            A `~generation.GenerationConfig`.
+        """
+
+        # GenerationConfig provided, nothing to do
+        if isinstance(gen_config_arg, GenerationConfig):
+            gen_config = deepcopy(gen_config_arg)
+        else:
+            # str or Path
+            pretrained_model_name = Path(gen_config_arg) if isinstance(gen_config_arg, str) else gen_config_arg
+            config_file_name = None
+
+            # Figuring if it is path pointing to a file, pointing to a directory or else a model id or URL
+            # This step is required in order to determine config_file_name
+            if pretrained_model_name.is_file():
+                config_file_name = pretrained_model_name.name
+                pretrained_model_name = pretrained_model_name.parent
+            # dir path
+            elif pretrained_model_name.is_dir():
+                pass
+            # model id or URL
+            else:
+                pretrained_model_name = gen_config_arg
+
+            gen_config = GenerationConfig.from_pretrained(pretrained_model_name, config_file_name)
+
+        # Strict validation to fail early. `GenerationConfig.save_pretrained()`, run at the end of training, throws
+        # an exception if there are warnings at validation time.
+        try:
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                gen_config.validate()
+            if len(caught_warnings) > 0:
+                raise ValueError(str([w.message for w in caught_warnings]))
+        except ValueError as exc:
+            raise ValueError(
+                "The loaded generation config instance is invalid -- `GenerationConfig.validate()` throws warnings "
+                "and/or exceptions. Fix these issues to train your model.\n\nThrown during validation:\n" + str(exc)
+            )
+        return gen_config
+
     def evaluate(
         self,
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-        **gen_kwargs
+        **gen_kwargs,
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -68,13 +180,20 @@ class Seq2SeqTrainer(Trainer):
         """
 
         gen_kwargs = gen_kwargs.copy()
-        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
-            gen_kwargs["max_length"] = self.args.generation_max_length
-        gen_kwargs["num_beams"] = (
-            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
-        )
-        self._gen_kwargs = gen_kwargs
 
+        # Use legacy argument setting if a) the option is not explicitly passed; and b) the argument is set in the
+        # training args
+        if (
+            gen_kwargs.get("max_length") is None
+            and gen_kwargs.get("max_new_tokens") is None
+            and self.args.generation_max_length is not None
+        ):
+            gen_kwargs["max_length"] = self.args.generation_max_length
+        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
+            gen_kwargs["num_beams"] = self.args.generation_num_beams
+        # We don't want to drop samples in general
+        self.gather_function = self.accelerator.gather
+        self._gen_kwargs = gen_kwargs
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -82,8 +201,8 @@ class Seq2SeqTrainer(Trainer):
         test_dataset: Dataset,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "test",
-        **gen_kwargs
-    ) -> PredictionOutput:
+        **gen_kwargs,
+    ) -> "PredictionOutput":
         """
         Run prediction and returns predictions and potential metrics.
 
@@ -125,11 +244,18 @@ class Seq2SeqTrainer(Trainer):
         """
 
         gen_kwargs = gen_kwargs.copy()
-        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+
+        # Use legacy argument setting if a) the option is not explicitly passed; and b) the argument is set in the
+        # training args
+        if (
+            gen_kwargs.get("max_length") is None
+            and gen_kwargs.get("max_new_tokens") is None
+            and self.args.generation_max_length is not None
+        ):
             gen_kwargs["max_length"] = self.args.generation_max_length
-        gen_kwargs["num_beams"] = (
-            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
-        )
+        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
+            gen_kwargs["num_beams"] = self.args.generation_num_beams
+        self.gather_function = self.accelerator.gather
         self._gen_kwargs = gen_kwargs
 
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
@@ -140,6 +266,7 @@ class Seq2SeqTrainer(Trainer):
         inputs: Dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
         ignore_keys: Optional[List[str]] = None,
+        **gen_kwargs,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on `model` using `inputs`.
@@ -156,6 +283,8 @@ class Seq2SeqTrainer(Trainer):
                 argument `labels`. Check your model's documentation for all accepted arguments.
             prediction_loss_only (`bool`):
                 Whether or not to return the loss only.
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         Return:
             Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
@@ -170,47 +299,57 @@ class Seq2SeqTrainer(Trainer):
         has_labels = "labels" in inputs
         inputs = self._prepare_inputs(inputs)
 
-        # XXX: adapt synced_gpus for fairscale as well
-        gen_kwargs = self._gen_kwargs.copy()
-        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
-            gen_kwargs["max_length"] = self.model.config.max_length
-        gen_kwargs["num_beams"] = (
-            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
-        )
-        default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
-        gen_kwargs["synced_gpus"] = (
-            gen_kwargs["synced_gpus"] if gen_kwargs.get("synced_gpus") is not None else default_synced_gpus
-        )
+        # Priority (handled in generate):
+        # non-`None` gen_kwargs > model.generation_config > default GenerationConfig()
+        if len(gen_kwargs) == 0 and hasattr(self, "_gen_kwargs"):
+            gen_kwargs = self._gen_kwargs.copy()
+        if "num_beams" in gen_kwargs and gen_kwargs["num_beams"] is None:
+            gen_kwargs.pop("num_beams")
+        if "max_length" in gen_kwargs and gen_kwargs["max_length"] is None:
+            gen_kwargs.pop("max_length")
 
-        if "attention_mask" in inputs:
-            gen_kwargs["attention_mask"] = inputs.get("attention_mask", None)
-        if "global_attention_mask" in inputs:
-            gen_kwargs["global_attention_mask"] = inputs.get("global_attention_mask", None)
+        default_synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self.model)
+        gen_kwargs["synced_gpus"] = gen_kwargs.get("synced_gpus", default_synced_gpus)
 
-        # prepare generation inputs
-        # some encoder-decoder models can have varying encoder's and thus
-        # varying model input names
-        if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
-            generation_inputs = inputs[self.model.encoder.main_input_name]
-        else:
-            generation_inputs = inputs[self.model.main_input_name]
-
-        generated_tokens = self.model.generate(
-            generation_inputs,
-            **gen_kwargs,
-        )
-        # in case the batch is shorter than max length, the output should be padded
-        if gen_kwargs.get("max_length") is not None and generated_tokens.shape[-1] < gen_kwargs["max_length"]:
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
-        elif gen_kwargs.get("max_new_tokens") is not None and generated_tokens.shape[-1] < (
-            gen_kwargs["max_new_tokens"] + 1
+        generation_inputs = inputs.copy()
+        # If the `decoder_input_ids` was created from `labels`, evict the former, so that the model can freely generate
+        # (otherwise, it would continue generating from the padded `decoder_input_ids`)
+        if (
+            "labels" in generation_inputs
+            and "decoder_input_ids" in generation_inputs
+            and generation_inputs["labels"].shape == generation_inputs["decoder_input_ids"].shape
         ):
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_new_tokens"] + 1)
+            generation_inputs = {
+                k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
+            }
+
+        summon_full_params_context = (
+            FullyShardedDataParallel.summon_full_params(self.model)
+            if isinstance(self.model, FullyShardedDataParallel)
+            else contextlib.nullcontext()
+        )
+
+        with summon_full_params_context:
+            generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
+
+        # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
+        # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
+        # removed in https://github.com/huggingface/transformers/blob/98d88b23f54e5a23e741833f1e973fdf600cc2c5/src/transformers/generation/utils.py#L1183
+        if self.model.generation_config._from_model_config:
+            self.model.generation_config._from_model_config = False
+
+        # Retrieves GenerationConfig from model.generation_config
+        gen_config = self.model.generation_config
+        # in case the batch is shorter than max length, the output should be padded
+        if generated_tokens.shape[-1] < gen_config.max_length:
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)
+        elif gen_config.max_new_tokens is not None and generated_tokens.shape[-1] < gen_config.max_new_tokens + 1:
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_new_tokens + 1)
 
         with torch.no_grad():
-            with self.compute_loss_context_manager():
-                outputs = model(**inputs)
             if has_labels:
+                with self.compute_loss_context_manager():
+                    outputs = model(**inputs)
                 if self.label_smoother is not None:
                     loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
                 else:
@@ -219,26 +358,26 @@ class Seq2SeqTrainer(Trainer):
                 loss = None
 
         if self.args.prediction_loss_only:
-            return (loss, None, None)
+            return loss, None, None
 
         if has_labels:
             labels = inputs["labels"]
-            if gen_kwargs.get("max_length") is not None and labels.shape[-1] < gen_kwargs["max_length"]:
-                labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
-            elif gen_kwargs.get("max_new_tokens") is not None and labels.shape[-1] < (
-                gen_kwargs["max_new_tokens"] + 1
-            ):
-                labels = self._pad_tensors_to_max_len(labels, (gen_kwargs["max_new_tokens"] + 1))
+            if labels.shape[-1] < gen_config.max_length:
+                labels = self._pad_tensors_to_max_len(labels, gen_config.max_length)
+            elif gen_config.max_new_tokens is not None and labels.shape[-1] < gen_config.max_new_tokens + 1:
+                labels = self._pad_tensors_to_max_len(labels, gen_config.max_new_tokens + 1)
         else:
             labels = None
 
-        return (loss, generated_tokens, labels)
+        return loss, generated_tokens, labels
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        if self.tokenizer is not None and hasattr(self.tokenizer, "pad_token_id"):
+        if self.processing_class is not None and hasattr(self.processing_class, "pad_token_id"):
             # If PAD token is not defined at least EOS token has to be defined
             pad_token_id = (
-                self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+                self.processing_class.pad_token_id
+                if self.processing_class.pad_token_id is not None
+                else self.processing_class.eos_token_id
             )
         else:
             if self.model.config.pad_token_id is not None:

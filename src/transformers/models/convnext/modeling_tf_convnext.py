@@ -12,15 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 ConvNext model."""
+"""TF 2.0 ConvNext model."""
 
+from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-
-from transformers import shape_list
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
@@ -29,9 +28,11 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
+from ...tf_utils import shape_list
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_convnext import ConvNextConfig
 
@@ -43,17 +44,17 @@ _CONFIG_FOR_DOC = "ConvNextConfig"
 _CHECKPOINT_FOR_DOC = "facebook/convnext-tiny-224"
 
 
-class TFConvNextDropPath(tf.keras.layers.Layer):
+class TFConvNextDropPath(keras.layers.Layer):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
     References:
         (1) github.com:rwightman/pytorch-image-models
     """
 
-    def __init__(self, drop_path, **kwargs):
+    def __init__(self, drop_path: float, **kwargs):
         super().__init__(**kwargs)
         self.drop_path = drop_path
 
-    def call(self, x, training=None):
+    def call(self, x: tf.Tensor, training=None):
         if training:
             keep_prob = 1 - self.drop_path
             shape = (tf.shape(x)[0],) + (1,) * (len(tf.shape(x)) - 1)
@@ -63,45 +64,57 @@ class TFConvNextDropPath(tf.keras.layers.Layer):
         return x
 
 
-class TFConvNextEmbeddings(tf.keras.layers.Layer):
+class TFConvNextEmbeddings(keras.layers.Layer):
     """This class is comparable to (and inspired by) the SwinEmbeddings class
     found in src/transformers/models/swin/modeling_swin.py.
     """
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: ConvNextConfig, **kwargs):
         super().__init__(**kwargs)
-        self.patch_embeddings = tf.keras.layers.Conv2D(
+        self.patch_embeddings = keras.layers.Conv2D(
             filters=config.hidden_sizes[0],
             kernel_size=config.patch_size,
             strides=config.patch_size,
             name="patch_embeddings",
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
+            bias_initializer=keras.initializers.Zeros(),
         )
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
         self.num_channels = config.num_channels
+        self.config = config
 
     def call(self, pixel_values):
         if isinstance(pixel_values, dict):
             pixel_values = pixel_values["pixel_values"]
 
-        num_channels = shape_list(pixel_values)[1]
-        if tf.executing_eagerly() and num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
+        tf.debugging.assert_equal(
+            shape_list(pixel_values)[1],
+            self.num_channels,
+            message="Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
+        )
 
-        # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
+        # When running on CPU, `keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
-        # shape = (batch_size, in_height, in_width, in_channels=num_channels)
+        # shape = (batch_size, in_height, in_width, in_channels)
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
         embeddings = self.patch_embeddings(pixel_values)
         embeddings = self.layernorm(embeddings)
         return embeddings
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embeddings", None) is not None:
+            with tf.name_scope(self.patch_embeddings.name):
+                self.patch_embeddings.build([None, None, None, self.config.num_channels])
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, None, self.config.hidden_sizes[0]])
 
-class TFConvNextLayer(tf.keras.layers.Layer):
+
+class TFConvNextLayer(keras.layers.Layer):
     """This corresponds to the `Block` class in the original implementation.
 
     There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
@@ -120,7 +133,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.dim = dim
         self.config = config
-        self.dwconv = tf.keras.layers.Conv2D(
+        self.dwconv = keras.layers.Conv2D(
             filters=dim,
             kernel_size=7,
             padding="same",
@@ -129,18 +142,18 @@ class TFConvNextLayer(tf.keras.layers.Layer):
             bias_initializer="zeros",
             name="dwconv",
         )  # depthwise conv
-        self.layernorm = tf.keras.layers.LayerNormalization(
+        self.layernorm = keras.layers.LayerNormalization(
             epsilon=1e-6,
             name="layernorm",
         )
-        self.pwconv1 = tf.keras.layers.Dense(
+        self.pwconv1 = keras.layers.Dense(
             units=4 * dim,
             kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
             name="pwconv1",
         )  # pointwise/1x1 convs, implemented with linear layers
         self.act = get_tf_activation(config.hidden_act)
-        self.pwconv2 = tf.keras.layers.Dense(
+        self.pwconv2 = keras.layers.Dense(
             units=dim,
             kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
@@ -151,22 +164,40 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         self.drop_path = (
             TFConvNextDropPath(drop_path, name="drop_path")
             if drop_path > 0.0
-            else tf.keras.layers.Activation("linear", name="drop_path")
+            else keras.layers.Activation("linear", name="drop_path")
         )
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         # PT's `nn.Parameters` must be mapped to a TF layer weight to inherit the same name hierarchy (and vice-versa)
         self.layer_scale_parameter = (
             self.add_weight(
                 shape=(self.dim,),
-                initializer=tf.keras.initializers.Constant(value=self.config.layer_scale_init_value),
+                initializer=keras.initializers.Constant(value=self.config.layer_scale_init_value),
                 trainable=True,
                 name="layer_scale_parameter",
             )
             if self.config.layer_scale_init_value > 0
             else None
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dwconv", None) is not None:
+            with tf.name_scope(self.dwconv.name):
+                self.dwconv.build([None, None, None, self.dim])
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, None, self.dim])
+        if getattr(self, "pwconv1", None) is not None:
+            with tf.name_scope(self.pwconv1.name):
+                self.pwconv1.build([None, None, self.dim])
+        if getattr(self, "pwconv2", None) is not None:
+            with tf.name_scope(self.pwconv2.name):
+                self.pwconv2.build([None, None, 4 * self.dim])
+        if getattr(self, "drop_path", None) is not None:
+            with tf.name_scope(self.drop_path.name):
+                self.drop_path.build(None)
 
     def call(self, hidden_states, training=False):
         input = hidden_states
@@ -183,24 +214,37 @@ class TFConvNextLayer(tf.keras.layers.Layer):
         return x
 
 
-class TFConvNextStage(tf.keras.layers.Layer):
+class TFConvNextStage(keras.layers.Layer):
     """ConvNext stage, consisting of an optional downsampling layer + multiple residual blocks.
 
     Args:
-        config ([`ConvNextConfig`]): Model configuration class.
-        in_channels (`int`): Number of input channels.
-        out_channels (`int`): Number of output channels.
-        depth (`int`): Number of residual blocks.
-        drop_path_rates(`List[float]`): Stochastic depth rates for each layer.
+        config (`ConvNextV2Config`):
+            Model configuration class.
+        in_channels (`int`):
+            Number of input channels.
+        out_channels (`int`):
+            Number of output channels.
+        depth (`int`):
+            Number of residual blocks.
+        drop_path_rates(`List[float]`):
+            Stochastic depth rates for each layer.
     """
 
     def __init__(
-        self, config, in_channels, out_channels, kernel_size=2, stride=2, depth=2, drop_path_rates=None, **kwargs
+        self,
+        config: ConvNextConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 2,
+        stride: int = 2,
+        depth: int = 2,
+        drop_path_rates: Optional[List[float]] = None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = [
-                tf.keras.layers.LayerNormalization(
+                keras.layers.LayerNormalization(
                     epsilon=1e-6,
                     name="downsampling_layer.0",
                 ),
@@ -209,12 +253,12 @@ class TFConvNextStage(tf.keras.layers.Layer):
                 # layer. All the outputs throughout the model will be in NHWC
                 # from this point on until the output where we again change to
                 # NCHW.
-                tf.keras.layers.Conv2D(
+                keras.layers.Conv2D(
                     filters=out_channels,
                     kernel_size=kernel_size,
                     strides=stride,
                     kernel_initializer=get_initializer(config.initializer_range),
-                    bias_initializer="zeros",
+                    bias_initializer=keras.initializers.Zeros(),
                     name="downsampling_layer.1",
                 ),
             ]
@@ -231,6 +275,9 @@ class TFConvNextStage(tf.keras.layers.Layer):
             )
             for j in range(depth)
         ]
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.stride = stride
 
     def call(self, hidden_states):
         for layer in self.downsampling_layer:
@@ -239,8 +286,22 @@ class TFConvNextStage(tf.keras.layers.Layer):
             hidden_states = layer(hidden_states)
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layers", None) is not None:
+            for layer in self.layers:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+        if self.in_channels != self.out_channels or self.stride > 1:
+            with tf.name_scope(self.downsampling_layer[0].name):
+                self.downsampling_layer[0].build([None, None, None, self.in_channels])
+            with tf.name_scope(self.downsampling_layer[1].name):
+                self.downsampling_layer[1].build([None, None, None, self.in_channels])
 
-class TFConvNextEncoder(tf.keras.layers.Layer):
+
+class TFConvNextEncoder(keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.stages = []
@@ -279,9 +340,14 @@ class TFConvNextEncoder(tf.keras.layers.Layer):
 
         return TFBaseModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
+    def build(self, input_shape=None):
+        for stage in self.stages:
+            with tf.name_scope(stage.name):
+                stage.build(None)
+
 
 @keras_serializable
-class TFConvNextMainLayer(tf.keras.layers.Layer):
+class TFConvNextMainLayer(keras.layers.Layer):
     config_class = ConvNextConfig
 
     def __init__(self, config: ConvNextConfig, add_pooling_layer: bool = True, **kwargs):
@@ -290,15 +356,15 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
         self.config = config
         self.embeddings = TFConvNextEmbeddings(config, name="embeddings")
         self.encoder = TFConvNextEncoder(config, name="encoder")
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         # We are setting the `data_format` like so because from here on we will revert to the
         # NCHW output format
-        self.pooler = tf.keras.layers.GlobalAvgPool2D(data_format="channels_first") if add_pooling_layer else None
+        self.pooler = keras.layers.GlobalAvgPool2D(data_format="channels_first") if add_pooling_layer else None
 
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -339,6 +405,20 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states if output_hidden_states else encoder_outputs.hidden_states,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, self.config.hidden_sizes[-1]])
+
 
 class TFConvNextPreTrainedModel(TFPreTrainedModel):
     """
@@ -350,50 +430,13 @@ class TFConvNextPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "convnext"
     main_input_name = "pixel_values"
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-        return self.serving_output(output)
-
 
 CONVNEXT_START_DOCSTRING = r"""
     This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -432,8 +475,8 @@ CONVNEXT_START_DOCSTRING = r"""
 CONVNEXT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ConvNextFeatureExtractor`]. See
-            [`ConvNextFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`ConvNextImageProcessor.__call__`] for details.
 
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
@@ -459,7 +502,7 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -470,17 +513,17 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ConvNextFeatureExtractor, TFConvNextModel
+        >>> from transformers import AutoImageProcessor, TFConvNextModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
         >>> model = TFConvNextModel.from_pretrained("facebook/convnext-tiny-224")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
@@ -508,13 +551,13 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=output.hidden_states,
-        )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convnext", None) is not None:
+            with tf.name_scope(self.convnext.name):
+                self.convnext.build(None)
 
 
 @add_start_docstrings(
@@ -532,22 +575,23 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         self.convnext = TFConvNextMainLayer(config, name="convnext")
 
         # Classifier head
-        self.classifier = tf.keras.layers.Dense(
+        self.classifier = keras.layers.Dense(
             units=config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
             bias_initializer="zeros",
             name="classifier",
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(CONVNEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
+        pixel_values: TFModelInputType | None = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -561,7 +605,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         Examples:
 
         ```python
-        >>> from transformers import ConvNextFeatureExtractor, TFConvNextForImageClassification
+        >>> from transformers import AutoImageProcessor, TFConvNextForImageClassification
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
@@ -569,10 +613,10 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
         >>> model = TFConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         >>> # model predicts one of the 1000 ImageNet classes
@@ -609,6 +653,17 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             hidden_states=outputs.hidden_states,
         )
 
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "convnext", None) is not None:
+            with tf.name_scope(self.convnext.name):
+                self.convnext.build(None)
+        if getattr(self, "classifier", None) is not None:
+            if hasattr(self.classifier, "name"):
+                with tf.name_scope(self.classifier.name):
+                    self.classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = ["TFConvNextForImageClassification", "TFConvNextModel", "TFConvNextPreTrainedModel"]

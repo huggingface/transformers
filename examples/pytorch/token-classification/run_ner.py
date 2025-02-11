@@ -26,10 +26,10 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
+import evaluate
 import numpy as np
 from datasets import ClassLabel, load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -49,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
@@ -79,12 +79,22 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -228,6 +238,10 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
+
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
     datasets.utils.logging.set_verbosity(log_level)
@@ -237,8 +251,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -275,20 +289,23 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
+            extension = data_args.train_file.split(".")[-1]
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
+            extension = data_args.validation_file.split(".")[-1]
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
-        extension = data_args.train_file.split(".")[-1]
+            extension = data_args.test_file.split(".")[-1]
         raw_datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if training_args.do_train:
         column_names = raw_datasets["train"].column_names
@@ -344,17 +361,19 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     tokenizer_name_or_path = model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path
-    if config.model_type in {"bloom", "gpt2", "roberta"}:
+    if config.model_type in {"bloom", "gpt2", "roberta", "deberta"}:
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name_or_path,
             cache_dir=model_args.cache_dir,
             use_fast=True,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
             add_prefix_space=True,
         )
     else:
@@ -363,7 +382,8 @@ def main():
             cache_dir=model_args.cache_dir,
             use_fast=True,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
     model = AutoModelForTokenClassification.from_pretrained(
@@ -372,7 +392,8 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
 
@@ -386,7 +407,7 @@ def main():
 
     # Model has labels -> use them.
     if model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
-        if list(sorted(model.config.label2id.keys())) == list(sorted(label_list)):
+        if sorted(model.config.label2id.keys()) == sorted(label_list):
             # Reorganize `label_list` to match the ordering of the model.
             if labels_are_int:
                 label_to_id = {i: int(model.config.label2id[l]) for i, l in enumerate(label_list)}
@@ -396,14 +417,14 @@ def main():
                 label_to_id = {l: i for i, l in enumerate(label_list)}
         else:
             logger.warning(
-                "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                f"model labels: {list(sorted(model.config.label2id.keys()))}, dataset labels:"
-                f" {list(sorted(label_list))}.\nIgnoring the model labels as a result.",
+                "Your model seems to have been trained with labels, but they don't match the dataset: "
+                f"model labels: {sorted(model.config.label2id.keys())}, dataset labels:"
+                f" {sorted(label_list)}.\nIgnoring the model labels as a result.",
             )
 
     # Set the correspondences label/ID inside the model config
     model.config.label2id = {l: i for i, l in enumerate(label_list)}
-    model.config.id2label = {i: l for i, l in enumerate(label_list)}
+    model.config.id2label = dict(enumerate(label_list))
 
     # Map that sends B-Xxx label to its I-Xxx counterpart
     b_to_i_label = []
@@ -505,7 +526,7 @@ def main():
     data_collator = DataCollatorForTokenClassification(tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
 
     # Metrics
-    metric = evaluate.load("seqeval")
+    metric = evaluate.load("seqeval", cache_dir=model_args.cache_dir)
 
     def compute_metrics(p):
         predictions, labels = p
@@ -546,7 +567,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )

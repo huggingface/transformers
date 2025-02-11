@@ -6,20 +6,18 @@ from typing import Callable, List, Optional, Union
 
 import numpy as np
 import tensorflow as tf
+from huggingface_hub import Repository, create_repo
 from packaging.version import parse
-from tensorflow.keras.callbacks import Callback
-
-from huggingface_hub import Repository
 
 from . import IntervalStrategy, PreTrainedTokenizerBase
 from .modelcard import TrainingSummary
-from .utils import get_full_repo_name
+from .modeling_tf_utils import keras
 
 
 logger = logging.getLogger(__name__)
 
 
-class KerasMetricCallback(Callback):
+class KerasMetricCallback(keras.callbacks.Callback):
     """
     Callback to compute metrics at the end of every epoch. Unlike normal Keras metrics, these do not need to be
     compilable by TF. It is particularly useful for common NLP metrics like BLEU and ROUGE that require string
@@ -145,7 +143,7 @@ class KerasMetricCallback(Callback):
     @staticmethod
     def _concatenate_batches(batches, padding_index=-100):
         # If all batches are unidimensional or same length, do a simple concatenation
-        if batches[0].ndim == 1 or all([batch.shape[1] == batches[0].shape[1] for batch in batches]):
+        if batches[0].ndim == 1 or all(batch.shape[1] == batches[0].shape[1] for batch in batches):
             return np.concatenate(batches, axis=0)
 
         # Welp, they're not the same length. Let's do some padding
@@ -163,7 +161,7 @@ class KerasMetricCallback(Callback):
 
     def _postprocess_predictions_or_labels(self, inputs):
         if isinstance(inputs[0], dict):
-            outputs = dict()
+            outputs = {}
             for key in inputs[0].keys():
                 outputs[key] = self._concatenate_batches([batch[key] for batch in inputs])
             # If it's a dict with only one key, just return the array
@@ -194,8 +192,7 @@ class KerasMetricCallback(Callback):
             # This dense conditional recognizes the case where we have an encoder-decoder model, but
             # avoids getting tangled up when we just have a model with a layer called 'encoder'
             if hasattr(self.model, "encoder") and hasattr(self.model.encoder, "main_input_name"):
-                if self.model.encoder.main_input_name != self.model.main_input_name:
-                    main_input_name = self.model.encoder.main_input_name
+                main_input_name = self.model.encoder.main_input_name
             else:
                 main_input_name = getattr(self.model, "main_input_name", "input_ids")
 
@@ -225,17 +222,21 @@ class KerasMetricCallback(Callback):
                 if self.use_xla_generation:
                     predictions = self.generation_function(generation_inputs, attention_mask=attention_mask)
                 else:
-                    predictions = self.model.generate(generation_inputs, attention_mask=attention_mask)
+                    predictions = self.model.generate(
+                        generation_inputs, attention_mask=attention_mask, **self.generate_kwargs
+                    )
             else:
                 predictions = self.model.predict_on_batch(batch)
                 if isinstance(predictions, dict):
                     # This converts any dict-subclass to a regular dict
                     # Keras REALLY doesn't like it when we pass around a BatchEncoding or other derived class
                     predictions = dict(predictions)
-                if self.output_cols is not None:
-                    predictions = {key: predictions[key] for key in self.output_cols}
-                else:
-                    predictions = {key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]}
+                    if self.output_cols is not None:
+                        predictions = {key: predictions[key] for key in self.output_cols}
+                    else:
+                        predictions = {
+                            key: val for key, val in predictions.items() if key not in ignore_keys + ["loss"]
+                        }
             prediction_list.append(predictions)
             if not self.use_keras_label:
                 labels = {key: batch[key].numpy() for key in self.label_cols}
@@ -264,7 +265,7 @@ class KerasMetricCallback(Callback):
         logs.update(metric_output)
 
 
-class PushToHubCallback(Callback):
+class PushToHubCallback(keras.callbacks.Callback):
     """
     Callback that will save and push the model to the Hub regularly. By default, it pushes once per epoch, but this can
     be changed with the `save_strategy` argument. Pushed models can be accessed like any other model on the hub, such
@@ -320,7 +321,7 @@ class PushToHubCallback(Callback):
         hub_model_id: Optional[str] = None,
         hub_token: Optional[str] = None,
         checkpoint: bool = False,
-        **model_card_args
+        **model_card_args,
     ):
         super().__init__()
         if checkpoint and save_strategy != "epoch":
@@ -332,18 +333,15 @@ class PushToHubCallback(Callback):
             raise ValueError("Please supply a positive integer argument for save_steps when save_strategy == 'steps'!")
         self.save_steps = save_steps
         output_dir = Path(output_dir)
+
+        # Create repo and retrieve repo_id
         if hub_model_id is None:
             hub_model_id = output_dir.absolute().name
-        if "/" not in hub_model_id:
-            hub_model_id = get_full_repo_name(hub_model_id, token=hub_token)
+        self.hub_model_id = create_repo(repo_id=hub_model_id, exist_ok=True, token=hub_token).repo_id
 
         self.output_dir = output_dir
-        self.hub_model_id = hub_model_id
-        self.repo = Repository(
-            str(self.output_dir),
-            clone_from=self.hub_model_id,
-            use_auth_token=hub_token if hub_token else True,
-        )
+        self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)
+
         self.tokenizer = tokenizer
         self.last_job = None
         self.checkpoint = checkpoint
@@ -394,17 +392,22 @@ class PushToHubCallback(Callback):
             )
 
     def on_train_end(self, logs=None):
+        # Makes sure the latest version of the model is uploaded
         if self.last_job is not None and not self.last_job.is_done:
-            self.last_job._process.terminate()  # Gotta go fast
+            logging.info("Pushing the last epoch to the Hub, this may take a while...")
             while not self.last_job.is_done:
                 sleep(1)
-        self.model.save_pretrained(self.output_dir)
-        if self.tokenizer is not None:
-            self.tokenizer.save_pretrained(self.output_dir)
-        train_summary = TrainingSummary.from_keras(
-            model=self.model, model_name=self.hub_model_id, keras_history=self.training_history, **self.model_card_args
-        )
-        model_card = train_summary.to_model_card()
-        with (self.output_dir / "README.md").open("w") as f:
-            f.write(model_card)
-        self.repo.push_to_hub(commit_message="End of training", blocking=True)
+        else:
+            self.model.save_pretrained(self.output_dir)
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(self.output_dir)
+            train_summary = TrainingSummary.from_keras(
+                model=self.model,
+                model_name=self.hub_model_id,
+                keras_history=self.training_history,
+                **self.model_card_args,
+            )
+            model_card = train_summary.to_model_card()
+            with (self.output_dir / "README.md").open("w") as f:
+                f.write(model_card)
+            self.repo.push_to_hub(commit_message="End of training", blocking=True)

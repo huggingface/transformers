@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import is_tf_available
@@ -22,24 +24,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import AutoTokenizer, T5Tokenizer, TFAutoModelForSeq2SeqLM, TFMT5ForConditionalGeneration
-
-
-@require_tf
-class TFMT5ModelTest(unittest.TestCase):  # no mixin with common tests -> most cases are already covered in the TF T5
-    @slow
-    def test_resize_embeddings(self):
-        model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-        original_vocab_size = model.get_input_embeddings().weight.shape[0]
-        # the vocab size is defined in the model config
-        self.assertEqual(original_vocab_size, model.config.vocab_size)
-
-        tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
-        tokenizer.add_special_tokens({"bos_token": "", "eos_token": ""})
-        model._resize_token_embeddings(len(tokenizer))
-        # the vocab size is now resized to the length of the tokenizer, which is different from the original size
-        self.assertEqual(model.get_input_embeddings().weight.shape[0], len(tokenizer))
-        self.assertNotEqual(model.get_input_embeddings().weight.shape[0], original_vocab_size)
+    from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 
 
 @require_tf

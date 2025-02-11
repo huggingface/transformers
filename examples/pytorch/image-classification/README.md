@@ -41,6 +41,7 @@ python run_image_classification.py \
     --dataset_name beans \
     --output_dir ./beans_outputs/ \
     --remove_unused_columns False \
+    --label_column_name labels \
     --do_train \
     --do_eval \
     --push_to_hub \
@@ -51,7 +52,7 @@ python run_image_classification.py \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --save_total_limit 3 \
@@ -113,10 +114,10 @@ from datasets import load_dataset
 # example 1: local folder
 dataset = load_dataset("imagefolder", data_dir="path_to_your_folder")
 
-# example 2: local files (suppoted formats are tar, gzip, zip, xz, rar, zstd)
+# example 2: local files (supported formats are tar, gzip, zip, xz, rar, zstd)
 dataset = load_dataset("imagefolder", data_files="path_to_zip_file")
 
-# example 3: remote files (suppoted formats are tar, gzip, zip, xz, rar, zstd)
+# example 3: remote files (supported formats are tar, gzip, zip, xz, rar, zstd)
 dataset = load_dataset("imagefolder", data_files="https://download.microsoft.com/download/3/E/1/3E1C3F21-ECDB-4869-8368-6DEBA77B919F/kagglecatsanddogs_3367a.zip")
 
 # example 4: providing several splits
@@ -197,7 +198,7 @@ accelerate test
 that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
-accelerate launch run_image_classification_trainer.py
+accelerate launch run_image_classification_no_trainer.py --image_column_name img
 ```
 
 This command is the same and will work for:

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for Perceiver."""
-
+"""Tokenization class for Perceiver."""
 
 from typing import Dict, List, Optional, Tuple
 
@@ -66,9 +65,8 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         sep_token="[SEP]",
         model_max_length=2048,
-        **kwargs
+        **kwargs,
     ) -> None:
-
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -76,6 +74,18 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
 
+        self._utf_vocab_size = 2**8  # utf is 8 bits
+
+        # Since these tokens are not part of the vocabulary, we manually add them
+        self._added_tokens_decoder: Dict[str, int] = {
+            0: pad_token,
+            1: bos_token,
+            2: eos_token,
+            3: mask_token,
+            4: cls_token,
+            5: sep_token,
+        }
+        self._num_special_tokens = len(self._added_tokens_decoder)
         super().__init__(
             pad_token=pad_token,
             bos_token=bos_token,
@@ -87,31 +97,17 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self._utf_vocab_size = 2**8  # utf is 8 bits
-
-        # define special tokens dict
-        self.special_tokens_encoder: Dict[str, int] = {
-            self.pad_token: 0,
-            self.bos_token: 1,
-            self.eos_token: 2,
-            self.mask_token: 3,
-            self.cls_token: 4,
-            self.sep_token: 5,
-        }
-        self._num_special_tokens = len(self.special_tokens_encoder)
-        self.special_tokens_decoder: Dict[int, str] = {v: k for k, v in self.special_tokens_encoder.items()}
-
     def get_vocab(self) -> Dict[str, int]:
-        vocab = self.special_tokens_encoder.copy()
-        vocab.update(self.added_tokens_encoder)
+        vocab = {}
         for i in range(self._utf_vocab_size):
             token = chr(i)
-            vocab[token] = i + len(self.special_tokens_encoder)
+            vocab[token] = i + self._num_special_tokens
+        vocab.update(self.added_tokens_encoder)
         return vocab
 
     @property
     def vocab_size(self):
-        return self._utf_vocab_size + self._num_special_tokens
+        return self._utf_vocab_size
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -172,11 +168,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token in self.special_tokens_encoder:
-            token_id = self.special_tokens_encoder[token]
-        elif token in self.added_tokens_encoder:
-            token_id = self.added_tokens_encoder[token]
-        elif len(token) != 1:
+        if len(token) != 1:
             token_id = self.unk_token_id
         else:
             token_id = ord(token) + self._num_special_tokens
@@ -184,26 +176,16 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.special_tokens_decoder:
-            token = self.special_tokens_decoder[index]
-        elif index in self.added_tokens_decoder:
-            token = self.added_tokens_decoder[index]
-        else:
-            token = chr(index - self._num_special_tokens)
+        token = chr(index - self._num_special_tokens)
         return token
 
+    # TODO @ArthurZ refactor this as well....
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
-            if token in self.special_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.added_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.special_tokens_encoder:
-                tok_string = token.encode("utf-8")
-            elif token in self.added_tokens_encoder:
-                tok_string = token.encode("utf-8")
+            if token in self.added_tokens_encoder:
+                tok_string = str(token).encode("utf-8")
             else:
                 tok_string = bytes([ord(token)])
             bstring += tok_string
@@ -213,3 +195,6 @@ class PerceiverTokenizer(PreTrainedTokenizer):
     # PerceiverTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         return ()
+
+
+__all__ = ["PerceiverTokenizer"]

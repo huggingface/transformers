@@ -3,27 +3,27 @@ name: Add model like runner
 on:
   push:
     branches:
-      - main
-  pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - ".github/**"
-    types: [opened, synchronize, reopened]
+      - none # put main here when this is fixed
+  #pull_request:
+  #  paths:
+  #    - "src/**"
+  #    - "tests/**"
+  #    - ".github/**"
+  #  types: [opened, synchronize, reopened]
 
 jobs:
   run_tests_templates_like:
     name: "Add new model like template tests"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt -y update && sudo apt install -y libsndfile1-dev
 
       - name: Load cached virtual environment
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         id: cache
         with:
           path: ~/venv/
@@ -74,7 +74,7 @@ jobs:
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: run_all_tests_new_models_test_reports
           path: reports/tests_new_models

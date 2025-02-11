@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax OPT model."""
+"""Flax OPT model."""
 
 from functools import partial
 from typing import Optional, Tuple
@@ -37,7 +37,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/opt-350m"
 _CONFIG_FOR_DOC = "OPTConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 
 OPT_START_DOCSTRING = r"""
@@ -80,7 +79,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -245,7 +244,7 @@ class FlaxOPTAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -310,7 +309,6 @@ class FlaxOPTDecoderLayer(nn.Module):
         output_attentions: bool = True,
         deterministic: bool = True,
     ) -> Tuple[jnp.ndarray]:
-
         residual = hidden_states
 
         # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
@@ -436,12 +434,14 @@ class FlaxOPTDecoder(nn.Module):
             self.config.vocab_size,
             self.config.word_embed_proj_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         self.embed_positions = FlaxOPTLearnedPositionalEmbedding(
             self.config.max_position_embeddings,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         if self.config.word_embed_proj_dim != self.config.hidden_size:
@@ -526,7 +526,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -665,7 +665,6 @@ class FlaxOPTModule(nn.Module):
         deterministic: bool = True,
         init_cache=False,
     ):
-
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -694,9 +693,7 @@ class FlaxOPTModel(FlaxOPTPreTrainedModel):
     module_class = FlaxOPTModule
 
 
-append_call_sample_docstring(
-    FlaxOPTModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxOPTModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 @add_start_docstrings(
@@ -727,7 +724,6 @@ class FlaxOPTForCausalLMModule(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
         outputs = self.model(
             input_ids,
             attention_mask,
@@ -767,7 +763,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
 class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
     module_class = FlaxOPTForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -797,8 +793,10 @@ class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxOPTForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxBaseModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = ["FlaxOPTForCausalLM", "FlaxOPTModel", "FlaxOPTPreTrainedModel"]

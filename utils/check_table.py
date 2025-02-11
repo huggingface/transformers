@@ -12,12 +12,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that checks the big table in the file docs/source/en/index.md and potentially updates it.
+
+Use from the root of the repo with:
+
+```bash
+python utils/check_table.py
+```
+
+for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+
+To auto-fix issues run:
+
+```bash
+python utils/check_table.py --fix_and_overwrite
+```
+
+which is used by `make fix-copies`.
+"""
 
 import argparse
 import collections
-import importlib.util
 import os
 import re
+from typing import List
+
+from transformers.utils import direct_transformers_import
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -27,19 +48,28 @@ PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
 
 
-def _find_text_in_file(filename, start_prompt, end_prompt):
+def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> str:
     """
-    Find the text in `filename` between a line beginning with `start_prompt` and before `end_prompt`, removing empty
-    lines.
+    Find the text in filename between two prompts.
+
+    Args:
+        filename (`str`): The file to search into.
+        start_prompt (`str`): A string to look for at the start of the content searched.
+        end_prompt (`str`): A string that will mark the end of the content to look for.
+
+    Returns:
+        `str`: The content between the prompts.
     """
     with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
+
     # Find the start prompt.
     start_index = 0
     while not lines[start_index].startswith(start_prompt):
         start_index += 1
     start_index += 1
 
+    # Now go until the end prompt.
     end_index = start_index
     while not lines[end_index].startswith(end_prompt):
         end_index += 1
@@ -53,40 +83,110 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
     return "".join(lines[start_index:end_index]), start_index, end_index, lines
 
 
-# Add here suffixes that are used to identify models, separated by |
-ALLOWED_MODEL_SUFFIXES = "Model|Encoder|Decoder|ForConditionalGeneration"
-# Regexes that match TF/Flax/PT model names.
+# Regexes that match TF/Flax/PT model names. Add here suffixes that are used to identify models, separated by |
 _re_tf_models = re.compile(r"TF(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
 _re_flax_models = re.compile(r"Flax(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
-# Will match any TF or Flax model too so need to be in an else branch afterthe two previous regexes.
-_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration)")
+# Will match any TF or Flax model too so need to be in an else branch after the two previous regexes.
+_re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGeneration|ForRetrieval)")
 
 
 # This is to make sure the transformers module imported is the one in the repo.
-spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
-)
-transformers_module = spec.loader.load_module()
+transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
-# Thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python
-def camel_case_split(identifier):
-    "Split a camelcased `identifier` into words."
+def camel_case_split(identifier: str) -> List[str]:
+    """
+    Split a camel-cased name into words.
+
+    Args:
+        identifier (`str`): The camel-cased name to parse.
+
+    Returns:
+        `List[str]`: The list of words in the identifier (as seprated by capital letters).
+
+    Example:
+
+    ```py
+    >>> camel_case_split("CamelCasedClass")
+    ["Camel", "Cased", "Class"]
+    ```
+    """
+    # Regex thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python
     matches = re.finditer(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)", identifier)
     return [m.group(0) for m in matches]
 
 
-def _center_text(text, width):
+def _center_text(text: str, width: int) -> str:
+    """
+    Utility that will add spaces on the left and right of a text to make it centered for a given width.
+
+    Args:
+        text (`str`): The text to center.
+        width (`int`): The desired length of the result.
+
+    Returns:
+        `str`: A text of length `width` with the original `text` in the middle.
+    """
     text_length = 2 if text == "✅" or text == "❌" else len(text)
     left_indent = (width - text_length) // 2
     right_indent = width - text_length - left_indent
     return " " * left_indent + text + " " * right_indent
 
 
-def get_model_table_from_auto_modules():
-    """Generates an up-to-date model table from the content of the auto modules."""
+SPECIAL_MODEL_NAME_LINK_MAPPING = {
+    "Data2VecAudio": "[Data2VecAudio](model_doc/data2vec)",
+    "Data2VecText": "[Data2VecText](model_doc/data2vec)",
+    "Data2VecVision": "[Data2VecVision](model_doc/data2vec)",
+    "DonutSwin": "[DonutSwin](model_doc/donut)",
+}
+
+MODEL_NAMES_WITH_SAME_CONFIG = {
+    "BARThez": "BART",
+    "BARTpho": "BART",
+    "BertJapanese": "BERT",
+    "BERTweet": "BERT",
+    "BORT": "BERT",
+    "ByT5": "T5",
+    "CPM": "OpenAI GPT-2",
+    "DePlot": "Pix2Struct",
+    "DialoGPT": "OpenAI GPT-2",
+    "DiT": "BEiT",
+    "FLAN-T5": "T5",
+    "FLAN-UL2": "T5",
+    "HerBERT": "BERT",
+    "LayoutXLM": "LayoutLMv2",
+    "Llama2": "LLaMA",
+    "Llama3": "LLaMA",
+    "Falcon3": "LLaMA",
+    "MADLAD-400": "T5",
+    "MatCha": "Pix2Struct",
+    "mBART-50": "mBART",
+    "Megatron-GPT2": "OpenAI GPT-2",
+    "mLUKE": "LUKE",
+    "MMS": "Wav2Vec2",
+    "NLLB": "M2M100",
+    "PhoBERT": "BERT",
+    "T5v1.1": "T5",
+    "TAPEX": "BART",
+    "UL2": "T5",
+    "Wav2Vec2Phoneme": "Wav2Vec2",
+    "XLM-V": "XLM-RoBERTa",
+    "XLS-R": "Wav2Vec2",
+    "XLSR-Wav2Vec2": "Wav2Vec2",
+}
+MODEL_NAMES_TO_IGNORE = [
+    "ChineseCLIPVisionModel",
+    "CLIPTextModel",
+    "CLIPVisionModel",
+    "Qwen2AudioEncoder",
+    "SiglipVisionModel",
+]
+
+
+def get_model_table_from_auto_modules() -> str:
+    """
+    Generates an up-to-date model table from the content of the auto modules.
+    """
     # Dictionary model names to config.
     config_maping_names = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING_NAMES
     model_name_to_config = {
@@ -96,9 +196,7 @@ def get_model_table_from_auto_modules():
     }
     model_name_to_prefix = {name: config.replace("Config", "") for name, config in model_name_to_config.items()}
 
-    # Dictionaries flagging if each model prefix has a slow/fast tokenizer, backend in PT/TF/Flax.
-    slow_tokenizers = collections.defaultdict(bool)
-    fast_tokenizers = collections.defaultdict(bool)
+    # Dictionaries flagging if each model prefix has a backend in PT/TF/Flax.
     pt_models = collections.defaultdict(bool)
     tf_models = collections.defaultdict(bool)
     flax_models = collections.defaultdict(bool)
@@ -106,13 +204,7 @@ def get_model_table_from_auto_modules():
     # Let's lookup through all transformers object (once).
     for attr_name in dir(transformers_module):
         lookup_dict = None
-        if attr_name.endswith("Tokenizer"):
-            lookup_dict = slow_tokenizers
-            attr_name = attr_name[:-9]
-        elif attr_name.endswith("TokenizerFast"):
-            lookup_dict = fast_tokenizers
-            attr_name = attr_name[:-13]
-        elif _re_tf_models.match(attr_name) is not None:
+        if _re_tf_models.match(attr_name) is not None:
             lookup_dict = tf_models
             attr_name = _re_tf_models.match(attr_name).groups()[0]
         elif _re_flax_models.match(attr_name) is not None:
@@ -131,12 +223,27 @@ def get_model_table_from_auto_modules():
                 attr_name = "".join(camel_case_split(attr_name)[:-1])
 
     # Let's build that table!
-    model_names = list(model_name_to_config.keys())
+    model_names = list(model_name_to_config.keys()) + list(MODEL_NAMES_WITH_SAME_CONFIG.keys())
+
+    # model name to doc link mapping
+    model_names_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
+    model_name_to_link_mapping = {value: f"[{value}](model_doc/{key})" for key, value in model_names_mapping.items()}
+    # update mapping with special model names
+    model_name_to_link_mapping = {
+        k: SPECIAL_MODEL_NAME_LINK_MAPPING[k] if k in SPECIAL_MODEL_NAME_LINK_MAPPING else v
+        for k, v in model_name_to_link_mapping.items()
+    }
+
+    # MaskFormerSwin and TimmBackbone are backbones and so not meant to be loaded and used on their own. Instead, they define architectures which can be loaded using the AutoBackbone API.
+    names_to_exclude = ["MaskFormerSwin", "TimmBackbone", "Speech2Text2"]
+    model_names = [name for name in model_names if name not in names_to_exclude]
     model_names.sort(key=str.lower)
-    columns = ["Model", "Tokenizer slow", "Tokenizer fast", "PyTorch support", "TensorFlow support", "Flax Support"]
+
+    columns = ["Model", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
+
     widths = [len(c) + 2 for c in columns]
-    widths[0] = max([len(name) for name in model_names]) + 2
+    widths[0] = max([len(doc_link) for doc_link in model_name_to_link_mapping.values()]) + 2
 
     # Build the table per se
     table = "|" + "|".join([_center_text(c, w) for c, w in zip(columns, widths)]) + "|\n"
@@ -144,12 +251,16 @@ def get_model_table_from_auto_modules():
     table += "|" + "|".join([":" + "-" * (w - 2) + ":" for w in widths]) + "|\n"
 
     check = {True: "✅", False: "❌"}
+
     for name in model_names:
-        prefix = model_name_to_prefix[name]
+        if name in MODEL_NAMES_TO_IGNORE:
+            continue
+        if name in MODEL_NAMES_WITH_SAME_CONFIG.keys():
+            prefix = model_name_to_prefix[MODEL_NAMES_WITH_SAME_CONFIG[name]]
+        else:
+            prefix = model_name_to_prefix[name]
         line = [
-            name,
-            check[slow_tokenizers[prefix]],
-            check[fast_tokenizers[prefix]],
+            model_name_to_link_mapping[name],
             check[pt_models[prefix]],
             check[tf_models[prefix]],
             check[flax_models[prefix]],
@@ -159,9 +270,15 @@ def get_model_table_from_auto_modules():
 
 
 def check_model_table(overwrite=False):
-    """Check the model table in the index.rst is consistent with the state of the lib and maybe `overwrite`."""
+    """
+    Check the model table in the index.md is consistent with the state of the lib and potentially fix it.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the table when it's not up to date.
+    """
     current_table, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.mdx"),
+        filename=os.path.join(PATH_TO_DOCS, "index.md"),
         start_prompt="<!--This table is updated automatically from the auto modules",
         end_prompt="<!-- End table-->",
     )
@@ -169,58 +286,12 @@ def check_model_table(overwrite=False):
 
     if current_table != new_table:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.mdx"), "w", encoding="utf-8", newline="\n") as f:
+            with open(os.path.join(PATH_TO_DOCS, "index.md"), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [new_table] + lines[end_index:])
         else:
             raise ValueError(
-                "The model table in the `index.mdx` has not been updated. Run `make fix-copies` to fix this."
+                "The model table in the `index.md` has not been updated. Run `make fix-copies` to fix this."
             )
-
-
-def has_onnx(model_type):
-    """
-    Returns whether `model_type` is supported by ONNX (by checking if there is an ONNX config) or not.
-    """
-    config_mapping = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING
-    if model_type not in config_mapping:
-        return False
-    config = config_mapping[model_type]
-    config_module = config.__module__
-    module = transformers_module
-    for part in config_module.split(".")[1:]:
-        module = getattr(module, part)
-    config_name = config.__name__
-    onnx_config_name = config_name.replace("Config", "OnnxConfig")
-    return hasattr(module, onnx_config_name)
-
-
-def get_onnx_model_list():
-    """
-    Return the list of models supporting ONNX.
-    """
-    config_mapping = transformers_module.models.auto.configuration_auto.CONFIG_MAPPING
-    model_names = config_mapping = transformers_module.models.auto.configuration_auto.MODEL_NAMES_MAPPING
-    onnx_model_types = [model_type for model_type in config_mapping.keys() if has_onnx(model_type)]
-    onnx_model_names = [model_names[model_type] for model_type in onnx_model_types]
-    onnx_model_names.sort(key=lambda x: x.upper())
-    return "\n".join([f"- {name}" for name in onnx_model_names]) + "\n"
-
-
-def check_onnx_model_list(overwrite=False):
-    """Check the model list in the serialization.mdx is consistent with the state of the lib and maybe `overwrite`."""
-    current_list, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "serialization.mdx"),
-        start_prompt="<!--This table is automatically generated by `make fix-copies`, do not fill manually!-->",
-        end_prompt="In the next two sections, we'll show you how to:",
-    )
-    new_list = get_onnx_model_list()
-
-    if current_list != new_list:
-        if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "serialization.mdx"), "w", encoding="utf-8", newline="\n") as f:
-                f.writelines(lines[:start_index] + [new_list] + lines[end_index:])
-        else:
-            raise ValueError("The list of ONNX-supported models needs an update. Run `make fix-copies` to fix this.")
 
 
 if __name__ == "__main__":
@@ -229,4 +300,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_model_table(args.fix_and_overwrite)
-    check_onnx_model_list(args.fix_and_overwrite)

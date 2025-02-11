@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SEW model."""
+"""PyTorch SEW model."""
 
 import math
 import warnings
@@ -25,12 +25,11 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, LayerNorm
 
-from transformers.deepspeed import is_deepspeed_zero3_enabled
-
 from ...activations import ACT2FN
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import softmax_backward_data, torch_int_div
+from ...pytorch_utils import softmax_backward_data
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sew_d import SEWDConfig
 
@@ -42,7 +41,6 @@ _HIDDEN_STATES_START_POSITION = 1
 
 # General docstring
 _CONFIG_FOR_DOC = "SEWDConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "asapp/sew-d-tiny-100k-ft-ls100h"
@@ -53,23 +51,9 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTIL OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 0.21
 
 # Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
 _SEQ_CLASS_CHECKPOINT = "anton-l/sew-d-mid-400k-ft-keyword-spotting"
 _SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
 _SEQ_CLASS_EXPECTED_LOSS = 3.16
-
-SEW_D_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "asapp/sew-d-tiny-100k",
-    "asapp/sew-d-small-100k",
-    "asapp/sew-d-mid-100k",
-    "asapp/sew-d-mid-k127-100k",
-    "asapp/sew-d-base-100k",
-    "asapp/sew-d-base-plus-100k",
-    "asapp/sew-d-mid-400k",
-    "asapp/sew-d-mid-k127-400k",
-    "asapp/sew-d-base-plus-400k",
-    # See all SEW models at https://huggingface.co/models?filter=sew-d
-]
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
@@ -134,7 +118,7 @@ def _compute_mask_indices(
     )
 
     # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
     spec_aug_mask_idxs = []
 
     max_num_masked_span = compute_num_masked_span(sequence_length)
@@ -192,7 +176,6 @@ def _compute_mask_indices(
     return spec_aug_mask
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.make_log_bucket_position
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
     sign = torch.sign(relative_pos)
     mid = bucket_size // 2
@@ -208,8 +191,7 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     return bucket_pos
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.build_relative_position
-def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1):
+def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-1, device=None):
     """
     Build relative position according to the query and key
 
@@ -222,13 +204,14 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         key_size (int): the length of key
         bucket_size (int): the size of position bucket
         max_position (int): the maximum allowed absolute position
+        device (`torch.device`): the device on which tensors will be created.
 
     Return:
         `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
-
     """
-    q_ids = torch.arange(0, query_size)
-    k_ids = torch.arange(0, key_size)
+
+    q_ids = torch.arange(0, query_size, device=device)
+    k_ids = torch.arange(0, key_size, device=device)
     rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
@@ -256,7 +239,6 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
 
-# Copied from transformers.models.deberta.modeling_deberta.get_mask
 def get_mask(input, local_context):
     if not isinstance(local_context, DropoutContext):
         dropout = local_context
@@ -364,15 +346,25 @@ class SEWDPositionalConvEmbedding(nn.Module):
             stride=config.squeeze_factor,
         )
 
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
+            if hasattr(self.conv, "parametrizations"):
+                weight_g = self.conv.parametrizations.weight.original0
+                weight_v = self.conv.parametrizations.weight.original1
+            else:
+                weight_g = self.conv.weight_g
+                weight_v = self.conv.weight_v
+            deepspeed.zero.register_external_parameter(self, weight_v)
+            deepspeed.zero.register_external_parameter(self, weight_g)
         else:
-            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = SEWDSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -455,15 +447,8 @@ class SEWDFeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
+                hidden_states = self._gradient_checkpointing_func(
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -483,7 +468,6 @@ class SEWDFeatureExtractor(SEWDFeatureEncoder):
         )
 
 
-# Copied from transformers.models.deberta.modeling_deberta.ContextPooler
 class ContextPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -506,7 +490,6 @@ class ContextPooler(nn.Module):
         return self.config.hidden_size
 
 
-# Copied from transformers.models.deberta.modeling_deberta.XSoftmax with deberta->deberta_v2
 class XSoftmax(torch.autograd.Function):
     """
     Masked Softmax which is optimized for saving memory
@@ -536,20 +519,20 @@ class XSoftmax(torch.autograd.Function):
     ```"""
 
     @staticmethod
-    def forward(self, input, mask, dim):
-        self.dim = dim
+    def forward(ctx, input, mask, dim):
+        ctx.dim = dim
         rmask = ~(mask.to(torch.bool))
 
         output = input.masked_fill(rmask, torch.tensor(torch.finfo(input.dtype).min))
-        output = torch.softmax(output, self.dim)
+        output = torch.softmax(output, ctx.dim)
         output.masked_fill_(rmask, 0)
-        self.save_for_backward(output)
+        ctx.save_for_backward(output)
         return output
 
     @staticmethod
-    def backward(self, grad_output):
-        (output,) = self.saved_tensors
-        inputGrad = softmax_backward_data(self, grad_output, output, self.dim, output)
+    def backward(ctx, grad_output):
+        (output,) = ctx.saved_tensors
+        inputGrad = softmax_backward_data(ctx, grad_output, output, ctx.dim, output)
         return inputGrad, None, None
 
     @staticmethod
@@ -561,17 +544,16 @@ class XSoftmax(torch.autograd.Function):
         r_mask = g.op(
             "Cast",
             g.op("Sub", g.op("Constant", value_t=torch.tensor(1, dtype=torch.int64)), mask_cast_value),
-            to_i=sym_help.cast_pytorch_to_onnx["Byte"],
+            to_i=sym_help.cast_pytorch_to_onnx["Bool"],
         )
         output = masked_fill(
             g, self, r_mask, g.op("Constant", value_t=torch.tensor(torch.finfo(self.type().dtype()).min))
         )
         output = softmax(g, output, dim)
-        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.uint8)))
+        return masked_fill(g, output, r_mask, g.op("Constant", value_t=torch.tensor(0, dtype=torch.bool)))
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DropoutContext
-class DropoutContext(object):
+class DropoutContext:
     def __init__(self):
         self.dropout = 0
         self.mask = None
@@ -579,7 +561,6 @@ class DropoutContext(object):
         self.reuse_mask = True
 
 
-# Copied from transformers.models.deberta.modeling_deberta.XDropout
 class XDropout(torch.autograd.Function):
     """Optimized dropout function to save computation and memory by using mask operation instead of multiplication."""
 
@@ -619,7 +600,6 @@ class XDropout(torch.autograd.Function):
         return symbolic_opset12.dropout(g, input, dropout_p, train)
 
 
-# Copied from transformers.models.deberta.modeling_deberta.StableDropout
 class StableDropout(nn.Module):
     """
     Optimized dropout module for stabilizing the training
@@ -669,13 +649,12 @@ class StableDropout(nn.Module):
             return self.drop_prob
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaV2->SEWD, DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
 class SEWDSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = StableDropout(config.activation_dropout)
+        self.dropout = nn.Dropout(config.activation_dropout)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -684,7 +663,6 @@ class SEWDSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DisentangledSelfAttention with attention_probs_dropout_prob->attention_dropout, hidden_dropout_prob->activation_dropout
 class DisentangledSelfAttention(nn.Module):
     """
     Disentangled self-attention module
@@ -756,15 +734,15 @@ class DisentangledSelfAttention(nn.Module):
                 Input states to the module usually the output from previous layer, it will be the Q,K and V in
                 *Attention(Q,K,V)*
 
-            attention_mask (`torch.ByteTensor`):
+            attention_mask (`torch.BoolTensor`):
                 An attention mask matrix of shape [*B*, *N*, *N*] where *B* is the batch size, *N* is the maximum
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            output_attentions (`bool`, optional):
+            output_attentions (`bool`, *optional*):
                 Whether return the attention matrix.
 
-            query_states (`torch.FloatTensor`, optional):
+            query_states (`torch.FloatTensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`torch.LongTensor`):
@@ -791,9 +769,7 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             scale_factor += 1
         scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
-        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / torch.tensor(
-            scale, dtype=query_layer.dtype
-        )
+        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2) / scale.to(dtype=query_layer.dtype))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -829,7 +805,11 @@ class DisentangledSelfAttention(nn.Module):
         if relative_pos is None:
             q = query_layer.size(-2)
             relative_pos = build_relative_position(
-                q, key_layer.size(-2), bucket_size=self.position_buckets, max_position=self.max_relative_positions
+                q,
+                key_layer.size(-2),
+                bucket_size=self.position_buckets,
+                max_position=self.max_relative_positions,
+                device=query_layer.device,
             )
         if relative_pos.dim() == 2:
             relative_pos = relative_pos.unsqueeze(0).unsqueeze(0)
@@ -854,15 +834,11 @@ class DisentangledSelfAttention(nn.Module):
             if "c2p" in self.pos_att_type:
                 pos_key_layer = self.transpose_for_scores(
                     self.pos_key_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
             if "p2c" in self.pos_att_type:
                 pos_query_layer = self.transpose_for_scores(
                     self.pos_query_proj(rel_embeddings), self.num_attention_heads
-                ).repeat(
-                    query_layer.size(0) // self.num_attention_heads, 1, 1
-                )  # .split(self.all_head_size, dim=-1)
+                ).repeat(query_layer.size(0) // self.num_attention_heads, 1, 1)  # .split(self.all_head_size, dim=-1)
 
         score = 0
         # content->position
@@ -875,7 +851,7 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
             )
-            score += c2p_att / torch.tensor(scale, dtype=c2p_att.dtype)
+            score += c2p_att / scale.to(dtype=c2p_att.dtype)
 
         # position->content
         if "p2c" in self.pos_att_type:
@@ -886,7 +862,8 @@ class DisentangledSelfAttention(nn.Module):
                     key_layer.size(-2),
                     bucket_size=self.position_buckets,
                     max_position=self.max_relative_positions,
-                ).to(query_layer.device)
+                    device=query_layer.device,
+                )
                 r_pos = r_pos.unsqueeze(0)
             else:
                 r_pos = relative_pos
@@ -898,12 +875,11 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
-            score += p2c_att / torch.tensor(scale, dtype=p2c_att.dtype)
+            score += p2c_att / scale.to(dtype=p2c_att.dtype)
 
         return score
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaAttention with Deberta->SEWD
 class SEWDAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -956,13 +932,12 @@ class SEWDIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaOutput with DebertaLayerNorm->LayerNorm, hidden_dropout_prob->activation_dropout
 class SEWDOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps)
-        self.dropout = StableDropout(config.activation_dropout)
+        self.dropout = nn.Dropout(config.activation_dropout)
         self.config = config
 
     def forward(self, hidden_states, input_tensor):
@@ -972,7 +947,6 @@ class SEWDOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->SEWD
 class SEWDLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1007,7 +981,6 @@ class SEWDLayer(nn.Module):
             return layer_output
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.ConvLayer
 class ConvLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1044,7 +1017,6 @@ class ConvLayer(nn.Module):
         return output_states
 
 
-# Copied from transformers.models.deberta_v2.modeling_deberta_v2.DebertaV2Encoder with DebertaV2->SEWD
 class SEWDTransformerEncoder(nn.Module):
     """Modified BertEncoder with relative position bias support"""
 
@@ -1085,7 +1057,6 @@ class SEWDTransformerEncoder(nn.Module):
         if attention_mask.dim() <= 2:
             extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
             attention_mask = extended_attention_mask * extended_attention_mask.squeeze(-2).unsqueeze(-1)
-            attention_mask = attention_mask.byte()
         elif attention_mask.dim() == 3:
             attention_mask = attention_mask.unsqueeze(1)
 
@@ -1095,7 +1066,11 @@ class SEWDTransformerEncoder(nn.Module):
         if self.relative_attention and relative_pos is None:
             q = query_states.size(-2) if query_states is not None else hidden_states.size(-2)
             relative_pos = build_relative_position(
-                q, hidden_states.size(-2), bucket_size=self.position_buckets, max_position=self.max_relative_positions
+                q,
+                hidden_states.size(-2),
+                bucket_size=self.position_buckets,
+                max_position=self.max_relative_positions,
+                device=hidden_states.device,
             )
         return relative_pos
 
@@ -1112,7 +1087,7 @@ class SEWDTransformerEncoder(nn.Module):
         if attention_mask.dim() <= 2:
             input_mask = attention_mask
         else:
-            input_mask = (attention_mask.sum(-2) > 0).byte()
+            input_mask = attention_mask.sum(-2) > 0
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)
 
@@ -1126,25 +1101,18 @@ class SEWDTransformerEncoder(nn.Module):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                output_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                output_states = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     next_kv,
                     attention_mask,
                     query_states,
                     relative_pos,
                     rel_embeddings,
+                    output_attentions,
                 )
             else:
                 output_states = layer_module(
@@ -1207,7 +1175,8 @@ class SEWDEncoder(nn.Module):
             )
         else:
             # make sure padded tokens output 0
-            hidden_states[~attention_mask.bool()] = 0.0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask.bool()] = 0.0
 
             input_lengths = (attention_mask.long()).sum(-1)
             # apply pooling formula to get real output_lengths
@@ -1254,7 +1223,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
     config_class = SEWDConfig
     base_model_prefix = "sew-d"
     main_input_name = "input_values"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -1301,7 +1269,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1319,10 +1287,6 @@ class SEWDPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, SEWDTransformerEncoder):
-            module.gradient_checkpointing = value
 
 
 SEWD_START_DOCSTRING = r"""
@@ -1347,10 +1311,10 @@ SEWD_START_DOCSTRING = r"""
 SEWD_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1389,7 +1353,7 @@ class SEWDModel(SEWDPreTrainedModel):
         self.feature_dropout = nn.Dropout(config.feat_proj_dropout)
 
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         self.encoder = SEWDEncoder(config)
 
@@ -1445,7 +1409,6 @@ class SEWDModel(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1507,11 +1470,13 @@ class SEWDModel(SEWDPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV_2_VEC_2->SEWD
 class SEWDForCTC(SEWDPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
         self.sew_d = SEWDModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
+
+        self.target_lang = target_lang
 
         if config.vocab_size is None:
             raise ValueError(
@@ -1528,13 +1493,34 @@ class SEWDForCTC(SEWDPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def tie_weights(self):
+        """
+        This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
+        passing `target_lang=...` to `from_pretrained(...)`.
+
+        This method is **not** supposed to be called by the user and is prone to be changed in the future.
+        """
+
+        # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
+        # correctly load adapter layers for SEWD so that we do not have to introduce a new API to
+        # [`PreTrainedModel`]. While slightly hacky, SEWD never has to tie input and output embeddings, so that it is
+        # ok to repurpose this function here.
+        target_lang = self.target_lang
+
+        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
+            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
+        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
+            logger.info("By default `target_lang` is set to 'eng'.")
+        elif target_lang is not None:
+            self.load_adapter(target_lang, force_load=True)
+
     def freeze_feature_extractor(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1547,9 +1533,16 @@ class SEWDForCTC(SEWDPreTrainedModel):
         """
         self.sew_d.feature_extractor._freeze_parameters()
 
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.sew_d.parameters():
+            param.requires_grad = False
+
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1572,8 +1565,10 @@ class SEWDForCTC(SEWDPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None and labels.max() >= self.config.vocab_size:
+            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.sew_d(
             input_values,
@@ -1590,10 +1585,6 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
         loss = None
         if labels is not None:
-
-            if labels.max() >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
@@ -1661,7 +1652,7 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
         not be updated during training.
         """
         warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5."
+            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
             "Please use the equivalent `freeze_feature_encoder` method instead.",
             FutureWarning,
         )
@@ -1684,7 +1675,6 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1732,7 +1722,8 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -1752,3 +1743,6 @@ class SEWDForSequenceClassification(SEWDPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["SEWDForCTC", "SEWDForSequenceClassification", "SEWDModel", "SEWDPreTrainedModel"]

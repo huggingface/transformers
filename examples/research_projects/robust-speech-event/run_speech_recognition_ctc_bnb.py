@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
-""" Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
+"""Fine-tuning a 🤗 Transformers CTC model for automatic speech recognition"""
 
 import functools
 import json
@@ -25,12 +25,12 @@ import warnings
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Union
 
+import bitsandbytes as bnb
 import datasets
 import numpy as np
 import torch
 from datasets import DatasetDict, load_dataset, load_metric
 
-import bitsandbytes as bnb
 import transformers
 from transformers import (
     AutoConfig,
@@ -104,8 +104,8 @@ class ModelArguments:
         default=0.05,
         metadata={
             "help": (
-                "Probability of each feature vector along the time axis to be chosen as the start of the vector"
-                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "Probability of each feature vector along the time axis to be chosen as the start of the vector "
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature "
                 "vectors will be masked along the time axis."
             )
         },
@@ -292,7 +292,7 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of_labels: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lenghts and need
+        # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
@@ -344,7 +344,7 @@ def create_vocabulary_from_data(
         lambda vocab_1, vocab_2: set(vocab_1["vocab"][0]) | set(vocab_2["vocab"][0]), vocabs.values()
     )
 
-    vocab_dict = {v: k for k, v in enumerate(sorted(list(vocab_set)))}
+    vocab_dict = {v: k for k, v in enumerate(sorted(vocab_set))}
 
     # replace white space with delimiter token
     if word_delimiter_token is not None:
@@ -399,7 +399,7 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
         f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
     # Set the verbosity to info of the Transformers logger (on main process only):
@@ -418,7 +418,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -443,7 +443,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.use_auth_token,
         )
 
         if data_args.max_eval_samples is not None:
@@ -481,7 +481,7 @@ def main():
     # the tokenizer
     # load config
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     # 4. Next, if no tokenizer file is defined,
@@ -532,11 +532,11 @@ def main():
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.use_auth_token,
         **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.use_auth_token
     )
 
     # adapt config
@@ -564,7 +564,7 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         config=config,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.use_auth_token,
     )
 
     # freeze encoder
@@ -680,8 +680,7 @@ def main():
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
 
-    decay_parameters = get_parameter_names(model, [torch.nn.LayerNorm])
-    decay_parameters = [name for name in decay_parameters if "bias" not in name]
+    decay_parameters = get_parameter_names(model, [torch.nn.LayerNorm], ["bias", "layernorm", "rmsnorm"])
     optimizer_grouped_parameters = [
         {
             "params": [p for n, p in model.named_parameters() if n in decay_parameters],
@@ -717,7 +716,6 @@ def main():
 
     # Training
     if training_args.do_train:
-
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint
@@ -758,7 +756,7 @@ def main():
     config_name = data_args.dataset_config_name if data_args.dataset_config_name is not None else "na"
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
-        "tasks": "speech-recognition",
+        "tasks": "automatic-speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
         "dataset_args": (
             f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split:"

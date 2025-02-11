@@ -185,7 +185,7 @@ class RepoCreateCommand(BaseUserCommand):
                 print("Abort")
                 exit()
         try:
-            url = create_repo(token, name=self.args.name, organization=self.args.organization)
+            url = create_repo(repo_id=full_name, token=token)
         except HTTPError as e:
             print(e)
             print(ANSI.red(e.response.text))

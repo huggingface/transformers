@@ -23,7 +23,6 @@ from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
-
     # to overwrite at feature extractactor specific tests
     feat_extract_tester = None
     feature_extraction_class = None
@@ -392,7 +391,7 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         feat_dict["return_attention_mask"] = True
         feat_extract = self.feature_extraction_class(**feat_dict)
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
-        input_lenghts = [len(x) for x in speech_inputs]
+        input_lengths = [len(x) for x in speech_inputs]
         input_name = feat_extract.model_input_names[0]
 
         processed = BatchFeature({input_name: speech_inputs})
@@ -400,25 +399,25 @@ class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):
         processed = feat_extract.pad(processed, padding="longest", return_tensors="np")
         self.assertIn("attention_mask", processed)
         self.assertListEqual(list(processed.attention_mask.shape), list(processed[input_name].shape[:2]))
-        self.assertListEqual(processed.attention_mask.sum(-1).tolist(), input_lenghts)
+        self.assertListEqual(processed.attention_mask.sum(-1).tolist(), input_lengths)
 
     def test_attention_mask_with_truncation(self):
         feat_dict = self.feat_extract_dict
         feat_dict["return_attention_mask"] = True
         feat_extract = self.feature_extraction_class(**feat_dict)
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
-        input_lenghts = [len(x) for x in speech_inputs]
+        input_lengths = [len(x) for x in speech_inputs]
         input_name = feat_extract.model_input_names[0]
 
         processed = BatchFeature({input_name: speech_inputs})
-        max_length = min(input_lenghts)
+        max_length = min(input_lengths)
 
         processed_pad = feat_extract.pad(
             processed, padding="max_length", max_length=max_length, truncation=True, return_tensors="np"
         )
         self.assertIn("attention_mask", processed_pad)
         self.assertListEqual(
-            list(processed_pad.attention_mask.shape), list((processed_pad[input_name].shape[0], max_length))
+            list(processed_pad.attention_mask.shape), [processed_pad[input_name].shape[0], max_length]
         )
         self.assertListEqual(
             processed_pad.attention_mask[:, :max_length].sum(-1).tolist(), [max_length for x in speech_inputs]

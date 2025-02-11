@@ -1,4 +1,4 @@
-transformers == 3.5.1
+transformers == 4.38.0
 
 # For ROUGE
 nltk

@@ -3,7 +3,7 @@
 Welcome to the robust speech recognition challenge 🎙️ !
 
 The goal of this event is to build **robust**, **real-world** speech recognition (ASR) systems in as many languages as possible 🌏🌍🌎.
-If necessary and available, free access to a V100S 32 GB GPU will kindly be provided by the [OVHcloud team]( https://www.ovhcloud.com/) 🚀.
+If necessary and available, free access to a V100S 32 GB GPU will kindly be provided by the [OVHcloud team](https://www.ovhcloud.com/) 🚀.
 This document summarizes all the relevant information required for the speech community event 📋.
 
 To sign-up, please see [this forum post](https://discuss.huggingface.co/t/open-to-the-community-robust-speech-recognition-challenge/13614) 🤗. Please make sure to:
@@ -112,7 +112,7 @@ Hugging Face Hub for additional audio data, for example by selecting the categor
 ["speech-processing"](https://huggingface.co/datasets?task_categories=task_categories:speech-processing&sort=downloads).
 All datasets that are available on the Hub can be downloaded via the 🤗 Datasets library in the same way Common Voice is downloaded.
 If one wants to combine multiple datasets for training, it might make sense to take a look at 
-the [`interleave_datasets`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=interleave#datasets.interleave_datasets) function.
+the [`interleave_datasets`](https://huggingface.co/docs/datasets/package_reference/main_classes?highlight=interleave#datasets.interleave_datasets) function.
 
 In addition, participants can also make use of their audio data. Here, please make sure that you **are allowed to use the audio data**. E.g., if audio data 
 is taken from media platforms, such as YouTube, it should be verified that the media platform and the owner of the data have given her/his approval to use the audio 
@@ -216,7 +216,7 @@ library from source to profit from the most current additions during the communi
 
 Simply run the following steps:
 
-```
+```bash
 $ cd ~/
 $ git clone https://github.com/huggingface/datasets.git
 $ cd datasets
@@ -362,7 +362,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--per_device_train_batch_size="2" \
 	--learning_rate="3e-4" \
 	--save_total_limit="1" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--length_column_name="input_length" \
 	--save_steps="5" \
@@ -438,7 +438,7 @@ echo '''python run_speech_recognition_ctc.py \
 	--learning_rate="7.5e-5" \
 	--warmup_steps="2000" \
 	--length_column_name="input_length" \
-	--evaluation_strategy="steps" \
+	--eval_strategy="steps" \
 	--text_column_name="sentence" \
 	--chars_to_ignore , ? . ! \- \; \: \" “ % ‘ ” � — ’ … – \
 	--save_steps="500" \
@@ -703,7 +703,7 @@ We are very excited to be hosting 2 days of talks from Kensho-Technologies, Mozi
 - Memory efficient training:
 
 In case, you are getting out-of-memory errors on your GPU, we recommend to use 
-[bitsandbytes](https://github.com/facebookresearch/bitsandbytes) to replace the 
+[bitsandbytes](https://github.com/TimDettmers/bitsandbytes) to replace the 
 native memory-intensive Adam optimizer with the one of `bitsandbytes`. You
 can simply run the script `./run_speech_recognition_ctc_bnb.py` provided in this 
 folder that makes use of `bitsandbytes` instead of the official one.

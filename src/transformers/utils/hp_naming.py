@@ -96,12 +96,12 @@ class TrialShortNamer:
         if cls.NAMING_INFO is not None:
             return
 
-        info = dict(
-            short_word={},
-            reverse_short_word={},
-            short_param={},
-            reverse_short_param={},
-        )
+        info = {
+            "short_word": {},
+            "reverse_short_word": {},
+            "short_param": {},
+            "reverse_short_param": {},
+        }
 
         field_keys = list(cls.DEFAULTS.keys())
 

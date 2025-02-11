@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch XCLIP model. """
-
+"""Testing suite for the PyTorch XCLIP model."""
 
 import inspect
 import os
@@ -21,8 +20,8 @@ import tempfile
 import unittest
 
 import numpy as np
-
 from huggingface_hub import hf_hub_download
+
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -35,6 +34,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -42,7 +42,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import XCLIPModel, XCLIPTextModel, XCLIPVisionModel
-    from transformers.models.x_clip.modeling_x_clip import XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -60,7 +59,7 @@ class XCLIPVisionModelTester:
         num_frames=8,  # important; the batch size * time must be divisible by the number of frames
         is_training=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         mit_hidden_size=64,
@@ -162,7 +161,7 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -187,10 +186,24 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
@@ -203,9 +216,9 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XCLIPVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/xclip-base-patch32"
+        model = XCLIPVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -317,7 +330,7 @@ class XCLIPTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -393,7 +406,6 @@ class XCLIPTextModelTester:
 
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -410,10 +422,24 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip
     def test_training(self):
         pass
 
+    @unittest.skip
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="X-CLIP does not use inputs_embeds")
@@ -430,18 +456,32 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XCLIPTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/xclip-base-patch32"
+        model = XCLIPTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 class XCLIPModelTester:
-    def __init__(self, parent, projection_dim=64, mit_hidden_size=64, is_training=True):
+    def __init__(
+        self,
+        parent,
+        text_kwargs=None,
+        vision_kwargs=None,
+        projection_dim=64,
+        mit_hidden_size=64,
+        is_training=True,
+    ):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
         self.parent = parent
         self.projection_dim = projection_dim
         self.mit_hidden_size = mit_hidden_size
-        self.text_model_tester = XCLIPTextModelTester(parent)
-        self.vision_model_tester = XCLIPVisionModelTester(parent)
+        self.text_model_tester = XCLIPTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = XCLIPVisionModelTester(parent, **vision_kwargs)
+        self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -494,8 +534,9 @@ class XCLIPModelTester:
 
 
 @require_torch
-class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -506,6 +547,13 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = XCLIPModelTester(self)
+        common_properties = ["projection_dim", "prompt_layers", "prompt_num_attention_heads"]
+        self.config_tester = ConfigTester(
+            self, config_class=XCLIPConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -524,7 +572,7 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="XCLIPModel does not have input/output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     @unittest.skip(reason="XCLIPModel does not support feedforward chunking")
@@ -559,7 +607,7 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
-            return
+            self.skipTest(reason="test_torchscript is set to False")
 
         configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
         configs_no_init.torchscript = True
@@ -598,7 +646,27 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
             model_state_dict = model.state_dict()
             loaded_model_state_dict = loaded_model.state_dict()
 
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
             self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
 
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
@@ -625,9 +693,9 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XCLIPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/xclip-base-patch32"
+        model = XCLIPModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on a spaghetti video
@@ -669,4 +737,40 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[14.0181, 20.2771, 14.4776]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.logits_per_video, expected_logits, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # XCLIP models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32").to(torch_device)
+
+        processor = XCLIPProcessor.from_pretrained(
+            "microsoft/xclip-base-patch32", size=180, crop_size={"height": 180, "width": 180}
+        )
+
+        video = prepare_video()
+        inputs = processor(text="what's in the video", videos=video, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((8, 26, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

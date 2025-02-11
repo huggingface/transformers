@@ -19,6 +19,7 @@ text file or a dataset.
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=fill-mask
 """
+
 import logging
 import os
 import sys
@@ -28,18 +29,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
-from datasets import load_dataset
-from tqdm import tqdm
-
 import jax
 import jax.numpy as jnp
+import numpy as np
+from datasets import load_dataset
 from flax import jax_utils
 from flax.optim import Adam
 from flax.training import common_utils
 from flax.training.common_utils import get_metrics
 from jax.nn import log_softmax
 from modeling_flax_performer import FlaxPerformerForMaskedLM
+from tqdm import tqdm
+
 from transformers import (
     MODEL_FOR_MASKED_LM_MAPPING,
     AutoTokenizer,
@@ -99,7 +100,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -466,7 +467,7 @@ if __name__ == "__main__":
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use --overwrite_output_dir to overcome."
         )
 
@@ -517,14 +518,15 @@ if __name__ == "__main__":
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
+            extension = data_args.train_file.split(".")[-1]
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-        extension = data_args.train_file.split(".")[-1]
+            extension = data_args.validation_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
         datasets = load_dataset(extension, data_files=data_files)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
 
@@ -558,7 +560,7 @@ if __name__ == "__main__":
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -632,7 +634,6 @@ if __name__ == "__main__":
 
     epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
     for epoch in epochs:
-
         # ======================== Training ================================
         # Create sampling rng
         rng, training_rng, eval_rng = jax.random.split(rng, 3)

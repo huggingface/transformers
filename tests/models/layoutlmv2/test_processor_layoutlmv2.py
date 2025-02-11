@@ -20,23 +20,26 @@ import unittest
 from typing import List
 
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.models.layoutlmv2 import LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
+from transformers.models.layoutlmv2 import LayoutLMv2Processor, LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast
 from transformers.models.layoutlmv2.tokenization_layoutlmv2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_pytesseract, require_tokenizers, require_torch, slow
 from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2Processor
+    from transformers import LayoutLMv2ImageProcessor
 
 
 @require_pytesseract
 @require_tokenizers
-class LayoutLMv2ProcessorTest(unittest.TestCase):
+class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tokenizer_class = LayoutLMv2Tokenizer
     rust_tokenizer_class = LayoutLMv2TokenizerFast
+    processor_class = LayoutLMv2Processor
 
     def setUp(self):
         vocab_tokens = [
@@ -57,7 +60,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
             "lowest",
         ]
 
-        feature_extractor_map = {
+        image_processor_map = {
             "do_resize": True,
             "size": 224,
             "apply_ocr": True,
@@ -67,9 +70,9 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(feature_extractor_map) + "\n")
+        self.image_processing_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
+        with open(self.image_processing_file, "w", encoding="utf-8") as fp:
+            fp.write(json.dumps(image_processor_map) + "\n")
 
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
@@ -80,17 +83,17 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
 
-    def get_feature_extractor(self, **kwargs):
-        return LayoutLMv2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+    def get_image_processor(self, **kwargs):
+        return LayoutLMv2ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_default(self):
-        feature_extractor = self.get_feature_extractor()
+        image_processor = self.get_image_processor()
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutLMv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
             processor.save_pretrained(self.tmpdirname)
             processor = LayoutLMv2Processor.from_pretrained(self.tmpdirname)
@@ -98,16 +101,16 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
             self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
             self.assertIsInstance(processor.tokenizer, (LayoutLMv2Tokenizer, LayoutLMv2TokenizerFast))
 
-            self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-            self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
+            self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
+            self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = LayoutLMv2Processor(feature_extractor=self.get_feature_extractor(), tokenizer=self.get_tokenizer())
+        processor = LayoutLMv2Processor(image_processor=self.get_image_processor(), tokenizer=self.get_tokenizer())
         processor.save_pretrained(self.tmpdirname)
 
         # slow tokenizer
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
+        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
         processor = LayoutLMv2Processor.from_pretrained(
             self.tmpdirname, use_fast=False, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
@@ -116,12 +119,12 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, LayoutLMv2Tokenizer)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
         # fast tokenizer
         tokenizer_add_kwargs = self.get_rust_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
-        feature_extractor_add_kwargs = self.get_feature_extractor(do_resize=False, size=30)
+        image_processor_add_kwargs = self.get_image_processor(do_resize=False, size=30)
 
         processor = LayoutLMv2Processor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_resize=False, size=30
@@ -130,8 +133,22 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, LayoutLMv2TokenizerFast)
 
-        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
+        self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+
+    def test_model_input_names(self):
+        image_processor = self.get_image_processor()
+        tokenizer = self.get_tokenizer()
+
+        processor = LayoutLMv2Processor(tokenizer=tokenizer, image_processor=image_processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # add extra args
+        inputs = processor(text=input_str, images=image_input, return_codebook_pixels=False, return_image_mask=False)
+
+        self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
     @slow
     def test_overflowing_tokens(self):
@@ -140,7 +157,7 @@ class LayoutLMv2ProcessorTest(unittest.TestCase):
         from datasets import load_dataset
 
         # set up
-        datasets = load_dataset("nielsr/funsd")
+        datasets = load_dataset("nielsr/funsd", trust_remote_code=True)
         processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased", revision="no_ocr")
 
         def preprocess_data(examples):
@@ -176,7 +193,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
         # we verify our implementation on 2 document images from the DocVQA dataset
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test")
+        ds = load_dataset("hf-internal-testing/fixtures_docvqa", split="test", trust_remote_code=True)
 
         image_1 = Image.open(ds[0]["file"]).convert("RGB")
         image_2 = Image.open(ds[1]["file"]).convert("RGB")
@@ -193,54 +210,46 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_1(self):
         # case 1: document image classification (training, inference) + token classification (inference), apply_ocr = True
 
-        feature_extractor = LayoutLMv2FeatureExtractor()
+        image_processor = LayoutLMv2ImageProcessor()
         tokenizers = self.get_tokenizers
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutLMv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
             # not batched
-            input_feat_extract = feature_extractor(images[0], return_tensors="pt")
+            input_image_proc = image_processor(images[0], return_tensors="pt")
             input_processor = processor(images[0], return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify image
-            self.assertAlmostEqual(
-                input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2
-            )
+            self.assertAlmostEqual(input_image_proc["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
-            # fmt: off
-            expected_decoding = "[CLS] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
-            # fmt: on
+            expected_decoding = "[CLS] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # fmt: skip
             decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
-            input_feat_extract = feature_extractor(images, return_tensors="pt")
+            input_image_proc = image_processor(images, return_tensors="pt")
             input_processor = processor(images, padding=True, return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify images
-            self.assertAlmostEqual(
-                input_feat_extract["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2
-            )
+            self.assertAlmostEqual(input_image_proc["pixel_values"].sum(), input_processor["image"].sum(), delta=1e-2)
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
-            # fmt: off
-            expected_decoding = "[CLS] 7 itc limited report and accounts 2013 itc ’ s brands : an asset for the nation the consumer needs and aspirations they fulfil, the benefit they generate for millions across itc ’ s value chains, the future - ready capabilities that support them, and the value that they create for the country, have made itc ’ s brands national assets, adding to india ’ s competitiveness. it is itc ’ s aspiration to be the no 1 fmcg player in the country, driven by its new fmcg businesses. a recent nielsen report has highlighted that itc's new fmcg businesses are the fastest growing among the top consumer goods companies operating in india. itc takes justifiable pride that, along with generating economic value, these celebrated indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. di wills * ; love delightfully soft skin? aia ans source : https : / / www. industrydocuments. ucsf. edu / docs / snbx0223 [SEP] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD]"  # noqa: E231
-            # fmt: on
+            expected_decoding = "[CLS] 7 itc limited report and accounts 2013 itc ’ s brands : an asset for the nation the consumer needs and aspirations they fulfil, the benefit they generate for millions across itc ’ s value chains, the future - ready capabilities that support them, and the value that they create for the country, have made itc ’ s brands national assets, adding to india ’ s competitiveness. it is itc ’ s aspiration to be the no 1 fmcg player in the country, driven by its new fmcg businesses. a recent nielsen report has highlighted that itc's new fmcg businesses are the fastest growing among the top consumer goods companies operating in india. itc takes justifiable pride that, along with generating economic value, these celebrated indian brands also drive the creation of larger societal capital through the virtuous cycle of sustainable and inclusive growth. di wills * ; love delightfully soft skin? aia ans source : https : / / www. industrydocuments. ucsf. edu / docs / snbx0223 [SEP] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD] [PAD]"  # fmt: skip
             decoding = processor.decode(input_processor.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -248,12 +257,12 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_2(self):
         # case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False
 
-        feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+        image_processor = LayoutLMv2ImageProcessor(apply_ocr=False)
         tokenizers = self.get_tokenizers
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutLMv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
             # not batched
             words = ["hello", "world"]
@@ -278,7 +287,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -302,12 +311,12 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_3(self):
         # case 3: token classification (training), apply_ocr=False
 
-        feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+        image_processor = LayoutLMv2ImageProcessor(apply_ocr=False)
         tokenizers = self.get_tokenizers
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutLMv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
             # not batched
             words = ["weirdly", "world"]
@@ -317,7 +326,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -339,7 +348,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "labels", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -367,12 +376,12 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
     def test_processor_case_4(self):
         # case 4: visual question answering (inference), apply_ocr=True
 
-        feature_extractor = LayoutLMv2FeatureExtractor()
+        image_processor = LayoutLMv2ImageProcessor()
         tokenizers = self.get_tokenizers
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutLMv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
             # not batched
             question = "What's his name?"
@@ -380,14 +389,12 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
             # this was obtained with Tesseract 4.1.1
-            # fmt: off
-            expected_decoding = "[CLS] what's his name? [SEP] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # noqa: E231
-            # fmt: on
+            expected_decoding = "[CLS] what's his name? [SEP] 11 : 14 to 11 : 39 a. m 11 : 39 to 11 : 44 a. m. 11 : 44 a. m. to 12 : 25 p. m. 12 : 25 to 12 : 58 p. m. 12 : 58 to 4 : 00 p. m. 2 : 00 to 5 : 00 p. m. coffee break coffee will be served for men and women in the lobby adjacent to exhibit area. please move into exhibit area. ( exhibits open ) trrf general session ( part | ) presiding : lee a. waller trrf vice president “ introductory remarks ” lee a. waller, trrf vice presi - dent individual interviews with trrf public board members and sci - entific advisory council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public refrigerated warehousing industry is looking for. plus questions from the floor. dr. emil m. mrak, university of cal - ifornia, chairman, trrf board ; sam r. cecil, university of georgia college of agriculture ; dr. stanley charm, tufts university school of medicine ; dr. robert h. cotton, itt continental baking company ; dr. owen fennema, university of wis - consin ; dr. robert e. hardenburg, usda. questions and answers exhibits open capt. jack stoney room trrf scientific advisory council meeting ballroom foyer [SEP]"  # fmt: skip
             decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
@@ -399,7 +406,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -409,21 +416,19 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify bbox
-            # fmt: off
-            expected_bbox = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [0, 45, 67, 80], [72, 56, 109, 67], [72, 56, 109, 67], [116, 56, 189, 67], [198, 59, 253, 66], [257, 59, 285, 66], [289, 59, 365, 66], [372, 59, 407, 66], [74, 136, 161, 158], [74, 136, 161, 158], [74, 136, 161, 158], [74, 136, 161, 158], [1000, 1000, 1000, 1000]]  # noqa: E231
-            # fmt: on
+            expected_bbox = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1000, 1000, 1000, 1000], [0, 45, 67, 80], [72, 56, 109, 67], [72, 56, 109, 67], [116, 56, 189, 67], [198, 59, 253, 66], [257, 59, 285, 66], [289, 59, 365, 66], [372, 59, 407, 66], [74, 136, 161, 158], [74, 136, 161, 158], [74, 136, 161, 158], [74, 136, 161, 158], [1000, 1000, 1000, 1000]]  # fmt: skip
             self.assertListEqual(input_processor.bbox[1].tolist(), expected_bbox)
 
     @slow
     def test_processor_case_5(self):
         # case 5: visual question answering (inference), apply_ocr=False
 
-        feature_extractor = LayoutLMv2FeatureExtractor(apply_ocr=False)
+        image_processor = LayoutLMv2ImageProcessor(apply_ocr=False)
         tokenizers = self.get_tokenizers
         images = self.get_images
 
         for tokenizer in tokenizers:
-            processor = LayoutLMv2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor = LayoutLMv2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
             # not batched
             question = "What's his name?"
@@ -433,7 +438,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
@@ -449,7 +454,7 @@ class LayoutLMv2ProcessorIntegrationTests(unittest.TestCase):
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(input_processor.keys())
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids

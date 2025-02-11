@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" OpenAI GPT configuration"""
+"""OpenAI GPT configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -21,15 +21,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/config.json"}
-
 
 class OpenAIGPTConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
     used to instantiate a GPT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT
-    [openai-gpt](https://huggingface.co/openai-gpt) architecture from OpenAI.
+    [openai-community/openai-gpt](https://huggingface.co/openai-community/openai-gpt) architecture from OpenAI.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -56,12 +54,10 @@ class OpenAIGPTConfig(PretrainedConfig):
             The dropout ratio for the embeddings.
         attn_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention.
-        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
             The epsilon to use in the layer normalization layers
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        predict_special_tokens (`bool`, *optional*, defaults to `True`):
-            Whether or not special tokens should be predicted when the model has a language modeling head.
         summary_type (`str`, *optional*, defaults to `"cls_index"`):
             Argument used when doing sequence summary, used in the models [`OpenAIGPTDoubleHeadsModel`] and
             [`OpenAIGPTDoubleHeadsModel`].
@@ -93,8 +89,6 @@ class OpenAIGPTConfig(PretrainedConfig):
             [`OpenAIGPTDoubleHeadsModel`].
 
             The dropout ratio to be used after the projection and activation.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
 
 
     Examples:
@@ -105,7 +99,7 @@ class OpenAIGPTConfig(PretrainedConfig):
     >>> # Initializing a GPT configuration
     >>> configuration = OpenAIGPTConfig()
 
-    >>> # Initializing a model from the configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = OpenAIGPTModel(configuration)
 
     >>> # Accessing the model configuration
@@ -133,13 +127,12 @@ class OpenAIGPTConfig(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        predict_special_tokens=True,
         summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.n_positions = n_positions
@@ -152,10 +145,12 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.predict_special_tokens = predict_special_tokens
         self.summary_type = summary_type
         self.summary_use_proj = summary_use_proj
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
         super().__init__(**kwargs)
+
+
+__all__ = ["OpenAIGPTConfig"]

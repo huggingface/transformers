@@ -32,22 +32,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
+import jax
+import jax.numpy as jnp
+import optax
 import torch
+from flax import jax_utils
+from flax.jax_utils import unreplicate
+from flax.training import train_state
+from flax.training.common_utils import get_metrics, shard, shard_prng_key
+from modeling_hybrid_clip import FlaxHybridCLIP
 from torchvision.datasets import VisionDataset
 from torchvision.io import ImageReadMode, read_image
 from torchvision.transforms import CenterCrop, ConvertImageDtype, Normalize, Resize
 from torchvision.transforms.functional import InterpolationMode
 from tqdm import tqdm
 
-import jax
-import jax.numpy as jnp
-import optax
 import transformers
-from flax import jax_utils
-from flax.jax_utils import unreplicate
-from flax.training import train_state
-from flax.training.common_utils import get_metrics, shard, shard_prng_key
-from modeling_hybrid_clip import FlaxHybridCLIP
 from transformers import AutoTokenizer, HfArgumentParser, TrainingArguments, is_tensorboard_available, set_seed
 
 
@@ -78,7 +78,7 @@ class ModelArguments:
     text_model_name_or_path: str = field(
         metadata={
             "help": (
-                "The text model checkpoint for weights initialization."
+                "The text model checkpoint for weights initialization. "
                 "Don't set if you want to train a model from scratch."
             )
         },
@@ -86,7 +86,7 @@ class ModelArguments:
     vision_model_name_or_path: str = field(
         metadata={
             "help": (
-                "The vision model checkpoint for weights initialization."
+                "The vision model checkpoint for weights initialization. "
                 "Don't set if you want to train a model from scratch."
             )
         },
@@ -159,9 +159,6 @@ class DataTrainingArguments:
                 "value if set."
             )
         },
-    )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -283,7 +280,7 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
 
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
+) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
@@ -311,7 +308,7 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use --overwrite_output_dir to overcome."
         )
 
@@ -341,7 +338,7 @@ def main():
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 

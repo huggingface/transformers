@@ -14,32 +14,23 @@
 # limitations under the License.
 
 
-import copy
 import inspect
-import os
-import tempfile
 import unittest
 
 from transformers import ImageGPTConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, run_test_using_subprocess, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    _config_zero_init,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         ImageGPTForCausalImageModeling,
         ImageGPTForImageClassification,
         ImageGPTModel,
@@ -48,7 +39,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ImageGPTFeatureExtractor
+    from transformers import ImageGPTImageProcessor
 
 
 class ImageGPTModelTester:
@@ -64,7 +55,7 @@ class ImageGPTModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -108,7 +99,7 @@ class ImageGPTModelTester:
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
-        pixel_values = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
 
         input_mask = None
         if self.use_input_mask:
@@ -140,7 +131,7 @@ class ImageGPTModelTester:
 
         return (
             config,
-            pixel_values,
+            input_ids,
             input_mask,
             head_mask,
             token_type_ids,
@@ -177,66 +168,37 @@ class ImageGPTModelTester:
         config.max_position_embeddings = 1024
         return config
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            pixel_values,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            pixel_values,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
-
-    def create_and_check_imagegpt_model(self, config, pixel_values, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_imagegpt_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = ImageGPTModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(pixel_values, token_type_ids=token_type_ids, head_mask=head_mask)
-        result = model(pixel_values, token_type_ids=token_type_ids)
-        result = model(pixel_values)
+        result = model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_lm_head_model(self, config, pixel_values, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = ImageGPTForCausalImageModeling(config)
         model.to(torch_device)
         model.eval()
 
         labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
-        result = model(pixel_values, token_type_ids=token_type_ids, labels=labels)
+        result = model(input_ids, token_type_ids=token_type_ids, labels=labels)
         self.parent.assertEqual(result.loss.shape, ())
         # ImageGPTForCausalImageModeling doens't have tied input- and output embeddings
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size - 1))
 
     def create_and_check_imagegpt_for_image_classification(
-        self, config, pixel_values, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
     ):
         config.num_labels = self.num_labels
         model = ImageGPTForImageClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
@@ -244,7 +206,7 @@ class ImageGPTModelTester:
 
         (
             config,
-            pixel_values,
+            input_ids,
             input_mask,
             head_mask,
             token_type_ids,
@@ -255,7 +217,7 @@ class ImageGPTModelTester:
         ) = config_and_inputs
 
         inputs_dict = {
-            "pixel_values": pixel_values,
+            "input_ids": input_ids,
             "token_type_ids": token_type_ids,
             "head_mask": head_mask,
         }
@@ -264,14 +226,18 @@ class ImageGPTModelTester:
 
 
 @require_torch
-class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (ImageGPTForCausalImageModeling, ImageGPTForImageClassification, ImageGPTModel) if is_torch_available() else ()
     )
     all_generative_model_classes = (ImageGPTForCausalImageModeling,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-feature-extraction": ImageGPTModel, "image-classification": ImageGPTForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     test_missing_keys = False
-    input_name = "pixel_values"
+    test_torch_exportable = True
 
     # as ImageGPTForImageClassification isn't included in any auto mapping, we add labels here
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -286,11 +252,15 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         return inputs_dict
 
     # we overwrite the _check_scores method of GenerationTesterMixin, as ImageGPTForCausalImageModeling doesn't have tied input- and output embeddings
-    def _check_scores(self, batch_size, scores, length, config):
+    def _check_scores(self, batch_size, scores, generated_length, config):
         expected_shape = (batch_size, config.vocab_size - 1)
         self.assertIsInstance(scores, tuple)
-        self.assertEqual(len(scores), length)
+        self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
+
+    @run_test_using_subprocess
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        super().test_beam_search_generate_dict_outputs_use_cache()
 
     def setUp(self):
         self.model_tester = ImageGPTModelTester(self)
@@ -311,11 +281,29 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_imagegpt_for_image_classification(*config_and_inputs)
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
-        for model_name in IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ImageGPTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "openai/imagegpt-small"
+        model = ImageGPTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -329,191 +317,9 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             expected_arg_names = ["input_ids"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
-
-        for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            model = model_class(config)
-            model.to(torch_device)
-
-            if self.model_tester.is_training is False:
-                model.eval()
-
-            model_vocab_size = config.vocab_size
-            # Retrieve the embeddings and clone theme
-            model_embed = model.resize_token_embeddings(model_vocab_size)
-            cloned_embeddings = model_embed.weight.clone()
-
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
-
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["pixel_values"].clamp_(max=model_vocab_size - 15 - 1)
-
-            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
-            models_equal = True
-            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
-    def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
-
-        original_config.tie_word_embeddings = False
-
-        # if model cannot untied embeddings -> leave test
-        if original_config.tie_word_embeddings:
-            return
-
-        for model_class in self.all_model_classes:
-            config = copy.deepcopy(original_config)
-            model = model_class(config).to(torch_device)
-
-            # if no output embeddings -> leave test
-            if model.get_output_embeddings() is None:
-                continue
-
-            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
-            model_vocab_size = config.vocab_size
-            model.resize_token_embeddings(model_vocab_size + 10)
-            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
-            model.resize_token_embeddings(model_vocab_size - 15)
-            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
-            # Check that it actually resizes the embeddings matrix
-            output_embeds = model.get_output_embeddings()
-            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
-            # Check bias if present
-            if output_embeds.bias is not None:
-                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            # Input ids should be clamped to the maximum size of the vocabulary
-            inputs_dict["pixel_values"].clamp_(max=model_vocab_size - 15 - 1)
-            # Check that the model can still do a forward pass successfully (every parameter should be resized)
-            model(**self._prepare_for_class(inputs_dict, model_class))
-
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            pixel_values = inputs["pixel_values"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(pixel_values)
-
-            with torch.no_grad():
-                model(**inputs)[0]
-
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            return
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            try:
-                pixel_values = inputs["pixel_values"]
-                traced_model = torch.jit.trace(model, pixel_values)
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                if layer_name in loaded_model_state_dict:
-                    p2 = loaded_model_state_dict[layer_name]
-                    if p1.data.ne(p2.data).sum() > 0:
-                        models_equal = False
-
-            self.assertTrue(models_equal)
+    @unittest.skip(reason="The model doesn't support left padding")  # and it's not used enough to be worth fixing :)
+    def test_left_padding_compatibility(self):
+        pass
 
 
 # We will verify our results on an image of cute cats
@@ -526,16 +332,16 @@ def prepare_img():
 @require_vision
 class ImageGPTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ImageGPTFeatureExtractor.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
+    def default_image_processor(self):
+        return ImageGPTImageProcessor.from_pretrained("openai/imagegpt-small") if is_vision_available() else None
 
     @slow
     def test_inference_causal_lm_head(self):
         model = ImageGPTForCausalImageModeling.from_pretrained("openai/imagegpt-small").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -549,4 +355,4 @@ class ImageGPTModelIntegrationTest(unittest.TestCase):
             [[2.3445, 2.6889, 2.7313], [1.0530, 1.2416, 0.5699], [0.2205, 0.7749, 0.3953]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

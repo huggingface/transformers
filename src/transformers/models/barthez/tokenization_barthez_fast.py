@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for the BARThez model."""
-
+"""Tokenization classes for the BARThez model."""
 
 import os
 from shutil import copyfile
@@ -33,28 +32,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "moussaKam/mbarthez": "https://huggingface.co/moussaKam/mbarthez/resolve/main/sentencepiece.bpe.model",
-        "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/sentencepiece.bpe.model",
-        "moussaKam/barthez-orangesum-title": (
-            "https://huggingface.co/moussaKam/barthez-orangesum-title/resolve/main/sentencepiece.bpe.model"
-        ),
-    },
-    "tokenizer_file": {
-        "moussaKam/mbarthez": "https://huggingface.co/moussaKam/mbarthez/resolve/main/tokenizer.json",
-        "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/tokenizer.json",
-        "moussaKam/barthez-orangesum-title": (
-            "https://huggingface.co/moussaKam/barthez-orangesum-title/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "moussaKam/mbarthez": 1024,
-    "moussaKam/barthez": 1024,
-    "moussaKam/barthez-orangesum-title": 1024,
-}
 
 SPIECE_UNDERLINE = "▁"
 
@@ -111,8 +88,6 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = BarthezTokenizer
 
@@ -127,7 +102,7 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        **kwargs
+        **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -146,7 +121,10 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -214,3 +192,6 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+__all__ = ["BarthezTokenizerFast"]

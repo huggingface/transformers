@@ -17,16 +17,13 @@
 import json
 import os
 from functools import lru_cache
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
-
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -36,16 +33,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
     "tokenizer_config_file": "tokenizer_config.json",
 }
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
-    "merges_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
-    "tokenizer_config_file": {
-        "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 
 @lru_cache()
@@ -96,12 +83,15 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import BlenderbotTokenizer
+
     >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
-    >>> tokenizer("Hello world")['input_ids']
-    [6950, 1085, 2]
-    >>> tokenizer(" Hello world")['input_ids']
+    >>> tokenizer.add_prefix_space = False
+    >>> tokenizer("Hello world")["input_ids"]
+    [47, 921, 86, 1085, 2]
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [6950, 1085, 2]
     ```
 
@@ -166,8 +156,6 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.__init__ with Roberta->Blenderbot, RoBERTa->Blenderbot
@@ -184,30 +172,23 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            **kwargs,
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
         )
+
+        # these special tokens are not part of the vocab.json, let's add them in the correct order
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -225,6 +206,19 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+
     @property
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size with Roberta->Blenderbot, RoBERTa->Blenderbot
     def vocab_size(self):
@@ -232,7 +226,9 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_vocab with Roberta->Blenderbot, RoBERTa->Blenderbot
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = dict(self.encoder).copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.bpe with Roberta->Blenderbot, RoBERTa->Blenderbot
     def bpe(self, token):
@@ -368,8 +364,8 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Blenderbot does not
+        make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -399,6 +395,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A Blenderbot sequence has the following format:
         - single sequence: ` X </s>`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added
@@ -409,19 +406,5 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         """
         return token_ids_0 + [self.eos_token_id]
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        inputs = []
-        for is_user, text in conversation.iter_texts():
-            if is_user:
-                # We need to space prefix as it's being done within blenderbot
-                inputs.append(" " + text)
-            else:
-                # Generated responses should contain them already.
-                inputs.append(text)
 
-        full_string = "  ".join(inputs)
-        input_ids = self.encode(full_string)
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-            logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
-        return input_ids
+__all__ = ["BlenderbotTokenizer"]

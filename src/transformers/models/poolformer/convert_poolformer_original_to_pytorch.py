@@ -19,12 +19,12 @@ import json
 from collections import OrderedDict
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
-from transformers import PoolFormerConfig, PoolFormerFeatureExtractor, PoolFormerForImageClassification
+from transformers import PoolFormerConfig, PoolFormerForImageClassification, PoolFormerImageProcessor
 from transformers.utils import logging
 
 
@@ -141,12 +141,12 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     else:
         raise ValueError(f"Size {size} not supported")
 
-    # load feature extractor
-    feature_extractor = PoolFormerFeatureExtractor(crop_pct=crop_pct)
+    # load image processor
+    image_processor = PoolFormerImageProcessor(crop_pct=crop_pct)
 
     # Prepare image
     image = prepare_img()
-    pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
+    pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
 
     logger.info(f"Converting model {model_name}...")
 
@@ -161,9 +161,9 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     model.load_state_dict(state_dict)
     model.eval()
 
-    # Define feature extractor
-    feature_extractor = PoolFormerFeatureExtractor(crop_pct=crop_pct)
-    pixel_values = feature_extractor(images=prepare_img(), return_tensors="pt").pixel_values
+    # Define image processor
+    image_processor = PoolFormerImageProcessor(crop_pct=crop_pct)
+    pixel_values = image_processor(images=prepare_img(), return_tensors="pt").pixel_values
 
     # forward pass
     outputs = model(pixel_values)
@@ -187,12 +187,12 @@ def convert_poolformer_checkpoint(model_name, checkpoint_path, pytorch_dump_fold
     assert logits.shape == expected_shape
     assert torch.allclose(logits[0, :3], expected_slice, atol=1e-2)
 
-    # finally, save model and feature extractor
-    logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
+    # finally, save model and image processor
+    logger.info(f"Saving PyTorch model and image processor to {pytorch_dump_folder_path}...")
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@
 import argparse
 
 from t5x import checkpoints
+
 from transformers import AutoConfig, FlaxAutoModelForSeq2SeqLM
 
 
@@ -81,9 +82,9 @@ def convert_t5x_checkpoint_to_flax(t5x_checkpoint_path, config_name, flax_dump_f
 
         # Global input layer norm
         if config.model_type == "longt5" and config.encoder_attention_type == "transient-global":
-            flax_model_encoder_layer_block["0"][encoder_attn_name]["global_input_layer_norm"][
-                "weight"
-            ] = t5x_global_layer_norm
+            flax_model_encoder_layer_block["0"][encoder_attn_name]["global_input_layer_norm"]["weight"] = (
+                t5x_global_layer_norm
+            )
 
         if split_mlp_wi:
             flax_model_encoder_layer_block["1"]["DenseReluDense"]["wi_0"]["kernel"] = t5x_mlp_wi_0

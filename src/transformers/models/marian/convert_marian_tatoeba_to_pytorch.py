@@ -20,9 +20,9 @@ import re
 from pathlib import Path
 from typing import Tuple
 
+import yaml
 from tqdm import tqdm
 
-import yaml
 from transformers.models.marian.convert_marian_to_pytorch import (
     FRONT_MATTER_TEMPLATE,
     convert,
@@ -34,7 +34,6 @@ from transformers.models.marian.convert_marian_to_pytorch import (
 
 DEFAULT_REPO = "Tatoeba-Challenge"
 DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
-LANG_CODE_URL = "https://datahub.io/core/language-codes/r/language-codes-3b2.csv"
 ISO_URL = "https://cdn-datasets.huggingface.co/language_codes/iso-639-3.csv"
 ISO_PATH = "lang_code_data/iso-639-3.csv"
 LANG_CODE_PATH = "lang_code_data/language-codes-3b2.csv"
@@ -277,13 +276,17 @@ class TatoebaConverter:
             json.dump(metadata, writeobj)
 
     def download_lang_info(self):
+        global LANG_CODE_PATH
         Path(LANG_CODE_PATH).parent.mkdir(exist_ok=True)
         import wget
+        from huggingface_hub import hf_hub_download
 
         if not os.path.exists(ISO_PATH):
             wget.download(ISO_URL, ISO_PATH)
         if not os.path.exists(LANG_CODE_PATH):
-            wget.download(LANG_CODE_URL, LANG_CODE_PATH)
+            LANG_CODE_PATH = hf_hub_download(
+                repo_id="huggingface/language_codes_marianMT", filename="language-codes-3b2.csv", repo_type="dataset"
+            )
 
     def parse_metadata(self, model_name, repo_path=DEFAULT_MODEL_DIR, method="best"):
         p = Path(repo_path) / model_name

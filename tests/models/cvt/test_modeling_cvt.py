@@ -12,10 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch CvT model. """
+"""Testing suite for the PyTorch CvT model."""
 
-
-import inspect
 import unittest
 from math import floor
 
@@ -25,19 +23,19 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import CvtForImageClassification, CvtModel
-    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class CvtConfigTester(ConfigTester):
@@ -54,8 +52,8 @@ class CvtModelTester:
         batch_size=13,
         image_size=64,
         num_channels=3,
-        embed_dim=[16, 48, 96],
-        num_heads=[1, 3, 6],
+        embed_dim=[16, 32, 48],
+        num_heads=[1, 2, 3],
         depth=[1, 2, 10],
         patch_sizes=[7, 3, 3],
         patch_stride=[4, 2, 2],
@@ -143,35 +141,38 @@ class CvtModelTester:
 
 
 @require_torch
-class CvtModelTest(ModelTesterMixin, unittest.TestCase):
+class CvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Cvt does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (CvtModel, CvtForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-feature-extraction": CvtModel, "image-classification": CvtForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
     has_attentions = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = CvtModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=CvtConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["hidden_size", "num_channels"],
+        )
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Cvt does not output attentions")
     def test_attention_outputs(self):
@@ -182,20 +183,8 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Cvt does not support input and output embeddings")
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -243,9 +232,9 @@ class CvtModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CvtModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/cvt-13"
+        model = CvtModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -258,16 +247,16 @@ def prepare_img():
 @require_vision
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained("microsoft/cvt-13")
 
     @slow
     def test_inference_image_classification_head(self):
-        model = CvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
+        model = CvtForImageClassification.from_pretrained("microsoft/cvt-13").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -279,4 +268,4 @@ class CvtModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([0.9285, 0.9015, -0.3150]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -1,0 +1,2 @@
+tensorflow>=2.6.0
+datasets>=1.8.0

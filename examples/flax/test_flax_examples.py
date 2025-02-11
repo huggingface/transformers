@@ -32,6 +32,7 @@ SRC_DIRS = [
         "summarization",
         "token-classification",
         "question-answering",
+        "speech-recognition",
     ]
 ]
 sys.path.extend(SRC_DIRS)
@@ -41,6 +42,7 @@ if SRC_DIRS is not None:
     import run_clm_flax
     import run_flax_glue
     import run_flax_ner
+    import run_flax_speech_recognition_seq2seq
     import run_mlm_flax
     import run_qa
     import run_summarization_flax
@@ -60,14 +62,11 @@ def get_setup_file():
 
 
 def get_results(output_dir, split="eval"):
-    results = {}
     path = os.path.join(output_dir, f"{split}_results.json")
     if os.path.exists(path):
         with open(path, "r") as f:
-            results = json.load(f)
-    else:
-        raise ValueError(f"can't find {path}")
-    return results
+            return json.load(f)
+    raise ValueError(f"can't find {path}")
 
 
 stream_handler = logging.StreamHandler(sys.stdout)
@@ -79,7 +78,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_glue.py
-            --model_name_or_path distilbert-base-uncased
+            --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
             --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
             --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
@@ -102,7 +101,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_clm_flax.py
-            --model_name_or_path distilgpt2
+            --model_name_or_path distilbert/distilgpt2
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --do_train
@@ -126,7 +125,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_summarization.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
             --test_file tests/fixtures/tests_samples/xsum/sample.json
@@ -156,7 +155,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_mlm.py
-            --model_name_or_path distilroberta-base
+            --model_name_or_path distilbert/distilroberta-base
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --output_dir {tmp_dir}
@@ -180,7 +179,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_t5_mlm_flax.py
-            --model_name_or_path t5-small
+            --model_name_or_path google-t5/t5-small
             --train_file ./tests/fixtures/sample_text.txt
             --validation_file ./tests/fixtures/sample_text.txt
             --do_train
@@ -207,7 +206,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_flax_ner.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --train_file tests/fixtures/tests_samples/conll/sample.json
             --validation_file tests/fixtures/tests_samples/conll/sample.json
             --output_dir {tmp_dir}
@@ -234,7 +233,7 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_qa.py
-            --model_name_or_path bert-base-uncased
+            --model_name_or_path google-bert/bert-base-uncased
             --version_2_with_negative
             --train_file tests/fixtures/tests_samples/SQUAD/sample.json
             --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
@@ -255,3 +254,33 @@ class ExamplesTests(TestCasePlus):
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_f1"], 30)
             self.assertGreaterEqual(result["eval_exact"], 30)
+
+    @slow
+    def test_run_flax_speech_recognition_seq2seq(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_flax_speech_recognition_seq2seq.py
+            --model_name_or_path openai/whisper-tiny.en
+            --dataset_name hf-internal-testing/librispeech_asr_dummy
+            --dataset_config clean
+            --train_split_name validation
+            --eval_split_name validation
+            --trust_remote_code
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --num_train_epochs=2
+            --max_train_samples 10
+            --max_eval_samples 10
+            --warmup_steps=8
+            --do_train
+            --do_eval
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --predict_with_generate
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            run_flax_speech_recognition_seq2seq.main()
+            result = get_results(tmp_dir, split="eval")
+            self.assertLessEqual(result["eval_wer"], 0.05)

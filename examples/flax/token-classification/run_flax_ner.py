@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning a 🤗 Flax Transformers model on token classification tasks (NER, POS, CHUNKS)"""
+"""Fine-tuning a 🤗 Flax Transformers model on token classification tasks (NER, POS, CHUNKS)"""
+
 import json
 import logging
 import math
@@ -21,6 +22,7 @@ import os
 import random
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
@@ -28,20 +30,20 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 import datasets
-import numpy as np
-from datasets import ClassLabel, load_dataset
-from tqdm import tqdm
-
 import evaluate
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
-import transformers
+from datasets import ClassLabel, load_dataset
 from flax import struct, traverse_util
 from flax.jax_utils import pad_shard_unpad, replicate, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
-from huggingface_hub import Repository
+from huggingface_hub import HfApi
+from tqdm import tqdm
+
+import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,
@@ -49,13 +51,13 @@ from transformers import (
     HfArgumentParser,
     is_tensorboard_available,
 )
-from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
@@ -149,12 +151,28 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -290,14 +308,12 @@ def create_train_state(
         flat_params = traverse_util.flatten_dict(params)
         # find out all LayerNorm parameters
         layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
-        layer_norm_named_params = set(
-            [
-                layer[-2:]
-                for layer_norm_name in layer_norm_candidates
-                for layer in flat_params.keys()
-                if layer_norm_name in "".join(layer).lower()
-            ]
-        )
+        layer_norm_named_params = {
+            layer[-2:]
+            for layer_norm_name in layer_norm_candidates
+            for layer in flat_params.keys()
+            if layer_norm_name in "".join(layer).lower()
+        }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
@@ -325,7 +341,7 @@ def create_train_state(
 
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
+) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
@@ -379,6 +395,15 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token` instead.",
+            FutureWarning,
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_ner", model_args, data_args, framework="flax")
@@ -400,13 +425,13 @@ def main():
 
     # Handle the repository creation
     if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(
-                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
-            )
-        else:
-            repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
+        # Retrieve of infer repo_name
+        repo_name = training_args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(training_args.output_dir).absolute().name
+        # Create repo and retrieve repo_id
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets for token classification task available on the hub at https://huggingface.co/datasets/
@@ -423,7 +448,8 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -437,10 +463,10 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     if raw_datasets["train"] is not None:
         column_names = raw_datasets["train"].column_names
@@ -491,7 +517,8 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer_name_or_path = model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path
     if config.model_type in {"gpt2", "roberta"}:
@@ -499,7 +526,8 @@ def main():
             tokenizer_name_or_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
             add_prefix_space=True,
         )
     else:
@@ -507,14 +535,16 @@ def main():
             tokenizer_name_or_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     model = FlaxAutoModelForTokenClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     # Preprocessing the datasets
@@ -647,7 +677,7 @@ def main():
 
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
-    metric = evaluate.load("seqeval")
+    metric = evaluate.load("seqeval", cache_dir=model_args.cache_dir)
 
     def get_labels(y_pred, y_true):
         # Transform predictions and references tensos to numpy arrays
@@ -694,7 +724,6 @@ def main():
     total_steps = step_per_epoch * num_epochs
     epochs = tqdm(range(num_epochs), desc=f"Epoch ... (1/{num_epochs})", position=0)
     for epoch in epochs:
-
         train_start = time.time()
         train_metrics = []
 
@@ -730,7 +759,6 @@ def main():
                 train_metrics = []
 
             if cur_step % training_args.eval_steps == 0 and cur_step > 0:
-
                 eval_metrics = {}
                 # evaluate
                 for batch in tqdm(
@@ -771,7 +799,13 @@ def main():
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
-                        repo.push_to_hub(commit_message=f"Saving weights and logs of step {cur_step}", blocking=False)
+                        api.upload_folder(
+                            commit_message=f"Saving weights and logs of step {cur_step}",
+                            folder_path=training_args.output_dir,
+                            repo_id=repo_id,
+                            repo_type="model",
+                            token=training_args.hub_token,
+                        )
         epochs.desc = f"Epoch ... {epoch + 1}/{num_epochs}"
 
     # Eval after training

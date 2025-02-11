@@ -12,14 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax Bart model."""
+"""Flax Bart model."""
 
 import math
 import random
 from functools import partial
 from typing import Callable, Optional, Tuple
-
-import numpy as np
 
 import flax.linen as nn
 import jax
@@ -55,7 +53,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/bart-base"
 _CONFIG_FOR_DOC = "BartConfig"
-_TOKENIZER_FOR_DOC = "BartTokenizer"
 
 
 BART_START_DOCSTRING = r"""
@@ -98,7 +95,7 @@ BART_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -112,7 +109,7 @@ BART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -149,7 +146,7 @@ BART_ENCODE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -178,7 +175,7 @@ BART_DECODE_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -220,15 +217,15 @@ BART_DECODE_INPUTS_DOCSTRING = r"""
 """
 
 
-def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
+def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
-    shifted_input_ids = np.zeros_like(input_ids)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1]
-    shifted_input_ids[:, 0] = decoder_start_token_id
+    shifted_input_ids = jnp.zeros_like(input_ids)
+    shifted_input_ids = shifted_input_ids.at[:, 1:].set(input_ids[:, :-1])
+    shifted_input_ids = shifted_input_ids.at[:, 0].set(decoder_start_token_id)
 
-    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
     return shifted_input_ids
 
 
@@ -371,7 +368,7 @@ class FlaxBartAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, float("-inf")).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -715,6 +712,7 @@ class FlaxBartEncoder(nn.Module):
             self.config.max_position_embeddings + self.offset,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
         self.layers = FlaxBartEncoderLayerCollection(self.config, self.dtype)
         self.layernorm_embedding = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
@@ -779,6 +777,7 @@ class FlaxBartDecoder(nn.Module):
             self.config.max_position_embeddings + self.offset,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         self.layers = FlaxBartDecoderLayerCollection(self.config, self.dtype)
@@ -842,6 +841,7 @@ class FlaxBartModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
 
         self.encoder = FlaxBartEncoder(self.config, dtype=self.dtype, embed_tokens=self.shared)
@@ -914,7 +914,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -1016,10 +1016,10 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBartForConditionalGeneration
 
         >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
-        >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1083,10 +1083,10 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBartForConditionalGeneration
 
         >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
-        >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1244,9 +1244,7 @@ class FlaxBartModel(FlaxBartPreTrainedModel):
     module_class = FlaxBartModule
 
 
-append_call_sample_docstring(
-    FlaxBartModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBartModel, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBartForConditionalGenerationModule(nn.Module):
@@ -1352,10 +1350,10 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
 
         ```python
         >>> import jax.numpy as jnp
-        >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxBartForConditionalGeneration
 
         >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
-        >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
         >>> text = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
@@ -1469,10 +1467,10 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
         self,
         decoder_input_ids,
         max_length,
-        attention_mask: Optional[jnp.DeviceArray] = None,
-        decoder_attention_mask: Optional[jnp.DeviceArray] = None,
+        attention_mask: Optional[jax.Array] = None,
+        decoder_attention_mask: Optional[jax.Array] = None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape
@@ -1508,10 +1506,10 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
     Summarization example:
 
     ```python
-    >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+    >>> from transformers import AutoTokenizer, FlaxBartForConditionalGeneration
 
     >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
-    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large-cnn")
 
     >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="np")
@@ -1525,10 +1523,10 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
 
     ```python
     >>> import jax
-    >>> from transformers import BartTokenizer, FlaxBartForConditionalGeneration
+    >>> from transformers import AutoTokenizer, FlaxBartForConditionalGeneration
 
     >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large")
-    >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large")
+    >>> tokenizer = AutoTokenizer.from_pretrained("facebook/bart-large")
 
     >>> TXT = "My friends are <mask> but they eat too many carbs."
     >>> input_ids = tokenizer([TXT], return_tensors="jax")["input_ids"]
@@ -1601,7 +1599,7 @@ class FlaxBartForSequenceClassificationModule(nn.Module):
         eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
 
         # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
-        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
+        if not isinstance(eos_mask, jax.interpreters.partial_eval.DynamicJaxprTracer):
             if len(jnp.unique(eos_mask.sum(1))) > 1:
                 raise ValueError("All examples must have the same number of <eos> tokens.")
 
@@ -1644,7 +1642,6 @@ class FlaxBartForSequenceClassification(FlaxBartPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBartForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSeq2SeqSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1731,7 +1728,6 @@ class FlaxBartForQuestionAnswering(FlaxBartPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBartForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSeq2SeqQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1750,7 +1746,7 @@ class FlaxBartDecoderPreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         config.is_decoder = True
         config.is_encoder_decoder = False
@@ -1888,6 +1884,7 @@ class FlaxBartDecoderWrapper(nn.Module):
             self.config.vocab_size,
             embed_dim,
             embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            dtype=self.dtype,
         )
         self.decoder = FlaxBartDecoder(config=self.config, embed_tokens=embed_tokens, dtype=self.dtype)
 
@@ -1921,7 +1918,6 @@ class FlaxBartForCausalLMModule(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
     ):
-
         outputs = self.model(
             input_ids,
             attention_mask,
@@ -1964,7 +1960,7 @@ class FlaxBartForCausalLMModule(nn.Module):
 class FlaxBartForCausalLM(FlaxBartDecoderPreTrainedModel):
     module_class = FlaxBartForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -1993,8 +1989,18 @@ class FlaxBartForCausalLM(FlaxBartDecoderPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBartForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxBartDecoderPreTrainedModel",
+    "FlaxBartForCausalLM",
+    "FlaxBartForConditionalGeneration",
+    "FlaxBartForQuestionAnswering",
+    "FlaxBartForSequenceClassification",
+    "FlaxBartModel",
+    "FlaxBartPreTrainedModel",
+]

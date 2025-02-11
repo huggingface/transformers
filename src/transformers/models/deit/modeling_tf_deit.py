@@ -12,13 +12,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TensorFlow DeiT model."""
+"""TensorFlow DeiT model."""
 
+from __future__ import annotations
 
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -27,12 +28,13 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFImageClassifierOutput,
-    TFMaskedLMOutput,
+    TFMaskedImageModelingOutput,
 )
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
@@ -52,7 +54,6 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "DeiTConfig"
-_FEAT_EXTRACTOR_FOR_DOC = "DeiTFeatureExtractor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/deit-base-distilled-patch16-224"
@@ -61,12 +62,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 198, 768]
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/deit-base-distilled-patch16-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
-
-
-TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/deit-base-distilled-patch16-224",
-    # See all DeiT models at https://huggingface.co/models?filter=deit
-]
 
 
 @dataclass
@@ -96,11 +91,11 @@ class TFDeiTForImageClassificationWithTeacherOutput(ModelOutput):
     logits: tf.Tensor = None
     cls_logits: tf.Tensor = None
     distillation_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
-class TFDeiTEmbeddings(tf.keras.layers.Layer):
+class TFDeiTEmbeddings(keras.layers.Layer):
     """
     Construct the CLS token, distillation token, position and patch embeddings. Optionally, also the mask token.
     """
@@ -110,18 +105,18 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         self.config = config
         self.use_mask_token = use_mask_token
         self.patch_embeddings = TFDeiTPatchEmbeddings(config=config, name="patch_embeddings")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         self.cls_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
-            initializer=tf.keras.initializers.zeros(),
+            initializer=keras.initializers.zeros(),
             trainable=True,
             name="cls_token",
         )
         self.distillation_token = self.add_weight(
             shape=(1, 1, self.config.hidden_size),
-            initializer=tf.keras.initializers.zeros(),
+            initializer=keras.initializers.zeros(),
             trainable=True,
             name="distillation_token",
         )
@@ -129,22 +124,64 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         if self.use_mask_token:
             self.mask_token = self.add_weight(
                 shape=(1, 1, self.config.hidden_size),
-                initializer=tf.keras.initializers.zeros(),
+                initializer=keras.initializers.zeros(),
                 trainable=True,
                 name="mask_token",
             )
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.add_weight(
             shape=(1, num_patches + 2, self.config.hidden_size),
-            initializer=tf.keras.initializers.zeros(),
+            initializer=keras.initializers.zeros(),
             trainable=True,
             name="position_embeddings",
         )
-        super().build(input_shape)
+
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "patch_embeddings", None) is not None:
+            with tf.name_scope(self.patch_embeddings.name):
+                self.patch_embeddings.build(None)
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+
+    def interpolate_pos_encoding(self, embeddings: tf.Tensor, height: int, width: int) -> tf.Tensor:
+        num_patches = embeddings.shape[1] - 2
+        num_positions = self.position_embeddings.shape[1] - 2
+
+        if num_patches == num_positions and height == width:
+            return self.position_embeddings
+
+        class_pos_embed = self.position_embeddings[:, 0, :]
+        dist_pos_embed = self.position_embeddings[:, 1, :]
+        patch_pos_embed = self.position_embeddings[:, 2:, :]
+        dim = embeddings.shape[-1]
+        h0 = height // self.config.patch_size
+        w0 = width // self.config.patch_size
+        # # we add a small number to avoid floating point error in the interpolation
+        # # see discussion at https://github.com/facebookresearch/dino/issues/8
+        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_pos_embed = tf.reshape(
+            patch_pos_embed, (1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+        )
+        patch_pos_embed = tf.image.resize(patch_pos_embed, size=(int(h0), int(w0)), method="bicubic")
+        patch_pos_embed = tf.transpose(patch_pos_embed, perm=[0, 2, 3, 1])
+        patch_pos_embed = tf.reshape(patch_pos_embed, (1, -1, dim))
+
+        return tf.concat(
+            [tf.expand_dims(class_pos_embed, axis=0), tf.expand_dims(dist_pos_embed, axis=0), patch_pos_embed], axis=1
+        )
 
     def call(
-        self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None, training: bool = False
+        self,
+        pixel_values: tf.Tensor,
+        bool_masked_pos: tf.Tensor | None = None,
+        training: bool = False,
+        interpolate_pos_encoding: bool = False,
     ) -> tf.Tensor:
+        _, height, width, _ = pixel_values.shape
+
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_length, _ = shape_list(embeddings)
 
@@ -158,12 +195,16 @@ class TFDeiTEmbeddings(tf.keras.layers.Layer):
         cls_tokens = tf.repeat(self.cls_token, repeats=batch_size, axis=0)
         distillation_tokens = tf.repeat(self.distillation_token, repeats=batch_size, axis=0)
         embeddings = tf.concat((cls_tokens, distillation_tokens, embeddings), axis=1)
-        embeddings = embeddings + self.position_embeddings
+        position_embedding = self.position_embeddings
+        if interpolate_pos_encoding:
+            position_embedding = self.interpolate_pos_encoding(embeddings, height, width)
+
+        embeddings = embeddings + position_embedding
         embeddings = self.dropout(embeddings, training=training)
         return embeddings
 
 
-class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
+class TFDeiTPatchEmbeddings(keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -183,7 +224,7 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = tf.keras.layers.Conv2D(
+        self.projection = keras.layers.Conv2D(
             hidden_size, kernel_size=patch_size, strides=patch_size, name="projection"
         )
 
@@ -193,18 +234,23 @@ class TFDeiTPatchEmbeddings(tf.keras.layers.Layer):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if tf.executing_eagerly() and (height != self.image_size[0] or width != self.image_size[1]):
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
+
         x = self.projection(pixel_values)
         batch_size, height, width, num_channels = shape_list(x)
         x = tf.reshape(x, (batch_size, height * width, num_channels))
         return x
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "projection", None) is not None:
+            with tf.name_scope(self.projection.name):
+                self.projection.build([None, None, None, self.num_channels])
+
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfAttention with ViT->DeiT
-class TFDeiTSelfAttention(tf.keras.layers.Layer):
+class TFDeiTSelfAttention(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -219,16 +265,17 @@ class TFDeiTSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -278,9 +325,23 @@ class TFDeiTSelfAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTSelfOutput with ViT->DeiT
-class TFDeiTSelfOutput(tf.keras.layers.Layer):
+class TFDeiTSelfOutput(keras.layers.Layer):
     """
     The residual connection is defined in TFDeiTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
@@ -289,10 +350,11 @@ class TFDeiTSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -300,9 +362,17 @@ class TFDeiTSelfOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTAttention with ViT->DeiT
-class TFDeiTAttention(tf.keras.layers.Layer):
+class TFDeiTAttention(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -329,13 +399,24 @@ class TFDeiTAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "dense_output", None) is not None:
+            with tf.name_scope(self.dense_output.name):
+                self.dense_output.build(None)
+
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTIntermediate with ViT->DeiT
-class TFDeiTIntermediate(tf.keras.layers.Layer):
+class TFDeiTIntermediate(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -343,6 +424,7 @@ class TFDeiTIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -350,16 +432,25 @@ class TFDeiTIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTOutput with ViT->DeiT
-class TFDeiTOutput(tf.keras.layers.Layer):
+class TFDeiTOutput(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -368,8 +459,16 @@ class TFDeiTOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
 
-class TFDeiTLayer(tf.keras.layers.Layer):
+
+class TFDeiTLayer(keras.layers.Layer):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config: DeiTConfig, **kwargs):
@@ -379,12 +478,9 @@ class TFDeiTLayer(tf.keras.layers.Layer):
         self.intermediate = TFDeiTIntermediate(config, name="intermediate")
         self.deit_output = TFDeiTOutput(config, name="output")
 
-        self.layernorm_before = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_before"
-        )
-        self.layernorm_after = tf.keras.layers.LayerNormalization(
-            epsilon=config.layer_norm_eps, name="layernorm_after"
-        )
+        self.layernorm_before = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_before")
+        self.layernorm_after = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm_after")
+        self.config = config
 
     def call(
         self,
@@ -418,9 +514,29 @@ class TFDeiTLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "deit_output", None) is not None:
+            with tf.name_scope(self.deit_output.name):
+                self.deit_output.build(None)
+        if getattr(self, "layernorm_before", None) is not None:
+            with tf.name_scope(self.layernorm_before.name):
+                self.layernorm_before.build([None, None, self.config.hidden_size])
+        if getattr(self, "layernorm_after", None) is not None:
+            with tf.name_scope(self.layernorm_after.name):
+                self.layernorm_after.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTEncoder with ViT->DeiT
-class TFDeiTEncoder(tf.keras.layers.Layer):
+class TFDeiTEncoder(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -464,9 +580,18 @@ class TFDeiTEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 @keras_serializable
-class TFDeiTMainLayer(tf.keras.layers.Layer):
+class TFDeiTMainLayer(keras.layers.Layer):
     config_class = DeiTConfig
 
     def __init__(
@@ -478,7 +603,7 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFDeiTEmbeddings(config, use_mask_token=use_mask_token, name="embeddings")
         self.encoder = TFDeiTEncoder(config, name="encoder")
 
-        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layernorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
         self.pooler = TFDeiTPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self) -> TFDeiTPatchEmbeddings:
@@ -502,12 +627,13 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -530,7 +656,12 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask)
 
-        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos, training=training)
+        embedding_output = self.embeddings(
+            pixel_values,
+            bool_masked_pos=bool_masked_pos,
+            training=training,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -555,6 +686,23 @@ class TFDeiTMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "layernorm", None) is not None:
+            with tf.name_scope(self.layernorm.name):
+                self.layernorm.build([None, None, self.config.hidden_size])
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTPreTrainedModel with ViT->DeiT all-casing
 class TFDeiTPreTrainedModel(TFPreTrainedModel):
@@ -567,42 +715,10 @@ class TFDeiTPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "deit"
     main_input_name = "pixel_values"
 
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
 
 DEIT_START_DOCSTRING = r"""
     This model is a TensorFlow
-    [tf.keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer). Use it as a regular
+    [keras.layers.Layer](https://www.tensorflow.org/api_docs/python/tf/keras/layers/Layer). Use it as a regular
     TensorFlow Module and refer to the TensorFlow documentation for all matter related to general usage and behavior.
 
     Parameters:
@@ -614,8 +730,8 @@ DEIT_START_DOCSTRING = r"""
 DEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`DeiTFeatureExtractor`]. See
-            [`DeiTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`DeiTImageProcessor.__call__`] for details.
 
         head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -629,6 +745,8 @@ DEIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -651,7 +769,6 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
@@ -660,14 +777,15 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ):
+    ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
         outputs = self.deit(
             pixel_values=pixel_values,
             bool_masked_pos=bool_masked_pos,
@@ -675,33 +793,32 @@ class TFDeiTModel(TFDeiTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             training=training,
         )
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "deit", None) is not None:
+            with tf.name_scope(self.deit.name):
+                self.deit.build(None)
 
 
 # Copied from transformers.models.vit.modeling_tf_vit.TFViTPooler with ViT->DeiT
-class TFDeiTPooler(tf.keras.layers.Layer):
+class TFDeiTPooler(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -711,8 +828,16 @@ class TFDeiTPooler(tf.keras.layers.Layer):
 
         return pooled_output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
 
-class TFDeitPixelShuffle(tf.keras.layers.Layer):
+
+class TFDeitPixelShuffle(keras.layers.Layer):
     """TF layer implementation of torch.nn.PixelShuffle"""
 
     def __init__(self, upscale_factor: int, **kwargs) -> None:
@@ -738,19 +863,31 @@ class TFDeitPixelShuffle(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFDeitDecoder(tf.keras.layers.Layer):
+class TFDeitDecoder(keras.layers.Layer):
     def __init__(self, config: DeiTConfig, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.conv2d = tf.keras.layers.Conv2D(
+        self.conv2d = keras.layers.Conv2D(
             filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, name="0"
         )
         self.pixel_shuffle = TFDeitPixelShuffle(config.encoder_stride, name="1")
+        self.config = config
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = inputs
         hidden_states = self.conv2d(hidden_states)
         hidden_states = self.pixel_shuffle(hidden_states)
         return hidden_states
+
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "conv2d", None) is not None:
+            with tf.name_scope(self.conv2d.name):
+                self.conv2d.build([None, None, None, self.config.hidden_size])
+        if getattr(self, "pixel_shuffle", None) is not None:
+            with tf.name_scope(self.pixel_shuffle.name):
+                self.pixel_shuffle.build(None)
 
 
 @add_start_docstrings(
@@ -767,17 +904,18 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFMaskedImageModelingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         training: bool = False,
-    ) -> Union[tuple, TFMaskedLMOutput]:
+    ) -> Union[tuple, TFMaskedImageModelingOutput]:
         r"""
         bool_masked_pos (`tf.Tensor` of type bool and shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -786,7 +924,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import DeiTFeatureExtractor, TFDeiTForMaskedImageModeling
+        >>> from transformers import AutoImageProcessor, TFDeiTForMaskedImageModeling
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
@@ -794,16 +932,16 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = TFDeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
         >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
+        >>> pixel_values = image_processor(images=image, return_tensors="tf").pixel_values
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = tf.cast(tf.random.uniform((1, num_patches), minval=0, maxval=2, dtype=tf.int32), tf.bool)
 
         >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.reconstruction
         >>> list(reconstructed_pixel_values.shape)
         [1, 3, 224, 224]
         ```"""
@@ -816,6 +954,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             training=training,
         )
 
@@ -830,7 +969,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         # Reconstruct pixel values
         reconstructed_pixel_values = self.decoder(sequence_output, training=training)
         # TF 2.0 image layers can't use NCHW format when running on CPU, so intermediate layers use NHWC,
-        # including the The decoder. We transpose to compute the loss against the pixel values
+        # including the decoder. We transpose to compute the loss against the pixel values
         # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
         reconstructed_pixel_values = tf.transpose(reconstructed_pixel_values, (0, 3, 1, 2))
 
@@ -843,7 +982,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             mask = tf.expand_dims(mask, 1)
             mask = tf.cast(mask, tf.float32)
 
-            reconstruction_loss = tf.keras.losses.mean_absolute_error(
+            reconstruction_loss = keras.losses.mean_absolute_error(
                 # Swap axes as metric calculation reduces over the final dimension
                 tf.transpose(pixel_values, (1, 2, 3, 0)),
                 tf.transpose(reconstructed_pixel_values, (1, 2, 3, 0)),
@@ -858,18 +997,23 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             output = (reconstructed_pixel_values,) + outputs[1:]
             return ((masked_im_loss,) + output) if masked_im_loss is not None else output
 
-        return TFMaskedLMOutput(
+        return TFMaskedImageModelingOutput(
             loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
+            reconstruction=reconstructed_pixel_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "deit", None) is not None:
+            with tf.name_scope(self.deit.name):
+                self.deit.build(None)
+        if getattr(self, "decoder", None) is not None:
+            with tf.name_scope(self.decoder.name):
+                self.decoder.build(None)
 
 
 @add_start_docstrings(
@@ -888,22 +1032,24 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
 
         # Classifier head
         self.classifier = (
-            tf.keras.layers.Dense(config.num_labels, name="classifier")
+            keras.layers.Dense(config.num_labels, name="classifier")
             if config.num_labels > 0
-            else tf.keras.layers.Activation("linear", name="classifier")
+            else keras.layers.Activation("linear", name="classifier")
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         training: bool = False,
     ) -> Union[tf.Tensor, TFImageClassifierOutput]:
         r"""
@@ -917,21 +1063,21 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         Examples:
 
         ```python
-        >>> from transformers import DeiTFeatureExtractor, TFDeiTForImageClassification
+        >>> from transformers import AutoImageProcessor, TFDeiTForImageClassification
         >>> import tensorflow as tf
         >>> from PIL import Image
         >>> import requests
 
-        >>> tf.keras.utils.set_random_seed(3)  # doctest: +IGNORE_RESULT
+        >>> keras.utils.set_random_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> # note: we are loading a TFDeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
-        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = TFDeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         >>> # model predicts one of the 1000 ImageNet classes
@@ -947,6 +1093,7 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             training=training,
         )
 
@@ -968,11 +1115,16 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFImageClassifierOutput) -> TFImageClassifierOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFImageClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "deit", None) is not None:
+            with tf.name_scope(self.deit.name):
+                self.deit.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -996,20 +1148,20 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
 
         # Classifier heads
         self.cls_classifier = (
-            tf.keras.layers.Dense(config.num_labels, name="cls_classifier")
+            keras.layers.Dense(config.num_labels, name="cls_classifier")
             if config.num_labels > 0
-            else tf.keras.layers.Activation("linear", name="cls_classifier")
+            else keras.layers.Activation("linear", name="cls_classifier")
         )
         self.distillation_classifier = (
-            tf.keras.layers.Dense(config.num_labels, name="distillation_classifier")
+            keras.layers.Dense(config.num_labels, name="distillation_classifier")
             if config.num_labels > 0
-            else tf.keras.layers.Activation("linear", name="distillation_classifier")
+            else keras.layers.Activation("linear", name="distillation_classifier")
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=TFDeiTForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1017,11 +1169,12 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
         training: bool = False,
     ) -> Union[tuple, TFDeiTForImageClassificationWithTeacherOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1032,6 +1185,7 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            interpolate_pos_encoding=interpolate_pos_encoding,
             training=training,
         )
 
@@ -1055,16 +1209,25 @@ class TFDeiTForImageClassificationWithTeacher(TFDeiTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def serving_output(
-        self, output: TFDeiTForImageClassificationWithTeacherOutput
-    ) -> TFDeiTForImageClassificationWithTeacherOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "deit", None) is not None:
+            with tf.name_scope(self.deit.name):
+                self.deit.build(None)
+        if getattr(self, "cls_classifier", None) is not None:
+            with tf.name_scope(self.cls_classifier.name):
+                self.cls_classifier.build([None, None, self.config.hidden_size])
+        if getattr(self, "distillation_classifier", None) is not None:
+            with tf.name_scope(self.distillation_classifier.name):
+                self.distillation_classifier.build([None, None, self.config.hidden_size])
 
-        return TFDeiTForImageClassificationWithTeacherOutput(
-            logits=output.logits,
-            cls_logits=output.cls_logits,
-            distillation_logits=output.distillation_logits,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
+
+__all__ = [
+    "TFDeiTForImageClassification",
+    "TFDeiTForImageClassificationWithTeacher",
+    "TFDeiTForMaskedImageModeling",
+    "TFDeiTModel",
+    "TFDeiTPreTrainedModel",
+]

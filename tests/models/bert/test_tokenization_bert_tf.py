@@ -4,22 +4,25 @@ from tempfile import TemporaryDirectory
 
 from transformers import AutoConfig, TFAutoModel, is_tensorflow_text_available, is_tf_available
 from transformers.models.bert.tokenization_bert import BertTokenizer
-from transformers.testing_utils import require_tensorflow_text, slow
+from transformers.testing_utils import require_tensorflow_text, require_tf, slow
 
-
-if is_tensorflow_text_available():
-    from transformers.models.bert import TFBertTokenizer
 
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
 
-TOKENIZER_CHECKPOINTS = ["bert-base-uncased", "bert-base-cased"]
+if is_tensorflow_text_available():
+    from transformers.models.bert import TFBertTokenizer
+
+
+TOKENIZER_CHECKPOINTS = ["google-bert/bert-base-uncased", "google-bert/bert-base-cased"]
 TINY_MODEL_CHECKPOINT = "hf-internal-testing/tiny-bert-tf-only"
 
 if is_tf_available():
+    from transformers.modeling_tf_utils import keras
 
-    class ModelToSave(tf.keras.Model):
+    class ModelToSave(keras.Model):
         def __init__(self, tokenizer):
             super().__init__()
             self.tokenizer = tokenizer
@@ -28,10 +31,11 @@ if is_tf_available():
 
         def call(self, inputs):
             tokenized = self.tokenizer(inputs)
-            out = self.bert(**tokenized)
+            out = self.bert(tokenized)
             return out["pooler_output"]
 
 
+@require_tf
 @require_tensorflow_text
 class BertTokenizationTest(unittest.TestCase):
     # The TF tokenizers are usually going to be used as pretrained tokenizers from existing model checkpoints,
@@ -40,18 +44,13 @@ class BertTokenizationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        self.tokenizers = [
-            BertTokenizer.from_pretrained(checkpoint) for checkpoint in (TOKENIZER_CHECKPOINTS * 2)
-        ]  # repeat for when fast_bert_tokenizer=false
-        self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS] + [
-            TFBertTokenizer.from_pretrained(checkpoint, use_fast_bert_tokenizer=False)
-            for checkpoint in TOKENIZER_CHECKPOINTS
-        ]
+        self.tokenizers = [BertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
+        self.tf_tokenizers = [TFBertTokenizer.from_pretrained(checkpoint) for checkpoint in TOKENIZER_CHECKPOINTS]
         assert len(self.tokenizers) == len(self.tf_tokenizers)
 
         self.test_sentences = [
             "This is a straightforward English test sentence.",
-            "This one has some weird characters\rto\nsee\r\nif  those\u00E9break things.",
+            "This one has some weird characters\rto\nsee\r\nif  those\u00e9break things.",
             "Now we're going to add some Chinese: 一 二 三 一二三",
             "And some much more rare Chinese: 齉 堃 齉堃",
             "Je vais aussi écrire en français pour tester les accents",
@@ -93,15 +92,15 @@ class BertTokenizationTest(unittest.TestCase):
                     self.assertTrue(tf.reduce_all(eager_outputs[key] == compiled_outputs[key]))
 
     @slow
-    def test_saved_model(self):
+    def test_export_for_inference(self):
         for tf_tokenizer in self.tf_tokenizers:
             model = ModelToSave(tokenizer=tf_tokenizer)
             test_inputs = tf.convert_to_tensor(self.test_sentences)
             out = model(test_inputs)  # Build model with some sample inputs
             with TemporaryDirectory() as tempdir:
                 save_path = Path(tempdir) / "saved.model"
-                model.save(save_path)
-                loaded_model = tf.keras.models.load_model(save_path)
-            loaded_output = loaded_model(test_inputs)
+                model.export(save_path)
+                loaded_model = tf.saved_model.load(save_path)
+            loaded_output = loaded_model.serve(test_inputs)
             # We may see small differences because the loaded model is compiled, so we need an epsilon for the test
             self.assertLessEqual(tf.reduce_max(tf.abs(out - loaded_output)), 1e-5)

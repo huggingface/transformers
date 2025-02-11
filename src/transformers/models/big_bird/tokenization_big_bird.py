@@ -14,8 +14,8 @@
 # limitations under the License.
 """Tokenization classes for BigBird."""
 
-
 import os
+import re
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -29,24 +29,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model",
-        "google/bigbird-roberta-large": (
-            "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model"
-        ),
-        "google/bigbird-base-trivia-itc": (
-            "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/spiece.model"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/bigbird-roberta-base": 4096,
-    "google/bigbird-roberta-large": 4096,
-    "google/bigbird-base-trivia-itc": 4096,
-}
-
 
 class BigBirdTokenizer(PreTrainedTokenizer):
     """
@@ -59,25 +41,25 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-        bos_token (`str`, *optional*, defaults to `"<s>"`):
-            The begin of sequence token.
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The begin of sequence token.
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
         sep_token (`str`, *optional*, defaults to `"[SEP]"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         mask_token (`str`, *optional*, defaults to `"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        cls_token (`str`, *optional*, defaults to `"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -96,8 +78,6 @@ class BigBirdTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     prefix_tokens: List[int] = []
 
@@ -112,7 +92,7 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         cls_token="[CLS]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -126,6 +106,11 @@ class BigBirdTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -137,11 +122,6 @@ class BigBirdTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):
@@ -180,10 +160,73 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         token = self.sp_model.IdToPiece(index)
         return token
 
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                if not prev_is_special:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
+
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        spaces_between_special_tokens: bool = True,
+        **kwargs,
+    ) -> str:
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+
+        # To avoid mixing byte-level and unicode for byte-level BPT
+        # we need to build string separately for added tokens and byte-level tokens
+        # cf. https://github.com/huggingface/transformers/issues/1133
+        sub_texts = []
+        current_sub_text = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            if token in self.added_tokens_encoder:
+                if current_sub_text:
+                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+                    current_sub_text = []
+                sub_texts.append(token)
+            else:
+                current_sub_text.append(token)
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        # Mimic the behavior of the Rust tokenizer:
+        # No space before [MASK] and [SEP]
+        if spaces_between_special_tokens:
+            text = re.sub(r" (\[(MASK|SEP)\])", r"\1", " ".join(sub_texts))
+        else:
+            text = "".join(sub_texts)
+
+        clean_up_tokenization_spaces = (
+            clean_up_tokenization_spaces
+            if clean_up_tokenization_spaces is not None
+            else self.clean_up_tokenization_spaces
+        )
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
@@ -276,3 +319,6 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
+
+__all__ = ["BigBirdTokenizer"]

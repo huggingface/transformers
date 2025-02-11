@@ -1,20 +1,21 @@
 """
- coding=utf-8
- Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal
- Adapted From Facebook Inc, Detectron2
+coding=utf-8
+Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal
+Adapted From Facebook Inc, Detectron2
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.import copy
- """
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.import copy
+"""
+
 import sys
 from typing import Tuple
 
@@ -23,6 +24,7 @@ import torch
 from PIL import Image
 from torch import nn
 
+from transformers.image_utils import PILImageResampling
 from utils import img_tensorize
 
 
@@ -59,7 +61,7 @@ class ResizeShortestEdge:
 
             if img.dtype == np.uint8:
                 pil_image = Image.fromarray(img)
-                pil_image = pil_image.resize((neww, newh), Image.BILINEAR)
+                pil_image = pil_image.resize((neww, newh), PILImageResampling.BILINEAR)
                 img = np.asarray(pil_image)
             else:
                 img = img.permute(2, 0, 1).unsqueeze(0)  # 3, 0, 1)  # hw(c) -> nchw

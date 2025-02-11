@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch WavLM model. """
+"""Testing suite for the PyTorch WavLM model."""
 
 import math
 import unittest
@@ -31,6 +31,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -63,7 +64,7 @@ class WavLMModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
         intermediate_size=20,
@@ -255,8 +256,8 @@ class WavLMModelTester:
             input_values[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
-                # it's important that we make sure that target lenghts are at least
-                # one shorter than logit lenghts to prevent -inf
+                # it's important that we make sure that target lengths are at least
+                # one shorter than logit lengths to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
         loss = model(input_values, labels=labels).loss
@@ -287,6 +288,15 @@ class WavLMModelTester:
 
         loss.backward()
 
+    def check_output_attentions(self, config, input_values, attention_mask):
+        model = WavLMModel(config=config)
+        model.config.layerdrop = 1.0
+        model.to(torch_device)
+        model.train()
+
+        outputs = model(input_values, attention_mask=attention_mask, output_attentions=True)
+        self.parent.assertTrue(len(outputs.attentions) > 0)
+
     def check_labels_out_of_vocab(self, config, input_values, *args):
         model = WavLMForCTC(config)
         model.to(torch_device)
@@ -308,11 +318,20 @@ class WavLMModelTester:
 
 
 @require_torch
-class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
+class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (WavLMForCTC, WavLMModel, WavLMForAudioFrameClassification, WavLMForSequenceClassification, WavLMForXVector)
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": WavLMForSequenceClassification,
+            "automatic-speech-recognition": WavLMForCTC,
+            "feature-extraction": WavLMModel,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False
@@ -344,27 +363,28 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_seq_classifier_training(*config_and_inputs)
 
+    def test_output_attentions(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_output_attentions(*config_and_inputs)
+
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # WavLM has no inputs_embeds
+    @unittest.skip(reason="WavLM has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
     # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="WavLM has no input_ids")
     def test_forward_signature(self):
         pass
 
-    # WavLM cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="WavLM has no token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # WavLM has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         pass
 
     # WavLM uses PyTorch's multi-head-attention class
@@ -414,6 +434,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 uniform_init_parms = [
                     "conv.weight",
+                    "conv.parametrizations.weight",
                     "masked_spec_embed",
                     "codevectors",
                     "quantizer.weight_proj.weight",
@@ -428,7 +449,7 @@ class WavLMModelTest(ModelTesterMixin, unittest.TestCase):
                     "objective.weight",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -479,7 +500,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     def _load_superb(self, task, num_samples):
-        ds = load_dataset("anton-l/superb_dummy", task, split="test")
+        ds = load_dataset("anton-l/superb_dummy", task, split="test", trust_remote_code=True)
 
         return ds[:num_samples]
 
@@ -504,8 +525,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         EXPECTED_HIDDEN_STATES_SLICE = torch.tensor(
             [[[0.0577, 0.1161], [0.0579, 0.1165]], [[0.0199, 0.1237], [0.0059, 0.0605]]]
         )
-        # TODO: update the tolerance after the CI moves to torch 1.10
-        self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, atol=5e-2))
+        torch.testing.assert_close(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=5e-2, atol=5e-2)
 
     def test_inference_large(self):
         model = WavLMModel.from_pretrained("microsoft/wavlm-large").to(torch_device)
@@ -529,7 +549,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
             [[[0.2122, 0.0500], [0.2118, 0.0563]], [[0.1353, 0.1818], [0.2453, 0.0595]]]
         )
 
-        self.assertTrue(torch.allclose(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=5e-2))
+        torch.testing.assert_close(hidden_states_slice, EXPECTED_HIDDEN_STATES_SLICE, rtol=5e-2)
 
     def test_inference_diarization(self):
         model = WavLMForAudioFrameClassification.from_pretrained("microsoft/wavlm-base-plus-sd").to(torch_device)
@@ -556,8 +576,7 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 258)
         self.assertEqual(labels[0, :, 1].sum(), 647)
-        # TODO: update the tolerance after the CI moves to torch 1.10
-        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
+        torch.testing.assert_close(outputs.logits[:, :4], expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_speaker_verification(self):
         model = WavLMForXVector.from_pretrained("microsoft/wavlm-base-plus-sv").to(torch_device)
@@ -581,5 +600,4 @@ class WavLMModelIntegrationTest(unittest.TestCase):
         # id10002 vs id10004
         self.assertAlmostEqual(cosine_sim(embeddings[2], embeddings[3]).item(), 0.4780, 3)
 
-        # TODO: update the tolerance after the CI moves to torch 1.10
         self.assertAlmostEqual(outputs.loss.item(), 18.4154, 2)

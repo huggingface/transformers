@@ -13,21 +13,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
+""" """
 
-"""
 import argparse
 import logging
 import os
 import sys
 
 import numpy as np
-import torch
-
 import onnxruntime
-import transformers
+import torch
 from bart_onnx.generation_onnx import BARTBeamSearchGenerator
 from bart_onnx.reduce_onnx_size import remove_dup_initializers
+
+import transformers
 from transformers import BartForConditionalGeneration, BartTokenizer
 
 

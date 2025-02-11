@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import is_tf_available
@@ -21,13 +23,13 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXLMForMultipleChoice,
         TFXLMForQuestionAnsweringSimple,
         TFXLMForSequenceClassification,
@@ -58,7 +60,7 @@ class TFXLMModelTester:
         self.vocab_size = 99
         self.n_special = 0
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
@@ -276,8 +278,7 @@ class TFXLMModelTester:
 
 
 @require_tf
-class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFXLMModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFXLMModel,
@@ -293,8 +294,44 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFXLMWithLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFXLMModel,
+            "fill-mask": TFXLMWithLMHeadModel,
+            "question-answering": TFXLMForQuestionAnsweringSimple,
+            "text-classification": TFXLMForSequenceClassification,
+            "text-generation": TFXLMWithLMHeadModel,
+            "token-classification": TFXLMForTokenClassification,
+            "zero-shot": TFXLMForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if (
+            pipeline_test_case_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = TFXLMModelTester(self)
@@ -329,16 +366,16 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFXLMModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "FacebookAI/xlm-mlm-en-2048"
+        model = TFXLMModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf
 class TFXLMModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_xlm_mlm_en_2048(self):
-        model = TFXLMWithLMHeadModel.from_pretrained("xlm-mlm-en-2048")
+        model = TFXLMWithLMHeadModel.from_pretrained("FacebookAI/xlm-mlm-en-2048")
         input_ids = tf.convert_to_tensor([[14, 447]], dtype=tf.int32)  # the president
         expected_output_ids = [
             14,

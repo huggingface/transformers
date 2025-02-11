@@ -12,17 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ConvBERT model. """
+"""Testing suite for the PyTorch ConvBERT model."""
+
 import os
 import tempfile
 import unittest
 
 from transformers import ConvBertConfig, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,7 +39,6 @@ if is_torch_available():
         ConvBertForTokenClassification,
         ConvBertModel,
     )
-    from transformers.models.convbert.modeling_convbert import CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ConvBertModelTester:
@@ -52,7 +53,7 @@ class ConvBertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -245,8 +246,7 @@ class ConvBertModelTester:
 
 
 @require_torch
-class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             ConvBertModel,
@@ -258,6 +258,18 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": ConvBertModel,
+            "fill-mask": ConvBertForMaskedLM,
+            "question-answering": ConvBertForQuestionAnswering,
+            "text-classification": ConvBertForSequenceClassification,
+            "token-classification": ConvBertForTokenClassification,
+            "zero-shot": ConvBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_head_masking = False
@@ -295,9 +307,9 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ConvBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "YituTech/conv-bert-base"
+        model = ConvBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -415,14 +427,13 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                 )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # ConvBertForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == ConvBertForMultipleChoice:
-                return
+                self.skipTest(reason="ConvBertForMultipleChoice behaves incorrectly in JIT environments.")
 
             config.torchscript = True
             model = model_class(config=config)
@@ -436,6 +447,22 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
                 torch.jit.save(traced_model, os.path.join(tmp, "traced_model.pt"))
                 loaded = torch.jit.load(os.path.join(tmp, "traced_model.pt"), map_location=torch_device)
                 loaded(inputs_dict["input_ids"].to(torch_device), inputs_dict["attention_mask"].to(torch_device))
+
+    def test_model_for_input_embeds(self):
+        batch_size = 2
+        seq_length = 10
+        inputs_embeds = torch.rand([batch_size, seq_length, 768], device=torch_device)
+        config = self.model_tester.get_config()
+        model = ConvBertModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(inputs_embeds=inputs_embeds)
+        self.assertEqual(result.last_hidden_state.shape, (batch_size, seq_length, config.hidden_size))
+
+    def test_reducing_attention_heads(self):
+        config, *inputs_dict = self.model_tester.prepare_config_and_inputs()
+        config.head_ratio = 4
+        self.model_tester.create_and_check_for_masked_lm(config, *inputs_dict)
 
 
 @require_torch
@@ -454,4 +481,4 @@ class ConvBertModelIntegrationTest(unittest.TestCase):
             [[[-0.0864, -0.4898, -0.3677], [0.1434, -0.2952, -0.7640], [-0.0112, -0.4432, -0.5432]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

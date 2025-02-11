@@ -30,11 +30,10 @@ import abc
 import functools
 from collections.abc import Iterable  # pylint: disable=g-importing-member
 
-import numpy as onp
-from absl import logging
-
 import jax
 import jax.numpy as jnp
+import numpy as onp
+from absl import logging
 from jax import lax, random
 
 
@@ -285,7 +284,7 @@ def make_fast_generalized_attention(
     return attention_fn
 
 
-class RandomMatrix(object):
+class RandomMatrix:
     r"""
     Abstract class providing a method for constructing 2D random arrays. Class is responsible for constructing 2D
     random arrays.
@@ -349,7 +348,7 @@ class GaussianOrthogonalRandomMatrix(RandomMatrix):
         return jnp.matmul(jnp.diag(multiplier), final_matrix)
 
 
-class FastAttention(object):
+class FastAttention:
     r"""
     Abstract class providing a method for fast attention. Class is responsible for providing a method
     <dot_product_attention> for fast approximate attention.
@@ -524,7 +523,6 @@ class FastAttentionviaLowRankDecomposition(FastAttention):
         deterministic=False,
         precision=None,
     ):
-
         assert key.shape[:-1] == value.shape[:-1]
         assert query.shape[0:1] == key.shape[0:1] and query.shape[-1] == key.shape[-1]
         if axis is None:

@@ -15,6 +15,8 @@
 """
 Image/Text processor class for FLAVA
 """
+
+import warnings
 from typing import List, Optional, Union
 
 from ...image_utils import ImageInput
@@ -25,21 +27,38 @@ from ...utils import TensorType
 
 class FlavaProcessor(ProcessorMixin):
     r"""
-    Constructs a FLAVA processor which wraps a FLAVA feature extractor and a FLAVA tokenizer into a single processor.
+    Constructs a FLAVA processor which wraps a FLAVA image processor and a FLAVA tokenizer into a single processor.
 
-    [`FlavaProcessor`] offers all the functionalities of [`FlavaFeatureExtractor`] and [`BertTokenizerFast`]. See the
+    [`FlavaProcessor`] offers all the functionalities of [`FlavaImageProcessor`] and [`BertTokenizerFast`]. See the
     [`~FlavaProcessor.__call__`] and [`~FlavaProcessor.decode`] for more information.
 
     Args:
-        feature_extractor ([`FlavaFeatureExtractor`]): The feature extractor is a required input.
-        tokenizer ([`BertTokenizerFast`]): The tokenizer is a required input.
+        image_processor ([`FlavaImageProcessor`], *optional*): The image processor is a required input.
+        tokenizer ([`BertTokenizerFast`], *optional*): The tokenizer is a required input.
     """
-    feature_extractor_class = "FlavaFeatureExtractor"
+
+    attributes = ["image_processor", "tokenizer"]
+    image_processor_class = "FlavaImageProcessor"
     tokenizer_class = ("BertTokenizer", "BertTokenizerFast")
 
-    def __init__(self, feature_extractor, tokenizer):
-        super().__init__(feature_extractor, tokenizer)
-        self.current_processor = self.feature_extractor
+    def __init__(self, image_processor=None, tokenizer=None, **kwargs):
+        feature_extractor = None
+        if "feature_extractor" in kwargs:
+            warnings.warn(
+                "The `feature_extractor` argument is deprecated and will be removed in v5, use `image_processor`"
+                " instead.",
+                FutureWarning,
+            )
+            feature_extractor = kwargs.pop("feature_extractor")
+
+        image_processor = image_processor if image_processor is not None else feature_extractor
+        if image_processor is None:
+            raise ValueError("You need to specify an `image_processor`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+
+        super().__init__(image_processor, tokenizer)
+        self.current_processor = self.image_processor
 
     def __call__(
         self,
@@ -61,10 +80,10 @@ class FlavaProcessor(ProcessorMixin):
         return_length: bool = False,
         verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
-        This method uses [`FLAVAFeatureExtractor.__call__`] method to prepare image(s) for the model, and
+        This method uses [`FlavaImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`BertTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
@@ -93,7 +112,7 @@ class FlavaProcessor(ProcessorMixin):
                 **kwargs,
             )
         if images is not None:
-            image_features = self.feature_extractor(
+            image_features = self.image_processor(
                 images,
                 return_image_mask=return_image_mask,
                 return_codebook_pixels=return_codebook_pixels,
@@ -122,3 +141,28 @@ class FlavaProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    @property
+    def feature_extractor_class(self):
+        warnings.warn(
+            "`feature_extractor_class` is deprecated and will be removed in v5. Use `image_processor_class` instead.",
+            FutureWarning,
+        )
+        return self.image_processor_class
+
+    @property
+    def feature_extractor(self):
+        warnings.warn(
+            "`feature_extractor` is deprecated and will be removed in v5. Use `image_processor` instead.",
+            FutureWarning,
+        )
+        return self.image_processor
+
+
+__all__ = ["FlavaProcessor"]

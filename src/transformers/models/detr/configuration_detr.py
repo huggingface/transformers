@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DETR model configuration"""
+"""DETR model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -22,14 +22,11 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
-
-DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/detr-resnet-50": "https://huggingface.co/facebook/detr-resnet-50/resolve/main/config.json",
-    # See all DETR models at https://huggingface.co/models?filter=detr
-}
 
 
 class DetrConfig(PretrainedConfig):
@@ -43,13 +40,19 @@ class DetrConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        use_timm_backbone (`bool`, *optional*, defaults to `True`):
+            Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
+            API.
+        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+            The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
+            case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
             Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetrModel`] can
             detect in a single image. For COCO, we recommend 100 queries.
         d_model (`int`, *optional*, defaults to 256):
-            Dimension of the layers.
+            This parameter is a general dimension parameter, defining dimensions for components such as the encoder layer and projection parameters in the decoder layer, among others.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 6):
@@ -86,13 +89,17 @@ class DetrConfig(PretrainedConfig):
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
-            Name of convolutional backbone to use. Supports any convolutional backbone from the timm package. For a
-            list of all available models, see [this
-            page](https://rwightman.github.io/pytorch-image-models/#load-a-pretrained-model).
-        use_pretrained_backbone (`bool`, *optional*, defaults to `True`):
+            Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
+            will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
+            is `False`, this loads the backbone's config and uses that to initialize the backbone with random weights.
+        use_pretrained_backbone (`bool`, *optional*, `True`):
             Whether to use pretrained weights for the backbone.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint
+            e.g. `{'out_indices': (0, 1, 2, 3)}`. Cannot be specified if `backbone_config` is set.
         dilation (`bool`, *optional*, defaults to `False`):
-            Whether to replace stride with dilation in the last convolutional block (DC5).
+            Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
+            `use_timm_backbone` = `True`.
         class_cost (`float`, *optional*, defaults to 1):
             Relative weight of the classification error in the Hungarian matching cost.
         bbox_cost (`float`, *optional*, defaults to 5):
@@ -113,17 +120,18 @@ class DetrConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import DetrModel, DetrConfig
+    >>> from transformers import DetrConfig, DetrModel
 
     >>> # Initializing a DETR facebook/detr-resnet-50 style configuration
     >>> configuration = DetrConfig()
 
-    >>> # Initializing a model from the facebook/detr-resnet-50 style configuration
+    >>> # Initializing a model (with random weights) from the facebook/detr-resnet-50 style configuration
     >>> model = DetrModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "detr"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
@@ -133,9 +141,10 @@ class DetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        use_timm_backbone=True,
+        backbone_config=None,
         num_channels=3,
         num_queries=100,
-        max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=2048,
         encoder_attention_heads=8,
@@ -152,12 +161,11 @@ class DetrConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         init_xavier_std=1.0,
-        classifier_dropout=0.0,
-        scale_embedding=False,
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
         use_pretrained_backbone=True,
+        backbone_kwargs=None,
         dilation=False,
         class_cost=1,
         bbox_cost=5,
@@ -167,11 +175,41 @@ class DetrConfig(PretrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        **kwargs
+        **kwargs,
     ):
+        # We default to values which were previously hard-coded in the model. This enables configurability of the config
+        # while keeping the default behavior the same.
+        if use_timm_backbone and backbone_kwargs is None:
+            backbone_kwargs = {}
+            if dilation:
+                backbone_kwargs["output_stride"] = 16
+            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
+            backbone_kwargs["in_chans"] = num_channels
+        # Backwards compatibility
+        elif not use_timm_backbone and backbone in (None, "resnet50"):
+            if backbone_config is None:
+                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+            elif isinstance(backbone_config, dict):
+                backbone_model_type = backbone_config.get("model_type")
+                config_class = CONFIG_MAPPING[backbone_model_type]
+                backbone_config = config_class.from_dict(backbone_config)
+            backbone = None
+            # set timm attributes to None
+            dilation = None
+
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
+
+        self.use_timm_backbone = use_timm_backbone
+        self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
-        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers
@@ -188,11 +226,11 @@ class DetrConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
+        self.backbone_kwargs = backbone_kwargs
         self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
@@ -214,9 +252,20 @@ class DetrConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+    @classmethod
+    def from_backbone_config(cls, backbone_config: PretrainedConfig, **kwargs):
+        """Instantiate a [`DetrConfig`] (or a derived class) from a pre-trained backbone model configuration.
+
+        Args:
+            backbone_config ([`PretrainedConfig`]):
+                The backbone configuration.
+        Returns:
+            [`DetrConfig`]: An instance of a configuration object
+        """
+        return cls(backbone_config=backbone_config, **kwargs)
+
 
 class DetrOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
@@ -235,3 +284,6 @@ class DetrOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 12
+
+
+__all__ = ["DetrConfig", "DetrOnnxConfig"]

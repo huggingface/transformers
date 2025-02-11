@@ -34,6 +34,6 @@ python finetune_trainer.py \
     --logging_first_step \
     --max_target_length 56 --val_max_target_length $MAX_TGT_LEN --test_max_target_length $MAX_TGT_LEN\
     --do_train --do_eval --do_predict \
-    --evaluation_strategy steps \
+    --eval_strategy steps \
     --predict_with_generate --sortish_sampler \
     "$@"

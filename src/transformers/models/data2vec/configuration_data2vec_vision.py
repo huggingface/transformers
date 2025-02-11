@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Data2VecVision model configuration"""
+"""Data2VecVision model configuration"""
+
 from collections import OrderedDict
 from typing import Mapping
 
@@ -25,12 +26,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/data2vec-vision-base-ft": (
-        "https://huggingface.co/facebook/data2vec-vision-base-ft/resolve/main/config.json"
-    ),
-}
-
 
 class Data2VecVisionConfig(PretrainedConfig):
     r"""
@@ -40,9 +35,6 @@ class Data2VecVisionConfig(PretrainedConfig):
     [facebook/data2vec-vision-base](https://huggingface.co/facebook/data2vec-vision-base) architecture.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 8092):
-            Vocabulary size of the Data2VecVision model. Defines the number of different image tokens that can be used
-            during pre-training.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -103,22 +95,22 @@ class Data2VecVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Data2VecVisionModel, Data2VecVisionConfig
+    >>> from transformers import Data2VecVisionConfig, Data2VecVisionModel
 
     >>> # Initializing a Data2VecVision data2vec_vision-base-patch16-224-in22k style configuration
     >>> configuration = Data2VecVisionConfig()
 
-    >>> # Initializing a model from the data2vec_vision-base-patch16-224-in22k style configuration
+    >>> # Initializing a model (with random weights) from the data2vec_vision-base-patch16-224-in22k style configuration
     >>> model = Data2VecVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "data2vec-vision"
 
     def __init__(
         self,
-        vocab_size=8192,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -128,7 +120,6 @@ class Data2VecVisionConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=224,
         patch_size=16,
         num_channels=3,
@@ -147,11 +138,10 @@ class Data2VecVisionConfig(PretrainedConfig):
         auxiliary_num_convs=1,
         auxiliary_concat_input=False,
         semantic_loss_ignore_index=255,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -186,7 +176,6 @@ class Data2VecVisionConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class Data2VecVisionOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
@@ -200,3 +189,6 @@ class Data2VecVisionOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["Data2VecVisionConfig", "Data2VecVisionOnnxConfig"]

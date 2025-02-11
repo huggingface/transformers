@@ -25,21 +25,46 @@ from transformers import (
     TranslationPipeline,
     pipeline,
 )
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class TranslationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+class TranslationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         if isinstance(model.config, MBartConfig):
             src_lang, tgt_lang = list(tokenizer.lang_code_to_id.keys())[:2]
-            translator = TranslationPipeline(model=model, tokenizer=tokenizer, src_lang=src_lang, tgt_lang=tgt_lang)
+            translator = TranslationPipeline(
+                model=model,
+                tokenizer=tokenizer,
+                feature_extractor=feature_extractor,
+                image_processor=image_processor,
+                processor=processor,
+                torch_dtype=torch_dtype,
+                src_lang=src_lang,
+                tgt_lang=tgt_lang,
+            )
         else:
-            translator = TranslationPipeline(model=model, tokenizer=tokenizer)
+            translator = TranslationPipeline(
+                model=model,
+                tokenizer=tokenizer,
+                feature_extractor=feature_extractor,
+                image_processor=image_processor,
+                processor=processor,
+                torch_dtype=torch_dtype,
+            )
         return translator, ["Some string", "Some other text"]
 
     def run_pipeline_test(self, translator, _):

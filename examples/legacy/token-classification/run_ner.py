@@ -13,7 +13,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for named entity recognition on CoNLL-2003. """
+"""Fine-tuning the library models for named entity recognition on CoNLL-2003."""
+
 import logging
 import os
 import sys
@@ -24,6 +25,7 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch import nn
+from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 import transformers
 from transformers import (
@@ -38,7 +40,6 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 
 logger = logging.getLogger(__name__)
@@ -158,7 +159,7 @@ def main():
 
     # Prepare CONLL-2003 task
     labels = token_classification_task.get_labels(data_args.labels)
-    label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
+    label_map: Dict[int, str] = dict(enumerate(labels))
     num_labels = len(labels)
 
     # Load pretrained model and tokenizer

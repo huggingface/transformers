@@ -40,7 +40,7 @@ from datasets import Dataset, DatasetDict, Image
 
 # your images can of course have a different extension
 # semantic segmentation maps are typically stored in the png format
-image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"] 
+image_paths_train = ["path/to/image_1.jpg/jpg", "path/to/image_2.jpg/jpg", ..., "path/to/image_n.jpg/jpg"]
 label_paths_train = ["path/to/annotation_1.png", "path/to/annotation_2.png", ..., "path/to/annotation_n.png"]
 
 # same for validation
@@ -52,7 +52,7 @@ def create_dataset(image_paths, label_paths):
                                 "label": sorted(label_paths)})
     dataset = dataset.cast_column("image", Image())
     dataset = dataset.cast_column("label", Image())
-    
+
     return dataset
 
 # step 1: create Dataset objects
@@ -62,7 +62,7 @@ validation_dataset = create_dataset(image_paths_validation, label_paths_validati
 # step 2: create DatasetDict
 dataset = DatasetDict({
     "train": train_dataset,
-    "validation": val_dataset,
+    "validation": validation_dataset,
   }
 )
 
@@ -91,11 +91,15 @@ You can easily upload this by clicking on "Add file" in the "Files and versions"
 
 ## PyTorch version, Trainer
 
-Based on the script [`run_semantic_segmentation.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py). 
+Based on the script [`run_semantic_segmentation.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py).
 
 The script leverages the [🤗 Trainer API](https://huggingface.co/docs/transformers/main_classes/trainer) to automatically take care of the training for you, running on distributed environments right away.
 
 Here we show how to fine-tune a [SegFormer](https://huggingface.co/nvidia/mit-b0) model on the [segments/sidewalk-semantic](https://huggingface.co/datasets/segments/sidewalk-semantic) dataset:
+
+In order to use `segments/sidewalk-semantic`: 
+ - Log in to Hugging Face with `huggingface-cli login` (token can be accessed [here](https://huggingface.co/settings/tokens)).
+ - Accept terms of use for `sidewalk-semantic` on [dataset page](https://huggingface.co/datasets/segments/sidewalk-semantic).
 
 ```bash
 python run_semantic_segmentation.py \
@@ -105,7 +109,6 @@ python run_semantic_segmentation.py \
     --remove_unused_columns False \
     --do_train \
     --do_eval \
-    --evaluation_strategy steps \
     --push_to_hub \
     --push_to_hub_model_id segformer-finetuned-sidewalk-10k-steps \
     --max_steps 10000 \
@@ -115,7 +118,7 @@ python run_semantic_segmentation.py \
     --per_device_eval_batch_size 8 \
     --logging_strategy steps \
     --logging_steps 100 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --seed 1337
 ```
@@ -130,7 +133,7 @@ Note that you can replace the model and dataset by simply setting the `model_nam
 
 Based on the script [`run_semantic_segmentation_no_trainer.py`](https://github.com/huggingface/transformers/blob/main/examples/pytorch/semantic-segmentation/run_semantic_segmentation.py).
 
-The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision. 
+The script leverages [🤗 `Accelerate`](https://github.com/huggingface/accelerate), which allows to write your own training loop in PyTorch, but have it run instantly on any (distributed) environment, including CPU, multi-CPU, GPU, multi-GPU and TPU. It also supports mixed precision.
 
 First, run:
 
@@ -161,11 +164,11 @@ The resulting model can be seen here: https://huggingface.co/nielsr/segformer-fi
 This means that after training, you can easily load your trained model as follows:
 
 ```python
-from transformers import AutoFeatureExtractor, AutoModelForSemanticSegmentation
+from transformers import AutoImageProcessor, AutoModelForSemanticSegmentation
 
 model_name = "name_of_repo_on_the_hub_or_path_to_local_folder"
 
-feature_extractor = AutoFeatureExtractor.from_pretrained(model_name)
+image_processor = AutoImageProcessor.from_pretrained(model_name)
 model = AutoModelForSemanticSegmentation.from_pretrained(model_name)
 ```
 
@@ -180,7 +183,7 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 # prepare image for the model
-inputs = feature_extractor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt")
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -201,4 +204,4 @@ For visualization of the segmentation maps, we refer to the [example notebook](h
 
 Some datasets, like [`scene_parse_150`](https://huggingface.co/datasets/scene_parse_150), contain a "background" label that is not part of the classes. The Scene Parse 150 dataset for instance contains labels between 0 and 150, with 0 being the background class, and 1 to 150 being actual class names (like "tree", "person", etc.). For these kind of datasets, one replaces the background label (0) by 255, which is the `ignore_index` of the PyTorch model's loss function, and reduces all labels by 1. This way, the `labels` are PyTorch tensors containing values between 0 and 149, and 255 for all background/padding.
 
-In case you're training on such a dataset, make sure to set the ``reduce_labels`` flag, which will take care of this.
+In case you're training on such a dataset, make sure to set the ``do_reduce_labels`` flag, which will take care of this.

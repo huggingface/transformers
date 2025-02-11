@@ -24,6 +24,7 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 
 if is_flax_available():
     import jax.numpy as jnp
+
     from transformers.models.albert.modeling_flax_albert import (
         FlaxAlbertForMaskedLM,
         FlaxAlbertForMultipleChoice,
@@ -35,7 +36,7 @@ if is_flax_available():
     )
 
 
-class FlaxAlbertModelTester(unittest.TestCase):
+class FlaxAlbertModelTester:
     def __init__(
         self,
         parent,
@@ -47,7 +48,7 @@ class FlaxAlbertModelTester(unittest.TestCase):
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -117,7 +118,6 @@ class FlaxAlbertModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxAlbertModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             FlaxAlbertModel,
@@ -139,7 +139,7 @@ class FlaxAlbertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
-            model = model_class_name.from_pretrained("albert-base-v2")
+            model = model_class_name.from_pretrained("albert/albert-base-v2")
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
 
@@ -148,7 +148,7 @@ class FlaxAlbertModelTest(FlaxModelTesterMixin, unittest.TestCase):
 class FlaxAlbertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
-        model = FlaxAlbertModel.from_pretrained("albert-base-v2")
+        model = FlaxAlbertModel.from_pretrained("albert/albert-base-v2")
         input_ids = np.array([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
         attention_mask = np.array([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         output = model(input_ids, attention_mask=attention_mask)[0]

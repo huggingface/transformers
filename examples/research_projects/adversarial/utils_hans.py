@@ -20,8 +20,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import tqdm
-
 from filelock import FileLock
+
 from transformers import (
     BartTokenizer,
     BartTokenizerFast,
@@ -134,7 +134,6 @@ if is_torch_available():
             # and the others will use the cache.
             lock_path = cached_features_file + ".lock"
             with FileLock(lock_path):
-
                 if os.path.exists(cached_features_file) and not overwrite_cache:
                     logger.info(f"Loading features from cached file {cached_features_file}")
                     self.features = torch.load(cached_features_file)

@@ -21,18 +21,55 @@ from transformers import (
     ZeroShotClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    is_torch_available,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    slow,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+if is_torch_available():
+    import torch
+
+
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
+
+
+@is_pipeline_test
+class ZeroShotClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    if model_mapping is not None:
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if tf_model_mapping is not None:
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
+
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         classifier = ZeroShotClassificationPipeline(
-            model=model, tokenizer=tokenizer, candidate_labels=["polics", "health"]
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+            candidate_labels=["polics", "health"],
         )
         return classifier, ["Who are you voting for in 2020?", "My stomach hurts."]
 
@@ -164,6 +201,48 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
             },
         )
 
+    @require_torch
+    def test_small_model_pt_fp16(self):
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
+            torch_dtype=torch.float16,
+        )
+        outputs = zero_shot_classifier(
+            "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
+        )
+
+        self.assertEqual(
+            nested_simplify(outputs),
+            {
+                "sequence": "Who are you voting for in 2020?",
+                "labels": ["science", "public health", "politics"],
+                "scores": [0.333, 0.333, 0.333],
+            },
+        )
+
+    @require_torch
+    def test_small_model_pt_bf16(self):
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
+            torch_dtype=torch.bfloat16,
+        )
+        outputs = zero_shot_classifier(
+            "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
+        )
+
+        self.assertEqual(
+            nested_simplify(outputs),
+            {
+                "sequence": "Who are you voting for in 2020?",
+                "labels": ["science", "public health", "politics"],
+                "scores": [0.333, 0.333, 0.333],
+            },
+        )
+
     @require_tf
     def test_small_model_tf(self):
         zero_shot_classifier = pipeline(
@@ -187,7 +266,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     @slow
     @require_torch
     def test_large_model_pt(self):
-        zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli", framework="pt")
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="pt"
+        )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )
@@ -242,7 +323,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     @slow
     @require_tf
     def test_large_model_tf(self):
-        zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli", framework="tf")
+        zero_shot_classifier = pipeline(
+            "zero-shot-classification", model="FacebookAI/roberta-large-mnli", framework="tf"
+        )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
         )

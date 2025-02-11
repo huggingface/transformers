@@ -13,15 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" TensorFlow DPR model for Open Domain Question Answering."""
+"""TensorFlow DPR model for Open Domain Question Answering."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Tuple, Union
 
 import tensorflow as tf
 
 from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list, unpack_inputs
+from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, get_initializer, keras, shape_list, unpack_inputs
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -36,19 +38,6 @@ from .configuration_dpr import DPRConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
-
-TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-ctx_encoder-single-nq-base",
-    "facebook/dpr-ctx_encoder-multiset-base",
-]
-TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-question_encoder-single-nq-base",
-    "facebook/dpr-question_encoder-multiset-base",
-]
-TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/dpr-reader-single-nq-base",
-    "facebook/dpr-reader-multiset-base",
-]
 
 
 ##########
@@ -80,8 +69,8 @@ class TFDPRContextEncoderOutput(ModelOutput):
     """
 
     pooler_output: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -108,8 +97,8 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
     """
 
     pooler_output: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 @dataclass
@@ -141,12 +130,11 @@ class TFDPRReaderOutput(ModelOutput):
     start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     relevance_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
-class TFDPREncoderLayer(tf.keras.layers.Layer):
-
+class TFDPREncoderLayer(keras.layers.Layer):
     base_model_prefix = "bert_model"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -160,7 +148,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             raise ValueError("Encoder hidden_size can't be zero")
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
-            self.encode_proj = tf.keras.layers.Dense(
+            self.encode_proj = keras.layers.Dense(
                 config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
             )
 
@@ -168,9 +156,9 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
@@ -208,9 +196,19 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             return self.projection_dim
         return self.bert_model.config.hidden_size
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "bert_model", None) is not None:
+            with tf.name_scope(self.bert_model.name):
+                self.bert_model.build(None)
+        if getattr(self, "encode_proj", None) is not None:
+            with tf.name_scope(self.encode_proj.name):
+                self.encode_proj.build(None)
 
-class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
 
+class TFDPRSpanPredictorLayer(keras.layers.Layer):
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -218,10 +216,10 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         self.config = config
         self.encoder = TFDPREncoderLayer(config, name="encoder")
 
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
-        self.qa_classifier = tf.keras.layers.Dense(
+        self.qa_classifier = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
 
@@ -229,8 +227,8 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
@@ -273,9 +271,22 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
             attentions=outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.encoder.embeddings_size])
+        if getattr(self, "qa_classifier", None) is not None:
+            with tf.name_scope(self.qa_classifier.name):
+                self.qa_classifier.build([None, None, self.encoder.embeddings_size])
+
 
 class TFDPRSpanPredictor(TFPreTrainedModel):
-
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -286,9 +297,9 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
@@ -319,9 +330,9 @@ class TFDPREncoder(TFPreTrainedModel):
     def call(
         self,
         input_ids: tf.Tensor = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
@@ -373,19 +384,6 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     config_class = DPRConfig
     base_model_prefix = "reader"
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
 
 ###############
 # Actual Models
@@ -398,7 +396,7 @@ TF_DPR_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Tensorflow [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
+    This model is also a Tensorflow [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)
     subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
     general usage and behavior.
 
@@ -457,7 +455,7 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
 
-            Indices can be obtained using [`DPRTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -546,7 +544,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         try:
             return self.ctx_encoder.bert_model.get_input_embeddings()
         except AttributeError:
-            self(self.dummy_inputs)
+            self.build()
             return self.ctx_encoder.bert_model.get_input_embeddings()
 
     @unpack_inputs
@@ -554,15 +552,15 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRContextEncoderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRContextEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -613,11 +611,13 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFDPRContextEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "ctx_encoder", None) is not None:
+            with tf.name_scope(self.ctx_encoder.name):
+                self.ctx_encoder.build(None)
 
 
 @add_start_docstrings(
@@ -633,7 +633,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         try:
             return self.question_encoder.bert_model.get_input_embeddings()
         except AttributeError:
-            self(self.dummy_inputs)
+            self.build()
             return self.question_encoder.bert_model.get_input_embeddings()
 
     @unpack_inputs
@@ -641,15 +641,15 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRQuestionEncoderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRQuestionEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -699,11 +699,13 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFDPRQuestionEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "question_encoder", None) is not None:
+            with tf.name_scope(self.question_encoder.name):
+                self.question_encoder.build(None)
 
 
 @add_start_docstrings(
@@ -719,7 +721,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         try:
             return self.span_predictor.encoder.bert_model.get_input_embeddings()
         except AttributeError:
-            self(self.dummy_inputs)
+            self.build()
             return self.span_predictor.encoder.bert_model.get_input_embeddings()
 
     @unpack_inputs
@@ -727,14 +729,14 @@ class TFDPRReader(TFDPRPretrainedReader):
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
-        attention_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        output_attentions: bool = None,
-        output_hidden_states: bool = None,
-        return_dict=None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRReaderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -779,14 +781,20 @@ class TFDPRReader(TFDPRPretrainedReader):
             training=training,
         )
 
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "span_predictor", None) is not None:
+            with tf.name_scope(self.span_predictor.name):
+                self.span_predictor.build(None)
 
-        return TFDPRReaderOutput(
-            start_logits=output.start_logits,
-            end_logits=output.end_logits,
-            relevance_logits=output.relevance_logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+
+__all__ = [
+    "TFDPRContextEncoder",
+    "TFDPRPretrainedContextEncoder",
+    "TFDPRPretrainedQuestionEncoder",
+    "TFDPRPretrainedReader",
+    "TFDPRQuestionEncoder",
+    "TFDPRReader",
+]

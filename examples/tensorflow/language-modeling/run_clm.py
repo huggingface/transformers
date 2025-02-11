@@ -77,7 +77,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -112,12 +112,22 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -287,7 +297,8 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
@@ -295,14 +306,16 @@ def main():
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
             )
     else:
         data_files = {}
@@ -323,7 +336,7 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
             **dataset_args,
         )
         # If no validation data is there, validation_split_percentage will be used to divide the dataset.
@@ -333,7 +346,7 @@ def main():
                 data_files=data_files,
                 split=f"train[:{data_args.validation_split_percentage}%]",
                 cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
                 **dataset_args,
             )
             raw_datasets["train"] = load_dataset(
@@ -341,11 +354,11 @@ def main():
                 data_files=data_files,
                 split=f"train[{data_args.validation_split_percentage}%:]",
                 cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
                 **dataset_args,
             )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
     # endregion
 
     # region Load pretrained model and tokenizer
@@ -353,20 +366,30 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
     # endregion
@@ -390,16 +413,16 @@ def main():
 
     if data_args.block_size is None:
         block_size = tokenizer.model_max_length
-        if block_size > 1024:
+        if block_size > config.max_position_embeddings:
             logger.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+                f"Using block_size={min(1024, config.max_position_embeddings)} instead. You can change that default value by passing --block_size xxx."
             )
-            block_size = 1024
+            block_size = min(1024, config.max_position_embeddings)
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warning(
-                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model"
+                f"The block_size passed ({data_args.block_size}) is larger than the maximum length for the model "
                 f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
         block_size = min(data_args.block_size, tokenizer.model_max_length)
@@ -426,7 +449,7 @@ def main():
     # to preprocess.
     #
     # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-    # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+    # https://huggingface.co/docs/datasets/process#map
 
     lm_datasets = tokenized_datasets.map(
         group_texts,
@@ -466,14 +489,35 @@ def main():
     with training_args.strategy.scope():
         # region Prepare model
         if checkpoint is not None:
-            model = TFAutoModelForCausalLM.from_pretrained(checkpoint, config=config)
+            model = TFAutoModelForCausalLM.from_pretrained(
+                checkpoint, config=config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
         elif model_args.model_name_or_path:
-            model = TFAutoModelForCausalLM.from_pretrained(model_args.model_name_or_path, config=config)
+            model = TFAutoModelForCausalLM.from_pretrained(
+                model_args.model_name_or_path,
+                config=config,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
+            )
         else:
             logger.info("Training new model from scratch")
-            model = TFAutoModelForCausalLM.from_config(config)
+            model = TFAutoModelForCausalLM.from_config(
+                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
 
-        model.resize_token_embeddings(len(tokenizer))
+        # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+        # on a small vocab and want a smaller embedding size, remove this test.
+        embeddings = model.get_input_embeddings()
+
+        # Matt: This is a temporary workaround as we transition our models to exclusively using Keras embeddings.
+        #       As soon as the transition is complete, all embeddings should be keras.Embeddings layers, and
+        #       the weights will always be in embeddings.embeddings.
+        if hasattr(embeddings, "embeddings"):
+            embedding_size = embeddings.embeddings.shape[0]
+        else:
+            embedding_size = embeddings.weight.shape[0]
+        if len(tokenizer) > embedding_size:
+            model.resize_token_embeddings(len(tokenizer))
         # endregion
 
         # region TF Dataset preparation
@@ -525,7 +569,8 @@ def main():
             adam_global_clipnorm=training_args.max_grad_norm,
         )
 
-        # no user-specified loss = will use the model internal loss
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
         # endregion
 
@@ -551,9 +596,8 @@ def main():
             callbacks = [
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )
@@ -596,7 +640,7 @@ def main():
 
         if training_args.output_dir is not None:
             output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
-            results_dict = dict()
+            results_dict = {}
             results_dict["train_loss"] = train_loss
             results_dict["train_perplexity"] = train_perplexity
             results_dict["eval_loss"] = validation_loss

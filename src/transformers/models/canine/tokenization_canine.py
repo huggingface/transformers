@@ -23,17 +23,12 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "nielsr/canine-s": 2048,
-}
-
 # Unicode defines 1,114,112 total “codepoints”
 UNICODE_VOCAB_SIZE = 1114112
 
 # Below: Constants defining canonical codepoints for special, pseudo-characters.
 # Copied from https://github.com/google-research/language/blob/master/language/canine/special_codepoints.py
 PAD = 0
-
 CLS = 0xE000
 SEP = 0xE001
 BOS = 0xE002
@@ -74,8 +69,6 @@ class CanineTokenizer(PreTrainedTokenizer):
                 The maximum sentence length the model accepts.
     """
 
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-
     def __init__(
         self,
         bos_token=chr(CLS),
@@ -86,7 +79,7 @@ class CanineTokenizer(PreTrainedTokenizer):
         mask_token=chr(MASK),
         add_prefix_space=False,
         model_max_length=2048,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -96,18 +89,6 @@ class CanineTokenizer(PreTrainedTokenizer):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            model_max_length=model_max_length,
-            **kwargs,
-        )
 
         # Creates a mapping for looking up the IDs of special symbols.
         self._special_codepoints: Dict[str, int] = {}
@@ -122,9 +103,26 @@ class CanineTokenizer(PreTrainedTokenizer):
         self._unicode_vocab_size = UNICODE_VOCAB_SIZE
         self._num_special_tokens = len(self._special_codepoints)
 
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            model_max_length=model_max_length,
+            **kwargs,
+        )
+
     @property
     def vocab_size(self) -> int:
         return self._unicode_vocab_size
+
+    def get_vocab(self):
+        vocab = {chr(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string (i.e. perform character splitting)."""
@@ -241,3 +239,6 @@ class CanineTokenizer(PreTrainedTokenizer):
     # CanineTokenizer has no vocab file
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None):
         return ()
+
+
+__all__ = ["CanineTokenizer"]

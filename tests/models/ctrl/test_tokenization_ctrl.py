@@ -23,7 +23,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class CTRLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "Salesforce/ctrl"
     tokenizer_class = CTRLTokenizer
     test_rust_tokenizer = False
     test_seq2seq = False

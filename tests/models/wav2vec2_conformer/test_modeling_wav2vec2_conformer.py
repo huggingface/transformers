@@ -12,16 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Wav2Vec2-Conformer model. """
+"""Testing suite for the PyTorch Wav2Vec2-Conformer model."""
 
 import math
+import tempfile
 import unittest
 
 import numpy as np
 from datasets import load_dataset
 
 from transformers import Wav2Vec2ConformerConfig, is_torch_available
-from transformers.testing_utils import is_pt_flax_cross_test, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_flaky,
+    is_pt_flax_cross_test,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -31,6 +40,7 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -70,7 +80,7 @@ class Wav2Vec2ConformerModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,
         intermediate_size=20,
@@ -214,6 +224,23 @@ class Wav2Vec2ConformerModelTester:
             (self.batch_size, self.adapter_output_seq_length, config.output_hidden_size),
         )
 
+    def create_and_check_model_float16(self, config, input_values, attention_mask):
+        model = Wav2Vec2ConformerModel(config=config)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = Wav2Vec2ConformerModel.from_pretrained(tmpdirname, torch_dtype=torch.float16)
+
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            result = model(input_values.type(dtype=torch.float16), attention_mask=attention_mask)
+
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+        )
+
     def create_and_check_batch_inference(self, config, input_values, *args):
         # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
@@ -313,8 +340,8 @@ class Wav2Vec2ConformerModelTester:
             input_values[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
-                # it's important that we make sure that target lenghts are at least
-                # one shorter than logit lenghts to prevent -inf
+                # it's important that we make sure that target lengths are at least
+                # one shorter than logit lengths to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
         loss = model(input_values, labels=labels).loss
@@ -389,7 +416,7 @@ class Wav2Vec2ConformerModelTester:
 
 
 @require_torch
-class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
+class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             Wav2Vec2ConformerForCTC,
@@ -401,6 +428,15 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "audio-classification": Wav2Vec2ConformerForSequenceClassification,
+            "automatic-speech-recognition": Wav2Vec2ConformerForCTC,
+            "feature-extraction": Wav2Vec2ConformerModel,
+        }
+        if is_torch_available()
+        else {}
     )
     test_pruning = False
     test_headmasking = False
@@ -416,6 +452,12 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2ConformerGumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_model_with_relative(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
@@ -441,6 +483,18 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter_proj_dim(*config_and_inputs)
 
+    @require_torch_accelerator
+    @require_torch_fp16
+    def test_model_float16_with_relative(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
+        self.model_tester.create_and_check_model_float16(*config_and_inputs)
+
+    @require_torch_accelerator
+    @require_torch_fp16
+    def test_model_float16_with_rotary(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="rotary")
+        self.model_tester.create_and_check_model_float16(*config_and_inputs)
+
     def test_ctc_loss_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
@@ -465,32 +519,29 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
 
-    # Wav2Vec2Conformer has no inputs_embeds
+    @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    # `input_ids` is renamed to `input_values`
+    @unittest.skip(reason="Wav2Vec2Conformer has input_values instead of input_ids")
     def test_forward_signature(self):
         pass
 
-    # Wav2Vec2Conformer cannot resize token embeddings
-    # since it has no tokens embeddings
+    @unittest.skip(reason="Wav2Vec2Conformer has not token embeddings")
     def test_resize_tokens_embeddings(self):
         pass
 
-    # Wav2Vec2Conformer has no inputs_embeds
-    # and thus the `get_input_embeddings` fn
-    # is not implemented
-    def test_model_common_attributes(self):
+    @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
+    def test_model_get_set_embeddings(self):
         pass
 
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
+    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
     def test_equivalence_flax_to_pt(self):
         pass
 
     @is_pt_flax_cross_test
-    # non-robust architecture does not exist in Flax
+    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
     def test_equivalence_pt_to_flax(self):
         pass
 
@@ -543,6 +594,7 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             for name, param in model.named_parameters():
                 uniform_init_parms = [
                     "conv.weight",
+                    "conv.parametrizations.weight",
                     "masked_spec_embed",
                     "codevectors",
                     "quantizer.weight_proj.weight",
@@ -559,7 +611,7 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
                     "objective.weight",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",

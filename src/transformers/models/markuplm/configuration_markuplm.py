@@ -12,19 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" MarkupLM model configuration"""
-
-from transformers.utils import logging
+"""MarkupLM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/markuplm-base": "https://huggingface.co/microsoft/markuplm-base/resolve/main/config.json",
-    "microsoft/markuplm-large": "https://huggingface.co/microsoft/markuplm-large/resolve/main/config.json",
-}
 
 
 class MarkupLMConfig(PretrainedConfig):
@@ -65,8 +59,6 @@ class MarkupLMConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (`bool`, *optional*, defaults to `False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the tree id unit embedding might ever use. Typically set this to something large
             just in case (e.g., 1024).
@@ -100,6 +92,7 @@ class MarkupLMConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "markuplm"
 
     def __init__(
@@ -119,7 +112,6 @@ class MarkupLMConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=0,
         eos_token_id=2,
-        gradient_checkpointing=False,
         max_xpath_tag_unit_embeddings=256,
         max_xpath_subs_unit_embeddings=1024,
         tag_pad_id=216,
@@ -129,13 +121,12 @@ class MarkupLMConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            gradient_checkpointing=gradient_checkpointing,
             **kwargs,
         )
         self.vocab_size = vocab_size
@@ -160,3 +151,6 @@ class MarkupLMConfig(PretrainedConfig):
         self.tag_pad_id = tag_pad_id
         self.subs_pad_id = subs_pad_id
         self.xpath_unit_hidden_size = xpath_unit_hidden_size
+
+
+__all__ = ["MarkupLMConfig"]

@@ -22,6 +22,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -351,7 +352,7 @@ class FunnelModelTester:
 
 
 @require_torch
-class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
+class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_pruning = False
     all_model_classes = (
@@ -364,6 +365,18 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
         )
         if is_torch_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": (FunnelBaseModel, FunnelModel),
+            "fill-mask": FunnelForMaskedLM,
+            "question-answering": FunnelForQuestionAnswering,
+            "text-classification": FunnelForSequenceClassification,
+            "token-classification": FunnelForTokenClassification,
+            "zero-shot": FunnelForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     # special case for ForPreTraining model
@@ -488,16 +501,16 @@ class FunnelModelIntegrationTest(unittest.TestCase):
 
         expected_output_sum = torch.tensor(2344.8352)
         expected_output_mean = torch.tensor(0.8052)
-        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
-        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
+        torch.testing.assert_close(output.sum(), expected_output_sum, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output.mean(), expected_output_mean, rtol=1e-4, atol=1e-4)
 
         attention_mask = torch.tensor([[1] * 7, [1] * 4 + [0] * 3] * 6 + [[0, 1, 1, 0, 0, 1, 1]])
         output = model(input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)[0].abs()
 
         expected_output_sum = torch.tensor(2343.8425)
         expected_output_mean = torch.tensor(0.8049)
-        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
-        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
+        torch.testing.assert_close(output.sum(), expected_output_sum, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output.mean(), expected_output_mean, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_model(self):
@@ -508,5 +521,5 @@ class FunnelModelIntegrationTest(unittest.TestCase):
 
         expected_output_sum = torch.tensor(235.7246)
         expected_output_mean = torch.tensor(0.0256)
-        self.assertTrue(torch.allclose(output.sum(), expected_output_sum, atol=1e-4))
-        self.assertTrue(torch.allclose(output.mean(), expected_output_mean, atol=1e-4))
+        torch.testing.assert_close(output.sum(), expected_output_sum, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(output.mean(), expected_output_mean, rtol=1e-4, atol=1e-4)

@@ -16,27 +16,28 @@ import math
 import os
 import re
 import sys
-import unittest
+from pathlib import Path
 from typing import Tuple
 from unittest.mock import patch
 
 from parameterized import parameterized
-from transformers import AutoModel
+
 from transformers.testing_utils import (
     CaptureStderr,
     ExtendSysPath,
     TestCasePlus,
+    backend_device_count,
     execute_subprocess_async,
-    get_gpu_count,
     get_torch_dist_unique_port,
     require_apex,
     require_bitsandbytes,
-    require_fairscale,
+    require_non_xpu,
     require_torch,
     require_torch_gpu,
-    require_torch_multi_gpu,
-    require_torch_non_multi_gpu,
+    require_torch_multi_accelerator,
+    require_torch_non_multi_accelerator,
     slow,
+    torch_device,
 )
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
@@ -62,6 +63,7 @@ class TestTrainerExt(TestCasePlus):
         do_train=True,
         do_eval=True,
         do_predict=True,
+        n_gpus_to_use=None,
     ):
         output_dir = self.run_trainer(
             eval_steps=1,
@@ -74,11 +76,12 @@ class TestTrainerExt(TestCasePlus):
             do_train=do_train,
             do_eval=do_eval,
             do_predict=do_predict,
+            n_gpus_to_use=n_gpus_to_use,
         )
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
 
         if not do_eval:
-            return
+            self.skipTest(reason="do_eval is False")
 
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
 
@@ -90,50 +93,21 @@ class TestTrainerExt(TestCasePlus):
             assert isinstance(last_step_stats["eval_bleu"], float)
             assert not math.isnan(float(last_step_stats["eval_loss"])), "eval_loss must not be `nan`"
 
-    @require_torch_non_multi_gpu
+    @require_torch_non_multi_accelerator
     def test_run_seq2seq_no_dist(self):
         self.run_seq2seq_quick()
 
     # verify that the trainer can handle non-distributed with n_gpu > 1
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_run_seq2seq_dp(self):
         self.run_seq2seq_quick(distributed=False)
 
     # verify that the trainer can handle distributed with n_gpu > 1
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_run_seq2seq_ddp(self):
         self.run_seq2seq_quick(distributed=True)
 
-    # test --sharded_ddp w/o --fp16
-    @unittest.skip("Requires an update of the env running those tests")
-    @require_torch_multi_gpu
-    @require_fairscale
-    def test_run_seq2seq_sharded_ddp(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp simple")
-
-    # test --sharded_ddp w/ --fp16
-    @unittest.skip("Requires an update of the env running those tests")
-    @require_torch_multi_gpu
-    @require_fairscale
-    def test_run_seq2seq_sharded_ddp_fp16(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp simple --fp16")
-
-    # test --sharded_ddp zero_dp_2 w/o --fp16
-    @unittest.skip("Requires an update of the env running those tests")
-    @require_torch_multi_gpu
-    @require_fairscale
-    def test_run_seq2seq_fully_sharded_ddp(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2", predict_with_generate=False)
-
-    # test --sharded_ddp zero_dp_2 w/ --fp16
-    @unittest.skip("Requires an update of the env running those tests")
-    @require_torch_multi_gpu
-    @require_fairscale
-    def test_run_seq2seq_fully_sharded_ddp_fp16(self):
-        self.run_seq2seq_quick(
-            distributed=True, extra_args_str="--sharded_ddp zero_dp_2 --fp16", predict_with_generate=False
-        )
-
+    @require_non_xpu
     @require_apex
     @require_torch_gpu
     def test_run_seq2seq_apex(self):
@@ -151,24 +125,30 @@ class TestTrainerExt(TestCasePlus):
         self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
 
     @parameterized.expand(["base", "low", "high", "mixed"])
-    @require_torch_multi_gpu
+    @require_torch_multi_accelerator
     def test_trainer_log_level_replica(self, experiment_id):
         # as each sub-test is slow-ish split into multiple sub-tests to avoid CI timeout
-        experiments = dict(
+        experiments = {
             # test with the default log_level - should be info and thus log info once
-            base=dict(extra_args_str="", n_matches=1),
+            "base": {"extra_args_str": "", "n_matches": 1},
             # test with low log_level and log_level_replica - should be noisy on all processes
             # now the info string should appear twice on 2 processes
-            low=dict(extra_args_str="--log_level debug --log_level_replica debug", n_matches=2),
+            "low": {"extra_args_str": "--log_level debug --log_level_replica debug", "n_matches": 2},
             # test with high log_level and low log_level_replica
             # now the info string should appear once only on the replica
-            high=dict(extra_args_str="--log_level error --log_level_replica debug", n_matches=1),
+            "high": {"extra_args_str": "--log_level error --log_level_replica debug", "n_matches": 1},
             # test with high log_level and log_level_replica - should be quiet on all processes
-            mixed=dict(extra_args_str="--log_level error --log_level_replica error", n_matches=0),
-        )
+            "mixed": {"extra_args_str": "--log_level error --log_level_replica error", "n_matches": 0},
+        }
 
         data = experiments[experiment_id]
-        kwargs = dict(distributed=True, predict_with_generate=False, do_eval=False, do_predict=False)
+        kwargs = {
+            "distributed": True,
+            "predict_with_generate": False,
+            "do_eval": False,
+            "do_predict": False,
+            "n_gpus_to_use": 2,
+        }
         log_info_string = "Running training"
         with CaptureStderr() as cl:
             self.run_seq2seq_quick(**kwargs, extra_args_str=data["extra_args_str"])
@@ -207,96 +187,97 @@ class TestTrainerExt(TestCasePlus):
         from transformers.training_args import OptimizerNames
 
         def train_and_return_metrics(optim: str) -> Tuple[int, float]:
-            from pathlib import Path
-
-            extra_args = (
-                f"--skip_memory_metrics 0 --optim {optim} --do_eval False --do_predict "
-                "False --adafactor False --log_level debug"
-            )
+            extra_args = "--skip_memory_metrics 0"
 
             output_dir = self.run_trainer(
-                eval_steps=2,
                 max_len=128,
                 model_name=MARIAN_MODEL,
                 learning_rate=3e-4,
                 num_train_epochs=1,
+                optim=optim,
                 distributed=True,  # force run in a new process
                 extra_args_str=extra_args,
                 do_eval=False,
                 do_predict=False,
+                n_gpus_to_use=1,  # to allow deterministic fixed memory usage
             )
 
             # Check metrics
             logs = TrainerState.load_from_json(Path(output_dir, "trainer_state.json")).log_history
-            gpu_peak_mem = logs[0]["train_mem_gpu_peaked_delta"]
-            gpu_alloc_mem = logs[0]["train_mem_gpu_alloc_delta"]
+            gpu_peak_mem_mb = int(logs[0]["train_mem_gpu_peaked_delta"] / 2**20)
+            gpu_alloc_mem_mb = int(logs[0]["train_mem_gpu_alloc_delta"] / 2**20)
 
             loss = logs[0]["train_loss"]
-            return gpu_peak_mem, gpu_alloc_mem, loss
+            return gpu_peak_mem_mb, gpu_alloc_mem_mb, loss
 
         gpu_peak_mem_orig, gpu_alloc_mem_orig, loss_orig = train_and_return_metrics(OptimizerNames.ADAMW_TORCH.value)
         gpu_peak_mem_bnb, gpu_alloc_mem_bnb, loss_bnb = train_and_return_metrics(OptimizerNames.ADAMW_BNB.value)
 
-        gpu_peak_mem_diff_bytes = gpu_peak_mem_orig - gpu_peak_mem_bnb
-        gpu_peak_mem_diff_percent = gpu_peak_mem_diff_bytes / gpu_peak_mem_bnb
+        gpu_alloc_mem_diff = gpu_alloc_mem_orig - gpu_alloc_mem_bnb
 
         gpu_total_mem_orig = gpu_peak_mem_orig + gpu_alloc_mem_orig
         gpu_total_mem_bnb = gpu_peak_mem_bnb + gpu_alloc_mem_bnb
+        gpu_total_mem_diff = gpu_total_mem_orig - gpu_total_mem_bnb
 
-        gpu_total_mem_diff_bytes = gpu_total_mem_orig - gpu_total_mem_bnb
-        gpu_total_mem_diff_percent = gpu_total_mem_diff_bytes / gpu_total_mem_bnb
+        # sshleifer/student_marian_en_ro_6_1 has 54M parameter, 29M of which is `nn.Embedding` which
+        # doesn't get quantized and remains in fp32. Therefore we only have 25M parameters quantized
+        # in 2 bytes and the diff in optim memory usage is derived as so:
+        #
+        # - normal 25*8=~200MB (8 bytes per param)
+        # - bnb    25*2= ~50MB (2 bytes per param)
+        #
+        # Thus we should expect ~150MB total memory saved.
+        #
+        # Peak memory should be the same - the total should be different by about that same margin
+        #
+        # After leaving a small margin to accommodate for differences between gpus let's check
+        # that we have at least 120MB in savings
+        expected_savings = 120
 
-        # leave this for now if CI gets very different results
-        # print(f"{gpu_alloc_mem_orig=:010d} {gpu_peak_mem_orig=:010d} {gpu_alloc_mem_orig+gpu_peak_mem_orig=:010d}" )
-        # print(f" {gpu_alloc_mem_bnb=:010d}  {gpu_peak_mem_bnb=:010d}   {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=:010d}")
-        # print(f"{gpu_peak_mem_diff_bytes=}, {gpu_peak_mem_diff_percent=}")
-        # print(f"{gpu_total_mem_orig=}, {gpu_total_mem_bnb=}")
-        # print(f"{gpu_total_mem_diff_bytes=}, {gpu_total_mem_diff_percent=}")
+        # uncomment the following if this test starts failing - requires py38 for a new print feature
+        # gpu_peak_mem_diff = gpu_peak_mem_orig - gpu_peak_mem_bnb
+        # print(f"{gpu_alloc_mem_orig=}MB {gpu_peak_mem_orig=}MB {gpu_alloc_mem_orig+gpu_peak_mem_orig=}MB")
+        # print(f" {gpu_alloc_mem_bnb=}MB  {gpu_peak_mem_bnb=}MB  {gpu_alloc_mem_bnb+gpu_peak_mem_bnb=}MB")
+        # print(f"{gpu_alloc_mem_diff=}MB")
+        # print(f"{gpu_peak_mem_diff=}MB")
+        # print(f"{gpu_total_mem_orig=}MB, {gpu_total_mem_bnb=}MB")
+        # print(f"{gpu_total_mem_diff=}MB, {gpu_total_mem_diff=}MB")
 
         self.assertGreater(
-            gpu_peak_mem_diff_percent,
-            10,  # basically a huge difference - got ~30x on my desktop
-            "should use very little peak gpu memory with BNB, compared to without it"
-            f"but got gpu_peak_mem_orig={gpu_peak_mem_orig} and gpu_peak_mem_bnb={gpu_peak_mem_bnb}",
+            gpu_alloc_mem_diff,
+            expected_savings,
+            "should use ~150MB less alloc gpu memory with BNB, compared to without it for this model but got"
+            f" a difference of {gpu_alloc_mem_diff}MB, with gpu_alloc_mem_orig={gpu_alloc_mem_orig}MB and"
+            f" gpu_alloc_mem_bnb={gpu_alloc_mem_bnb}MB",
         )
 
         self.assertGreater(
-            gpu_total_mem_diff_percent,
-            0.20,  # could easily be 0.50, but let's stay on the safe side
-            "Using BNB should use less total GPU memory than without it"
-            f"but got gpu_total_mem_orig={gpu_total_mem_orig} and gpu_total_mem_bnb={gpu_total_mem_bnb}",
+            gpu_total_mem_diff,
+            expected_savings,
+            "should use ~150MB less total gpu memory with BNB, compared to without it for this model but got"
+            f" a difference of {gpu_total_mem_diff}MB, with gpu_total_mem_orig={gpu_total_mem_orig}MB and"
+            f" gpu_total_mem_bnb={gpu_total_mem_bnb}MB",
         )
 
         self.assertEqual(
             loss_orig, loss_bnb, f"loss should be the same, but got loss_orig={loss_orig}, loss_bnb={loss_bnb}"
         )
 
-        # Additionally let's test that the absolute gpu memory difference is larger or about the
-        # same as the expected saving coming from BNB (6 bytes per param)
-        model = AutoModel.from_pretrained(MARIAN_MODEL)
-        total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        bnb_saved_bytes = total_numel * 6  # 324MB
-
-        self.assertGreater(
-            gpu_total_mem_diff_bytes,
-            bnb_saved_bytes * 0.8,  # add a safety margin, if it saved slightly less
-            f"BNB should have saved about {bnb_saved_bytes} bytes, but the saved bytes were"
-            f" {gpu_total_mem_diff_bytes}",
-        )
-
     def run_trainer(
         self,
-        eval_steps: int,
         max_len: int,
         model_name: str,
         num_train_epochs: int,
         learning_rate: float = 3e-3,
+        optim: str = "adafactor",
         distributed: bool = False,
         extra_args_str: str = None,
+        eval_steps: int = 0,
         predict_with_generate: bool = True,
         do_train: bool = True,
         do_eval: bool = True,
         do_predict: bool = True,
+        n_gpus_to_use: int = None,
     ):
         data_dir = self.test_file_dir / "../fixtures/tests_samples/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
@@ -320,25 +301,25 @@ class TestTrainerExt(TestCasePlus):
             --save_steps {str(eval_steps)}
             --group_by_length
             --label_smoothing_factor 0.1
-            --adafactor
             --target_lang ro_RO
             --source_lang en_XX
-        """
+            --report_to none
+        """.split()
 
         args_eval = f"""
             --do_eval
             --per_device_eval_batch_size 4
             --max_eval_samples 8
             --val_max_target_length {max_len}
-            --evaluation_strategy steps
+            --eval_strategy steps
             --eval_steps {str(eval_steps)}
-        """
+        """.split()
 
         args_predict = """
             --do_predict
-        """
+        """.split()
 
-        args = ""
+        args = []
         if do_train:
             args += args_train
 
@@ -349,19 +330,24 @@ class TestTrainerExt(TestCasePlus):
             args += args_predict
 
         if predict_with_generate:
-            args += "--predict_with_generate"
+            args += "--predict_with_generate".split()
 
-        args = args.split()
+        if do_train:
+            if optim == "adafactor":
+                args += "--adafactor".split()
+            else:
+                args += f"--optim {optim}".split()
 
         if extra_args_str is not None:
-            args.extend(extra_args_str.split())
+            args += extra_args_str.split()
 
         if distributed:
-            n_gpu = get_gpu_count()
+            if n_gpus_to_use is None:
+                n_gpus_to_use = backend_device_count(torch_device)
             master_port = get_torch_dist_unique_port()
             distributed_args = f"""
-                -m torch.distributed.launch
-                --nproc_per_node={n_gpu}
+                -m torch.distributed.run
+                --nproc_per_node={n_gpus_to_use}
                 --master_port={master_port}
                 {self.examples_dir_str}/pytorch/translation/run_translation.py
             """.split()

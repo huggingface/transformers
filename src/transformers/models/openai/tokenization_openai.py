@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for OpenAI GPT."""
 
-
 import json
 import os
 import re
@@ -32,15 +31,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/vocab.json"},
-    "merges_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/merges.txt"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai-gpt": 512,
-}
-
 
 # Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
@@ -53,7 +43,7 @@ def whitespace_tokenize(text):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -71,20 +61,30 @@ class BasicTokenizer(object):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        do_split_on_punc (`bool`, *optional*, defaults to `True`):
+            In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
+            the full context of the words, such as contractions.
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self,
+        do_lower_case=True,
+        never_split=None,
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        do_split_on_punc=True,
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
+        self.do_split_on_punc = do_split_on_punc
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
+        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
             never_split (`List[str]`, *optional*)
@@ -103,7 +103,9 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
-        orig_tokens = whitespace_tokenize(text)
+        # prevents treating the same character with different unicode codepoints as different characters
+        unicode_normalized_text = unicodedata.normalize("NFC", text)
+        orig_tokens = whitespace_tokenize(unicode_normalized_text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
@@ -131,7 +133,7 @@ class BasicTokenizer(object):
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if never_split is not None and text in never_split:
+        if not self.do_split_on_punc or (never_split is not None and text in never_split):
             return [text]
         chars = list(text)
         i = 0
@@ -252,13 +254,9 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-        super().__init__(unk_token=unk_token, **kwargs)
-
         try:
             import ftfy
             from spacy.lang.en import English
@@ -279,6 +277,8 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        super().__init__(unk_token=unk_token, **kwargs)
 
     @property
     def do_lower_case(self):
@@ -342,12 +342,12 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
             # Using BERT's BasicTokenizer
             text = self.nlp.tokenize(text)
             for token in text:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
         else:
             # Using SpaCy & ftfy (original tokenization process of OpenAI GPT)
             text = self.nlp(text_standardize(self.fix_text(text)))
             for token in text:
-                split_tokens.extend([t for t in self.bpe(token.text.lower()).split(" ")])
+                split_tokens.extend(list(self.bpe(token.text.lower()).split(" ")))
         return split_tokens
 
     def _convert_token_to_id(self, token):
@@ -391,3 +391,6 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+
+__all__ = ["OpenAIGPTTokenizer"]

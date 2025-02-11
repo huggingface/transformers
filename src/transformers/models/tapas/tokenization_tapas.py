@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization class for TAPAS model."""
-
+"""Tokenization class for TAPAS model."""
 
 import collections
 import datetime
@@ -24,13 +23,14 @@ import os
 import re
 import unicodedata
 from dataclasses import dataclass
-from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
+from typing import Callable, Dict, Generator, List, Optional, Tuple, Union
 
 import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
+    VERY_LARGE_INTEGER,
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
@@ -46,92 +46,6 @@ logger = logging.get_logger(__name__)
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        # large models
-        "google/tapas-large-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-large-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-large-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-large-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-large-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-large-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-large-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-large-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # base models
-        "google/tapas-base-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-base-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-base-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-base-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # medium models
-        "google/tapas-medium-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-medium-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-medium-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-medium-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-medium-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-medium-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-medium-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-medium-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # small models
-        "google/tapas-small-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-small-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-small-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-small-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-small-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-small-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-small-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-small-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # tiny models
-        "google/tapas-tiny-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-tiny-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-tiny-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-tiny-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-tiny-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-        # mini models
-        "google/tapas-mini-finetuned-sqa": (
-            "https://huggingface.co/google/tapas-mini-finetuned-sqa/resolve/main/vocab.txt"
-        ),
-        "google/tapas-mini-finetuned-wtq": (
-            "https://huggingface.co/google/tapas-mini-finetuned-wtq/resolve/main/vocab.txt"
-        ),
-        "google/tapas-mini-finetuned-wikisql-supervised": (
-            "https://huggingface.co/google/tapas-mini-finetuned-wikisql-supervised/resolve/main/vocab.txt"
-        ),
-        "google/tapas-mini-finetuned-tabfact": (
-            "https://huggingface.co/google/tapas-mini-finetuned-tabfact/resolve/main/vocab.txt"
-        ),
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {name: 512 for name in PRETRAINED_VOCAB_FILES_MAP.keys()}
-PRETRAINED_INIT_CONFIGURATION = {name: {"do_lower_case": True} for name in PRETRAINED_VOCAB_FILES_MAP.keys()}
 
 
 class TapasTruncationStrategy(ExplicitEnum):
@@ -155,19 +69,19 @@ class TokenCoordinates:
 
 @dataclass
 class TokenizedTable:
-    rows: List[List[List[Text]]]
+    rows: List[List[List[str]]]
     selected_tokens: List[TokenCoordinates]
 
 
 @dataclass(frozen=True)
 class SerializedExample:
-    tokens: List[Text]
+    tokens: List[str]
     column_ids: List[int]
     row_ids: List[int]
     segment_ids: List[int]
 
 
-def _is_inner_wordpiece(token: Text):
+def _is_inner_wordpiece(token: str):
     return token.startswith("##")
 
 
@@ -223,7 +137,7 @@ TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 which it will tokenize. This is useful for NER or token classification.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -311,11 +225,12 @@ class TapasTokenizer(PreTrainedTokenizer):
             Minimum length of each question in terms of tokens (will be skipped otherwise).
         max_question_length (`int`, *optional*):
             Maximum length of each question in terms of tokens (will be skipped otherwise).
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -340,7 +255,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         max_question_length=None,
         model_max_length: int = 512,
         additional_special_tokens: Optional[List[str]] = None,
-        **kwargs
+        clean_up_tokenization_spaces=True,
+        **kwargs,
     ):
         if not is_pandas_available():
             raise ImportError("Pandas is required for the TAPAS tokenizer.")
@@ -350,6 +266,44 @@ class TapasTokenizer(PreTrainedTokenizer):
                 additional_special_tokens.append(empty_token)
         else:
             additional_special_tokens = [empty_token]
+
+        if not os.path.isfile(vocab_file):
+            raise ValueError(
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
+        self.vocab = load_vocab(vocab_file)
+        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+        self.do_basic_tokenize = do_basic_tokenize
+        if do_basic_tokenize:
+            self.basic_tokenizer = BasicTokenizer(
+                do_lower_case=do_lower_case,
+                never_split=never_split,
+                tokenize_chinese_chars=tokenize_chinese_chars,
+                strip_accents=strip_accents,
+            )
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+
+        # Additional properties
+        self.cell_trim_length = cell_trim_length
+        self.max_column_id = (
+            max_column_id
+            if max_column_id is not None
+            else model_max_length
+            if model_max_length is not None
+            else VERY_LARGE_INTEGER
+        )
+        self.max_row_id = (
+            max_row_id
+            if max_row_id is not None
+            else model_max_length
+            if model_max_length is not None
+            else VERY_LARGE_INTEGER
+        )
+        self.strip_column_names = strip_column_names
+        self.update_answer_coordinates = update_answer_coordinates
+        self.min_question_length = min_question_length
+        self.max_question_length = max_question_length
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -372,34 +326,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             max_question_length=max_question_length,
             model_max_length=model_max_length,
             additional_special_tokens=additional_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-
-        if not os.path.isfile(vocab_file):
-            raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
-            )
-        self.vocab = load_vocab(vocab_file)
-        self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
-        self.do_basic_tokenize = do_basic_tokenize
-        if do_basic_tokenize:
-            self.basic_tokenizer = BasicTokenizer(
-                do_lower_case=do_lower_case,
-                never_split=never_split,
-                tokenize_chinese_chars=tokenize_chinese_chars,
-                strip_accents=strip_accents,
-            )
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
-
-        # Additional properties
-        self.cell_trim_length = cell_trim_length
-        self.max_column_id = max_column_id if max_column_id is not None else self.model_max_length
-        self.max_row_id = max_row_id if max_row_id is not None else self.model_max_length
-        self.strip_column_names = strip_column_names
-        self.update_answer_coordinates = update_answer_coordinates
-        self.min_question_length = min_question_length
-        self.max_question_length = max_question_length
 
     @property
     def do_lower_case(self):
@@ -418,7 +347,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
-
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -594,6 +522,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -602,7 +531,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) related to a table.
@@ -658,6 +587,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 truncation=truncation,
                 max_length=max_length,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -679,6 +609,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 truncation=truncation,
                 max_length=max_length,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -708,6 +639,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -716,7 +648,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepare a table and a list of strings for the model.
@@ -776,6 +708,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             truncation=truncation,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -815,6 +748,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = None,
@@ -823,7 +757,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         table_tokens = self._tokenize_table(table)
 
@@ -845,6 +779,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             add_special_tokens=add_special_tokens,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
@@ -874,6 +809,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -882,7 +818,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         batch_outputs = {}
 
@@ -900,6 +836,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 truncation=truncation,
                 max_length=max_length,
                 pad_to_multiple_of=None,  # we pad in batch afterwards
+                padding_side=None,  # we pad in batch afterward
                 return_attention_mask=False,  # we pad in batch afterwards
                 return_token_type_ids=return_token_type_ids,
                 return_special_tokens_mask=return_special_tokens_mask,
@@ -921,6 +858,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             padding=padding,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
         )
 
@@ -944,7 +882,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> List[int]:
         """
         Prepare a table and a string for the model. This method does not return token type IDs, attention masks, etc.
@@ -989,6 +927,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -996,7 +935,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepare a table and a string for the model.
@@ -1045,6 +984,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             padding=padding,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -1070,6 +1010,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -1077,7 +1018,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ):
         if query is None:
             query = ""
@@ -1101,6 +1042,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             padding=padding,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
@@ -1128,6 +1070,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
@@ -1136,7 +1079,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence of input id so that it can be used by the model. It adds special tokens, truncates
@@ -1291,6 +1234,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 max_length=max_length,
                 padding=padding.value,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_attention_mask=return_attention_mask,
             )
 
@@ -1326,7 +1270,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Total number of table columns
             max_length (`int`):
                 Total maximum length.
-            truncation_strategy (`str` or [`TapasTruncationStrategy`]):
+            truncation_strategy (`str` or [`TapasTruncationStrategy]`):
                 Truncation strategy to use. Seeing as this method should only be called when truncating, the only
                 available strategy is the `"drop_rows_to_fit"` strategy.
 
@@ -1689,7 +1633,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         for col_index in range(num_columns):
             for row_index in range(num_rows):
-                indices = [index for index in self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index)]
+                indices = list(self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index))
                 num_indices = len(indices)
                 if num_indices > 1:
                     for index in indices:
@@ -1831,6 +1775,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -1852,7 +1797,10 @@ class TapasTokenizer(PreTrainedTokenizer):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
+            padding_side:
+                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+                Default value is picked from the class attribute of the same name.
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
@@ -1876,7 +1824,8 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if needs_to_be_padded:
             difference = max_length - len(encoded_inputs["input_ids"])
-            if self.padding_side == "right":
+            padding_side = padding_side if padding_side is not None else self.padding_side
+            if padding_side == "right":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
@@ -1894,7 +1843,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
-            elif self.padding_side == "left":
+            elif padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
@@ -1913,7 +1862,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
             else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+                raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
 
@@ -2038,7 +1987,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -2056,20 +2005,30 @@ class BasicTokenizer(object):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        do_split_on_punc (`bool`, *optional*, defaults to `True`):
+            In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
+            the full context of the words, such as contractions.
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self,
+        do_lower_case=True,
+        never_split=None,
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        do_split_on_punc=True,
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
+        self.do_split_on_punc = do_split_on_punc
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
+        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
             never_split (`List[str]`, *optional*)
@@ -2088,7 +2047,9 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
-        orig_tokens = whitespace_tokenize(text)
+        # prevents treating the same character with different unicode codepoints as different characters
+        unicode_normalized_text = unicodedata.normalize("NFC", text)
+        orig_tokens = whitespace_tokenize(unicode_normalized_text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
@@ -2116,7 +2077,7 @@ class BasicTokenizer(object):
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if never_split is not None and text in never_split:
+        if not self.do_split_on_punc or (never_split is not None and text in never_split):
             return [text]
         chars = list(text)
         i = 0
@@ -2188,7 +2149,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -2288,14 +2249,14 @@ class NumericValueSpan:
 
 @dataclass
 class Cell:
-    text: Text
+    text: str
     numeric_value: Optional[NumericValue] = None
 
 
 @dataclass
 class Question:
-    original_text: Text  # The original raw question string.
-    text: Text  # The question string after normalization.
+    original_text: str  # The original raw question string.
+    text: str  # The question string after normalization.
     numeric_spans: Optional[List[NumericValueSpan]] = None
 
 
@@ -2826,3 +2787,6 @@ def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=N
             table.iloc[row_index, col_index].numeric_value = numeric_value
 
     return table
+
+
+__all__ = ["TapasTokenizer"]

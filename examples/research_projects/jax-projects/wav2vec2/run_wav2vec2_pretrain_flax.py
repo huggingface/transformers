@@ -6,18 +6,18 @@ from dataclasses import field
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-import numpy as np
-from datasets import DatasetDict, load_dataset
-from tqdm import tqdm
-
 import flax
 import jax
 import jax.numpy as jnp
 import librosa
+import numpy as np
 import optax
+from datasets import DatasetDict, load_dataset
 from flax import jax_utils, traverse_util
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
+from tqdm import tqdm
+
 from transformers import (
     FlaxWav2Vec2ForPreTraining,
     HfArgumentParser,
@@ -144,7 +144,7 @@ class FlaxDataCollatorForWav2Vec2Pretraining:
             The Wav2Vec2 model used for pretraining. The data collator needs to have access
             to config and ``_get_feat_extract_output_lengths`` function for correct padding.
         feature_extractor (:class:`~transformers.Wav2Vec2FeatureExtractor`):
-            The processor used for proccessing the data.
+            The processor used for processing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:

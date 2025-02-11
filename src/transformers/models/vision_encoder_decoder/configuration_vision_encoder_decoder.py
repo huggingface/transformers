@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 from typing import TYPE_CHECKING, Any, Mapping, Optional, OrderedDict
 
 from packaging import version
@@ -60,7 +59,7 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
     >>> config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
 
-    >>> # Initializing a ViTBert model (with random weights) from a ViT & bert-base-uncased style configurations
+    >>> # Initializing a ViTBert model (with random weights) from a ViT & google-bert/bert-base-uncased style configurations
     >>> model = VisionEncoderDecoderModel(config=config)
 
     >>> # Accessing the model configuration
@@ -77,7 +76,9 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
     >>> encoder_decoder_config = VisionEncoderDecoderConfig.from_pretrained("my-model")
     >>> model = VisionEncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
+
     model_type = "vision-encoder-decoder"
+    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     is_composition = True
 
     def __init__(self, **kwargs):
@@ -113,19 +114,6 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
         decoder_config.add_cross_attention = True
 
         return cls(encoder=encoder_config.to_dict(), decoder=decoder_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default *to_dict()* from *PretrainedConfig*.
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["encoder"] = self.encoder.to_dict()
-        output["decoder"] = self.decoder.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
 
 
 class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
@@ -220,3 +208,6 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         """
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
         return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
+
+
+__all__ = ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LayoutLMv3 model. """
+"""Testing suite for the PyTorch LayoutLMv3 model."""
 
 import copy
 import unittest
@@ -23,6 +23,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -39,12 +40,11 @@ if is_torch_available():
         LayoutLMv3ForTokenClassification,
         LayoutLMv3Model,
     )
-    from transformers.models.layoutlmv3.modeling_layoutlmv3 import LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3FeatureExtractor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 class LayoutLMv3ModelTester:
@@ -62,7 +62,7 @@ class LayoutLMv3ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=36,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -269,8 +269,7 @@ class LayoutLMv3ModelTester:
 
 
 @require_torch
-class LayoutLMv3ModelTest(ModelTesterMixin, unittest.TestCase):
-
+class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_mismatched_shapes = False
@@ -285,6 +284,28 @@ class LayoutLMv3ModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"document-question-answering": LayoutLMv3ForQuestionAnswering, "feature-extraction": LayoutLMv3Model}
+        if is_torch_available()
+        else {}
+    )
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        # `DocumentQuestionAnsweringPipeline` is expected to work with this model, but it combines the text and visual
+        # embedding along the sequence dimension (dim 1), which causes an error during post-processing as `p_mask` has
+        # the sequence dimension of the text embedding only.
+        # (see the line `embedding_output = torch.cat([embedding_output, visual_embeddings], dim=1)`)
+        return True
 
     def setUp(self):
         self.model_tester = LayoutLMv3ModelTester(self)
@@ -353,9 +374,9 @@ class LayoutLMv3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LayoutLMv3Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "microsoft/layoutlmv3-base"
+        model = LayoutLMv3Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -367,16 +388,16 @@ def prepare_img():
 @require_torch
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return LayoutLMv3FeatureExtractor(apply_ocr=False) if is_vision_available() else None
+    def default_image_processor(self):
+        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
         model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values.to(torch_device)
+        pixel_values = image_processor(images=image, return_tensors="pt").pixel_values.to(torch_device)
 
         input_ids = torch.tensor([[1, 2]])
         bbox = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]]).unsqueeze(0)
@@ -396,4 +417,4 @@ class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
             [[-0.0529, 0.3618, 0.1632], [-0.1587, -0.1667, -0.0400], [-0.1557, -0.1671, -0.0505]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

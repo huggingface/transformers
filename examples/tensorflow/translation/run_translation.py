@@ -26,11 +26,11 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import datasets
+import evaluate
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
 
-import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 # region Dependencies and constants
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -93,12 +93,22 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -165,7 +175,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
                 "during ``evaluate`` and ``predict``."
             )
@@ -209,7 +219,7 @@ class DataTrainingArguments:
         },
     )
     num_beams: Optional[int] = field(
-        default=None,
+        default=1,
         metadata={
             "help": (
                 "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
@@ -322,7 +332,8 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -336,10 +347,10 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading
     # endregion
 
     # region Load model config and tokenizer
@@ -352,14 +363,16 @@ def main():
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     prefix = data_args.source_prefix if data_args.source_prefix is not None else ""
@@ -426,15 +439,14 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
-        with training_args.main_process_first(desc="train dataset map pre-processing"):
-            train_dataset = train_dataset.map(
-                preprocess_function,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Running tokenizer on train dataset",
-            )
+        train_dataset = train_dataset.map(
+            preprocess_function,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on train dataset",
+        )
     else:
         train_dataset = None
 
@@ -446,15 +458,14 @@ def main():
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
-        with training_args.main_process_first(desc="validation dataset map pre-processing"):
-            eval_dataset = eval_dataset.map(
-                preprocess_function,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                remove_columns=column_names,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Running tokenizer on validation dataset",
-            )
+        eval_dataset = eval_dataset.map(
+            preprocess_function,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+            desc="Running tokenizer on validation dataset",
+        )
     else:
         eval_dataset = None
     # endregion
@@ -466,10 +477,24 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
-        model.resize_token_embeddings(len(tokenizer))
+        # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
+        # on a small vocab and want a smaller embedding size, remove this test.
+        embeddings = model.get_input_embeddings()
+
+        # Matt: This is a temporary workaround as we transition our models to exclusively using Keras embeddings.
+        #       As soon as the transition is complete, all embeddings should be keras.Embeddings layers, and
+        #       the weights will always be in embeddings.embeddings.
+        if hasattr(embeddings, "embeddings"):
+            embedding_size = embeddings.embeddings.shape[0]
+        else:
+            embedding_size = embeddings.weight.shape[0]
+        if len(tokenizer) > embedding_size:
+            model.resize_token_embeddings(len(tokenizer))
+
         if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
             model.config.forced_bos_token_id = forced_bos_token_id
         # endregion
@@ -495,7 +520,7 @@ def main():
             model=model,
             label_pad_token_id=label_pad_token_id,
             pad_to_multiple_of=64,  # Reduce the number of unique shapes for XLA, especially for generation
-            return_tensors="tf",
+            return_tensors="np",
         )
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
@@ -544,12 +569,12 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = None
+            optimizer = "sgd"  # Just write anything because we won't be using it
         # endregion
 
         # region Metric and postprocessing
         if training_args.do_eval:
-            metric = evaluate.load("sacrebleu")
+            metric = evaluate.load("sacrebleu", cache_dir=model_args.cache_dir)
 
             if data_args.val_max_target_length is None:
                 data_args.val_max_target_length = data_args.max_target_length
@@ -620,9 +645,8 @@ def main():
             callbacks.append(
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )
@@ -631,6 +655,8 @@ def main():
 
         # region Training
         eval_metrics = None
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
 
         if training_args.do_train:

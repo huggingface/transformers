@@ -1,8 +1,4 @@
-# flake8: noqa
-# There's no way to ignore "F401 '...' imported but unused" warnings in this
-# module, but to preserve other warnings. So, don't check this module at all.
-
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,72 +13,18 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-# rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
-
-
-_import_structure = {"configuration_vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig"]}
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_vilt"] = ["ViltFeatureExtractor"]
-    _import_structure["processing_vilt"] = ["ViltProcessor"]
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_vilt"] = [
-        "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ViltForImageAndTextRetrieval",
-        "ViltForImagesAndTextClassification",
-        "ViltForTokenClassification",
-        "ViltForMaskedLM",
-        "ViltForQuestionAnswering",
-        "ViltLayer",
-        "ViltModel",
-        "ViltPreTrainedModel",
-    ]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_vilt import ViltFeatureExtractor
-        from .processing_vilt import ViltProcessor
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_vilt import (
-            VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViltForImageAndTextRetrieval,
-            ViltForImagesAndTextClassification,
-            ViltForMaskedLM,
-            ViltForQuestionAnswering,
-            ViltForTokenClassification,
-            ViltLayer,
-            ViltModel,
-            ViltPreTrainedModel,
-        )
-
-
+    from .configuration_vilt import *
+    from .feature_extraction_vilt import *
+    from .image_processing_vilt import *
+    from .modeling_vilt import *
+    from .processing_vilt import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

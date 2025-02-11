@@ -9,85 +9,128 @@ parameters:
         default: false
 
 jobs:
+    # Ensure running with CircleCI/huggingface
+    check_circleci_user:
+        docker:
+            - image: python:3.10-slim
+        resource_class: small
+        parallelism: 1
+        steps:
+            - run: echo $CIRCLE_PROJECT_USERNAME
+            - run: |
+                if [ "$CIRCLE_PROJECT_USERNAME" = "huggingface" ]; then
+                    exit 0
+                else
+                    echo "The CI is running under $CIRCLE_PROJECT_USERNAME personal account. Please follow https://support.circleci.com/hc/en-us/articles/360008097173-Troubleshooting-why-pull-requests-are-not-triggering-jobs-on-my-organization- to fix it."; exit -1
+                fi
     # Fetch the tests to run
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: huggingface/transformers-quality
         parallelism: 1
         steps:
             - checkout
-            - run: pip install --upgrade pip
-            - run: pip install GitPython
-            - run: pip install .
+            - run: uv pip install -U -e .
+            - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
             - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
-            - store_artifacts:
-                  path: ~/transformers/tests_fetched_summary.txt
+            - run: python utils/tests_fetcher.py --filter_tests
+            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
-                if [ -f test_list.txt ]; then
-                    cp test_list.txt test_preparation/test_list.txt
-                else
-                    touch test_preparation/test_list.txt
+                if [ ! -s test_preparation/generated_config.yml ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
                 fi
-            - run: python utils/tests_fetcher.py --filter_pipeline_tests
-            - run: |
-                if [ -f test_list.txt ]; then
-                    mv test_list.txt test_preparation/filtered_test_list.txt
-                else
-                    touch test_preparation/filtered_test_list.txt
-                fi
-            - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                      mv test_list.txt test_preparation/examples_test_list.txt
-                  else
-                      touch test_preparation/examples_test_list.txt
-                  fi
+
             - store_artifacts:
-                  path: test_preparation/test_list.txt
+                path: test_preparation
+
+            - run:
+                name: "Retrieve Artifact Paths"
+                # [reference] https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts
+                # `CIRCLE_TOKEN` is defined as an environment variables set within a context, see `https://circleci.com/docs/contexts/`
+                command: |
+                    project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    job_number=${CIRCLE_BUILD_NUM}
+                    url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
+                    curl -o test_preparation/artifacts.json ${url} --header "Circle-Token: $CIRCLE_TOKEN"
+            - run:
+                name: "Prepare pipeline parameters"
+                command: |
+                    python utils/process_test_artifacts.py 
+
+            # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
+            # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
+            # We used:
+
+            # https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts : to get the job artifacts
+            # We could not pass a nested dict, which is why we create the test_file_... parameters for every single job
+
             - store_artifacts:
-                  path: ~/transformers/test_preparation/filtered_test_list.txt
+                path: test_preparation/transformed_artifacts.json
             - store_artifacts:
-                  path: test_preparation/examples_test_list.txt
-            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
-            - run: |
-                  if [ ! -s test_preparation/generated_config.yml ]; then
-                      echo "No tests to run, exiting early!"
-                      circleci-agent step halt
-                  fi
-            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
-            - store_artifacts:
-                  path: test_preparation/generated_config.txt
+                path: test_preparation/artifacts.json
             - continuation/continue:
-                  configuration_path: test_preparation/generated_config.yml
+                parameters:  test_preparation/transformed_artifacts.json
+                configuration_path: test_preparation/generated_config.yml
 
     # To run all tests for the nightly build
     fetch_all_tests:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: huggingface/transformers-quality
         parallelism: 1
         steps:
-            - run: pip install --upgrade pip
-            - run: pip install .
+            - checkout
+            - run: uv pip install -U -e .
+            - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
+            - run: mkdir -p test_preparation
+            - run: python utils/tests_fetcher.py --fetch_all | tee tests_fetched_summary.txt
+            - run: python utils/tests_fetcher.py --filter_tests
+            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
-                  mkdir test_preparation
-                  echo "tests" > test_preparation/test_list.txt
-                  echo "tests" > test_preparation/examples_test_list.txt
-            - run: python utils/tests_fetcher.py --filter_pipeline_tests
-            - run: mv test_list.txt test_preparation/filtered_test_list.txt
-            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
-            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
+                if [ ! -s test_preparation/generated_config.yml ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
+
             - store_artifacts:
-                  path: test_preparation/generated_config.txt
+                path: test_preparation
+
+            - run:
+                name: "Retrieve Artifact Paths"
+                env:
+                    CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
+                command: |
+                    project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    job_number=${CIRCLE_BUILD_NUM}
+                    url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
+                    curl -o  test_preparation/artifacts.json ${url}
+            - run:
+                name: "Prepare pipeline parameters"
+                command: |
+                    python utils/process_test_artifacts.py 
+
+            # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
+            # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
+            # We used:
+
+            # https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts : to get the job artifacts
+            # We could not pass a nested dict, which is why we create the test_file_... parameters for every single job
+
+            - store_artifacts:
+                path: test_preparation/transformed_artifacts.json
+            - store_artifacts:
+                path: test_preparation/artifacts.json
             - continuation/continue:
-                  configuration_path: test_preparation/generated_config.yml
+                parameters:  test_preparation/transformed_artifacts.json
+                configuration_path: test_preparation/generated_config.yml
 
     check_code_quality:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: huggingface/transformers-quality
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -95,28 +138,24 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-code_quality-{{ checksum "setup.py" }}
-                      - v0.5-code-quality
-            - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
-            - save_cache:
-                  key: v0.5-code_quality-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: black --check --preview examples tests src utils
-            - run: isort --check-only examples tests src utils
+            - run: uv pip install -e ".[quality]"
+            - run:
+                name: Show installed libraries and their versions
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
+            - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
+            - run: ruff check examples tests src utils
+            - run: ruff format tests src utils --check
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
-            - run: flake8 examples tests src utils
-            - run: doc-builder style src/transformers docs/source --max_len 119 --check_only --path_to_docs docs/source
             - run: python utils/check_doc_toc.py
+            - run: python utils/check_docstrings.py --check_all
 
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
-            - image: cimg/python:3.7.12
+            - image: huggingface/transformers-consistency
         resource_class: large
         environment:
             TRANSFORMERS_IS_CI: yes
@@ -124,39 +163,56 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.5-repository_consistency
-            - run: pip install --upgrade pip
-            - run: pip install .[all,quality]
-            - save_cache:
-                  key: v0.5-repository_consistency-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
+            - run: uv pip install -e ".[quality]"
+            - run:
+                name: Show installed libraries and their versions
+                command: pip freeze | tee installed.txt
+            - store_artifacts:
+                  path: ~/transformers/installed.txt
             - run: python utils/check_copies.py
+            - run: python utils/check_modular_conversion.py
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
             - run: python utils/check_inits.py
             - run: python utils/check_config_docstrings.py
+            - run: python utils/check_config_attributes.py
+            - run: python utils/check_doctest_list.py
             - run: make deps_table_check_updated
-            - run: python utils/tests_fetcher.py --sanity_check
             - run: python utils/update_metadata.py --check-only
+            - run: python utils/check_docstrings.py
+            - run: python utils/check_support_list.py
 
 workflows:
     version: 2
     setup_and_quality:
         when:
-            not: <<pipeline.parameters.nightly>>
+            and:
+                - equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+                - not: <<pipeline.parameters.nightly>>
         jobs:
+            - check_circleci_user
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
 
+    setup_and_quality_2:
+        when:
+            not:
+                 equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+        jobs:
+            - check_circleci_user
+            - check_code_quality
+            - check_repository_consistency
+            - fetch_tests:
+                # [reference] https://circleci.com/docs/contexts/
+                context:
+                    - TRANSFORMERS_CONTEXT
+
     nightly:
         when: <<pipeline.parameters.nightly>>
         jobs:
+            - check_circleci_user
             - check_code_quality
             - check_repository_consistency
             - fetch_all_tests

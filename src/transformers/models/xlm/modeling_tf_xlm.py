@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 XLM model.
+TF 2.0 XLM model.
 """
+
+from __future__ import annotations
 
 import itertools
 import warnings
@@ -42,10 +44,11 @@ from ...modeling_tf_utils import (
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -59,23 +62,8 @@ from .configuration_xlm import XLMConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "xlm-mlm-en-2048"
+_CHECKPOINT_FOR_DOC = "FacebookAI/xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
-_TOKENIZER_FOR_DOC = "XLMTokenizer"
-
-TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "xlm-mlm-en-2048",
-    "xlm-mlm-ende-1024",
-    "xlm-mlm-enfr-1024",
-    "xlm-mlm-enro-1024",
-    "xlm-mlm-tlm-xnli15-1024",
-    "xlm-mlm-xnli15-1024",
-    "xlm-clm-enfr-1024",
-    "xlm-clm-ende-1024",
-    "xlm-mlm-17-1280",
-    "xlm-mlm-100-1280",
-    # See all XLM models at https://huggingface.co/models?filter=xlm
-]
 
 
 def create_sinusoidal_embeddings(n_pos, dim, out):
@@ -113,7 +101,7 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     return mask, attn_mask
 
 
-class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
+class TFXLMMultiHeadAttention(keras.layers.Layer):
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config, **kwargs):
@@ -124,12 +112,13 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         assert self.dim % self.n_heads == 0
 
-        self.q_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
-        self.k_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
-        self.v_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
-        self.out_lin = tf.keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
-        self.dropout = tf.keras.layers.Dropout(config.attention_dropout)
+        self.q_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="q_lin")
+        self.k_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="k_lin")
+        self.v_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="v_lin")
+        self.out_lin = keras.layers.Dense(dim, kernel_initializer=get_initializer(config.init_std), name="out_lin")
+        self.dropout = keras.layers.Dropout(config.attention_dropout)
         self.pruned_heads = set()
+        self.dim = dim
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -204,15 +193,34 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "q_lin", None) is not None:
+            with tf.name_scope(self.q_lin.name):
+                self.q_lin.build([None, None, self.dim])
+        if getattr(self, "k_lin", None) is not None:
+            with tf.name_scope(self.k_lin.name):
+                self.k_lin.build([None, None, self.dim])
+        if getattr(self, "v_lin", None) is not None:
+            with tf.name_scope(self.v_lin.name):
+                self.v_lin.build([None, None, self.dim])
+        if getattr(self, "out_lin", None) is not None:
+            with tf.name_scope(self.out_lin.name):
+                self.out_lin.build([None, None, self.dim])
 
-class TFXLMTransformerFFN(tf.keras.layers.Layer):
+
+class TFXLMTransformerFFN(keras.layers.Layer):
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.lin1 = tf.keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
-        self.lin2 = tf.keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
+        self.lin1 = keras.layers.Dense(dim_hidden, kernel_initializer=get_initializer(config.init_std), name="lin1")
+        self.lin2 = keras.layers.Dense(out_dim, kernel_initializer=get_initializer(config.init_std), name="lin2")
         self.act = get_tf_activation("gelu") if config.gelu_activation else get_tf_activation("relu")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
+        self.in_dim = in_dim
+        self.dim_hidden = dim_hidden
 
     def call(self, input, training=False):
         x = self.lin1(input)
@@ -222,9 +230,20 @@ class TFXLMTransformerFFN(tf.keras.layers.Layer):
 
         return x
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "lin1", None) is not None:
+            with tf.name_scope(self.lin1.name):
+                self.lin1.build([None, None, self.in_dim])
+        if getattr(self, "lin2", None) is not None:
+            with tf.name_scope(self.lin2.name):
+                self.lin2.build([None, None, self.dim_hidden])
+
 
 @keras_serializable
-class TFXLMMainLayer(tf.keras.layers.Layer):
+class TFXLMMainLayer(keras.layers.Layer):
     config_class = XLMConfig
 
     def __init__(self, config, **kwargs):
@@ -268,8 +287,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             raise ValueError("transformer dim must be a multiple of n_heads")
 
         # embeddings
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.attention_dropout = tf.keras.layers.Dropout(config.attention_dropout)
+        self.dropout = keras.layers.Dropout(config.dropout)
+        self.attention_dropout = keras.layers.Dropout(config.attention_dropout)
 
         if config.sinusoidal_embeddings:
             raise NotImplementedError
@@ -278,7 +297,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFSharedEmbeddings(
             self.n_words, self.dim, initializer_range=config.embed_init_std, name="embeddings"
         )  # padding_idx=self.pad_index)
-        self.layer_norm_emb = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
+        self.layer_norm_emb = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm_emb")
 
         # transformer layers
         self.attentions = []
@@ -294,7 +313,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                 TFXLMMultiHeadAttention(self.n_heads, self.dim, config=config, name=f"attentions_._{i}")
             )
             self.layer_norm1.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
+                keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
             )
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
@@ -303,7 +322,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                 TFXLMTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name=f"ffns_._{i}")
             )
             self.layer_norm2.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
+                keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
             )
 
         if hasattr(config, "pruned_heads"):
@@ -314,7 +333,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                 if self.attentions[int(layer)].n_heads == config.n_heads:
                     self.prune_heads({int(layer): list(map(int, heads))})
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
         with tf.name_scope("position_embeddings"):
             self.position_embeddings = self.add_weight(
                 name="embeddings",
@@ -329,8 +351,24 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                     shape=[self.n_langs, self.dim],
                     initializer=get_initializer(self.embed_init_std),
                 )
-
-        super().build(input_shape)
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "layer_norm_emb", None) is not None:
+            with tf.name_scope(self.layer_norm_emb.name):
+                self.layer_norm_emb.build([None, None, self.dim])
+        for layer in self.attentions:
+            with tf.name_scope(layer.name):
+                layer.build(None)
+        for layer in self.layer_norm1:
+            with tf.name_scope(layer.name):
+                layer.build([None, None, self.dim])
+        for layer in self.ffns:
+            with tf.name_scope(layer.name):
+                layer.build(None)
+        for layer in self.layer_norm2:
+            with tf.name_scope(layer.name):
+                layer.build([None, None, self.dim])
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -385,9 +423,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        tf.debugging.assert_equal(
-            shape_list(lengths)[0], bs
-        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(lengths)[0], bs),
+            f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched",
+        )
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -406,17 +445,19 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             position_ids = tf.tile(position_ids, (bs, 1))
 
         # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-        tf.debugging.assert_equal(
-            shape_list(position_ids), [bs, slen]
-        ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
+        (
+            tf.debugging.assert_equal(shape_list(position_ids), [bs, slen]),
+            f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched",
+        )
         # position_ids = position_ids.transpose(0, 1)
 
         # langs
         if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(
-                shape_list(langs), [bs, slen]
-            ), f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched"
+            (
+                tf.debugging.assert_equal(shape_list(langs), [bs, slen]),
+                f"Lang shape {shape_list(langs)} and input shape {[bs, slen]} mismatched",
+            )
             # langs = langs.transpose(0, 1)
 
         # Prepare head mask if needed
@@ -441,16 +482,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         # embeddings
         if inputs_embeds is None:
-            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-            tf.debugging.assert_less(
-                input_ids,
-                tf.cast(self.embeddings.vocab_size, dtype=input_ids.dtype),
-                message=(
-                    "input_ids must be smaller than the embedding layer's input dimension (got"
-                    f" {tf.math.reduce_max(input_ids)} >= {self.embeddings.vocab_size})"
-                ),
-            )
+            check_embeddings_within_bounds(input_ids, self.embeddings.vocab_size)
             inputs_embeds = self.embeddings(input_ids)
 
         tensor = inputs_embeds + tf.gather(self.position_embeddings, position_ids)
@@ -533,13 +565,13 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         # Sometimes XLM has language embeddings so don't forget to build them as well if needed
-        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
-        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]], dtype=tf.int32)
+        attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32)
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
                 "input_ids": inputs_list,
                 "attention_mask": attns_list,
-                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int32),
             }
         else:
             return {"input_ids": inputs_list, "attention_mask": attns_list}
@@ -568,8 +600,8 @@ class TFXLMWithLMHeadModelOutput(ModelOutput):
     """
 
     logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor, ...] | None = None
+    attentions: Tuple[tf.Tensor, ...] | None = None
 
 
 XLM_START_DOCSTRING = r"""
@@ -578,7 +610,7 @@ XLM_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -619,7 +651,7 @@ XLM_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -656,9 +688,8 @@ XLM_INPUTS_DOCSTRING = r"""
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, tf.Tensor]`, *optional*):
-            Dictionary string to `torch.FloatTensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding.
+            Dictionary string to `tf.Tensor` that contains precomputed hidden states (key and values in the attention
+            blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential decoding.
 
             The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
@@ -701,27 +732,26 @@ class TFXLMModel(TFXLMPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        langs=None,
-        token_type_ids=None,
-        position_ids=None,
-        lengths=None,
-        cache=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
+        input_ids: TFModelInputType | None = None,
+        attention_mask: tf.Tensor | None = None,
+        langs: tf.Tensor | None = None,
+        token_type_ids: tf.Tensor | None = None,
+        position_ids: tf.Tensor | None = None,
+        lengths: tf.Tensor | None = None,
+        cache: Dict[str, tf.Tensor] | None = None,
+        head_mask: tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        training: bool = False,
+    ) -> TFBaseModelOutput | Tuple[tf.Tensor]:
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -740,15 +770,16 @@ class TFXLMModel(TFXLMPreTrainedModel):
 
         return outputs
 
-    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
-
-class TFXLMPredLayer(tf.keras.layers.Layer):
+class TFXLMPredLayer(keras.layers.Layer):
     """
     Prediction layer (cross_entropy or adaptive_softmax).
     """
@@ -838,22 +869,21 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLMWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        langs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        lengths: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        langs: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        lengths: np.ndarray | tf.Tensor | None = None,
         cache: Optional[Dict[str, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -885,11 +915,16 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
         )
 
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFXLMWithLMHeadModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "pred_layer", None) is not None:
+            with tf.name_scope(self.pred_layer.name):
+                self.pred_layer.build(None)
 
 
 @add_start_docstrings(
@@ -910,26 +945,25 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        langs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        lengths: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        langs: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        lengths: np.ndarray | tf.Tensor | None = None,
         cache: Optional[Dict[str, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -970,12 +1004,16 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             attentions=transformer_outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
 
 
 @add_start_docstrings(
@@ -991,9 +1029,10 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
 
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.sequence_summary = TFSequenceSummary(config, initializer_range=config.init_std, name="sequence_summary")
-        self.logits_proj = tf.keras.layers.Dense(
+        self.logits_proj = keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="logits_proj"
         )
+        self.config = config
 
     @property
     def dummy_inputs(self):
@@ -1006,37 +1045,36 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         # Sometimes XLM has language embeddings so don't forget to build them as well if needed
         if self.config.use_lang_emb and self.config.n_langs > 1:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
+                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
         else:
             return {
-                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32),
             }
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        langs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        lengths: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        langs: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        lengths: np.ndarray | tf.Tensor | None = None,
         cache: Optional[Dict[str, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         if input_ids is not None:
@@ -1097,27 +1135,19 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             attentions=transformer_outputs.attentions,
         )
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
-    def serving(self, inputs: Dict[str, tf.Tensor]):
-        output = self.call(input_ids=inputs)
-
-        return self.serving_output(output)
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "sequence_summary", None) is not None:
+            with tf.name_scope(self.sequence_summary.name):
+                self.sequence_summary.build(None)
+        if getattr(self, "logits_proj", None) is not None:
+            with tf.name_scope(self.logits_proj.name):
+                self.logits_proj.build([None, None, self.config.num_labels])
 
 
 @add_start_docstrings(
@@ -1133,34 +1163,34 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         self.num_labels = config.num_labels
 
         self.transformer = TFXLMMainLayer(config, name="transformer")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.dropout)
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        langs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        lengths: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        langs: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        lengths: np.ndarray | tf.Tensor | None = None,
         cache: Optional[Dict[str, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1200,12 +1230,16 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             attentions=transformer_outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1219,34 +1253,34 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
-        self.qa_outputs = tf.keras.layers.Dense(
+        self.qa_outputs = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.init_std), name="qa_outputs"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        langs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        lengths: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        langs: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        lengths: np.ndarray | tf.Tensor | None = None,
         cache: Optional[Dict[str, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        start_positions: np.ndarray | tf.Tensor | None = None,
+        end_positions: np.ndarray | tf.Tensor | None = None,
         training: bool = False,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1299,11 +1333,25 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             attentions=transformer_outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transformer", None) is not None:
+            with tf.name_scope(self.transformer.name):
+                self.transformer.build(None)
+        if getattr(self, "qa_outputs", None) is not None:
+            with tf.name_scope(self.qa_outputs.name):
+                self.qa_outputs.build([None, None, self.config.hidden_size])
 
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
-        )
+
+__all__ = [
+    "TFXLMForMultipleChoice",
+    "TFXLMForQuestionAnsweringSimple",
+    "TFXLMForSequenceClassification",
+    "TFXLMForTokenClassification",
+    "TFXLMMainLayer",
+    "TFXLMModel",
+    "TFXLMPreTrainedModel",
+    "TFXLMWithLMHeadModel",
+]

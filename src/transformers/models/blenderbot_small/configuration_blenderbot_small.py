@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BlenderbotSmall model configuration"""
+"""BlenderbotSmall model configuration"""
 
 from collections import OrderedDict
 from typing import Any, Mapping, Optional
@@ -26,11 +26,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/config.json",
-    # See all BlenderbotSmall models at https://huggingface.co/models?filter=blenderbot_small
-}
 
 
 class BlenderbotSmallConfig(PretrainedConfig):
@@ -71,8 +66,6 @@ class BlenderbotSmallConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -106,6 +99,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "blenderbot-small"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
@@ -131,13 +125,12 @@ class BlenderbotSmallConfig(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=1,
-        classifier_dropout=0.0,
         scale_embedding=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
         forced_eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -155,7 +148,6 @@ class BlenderbotSmallConfig(PretrainedConfig):
         self.init_std = init_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
@@ -393,3 +385,6 @@ class BlenderbotSmallOnnxConfig(OnnxSeq2SeqConfigWithPast):
             flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+
+
+__all__ = ["BlenderbotSmallConfig", "BlenderbotSmallOnnxConfig"]

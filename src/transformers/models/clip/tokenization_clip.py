@@ -33,24 +33,6 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "openai/clip-vit-base-patch32": "https://huggingface.co/openai/clip-vit-base-patch32/resolve/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai/clip-vit-base-patch32": 77,
-}
-
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "openai/clip-vit-base-patch32": {},
-}
-
 
 @lru_cache()
 def bytes_to_unicode():
@@ -108,7 +90,7 @@ def whitespace_tokenize(text):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -126,20 +108,30 @@ class BasicTokenizer(object):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        do_split_on_punc (`bool`, *optional*, defaults to `True`):
+            In some instances we want to skip the basic punctuation splitting so that later tokenization can capture
+            the full context of the words, such as contractions.
     """
 
-    def __init__(self, do_lower_case=True, never_split=None, tokenize_chinese_chars=True, strip_accents=None):
+    def __init__(
+        self,
+        do_lower_case=True,
+        never_split=None,
+        tokenize_chinese_chars=True,
+        strip_accents=None,
+        do_split_on_punc=True,
+    ):
         if never_split is None:
             never_split = []
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
+        self.do_split_on_punc = do_split_on_punc
 
     def tokenize(self, text, never_split=None):
         """
-        Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
+        Basic Tokenization of a piece of text. For sub-word tokenization, see WordPieceTokenizer.
 
         Args:
             never_split (`List[str]`, *optional*)
@@ -158,7 +150,9 @@ class BasicTokenizer(object):
         # words in the English Wikipedia.).
         if self.tokenize_chinese_chars:
             text = self._tokenize_chinese_chars(text)
-        orig_tokens = whitespace_tokenize(text)
+        # prevents treating the same character with different unicode codepoints as different characters
+        unicode_normalized_text = unicodedata.normalize("NFC", text)
+        orig_tokens = whitespace_tokenize(unicode_normalized_text)
         split_tokens = []
         for token in orig_tokens:
             if token not in never_split:
@@ -186,7 +180,7 @@ class BasicTokenizer(object):
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if never_split is not None and text in never_split:
+        if not self.do_split_on_punc or (never_split is not None and text in never_split):
             return [text]
         chars = list(text)
         i = 0
@@ -272,18 +266,18 @@ class CLIPTokenizer(PreTrainedTokenizer):
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The token used for padding, for example when batching sequences of different lengths.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -295,28 +289,18 @@ class CLIPTokenizer(PreTrainedTokenizer):
         bos_token="<|startoftext|>",
         eos_token="<|endoftext|>",
         pad_token="<|endoftext|>",  # hack to enable padding
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            **kwargs,
-        )
-
         try:
             import ftfy
 
             self.fix_text = ftfy.fix_text
         except ImportError:
-            logger.warning("ftfy or spacy is not installed using BERT BasicTokenizer instead of ftfy.")
-            self.nlp = BasicTokenizer(do_lower_case=True)
+            logger.info("ftfy or spacy is not installed using custom BasicTokenizer instead of ftfy.")
+            self.nlp = BasicTokenizer(strip_accents=False, do_split_on_punc=False)
             self.fix_text = None
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -334,6 +318,15 @@ class CLIPTokenizer(PreTrainedTokenizer):
         self.pat = re.compile(
             r"""<\|startoftext\|>|<\|endoftext\|>|'s|'t|'re|'ve|'m|'ll|'d|[\p{L}]+|[\p{N}]|[^\s\p{L}\p{N}]+""",
             re.IGNORECASE,
+        )
+
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            **kwargs,
         )
 
     @property
@@ -521,3 +514,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+
+__all__ = ["CLIPTokenizer"]

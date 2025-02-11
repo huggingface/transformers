@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import BertConfig, is_tf_available
@@ -22,6 +24,7 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
 
 
@@ -54,7 +57,7 @@ class TFBertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -77,7 +80,7 @@ class TFBertModelTester:
         self.use_labels = True
         self.vocab_size = 99
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -590,8 +593,7 @@ class TFBertModelTester:
 
 
 @require_tf
-class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
-
+class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFBertModel,
@@ -606,6 +608,19 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
         )
         if is_tf_available()
         else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFBertModel,
+            "fill-mask": TFBertForMaskedLM,
+            "question-answering": TFBertForQuestionAnswering,
+            "text-classification": TFBertForSequenceClassification,
+            "text-generation": TFBertLMHeadModel,
+            "token-classification": TFBertForTokenClassification,
+            "zero-shot": TFBertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
     )
     test_head_masking = False
     test_onnx = True
@@ -710,27 +725,6 @@ class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
     def test_model_from_pretrained(self):
         model = TFBertModel.from_pretrained("jplu/tiny-tf-bert-random")
         self.assertIsNotNone(model)
-
-    def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFBertForMaskedLM, TFBertForPreTraining, TFBertLMHeadModel]
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in list_lm_models:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
 
     def test_custom_load_tf_weights(self):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(

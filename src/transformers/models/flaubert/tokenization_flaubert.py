@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for Flaubert."""
 
-
 import json
 import os
 import re
@@ -30,47 +29,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "flaubert/flaubert_small_cased": (
-            "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/vocab.json"
-        ),
-        "flaubert/flaubert_base_uncased": (
-            "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/vocab.json"
-        ),
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/vocab.json",
-        "flaubert/flaubert_large_cased": (
-            "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "flaubert/flaubert_small_cased": (
-            "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/merges.txt"
-        ),
-        "flaubert/flaubert_base_uncased": (
-            "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/merges.txt"
-        ),
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/merges.txt",
-        "flaubert/flaubert_large_cased": (
-            "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "flaubert/flaubert_small_cased": 512,
-    "flaubert/flaubert_base_uncased": 512,
-    "flaubert/flaubert_base_cased": 512,
-    "flaubert/flaubert_large_cased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "flaubert/flaubert_small_cased": {"do_lowercase": False},
-    "flaubert/flaubert_base_uncased": {"do_lowercase": True},
-    "flaubert/flaubert_base_cased": {"do_lowercase": False},
-    "flaubert/flaubert_large_cased": {"do_lowercase": False},
 }
 
 
@@ -207,7 +165,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<special1>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<special0>","<special1>","<special2>","<special3>","<special4>","<special5>","<special6>","<special7>","<special8>","<special9>"]`):
+        additional_special_tokens (`List[str]`, *optional*, defaults to `['<special0>', '<special1>', '<special2>', '<special3>', '<special4>', '<special5>', '<special6>', '<special7>', '<special8>', '<special9>']`):
             List of additional special tokens.
         lang2id (`Dict[str, int]`, *optional*):
             Dictionary mapping languages string identifiers to their IDs.
@@ -216,9 +174,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -245,9 +200,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         ],
         lang2id=None,
         id2lang=None,
-        **kwargs
+        **kwargs,
     ):
-
         do_lowercase_and_remove_accent = kwargs.pop("do_lowercase_and_remove_accent", None)
         if do_lowercase_and_remove_accent is not None:
             logger.warning(
@@ -258,19 +212,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.do_lowercase_and_remove_accent = False
 
         self.do_lowercase = do_lowercase
-
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
-            lang2id=lang2id,
-            id2lang=id2lang,
-            **kwargs,
-        )
 
         try:
             import sacremoses
@@ -283,10 +224,10 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.sm = sacremoses
 
         # cache of sm.MosesPunctNormalizer instance
-        self.cache_moses_punct_normalizer = dict()
+        self.cache_moses_punct_normalizer = {}
         # cache of sm.MosesTokenizer instance
-        self.cache_moses_tokenizer = dict()
-        self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
+        self.cache_moses_tokenizer = {}
+        self.lang_with_custom_tokenizer = {"zh", "th", "ja"}
         self.lang2id = lang2id
         self.id2lang = id2lang
         if lang2id is not None and id2lang is not None:
@@ -303,6 +244,20 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
+        super().__init__(
+            do_lowercase=do_lowercase,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            lang2id=lang2id,
+            id2lang=id2lang,
+            **kwargs,
+        )
 
     @property
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.do_lower_case
@@ -453,7 +408,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         for token in text:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens
 
@@ -608,3 +563,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             )
 
         self.sm = sacremoses
+
+
+__all__ = ["FlaubertTokenizer"]

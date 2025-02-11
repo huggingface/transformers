@@ -69,19 +69,19 @@ class ModelArguments:
     hidden_dropout: Optional[float] = field(
         default=0.1,
         metadata={
-            "help": "The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler."
+            "help": "The dropout probability for all fully connected layers in the embeddings, encoder, and pooler."
         },
     )
     feat_proj_dropout: Optional[float] = field(
         default=0.1,
-        metadata={"help": "The dropout probabilitiy for all 1D convolutional layers in feature extractor."},
+        metadata={"help": "The dropout probability for all 1D convolutional layers in feature extractor."},
     )
     mask_time_prob: Optional[float] = field(
         default=0.05,
         metadata={
             "help": (
-                "Propability of each feature vector along the time axis to be chosen as the start of the vector"
-                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "Propability of each feature vector along the time axis to be chosen as the start of the vector "
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature "
                 "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
             )
         },
@@ -173,7 +173,7 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of_labels: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
-        # split inputs and labels since they have to be of different lenghts and need
+        # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]

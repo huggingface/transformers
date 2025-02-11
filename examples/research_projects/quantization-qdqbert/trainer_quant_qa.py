@@ -20,17 +20,17 @@ A subclass of `Trainer` specific to Question-Answering tasks
 import logging
 import os
 
+import quant_trainer
 import torch
 from torch.utils.data import DataLoader
 
-import quant_trainer
-from transformers import Trainer, is_torch_tpu_available
+from transformers import Trainer, is_torch_xla_available
 from transformers.trainer_utils import PredictionOutput
 
 
 logger = logging.getLogger(__name__)
 
-if is_torch_tpu_available(check_device=False):
+if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
 

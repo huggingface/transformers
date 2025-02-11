@@ -12,16 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Classes to support Vision-Encoder-Text-Decoder architectures"""
+"""Classes to support Vision-Encoder-Text-Decoder architectures"""
 
-
-from typing import Optional
+import gc
+import os
+import tempfile
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...configuration_utils import PretrainedConfig
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -89,8 +92,8 @@ VISION_ENCODER_DECODER_START_DOCSTRING = r"""
 VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using a feature extractor (e.g. if you use ViT as the encoder,
-            you should use [`ViTFeatureExtractor`]). See [`ViTFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using an image processor (e.g. if you use ViT as the encoder,
+            you should use [`AutoImageProcessor`]). See [`ViTImageProcessor.__call__`] for details.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -145,17 +148,21 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(VISION_ENCODER_DECODER_START_DOCSTRING)
-class VisionEncoderDecoderModel(PreTrainedModel):
+class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     r"""
     [`VisionEncoderDecoderModel`] is a generic model class that will be instantiated as a transformer architecture with
     one of the base vision model classes of the library as encoder and another one as decoder when created with the
     :meth*~transformers.AutoModel.from_pretrained* class method for the encoder and
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """
+
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -207,6 +214,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        self.config.encoder._attn_implementation = self.encoder.config._attn_implementation
+        self.config.decoder._attn_implementation = self.decoder.config._attn_implementation
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
@@ -222,16 +231,14 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        # call both encoder and decoder function on gradient checkpointing
-        self.encoder._set_gradient_checkpointing(module, value=value)
-        self.decoder._set_gradient_checkpointing(module, value=value)
-
     def get_encoder(self):
         return self.encoder
 
     def get_decoder(self):
         return self.decoder
+
+    def get_input_embeddings(self):
+        return self.decoder.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -240,7 +247,127 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         return self.decoder.set_output_embeddings(new_embeddings)
 
     @classmethod
-    def from_pretrained(cls, *args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import VisionEncoderDecoderModel, AutoImageProcessor, AutoTokenizer
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> decoder_tokenizer = AutoTokenizer.from_pretrained("ydshieh/vit-gpt2-coco-en")
+        >>> model = VisionEncoderDecoderModel.from_pretrained("ydshieh/vit-gpt2-coco-en")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> img = Image.open(requests.get(url, stream=True).raw)
+        >>> pixel_values = image_processor(images=img, return_tensors="pt").pixel_values  # Batch size 1
+
+        >>> output_ids = model.generate(
+        ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
+        ... ).sequences
+
+        >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        >>> preds = [pred.strip() for pred in preds]
+
+        >>> assert preds == ["a cat laying on top of a couch next to another cat"]
+        ```"""
+
+        from_tf = kwargs.pop("from_tf", False)
+        if from_tf:
+            from transformers import TFVisionEncoderDecoderModel
+
+            # a workaround to load from tensorflow checkpoint
+            # Using `_tf_model` won't work, because the weight names in the encoder/decoder of `_tf_model` get
+            # extended before saving those components. For example, The name of `_tf_model.encoder.vit` is
+            # `[top model name]/encoder/vit`, but the name of `tf_model.encoder.vit` is `[top model name]/vit`. The
+            # [top model name] is handled (stripped) by the conversion method, and the former case gets extra `encoder`,
+            # which should not occur when we want to save the components alone.
+            # There was a (very) ugly potential fix, which wasn't integrated to `transformers`: see
+            #   https://github.com/huggingface/transformers/pull/13222/commits/dbb3c9de76eee235791d2064094654637c99f36d#r697304245
+            #   (the change in `src/transformers/modeling_tf_utils.py`)
+            _tf_model = TFVisionEncoderDecoderModel.from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
+            config = _tf_model.config
+
+            # Using `tf_model` instead
+            encoder = _tf_model.encoder.__class__(_tf_model.config.encoder)
+            decoder = _tf_model.decoder.__class__(_tf_model.config.decoder)
+            # Make sure models are built
+            encoder(encoder.dummy_inputs)
+            decoder(decoder.dummy_inputs)
+
+            # Get the variable correspondence between `_tf_model` and `encoder` and `decoder`
+            encoder_variables = {}
+            for v in encoder.trainable_variables + encoder.non_trainable_variables:
+                encoder_variables["/".join(v.name.split("/")[1:])] = v
+            decoder_variables = {}
+            for v in decoder.trainable_variables + decoder.non_trainable_variables:
+                decoder_variables["/".join(v.name.split("/")[1:])] = v
+
+            _encoder_variables = {}
+            for v in _tf_model.encoder.trainable_variables + _tf_model.encoder.non_trainable_variables:
+                _encoder_variables["/".join(v.name.split("/")[2:])] = v
+            _decoder_variables = {}
+            for v in _tf_model.decoder.trainable_variables + _tf_model.decoder.non_trainable_variables:
+                _decoder_variables["/".join(v.name.split("/")[2:])] = v
+
+            # assign weight values to `encoder` and `decoder` from `_tf_model`
+            for name, v in encoder_variables.items():
+                v.assign(_encoder_variables[name])
+            for name, v in decoder_variables.items():
+                v.assign(_decoder_variables[name])
+
+            tf_model = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
+
+            # Deal with `enc_to_dec_proj`
+            if hasattr(_tf_model, "enc_to_dec_proj"):
+                tf_model(tf_model.dummy_inputs)
+                tf_model.enc_to_dec_proj.kernel.assign(_tf_model.enc_to_dec_proj.kernel)
+                tf_model.enc_to_dec_proj.bias.assign(_tf_model.enc_to_dec_proj.bias)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                encoder_dir = os.path.join(tmpdirname, "encoder")
+                decoder_dir = os.path.join(tmpdirname, "decoder")
+                tf_model.encoder.save_pretrained(encoder_dir)
+                tf_model.decoder.save_pretrained(decoder_dir)
+
+                if hasattr(tf_model, "enc_to_dec_proj"):
+                    enc_to_dec_proj_weight = torch.transpose(
+                        torch.from_numpy(tf_model.enc_to_dec_proj.kernel.numpy()), 1, 0
+                    )
+                    enc_to_dec_proj_bias = torch.from_numpy(tf_model.enc_to_dec_proj.bias.numpy())
+
+                del _tf_model
+                del tf_model
+                gc.collect()
+
+                attn_implementation = kwargs.get("attn_implementation", None)
+                kwargs_encoder_decoder = {}
+                if attn_implementation:
+                    kwargs_encoder_decoder = {
+                        "encoder_attn_implementation": attn_implementation,
+                        "decoder_attn_implementation": attn_implementation,
+                    }
+
+                model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+                    encoder_dir,
+                    decoder_dir,
+                    encoder_from_tf=True,
+                    decoder_from_tf=True,
+                    **kwargs_encoder_decoder,
+                )
+                # This is only for copying some specific attributes of this particular model.
+                model.config = config
+
+                if hasattr(model, "enc_to_dec_proj"):
+                    model.enc_to_dec_proj.weight.data = enc_to_dec_proj_weight.contiguous()
+                    model.enc_to_dec_proj.bias.data = enc_to_dec_proj_bias.contiguous()
+
+                return model
+
         # At the moment fast initialization is not supported for composite models
         if kwargs.get("_fast_init", False):
             logger.warning(
@@ -248,7 +375,8 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 "Falling back to slow initialization..."
             )
         kwargs["_fast_init"] = False
-        return super().from_pretrained(*args, **kwargs)
+
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @classmethod
     def from_encoder_decoder_pretrained(
@@ -256,7 +384,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         encoder_pretrained_model_name_or_path: str = None,
         decoder_pretrained_model_name_or_path: str = None,
         *model_args,
-        **kwargs
+        **kwargs,
     ) -> PreTrainedModel:
         r"""
         Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
@@ -283,8 +411,6 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 Information necessary to initiate the text decoder. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
@@ -312,7 +438,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
 
         >>> # initialize a vit-bert from a pretrained ViT and a pretrained BERT model. Note that the cross-attention layers will be randomly initialized
         >>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "google/vit-base-patch16-224-in21k", "bert-base-uncased"
+        ...     "google/vit-base-patch16-224-in21k", "google-bert/bert-base-uncased"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")
@@ -408,31 +534,31 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.BoolTensor] = None,
+        encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
-    ):
+    ) -> Union[Tuple[torch.FloatTensor], Seq2SeqLMOutput]:
         r"""
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+        >>> from transformers import AutoProcessor, VisionEncoderDecoderModel
         >>> import requests
         >>> from PIL import Image
         >>> import torch
 
-        >>> processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
+        >>> processor = AutoProcessor.from_pretrained("microsoft/trocr-base-handwritten")
         >>> model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
 
         >>> # load image from the IAM dataset
@@ -440,7 +566,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
         >>> # training
-        >>> model.config.decoder_start_token_id = processor.tokenizer.cls_token_id
+        >>> model.config.decoder_start_token_id = processor.tokenizer.eos_token_id
         >>> model.config.pad_token_id = processor.tokenizer.pad_token_id
         >>> model.config.vocab_size = model.config.decoder.vocab_size
 
@@ -467,7 +593,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
                 raise ValueError("You have to specify pixel_values")
 
             encoder_outputs = self.encoder(
-                pixel_values,
+                pixel_values=pixel_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -513,7 +639,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         if labels is not None:
             logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.view(-1))
+            loss = loss_fct(logits.reshape(-1, self.decoder.config.vocab_size), labels.reshape(-1))
 
         if not return_dict:
             if loss is not None:
@@ -536,27 +662,9 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
-    ):
-        decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
-        decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
-        input_dict = {
-            "attention_mask": attention_mask,
-            "decoder_attention_mask": decoder_attention_mask,
-            "decoder_input_ids": decoder_inputs["input_ids"],
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_inputs["past_key_values"],
-            "use_cache": use_cache,
-        }
-        return input_dict
-
-    def resize_token_embeddings(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Resizing the embedding layers via the VisionEncoderDecoderModel directly is not supported.Please use the"
-            " respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
-        )
-
-    def _reorder_cache(self, past, beam_idx):
+    def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
-        return self.decoder._reorder_cache(past, beam_idx)
+        return self.decoder._reorder_cache(past_key_values, beam_idx)
+
+
+__all__ = ["VisionEncoderDecoderModel"]

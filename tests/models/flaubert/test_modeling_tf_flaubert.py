@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import is_tf_available
@@ -20,6 +22,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -27,7 +30,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         FlaubertConfig,
         TFFlaubertForMultipleChoice,
         TFFlaubertForQuestionAnsweringSimple,
@@ -58,7 +60,7 @@ class TFFlaubertModelTester:
         self.vocab_size = 99
         self.n_special = 0
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
@@ -274,8 +276,7 @@ class TFFlaubertModelTester:
 
 
 @require_tf
-class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFFlaubertModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFFlaubertModel,
@@ -291,8 +292,43 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFFlaubertWithLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFFlaubertModel,
+            "fill-mask": TFFlaubertWithLMHeadModel,
+            "question-answering": TFFlaubertForQuestionAnsweringSimple,
+            "text-classification": TFFlaubertForSequenceClassification,
+            "token-classification": TFFlaubertForTokenClassification,
+            "zero-shot": TFFlaubertForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if (
+            pipeline_test_case_name == "QAPipelineTests"
+            and tokenizer_name is not None
+            and not tokenizer_name.endswith("Fast")
+        ):
+            # `QAPipelineTests` fails for a few models when the slower tokenizer are used.
+            # (The slower tokenizers were never used for pipeline tests before the pipeline testing rework)
+            # TODO: check (and possibly fix) the `QAPipelineTests` with slower tokenizer
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = TFFlaubertModelTester(self)
@@ -327,9 +363,9 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFFlaubertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "hf-internal-testing/tiny-random-flaubert"
+        model = TFFlaubertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf

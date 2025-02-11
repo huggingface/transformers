@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import gc
 import json
 import os
 import shutil
@@ -29,11 +28,12 @@ from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_
 from transformers.models.dpr.tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
+    cleanup,
     get_tests_dir,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torch_non_multi_gpu,
+    require_torch_non_multi_accelerator,
     slow,
     torch_device,
 )
@@ -48,10 +48,10 @@ TOLERANCE = 1e-3
 
 T5_SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 if is_torch_available() and is_datasets_available() and is_faiss_available():
+    import faiss
     import torch
     from datasets import Dataset
 
-    import faiss
     from transformers import (
         AutoConfig,
         AutoModel,
@@ -91,7 +91,7 @@ def require_retrieval(test_case):
 
     """
     if not (is_torch_available() and is_datasets_available() and is_faiss_available()):
-        test_case = unittest.skip("test requires PyTorch, datasets and faiss")(test_case)
+        test_case = unittest.skip(reason="test requires PyTorch, datasets and faiss")(test_case)
     return test_case
 
 
@@ -99,7 +99,6 @@ def require_retrieval(test_case):
 @require_retrieval
 @require_sentencepiece
 class RagTestMixin:
-
     all_model_classes = (
         (RagModel, RagTokenForGeneration, RagSequenceForGeneration)
         if is_torch_available() and is_datasets_available() and is_faiss_available()
@@ -197,8 +196,7 @@ class RagTestMixin:
         shutil.rmtree(self.tmpdirname)
 
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def get_retriever(self, config):
         dataset = Dataset.from_dict(
@@ -493,7 +491,7 @@ class RagTestMixin:
         decoder_attention_mask,
         retriever_n_docs,
         generator_n_docs,
-        **kwargs
+        **kwargs,
     ):
         self.assertIsNotNone(config.question_encoder)
         self.assertIsNotNone(config.generator)
@@ -654,7 +652,7 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
     def config_and_inputs(self):
         question_encoder_tester = DPRModelTester(self)
         dpr_config_and_inputs = question_encoder_tester.prepare_config_and_inputs()
-        generator_tester = T5ModelTester(self, vocab_size=1100)
+        generator_tester = T5ModelTester(self, vocab_size=1101)
         t5_config_and_inputs = generator_tester.prepare_config_and_inputs()
 
         (question_encoder_config, input_ids, _, input_mask, _, _, _) = dpr_config_and_inputs
@@ -680,13 +678,12 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 @require_retrieval
 @require_sentencepiece
 @require_tokenizers
-@require_torch_non_multi_gpu
+@require_torch_non_multi_accelerator
 class RagModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @cached_property
     def sequence_model(self):
@@ -731,6 +728,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
+            dataset_revision="b24a417",
         )
 
     @slow
@@ -906,7 +904,7 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
         )
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
@@ -945,7 +943,10 @@ class RagModelIntegrationTests(unittest.TestCase):
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
         retriever = RagRetriever.from_pretrained(
-            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+            "facebook/rag-sequence-nq",
+            index_name="exact",
+            use_dummy_dataset=True,
+            dataset_revision="b24a417",
         )
         rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
             torch_device
@@ -994,12 +995,14 @@ class RagModelIntegrationTests(unittest.TestCase):
     @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
-        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True, dataset_revision="b24a417"
+        )
         rag_token = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever).to(
             torch_device
         )
 
-        if torch_device == "cuda":
+        if torch_device != "cpu":
             rag_token.half()
 
         input_dict = tokenizer(
@@ -1038,8 +1041,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def get_rag_config(self):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
@@ -1064,6 +1066,7 @@ class RagModelSaveLoadTests(unittest.TestCase):
             use_dummy_dataset=True,
             retrieval_vector_size=768,
             retrieval_batch_size=8,
+            dataset_revision="b24a417",
         )
 
     @slow

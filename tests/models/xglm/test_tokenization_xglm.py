@@ -31,7 +31,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "facebook/xglm-564M"
     tokenizer_class = XGLMTokenizer
     rust_tokenizer_class = XGLMTokenizerFast
     test_rust_tokenizer = True
@@ -150,7 +150,7 @@ class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
-            return
+            self.skipTest(reason="test_rust_tokenizer is set to False")
 
         tokenizer = self.get_tokenizer()
         rust_tokenizer = self.get_rust_tokenizer()
@@ -183,9 +183,7 @@ class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
             " add words that should not exsist and be tokenized to unk, such as saoneuhaoesuth"
         )
-        # fmt: off
-        original_tokenizer_encodings = [2, 1018, 67, 11, 1988, 2617, 5631, 278, 11, 3407, 48, 71630, 28085, 4, 3234, 157, 13, 6, 5, 6, 4, 3526, 768, 15, 659, 57, 298, 3983, 864, 129, 21, 6, 5, 13675, 377, 652, 7580, 10341, 155, 2817, 422, 1666, 7, 1674, 53, 113, 202277, 17892, 33, 60, 87, 4, 3234, 157, 61, 2667, 52376, 19, 88, 23, 735]
-        # fmt: on
+        original_tokenizer_encodings = [2, 1018, 67, 11, 1988, 2617, 5631, 278, 11, 3407, 48, 71630, 28085, 4, 3234, 157, 13, 6, 5, 6, 4, 3526, 768, 15, 659, 57, 298, 3983, 864, 129, 21, 6, 5, 13675, 377, 652, 7580, 10341, 155, 2817, 422, 1666, 7, 1674, 53, 113, 202277, 17892, 33, 60, 87, 4, 3234, 157, 61, 2667, 52376, 19, 88, 23, 735]  # fmt: skip
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
 

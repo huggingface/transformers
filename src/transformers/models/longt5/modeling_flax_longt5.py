@@ -12,17 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax LongT5 model."""
-
+"""Flax LongT5 model."""
 
 import copy
 from typing import Any, Callable, List, Optional, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -52,21 +50,20 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 _CONFIG_FOR_DOC = "LongT5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 remat = nn_partitioning.remat
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
-def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
+def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
-    shifted_input_ids = np.zeros_like(input_ids)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1]
-    shifted_input_ids[:, 0] = decoder_start_token_id
+    shifted_input_ids = jnp.zeros_like(input_ids)
+    shifted_input_ids = shifted_input_ids.at[:, 1:].set(input_ids[:, :-1])
+    shifted_input_ids = shifted_input_ids.at[:, 0].set(decoder_start_token_id)
 
-    shifted_input_ids = np.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
     return shifted_input_ids
 
 
@@ -368,6 +365,7 @@ class FlaxLongT5Attention(nn.Module):
                 self.relative_attention_num_buckets,
                 self.n_heads,
                 embedding_init=jax.nn.initializers.normal(kv_init_std),
+                dtype=self.dtype,
             )
 
     @staticmethod
@@ -546,7 +544,7 @@ class FlaxLongT5Attention(nn.Module):
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.causal and (self.has_variable("cache", "cached_key") or init_cache):
-            key_states, value_states, attention_attention_mask = self._concatenate_to_cache(
+            key_states, value_states, attention_mask = self._concatenate_to_cache(
                 key_states, value_states, query_states, attention_mask
             )
 
@@ -1540,7 +1538,7 @@ LONGT5_ENCODE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             To know more on how to prepare `input_ids` for pretraining take a look a [LONGT5
@@ -1567,7 +1565,7 @@ LONGT5_DECODE_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1610,7 +1608,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for detail.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1627,7 +1625,7 @@ LONGT5_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`jnp.ndarray` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`T5Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -1681,7 +1679,7 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
@@ -1827,9 +1825,9 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
         >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -1888,10 +1886,10 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
         >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
         >>> text = "My friends are cool but they eat too many carbs."
@@ -2032,6 +2030,7 @@ class FlaxLongT5Module(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            dtype=self.dtype,
         )
 
         encoder_config = copy.deepcopy(self.config)
@@ -2109,9 +2108,7 @@ class FlaxLongT5Model(FlaxLongT5PreTrainedModel):
     module_class = FlaxLongT5Module
 
 
-append_call_sample_docstring(
-    FlaxLongT5Model, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxLongT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
 
 FLAX_LONGT5_MODEL_DOCSTRING = """
     Returns:
@@ -2119,9 +2116,9 @@ FLAX_LONGT5_MODEL_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import T5Tokenizer, FlaxLongT5Model
+    >>> from transformers import AutoTokenizer, FlaxLongT5Model
 
-    >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     >>> model = FlaxLongT5Model.from_pretrained("google/long-t5-local-base")
 
     >>> input_ids = tokenizer(
@@ -2160,6 +2157,7 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
             self.config.vocab_size,
             self.config.d_model,
             embedding_init=jax.nn.initializers.normal(self.config.initializer_factor),
+            dtype=self.dtype,
         )
 
         encoder_config = copy.deepcopy(self.config)
@@ -2276,10 +2274,10 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
+        >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
         >>> import jax.numpy as jnp
 
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
         >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
         >>> text = "summarize: My friends are cool but they eat too many carbs."
@@ -2389,10 +2387,10 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         self,
         decoder_input_ids,
         max_length,
-        attention_mask: Optional[jnp.DeviceArray] = None,
-        decoder_attention_mask: Optional[jnp.DeviceArray] = None,
+        attention_mask: Optional[jax.Array] = None,
+        decoder_attention_mask: Optional[jax.Array] = None,
         encoder_outputs=None,
-        **kwargs
+        **kwargs,
     ):
         # initializing the cache
         batch_size, seq_length = decoder_input_ids.shape
@@ -2425,9 +2423,9 @@ FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import T5Tokenizer, FlaxLongT5ForConditionalGeneration
+    >>> from transformers import AutoTokenizer, FlaxLongT5ForConditionalGeneration
 
-    >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-base")
     >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
 
     >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
@@ -2446,3 +2444,6 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxLongT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
 )
+
+
+__all__ = ["FlaxLongT5ForConditionalGeneration", "FlaxLongT5Model", "FlaxLongT5PreTrainedModel"]

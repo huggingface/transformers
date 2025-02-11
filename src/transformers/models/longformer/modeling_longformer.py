@@ -41,16 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
-_TOKENIZER_FOR_DOC = "LongformerTokenizer"
-
-LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "allenai/longformer-base-4096",
-    "allenai/longformer-large-4096",
-    "allenai/longformer-large-4096-finetuned-triviaqa",
-    "allenai/longformer-base-4096-extra.pos.embd.only",
-    "allenai/longformer-large-4096-extra.pos.embd.only",
-    # See all Longformer models at https://huggingface.co/models?filter=longformer
-]
 
 
 @dataclass
@@ -91,9 +81,9 @@ class LongformerBaseModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -139,9 +129,9 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
 
     last_hidden_state: torch.FloatTensor
     pooler_output: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -185,9 +175,9 @@ class LongformerMaskedLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -234,9 +224,9 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     start_logits: torch.FloatTensor = None
     end_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -280,9 +270,9 @@ class LongformerSequenceClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -328,9 +318,9 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 @dataclass
@@ -374,9 +364,9 @@ class LongformerTokenClassifierOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
 def _get_question_end_index(input_ids, sep_token_id):
@@ -405,12 +395,12 @@ def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=Tru
     # bool attention mask with True in locations of global attention
     attention_mask = torch.arange(input_ids.shape[1], device=input_ids.device)
     if before_sep_token is True:
-        attention_mask = (attention_mask.expand_as(input_ids) < question_end_index).to(torch.uint8)
+        attention_mask = (attention_mask.expand_as(input_ids) < question_end_index).to(torch.bool)
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
-        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)).to(torch.uint8) * (
+        attention_mask = (attention_mask.expand_as(input_ids) > (question_end_index + 1)).to(torch.bool) * (
             attention_mask.expand_as(input_ids) < input_ids.shape[-1]
-        ).to(torch.uint8)
+        ).to(torch.bool)
 
     return attention_mask
 
@@ -439,15 +429,12 @@ class LongformerEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
@@ -763,7 +750,7 @@ class LongformerSelfAttention(nn.Module):
         return chunked_hidden_states
 
     @staticmethod
-    def _chunk(hidden_states, window_overlap, onnx_export=False):
+    def _chunk(hidden_states, window_overlap, onnx_export: bool = False):
         """convert into overlapping chunks. Chunk size = 2w, overlap size = w"""
         if not onnx_export:
             # non-overlapping chunks of size = 2w
@@ -782,29 +769,26 @@ class LongformerSelfAttention(nn.Module):
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
         # When exporting to ONNX, use this separate logic
-        if hidden_states.size(1) == window_overlap * 2:
-            # simplest case
-            return hidden_states.unsqueeze(1)
-        else:
-            # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
+        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
 
-            # TODO replace this with
-            # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-            # once `unfold` is supported
+        # TODO replace this with
+        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
+        # once `unfold` is supported
+        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
 
-            chunk_size = [
-                hidden_states.size(0),
-                hidden_states.size(1) // window_overlap - 1,
-                window_overlap * 2,
-                hidden_states.size(2),
+        chunk_size = [
+            hidden_states.size(0),
+            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
+            window_overlap * 2,
+            hidden_states.size(2),
+        ]
+
+        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
+        for chunk in range(chunk_size[1]):
+            overlapping_chunks[:, chunk, :, :] = hidden_states[
+                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
             ]
-
-            overlapping_chunks = torch.empty(chunk_size)
-            for chunk in range(chunk_size[1]):
-                overlapping_chunks[:, chunk, :, :] = hidden_states[
-                    :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
-                ]
-            return overlapping_chunks
+        return overlapping_chunks
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -840,8 +824,8 @@ class LongformerSelfAttention(nn.Module):
         query = query.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
         key = key.transpose(1, 2).reshape(batch_size * num_heads, seq_len, head_dim)
 
-        query = self._chunk(query, window_overlap, self.config.__dict__.get("onnx_export", False))
-        key = self._chunk(key, window_overlap, self.config.__dict__.get("onnx_export", False))
+        query = self._chunk(query, window_overlap, getattr(self.config, "onnx_export", False))
+        key = self._chunk(key, window_overlap, getattr(self.config, "onnx_export", False))
 
         # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
@@ -1291,9 +1275,10 @@ class LongformerEncoder(nn.Module):
         output_hidden_states=False,
         return_dict=True,
     ):
-
         is_index_masked = attention_mask < 0
         is_index_global_attn = attention_mask > 0
+
+        # Record `is_global_attn == True` to enable ONNX export
         is_global_attn = is_index_global_attn.flatten().any().item()
 
         all_hidden_states = () if output_hidden_states else None
@@ -1310,20 +1295,15 @@ class LongformerEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, is_global_attn, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
+                layer_outputs = self._gradient_checkpointing_func(
+                    layer_module.__call__,
                     hidden_states,
                     attention_mask,
                     head_mask[idx] if head_mask is not None else None,
                     is_index_masked,
                     is_index_global_attn,
+                    is_global_attn,
+                    output_attentions,
                 )
             else:
                 layer_outputs = layer_module(
@@ -1349,15 +1329,14 @@ class LongformerEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # undo padding
-        if padding_len > 0:
-            # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
-            hidden_states = hidden_states[:, :-padding_len]
-            if output_hidden_states:
-                all_hidden_states = tuple([state[:, :-padding_len] for state in all_hidden_states])
+        # undo padding if necessary
+        # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+        hidden_states = hidden_states[:, : hidden_states.shape[1] - padding_len]
+        if output_hidden_states:
+            all_hidden_states = tuple([state[:, : state.shape[1] - padding_len] for state in all_hidden_states])
 
-            if output_attentions:
-                all_attentions = tuple([state[:, :, :-padding_len, :] for state in all_attentions])
+        if output_attentions:
+            all_attentions = tuple([state[:, :, : state.shape[2] - padding_len, :] for state in all_attentions])
 
         if not return_dict:
             return tuple(
@@ -1412,7 +1391,11 @@ class LongformerLMHead(nn.Module):
 
     def _tie_weights(self):
         # To tie those two weights if they get disconnected (on TPU or when the bias is resized)
-        self.bias = self.decoder.bias
+        # For accelerate compatibility and to not break backward compatibility
+        if self.decoder.bias.device.type == "meta":
+            self.decoder.bias = self.bias
+        else:
+            self.bias = self.decoder.bias
 
 
 class LongformerPreTrainedModel(PreTrainedModel):
@@ -1424,7 +1407,7 @@ class LongformerPreTrainedModel(PreTrainedModel):
     config_class = LongformerConfig
     base_model_prefix = "longformer"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
+    _no_split_modules = ["LongformerSelfAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -1441,10 +1424,6 @@ class LongformerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LongformerEncoder):
-            module.gradient_checkpointing = value
 
 
 LONGFORMER_START_DOCSTRING = r"""
@@ -1468,7 +1447,7 @@ LONGFORMER_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`LongformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1607,9 +1586,11 @@ class LongformerModel(LongformerPreTrainedModel):
         batch_size, seq_len = input_shape[:2]
 
         padding_len = (attention_window - seq_len % attention_window) % attention_window
+
+        # this path should be recorded in the ONNX export, it is fine with padding_len == 0 as well
         if padding_len > 0:
-            logger.info(
-                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+            logger.warning_once(
+                f"Input ids are automatically padded to be a multiple of "
                 f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
@@ -1668,10 +1649,10 @@ class LongformerModel(LongformerPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import LongformerModel, LongformerTokenizer
+        >>> from transformers import LongformerModel, AutoTokenizer
 
         >>> model = LongformerModel.from_pretrained("allenai/longformer-base-4096")
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
 
         >>> SAMPLE_TEXT = " ".join(["Hello world! "] * 1000)  # long input document
         >>> input_ids = torch.tensor(tokenizer.encode(SAMPLE_TEXT)).unsqueeze(0)  # batch of size 1
@@ -1708,6 +1689,7 @@ class LongformerModel(LongformerPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1770,8 +1752,7 @@ class LongformerModel(LongformerPreTrainedModel):
 
 @add_start_docstrings("""Longformer Model with a `language modeling` head on top.""", LONGFORMER_START_DOCSTRING)
 class LongformerForMaskedLM(LongformerPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _tied_weights_keys = ["lm_head.decoder"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1809,7 +1790,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Returns:
@@ -1817,9 +1798,9 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         Mask filling example:
 
         ```python
-        >>> from transformers import LongformerTokenizer, LongformerForMaskedLM
+        >>> from transformers import AutoTokenizer, LongformerForMaskedLM
 
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
         >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         ```
 
@@ -1860,6 +1841,8 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(prediction_scores.device)
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
@@ -1883,9 +1866,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForSequenceClassification(LongformerPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1899,7 +1879,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="jpwahle/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1929,7 +1908,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if global_attention_mask is None:
-            logger.info("Initializing global attention on CLS token...")
+            logger.warning_once("Initializing global attention on CLS token...")
             global_attention_mask = torch.zeros_like(input_ids)
             # global attention on cls token
             global_attention_mask[:, 0] = 1
@@ -1951,6 +1930,8 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
         loss = None
         if labels is not None:
+            labels = labels.to(logits.device)
+
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
@@ -2012,9 +1993,6 @@ class LongformerClassificationHead(nn.Module):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForQuestionAnswering(LongformerPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2057,10 +2035,10 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LongformerTokenizer, LongformerForQuestionAnswering
+        >>> from transformers import AutoTokenizer, LongformerForQuestionAnswering
         >>> import torch
 
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
+        >>> tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
         >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
@@ -2152,9 +2130,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class LongformerForTokenClassification(LongformerPreTrainedModel):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -2168,7 +2143,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint="brad1141/Longformer-finetuned-norm",
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2219,6 +2193,8 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(logits.device)
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
@@ -2256,7 +2232,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -2286,7 +2261,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
 
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on multiple choice...")
+            logger.warning_once("Initializing global attention on multiple choice...")
             # put global attention on all tokens after `config.sep_token_id`
             global_attention_mask = torch.stack(
                 [
@@ -2332,6 +2307,8 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
+
+            labels = labels.to(reshaped_logits.device)
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
@@ -2345,3 +2322,15 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
         )
+
+
+__all__ = [
+    "LongformerForMaskedLM",
+    "LongformerForMultipleChoice",
+    "LongformerForQuestionAnswering",
+    "LongformerForSequenceClassification",
+    "LongformerForTokenClassification",
+    "LongformerModel",
+    "LongformerPreTrainedModel",
+    "LongformerSelfAttention",
+]

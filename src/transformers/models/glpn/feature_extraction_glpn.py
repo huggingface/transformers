@@ -14,11 +14,23 @@
 # limitations under the License.
 """Feature extractor class for GLPN."""
 
+import warnings
+
 from ...utils import logging
 from .image_processing_glpn import GLPNImageProcessor
 
 
 logger = logging.get_logger(__name__)
 
-# Feature extractor for GLPN is being replaced by image processor
-GLPNFeatureExtractor = GLPNImageProcessor
+
+class GLPNFeatureExtractor(GLPNImageProcessor):
+    def __init__(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "The class GLPNFeatureExtractor is deprecated and will be removed in version 5 of Transformers. Please"
+            " use GLPNImageProcessor instead.",
+            FutureWarning,
+        )
+        super().__init__(*args, **kwargs)
+
+
+__all__ = ["GLPNFeatureExtractor"]

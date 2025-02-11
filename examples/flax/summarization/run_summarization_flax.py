@@ -31,22 +31,22 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import datasets
-import nltk  # Here to have a nice missing dependency error message early on
-import numpy as np
-from datasets import Dataset, load_dataset
-from tqdm import tqdm
-
 import evaluate
 import jax
 import jax.numpy as jnp
+import nltk  # Here to have a nice missing dependency error message early on
+import numpy as np
 import optax
-import transformers
+from datasets import Dataset, load_dataset
 from filelock import FileLock
 from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
-from huggingface_hub import Repository
+from huggingface_hub import HfApi
+from tqdm import tqdm
+
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -56,7 +56,7 @@ from transformers import (
     HfArgumentParser,
     is_tensorboard_available,
 )
-from transformers.utils import get_full_repo_name, is_offline_mode, send_example_telemetry
+from transformers.utils import is_offline_mode, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -158,7 +158,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -188,12 +188,22 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
             )
         },
     )
@@ -251,7 +261,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
+                "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`. "
                 "This argument is also used to override the `max_length` param of `model.generate`, which is used "
                 "during evaluation."
             )
@@ -295,7 +305,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
     )
     num_beams: Optional[int] = field(
-        default=None,
+        default=1,
         metadata={
             "help": (
                 "Number of beams to use for evaluation. This argument will be passed to `model.generate`, "
@@ -308,8 +318,13 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+            and self.test_file is None
+        ):
+            raise ValueError("Need either a dataset name or a training, validation, or test file.")
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
@@ -317,6 +332,9 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            if self.test_file is not None:
+                extension = self.test_file.split(".")[-1]
+                assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
 
@@ -384,7 +402,7 @@ def write_metric(summary_writer, train_metrics, eval_metrics, train_time, step):
 
 def create_learning_rate_fn(
     train_ds_size: int, train_batch_size: int, num_train_epochs: int, num_warmup_steps: int, learning_rate: float
-) -> Callable[[int], jnp.array]:
+) -> Callable[[int], jnp.ndarray]:
     """Returns a linear warmup, linear_decay learning rate function."""
     steps_per_epoch = train_ds_size // train_batch_size
     num_train_steps = steps_per_epoch * num_train_epochs
@@ -420,7 +438,7 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
             "Use --overwrite_output_dir to overcome."
         )
 
@@ -444,13 +462,13 @@ def main():
 
     # Handle the repository creation
     if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(
-                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
-            )
-        else:
-            repo_name = training_args.hub_model_id
-        repo = Repository(training_args.output_dir, clone_from=repo_name)
+        # Retrieve of infer repo_name
+        repo_name = training_args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(training_args.output_dir).absolute().name
+        # Create repo and retrieve repo_id
+        api = HfApi()
+        repo_id = api.create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -466,7 +484,8 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         data_files = {}
@@ -483,10 +502,10 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Load pretrained model and tokenizer
 
@@ -494,13 +513,15 @@ def main():
         config = AutoConfig.from_pretrained(
             model_args.config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -511,18 +532,20 @@ def main():
             model_args.tokenizer_name,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         raise ValueError(
-            "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+            "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
@@ -532,13 +555,15 @@ def main():
             config=config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         model = FlaxAutoModelForSeq2SeqLM.from_config(
             config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
+            trust_remote_code=model_args.trust_remote_code,
         )
 
     if training_args.gradient_checkpointing:
@@ -552,10 +577,16 @@ def main():
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     if training_args.do_train:
+        if "train" not in dataset:
+            raise ValueError("--do_train requires a train dataset")
         column_names = dataset["train"].column_names
     elif training_args.do_eval:
+        if "validation" not in dataset:
+            raise ValueError("--do_eval requires a validation dataset")
         column_names = dataset["validation"].column_names
     elif training_args.do_predict:
+        if "test" not in dataset:
+            raise ValueError("--do_predict requires a test dataset")
         column_names = dataset["test"].column_names
     else:
         logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
@@ -619,8 +650,6 @@ def main():
         return model_inputs
 
     if training_args.do_train:
-        if "train" not in dataset:
-            raise ValueError("--do_train requires a train dataset")
         train_dataset = dataset["train"]
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
@@ -636,8 +665,6 @@ def main():
 
     if training_args.do_eval:
         max_target_length = data_args.val_max_target_length
-        if "validation" not in dataset:
-            raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = dataset["validation"]
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
@@ -653,8 +680,6 @@ def main():
 
     if training_args.do_predict:
         max_target_length = data_args.val_max_target_length
-        if "test" not in dataset:
-            raise ValueError("--do_predict requires a test dataset")
         predict_dataset = dataset["test"]
         if data_args.max_predict_samples is not None:
             max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
@@ -669,7 +694,7 @@ def main():
         )
 
     # Metric
-    metric = evaluate.load("rouge")
+    metric = evaluate.load("rouge", cache_dir=model_args.cache_dir)
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
@@ -741,14 +766,12 @@ def main():
         flat_params = traverse_util.flatten_dict(params)
         # find out all LayerNorm parameters
         layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
-        layer_norm_named_params = set(
-            [
-                layer[-2:]
-                for layer_norm_name in layer_norm_candidates
-                for layer in flat_params.keys()
-                if layer_norm_name in "".join(layer).lower()
-            ]
-        )
+        layer_norm_named_params = {
+            layer[-2:]
+            for layer_norm_name in layer_norm_candidates
+            for layer in flat_params.keys()
+            if layer_norm_name in "".join(layer).lower()
+        }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
@@ -937,7 +960,13 @@ def main():
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
             if training_args.push_to_hub:
-                repo.push_to_hub(commit_message=f"Saving weights and logs of epoch {epoch}", blocking=False)
+                api.upload_folder(
+                    commit_message=f"Saving weights and logs of epoch {epoch}",
+                    folder_path=training_args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=training_args.hub_token,
+                )
 
     # ======================== Prediction loop ==============================
     if training_args.do_predict:

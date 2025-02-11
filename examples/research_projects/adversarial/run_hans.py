@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for sequence classification on HANS."""
+"""Finetuning the library models for sequence classification on HANS."""
 
 import logging
 import os
@@ -22,6 +22,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import torch
+from utils_hans import HansDataset, InputFeatures, hans_processors, hans_tasks_num_labels
 
 import transformers
 from transformers import (
@@ -35,7 +36,6 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from utils_hans import HansDataset, InputFeatures, hans_processors, hans_tasks_num_labels
 
 
 logger = logging.getLogger(__name__)

@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch MVP model."""
+"""PyTorch MVP model."""
+
 import copy
 import math
-import random
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -24,6 +24,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -49,29 +51,9 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "RUCAIBox/mvp"
 _CONFIG_FOR_DOC = "MvpConfig"
-_TOKENIZER_FOR_DOC = "MvpTokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
-
-MVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "RUCAIBox/mvp",
-    "RUCAIBox/mvp-data-to-text",
-    "RUCAIBox/mvp-open-dialog",
-    "RUCAIBox/mvp-question-answering",
-    "RUCAIBox/mvp-question-generation",
-    "RUCAIBox/mvp-story",
-    "RUCAIBox/mvp-summarization",
-    "RUCAIBox/mvp-task-dialog",
-    "RUCAIBox/mtl-data-to-text",
-    "RUCAIBox/mtl-multi-task",
-    "RUCAIBox/mtl-open-dialog",
-    "RUCAIBox/mtl-question-answering",
-    "RUCAIBox/mtl-question-generation",
-    "RUCAIBox/mtl-story",
-    "RUCAIBox/mtl-summarization",
-    # See all MVP models at https://huggingface.co/models?filter=mvp
-]
 
 
 # Copied from transformers.models.bart.modeling_bart.shift_tokens_right
@@ -89,37 +71,6 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
     return shifted_input_ids
-
-
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 # Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->MVP
@@ -327,7 +278,7 @@ class MvpEncoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -551,7 +502,6 @@ class MvpPreTrainedModel(PreTrainedModel):
     config_class = MvpConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = [r"encoder.version", r"decoder.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -563,10 +513,6 @@ class MvpPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (MvpDecoder, MvpEncoder, MvpPrompt)):
-            module.gradient_checkpointing = value
 
     @property
     def dummy_inputs(self):
@@ -601,7 +547,7 @@ MVP_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -615,7 +561,7 @@ MVP_INPUTS_DOCSTRING = r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
@@ -666,10 +612,11 @@ MVP_INPUTS_DOCSTRING = r"""
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
             don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape
-            `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
-            can choose to directly pass an embedded representation. This is useful if you want more control over how to
-            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -697,9 +644,9 @@ MVP_CONDITIONAL_GENERATION_EXAMPLE = r"""
     Fine-tuning a model
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForConditionalGeneration
+    >>> from transformers import AutoTokenizer, MvpForConditionalGeneration
 
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp")
 
     >>> inputs = tokenizer(
@@ -727,10 +674,10 @@ MVP_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     Fine-tuning a model on `num_labels` classes
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForSequenceClassification
+    >>> from transformers import AutoTokenizer, MvpForSequenceClassification
 
     >>> num_labels = 2  # for example, this is a binary classification task
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForSequenceClassification.from_pretrained("RUCAIBox/mvp", num_labels=num_labels)
 
     >>> inputs = tokenizer("Classify: Hello, my dog is cute", return_tensors="pt")
@@ -756,9 +703,9 @@ MVP_QUESTION_ANSWERING_SAMPLE = r"""
     using `BartForConditionalGeneration`
     ```python
     >>> import torch
-    >>> from transformers import MvpTokenizer, MvpForQuestionAnswering
+    >>> from transformers import AutoTokenizer, MvpForQuestionAnswering
 
-    >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+    >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
     >>> model = MvpForQuestionAnswering.from_pretrained("RUCAIBox/mvp")
 
     >>> inputs = tokenizer(
@@ -857,7 +804,7 @@ class MvpEncoder(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -923,7 +870,7 @@ class MvpEncoder(MvpPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -940,24 +887,23 @@ class MvpEncoder(MvpPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        encoder_layer.__call__,
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                         (self_attn_prompt[idx] if self.use_prompt else None),
+                        output_attentions,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1039,24 +985,6 @@ class MvpDecoder(MvpPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(inputs_embeds.device)
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
-            )
-
-        return combined_attention_mask
-
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1078,7 +1006,7 @@ class MvpDecoder(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1123,11 +1051,11 @@ class MvpDecoder(MvpPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1163,14 +1091,16 @@ class MvpDecoder(MvpPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(
+        attention_mask = _prepare_4d_causal_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            encoder_attention_mask = _prepare_4d_attention_mask(
+                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)
@@ -1185,6 +1115,13 @@ class MvpDecoder(MvpPreTrainedModel):
             prompt_ids = torch.arange(self.prompt_length).to(self.device)
             self_attn_prompt = self.self_attn_prompt(prompt_ids)
             cross_attn_prompt = self.cross_attn_prompt(prompt_ids)
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1205,29 +1142,16 @@ class MvpDecoder(MvpPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
@@ -1237,9 +1161,10 @@ class MvpDecoder(MvpPreTrainedModel):
                     self_attn_prompt[idx] if self.use_prompt else None,
                     cross_attn_prompt[idx] if self.use_prompt else None,
                     None,
+                    output_attentions,
+                    use_cache,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1291,7 +1216,8 @@ class MvpDecoder(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpModel(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
+    _keys_to_ignore_on_load_unexpected = ["final_logits_bias"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig):
         super().__init__(config)
@@ -1330,7 +1256,6 @@ class MvpModel(MvpPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MVP_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1354,7 +1279,6 @@ class MvpModel(MvpPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
-
         # different to other models, Mvp automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1428,7 +1352,9 @@ class MvpModel(MvpPreTrainedModel):
 @add_start_docstrings(
     "The MVP Model with a language modeling head. Can be used for various text generation tasks.", MVP_START_DOCSTRING
 )
-class MvpForConditionalGeneration(MvpPreTrainedModel):
+class MvpForConditionalGeneration(MvpPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+
     def __init__(self, config: MvpConfig):
         super().__init__(config)
         self.model = MvpModel(config)
@@ -1444,8 +1370,10 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+    def resize_token_embeddings(
+        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+    ) -> nn.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
 
@@ -1549,44 +1477,17 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs
-    ):
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
-
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
+        for layer_past in past_key_values:
             # cached cross_attention states don't have to be reordered -> they are always the same
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                + layer_past[2:],
             )
         return reordered_past
 
@@ -1599,7 +1500,7 @@ class MvpForConditionalGeneration(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpForSequenceClassification(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: MvpConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1611,8 +1512,8 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
             config.classifier_dropout,
         )
 
-        self.model._init_weights(self.classification_head.dense)
-        self.model._init_weights(self.classification_head.out_proj)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_lightweight_tuning(self):
         self.model.set_lightweight_tuning()
@@ -1670,7 +1571,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
         )
         hidden_states = outputs[0]  # last hidden state
 
-        eos_mask = input_ids.eq(self.config.eos_token_id)
+        eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
         if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
@@ -1726,7 +1627,7 @@ class MvpForSequenceClassification(MvpPreTrainedModel):
     MVP_START_DOCSTRING,
 )
 class MvpForQuestionAnswering(MvpPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"final_logits_bias", r"lm_head.weight"]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1737,7 +1638,8 @@ class MvpForQuestionAnswering(MvpPreTrainedModel):
         self.model = MvpModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.model._init_weights(self.qa_outputs)
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def set_lightweight_tuning(self):
         self.model.set_lightweight_tuning()
@@ -1855,7 +1757,9 @@ class MvpDecoderWrapper(MvpPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-class MvpForCausalLM(MvpPreTrainedModel):
+class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         config = copy.deepcopy(config)
         config.is_decoder = True
@@ -1913,7 +1817,7 @@ class MvpForCausalLM(MvpPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`MvpTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -1978,9 +1882,9 @@ class MvpForCausalLM(MvpPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import MvpTokenizer, MvpForCausalLM
+        >>> from transformers import AutoTokenizer, MvpForCausalLM
 
-        >>> tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
+        >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
         >>> model = MvpForCausalLM.from_pretrained("RUCAIBox/mvp", add_cross_attention=False)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
@@ -2033,24 +1937,21 @@ class MvpForCausalLM(MvpPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_ids.shape)
-
-        if past:
-            input_ids = input_ids[:, -1:]
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "past_key_values": past,
-            "use_cache": use_cache,
-        }
-
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
+
+
+__all__ = [
+    "MvpForCausalLM",
+    "MvpForConditionalGeneration",
+    "MvpForQuestionAnswering",
+    "MvpForSequenceClassification",
+    "MvpModel",
+    "MvpPreTrainedModel",
+]

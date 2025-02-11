@@ -29,7 +29,7 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    ViTFeatureExtractor,
+    ViTImageProcessor,
     ViTMAEConfig,
     ViTMAEForPreTraining,
 )
@@ -43,7 +43,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -62,6 +62,16 @@ class DataTrainingArguments:
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether to trust the execution of code from datasets/models defined on the Hub."
+                " This option should only be set to `True` for repositories you trust and in which you have read the"
+                " code, as it will execute code present on the Hub on your local machine."
+            )
+        },
     )
     image_column_name: Optional[str] = field(
         default=None, metadata={"help": "The column name of the images in the files."}
@@ -91,7 +101,7 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        data_files = dict()
+        data_files = {}
         if self.train_dir is not None:
             data_files["train"] = self.train_dir
         if self.validation_dir is not None:
@@ -102,14 +112,14 @@ class DataTrainingArguments:
 @dataclass
 class ModelArguments:
     """
-    Arguments pertaining to which model/config/feature extractor we are going to pre-train.
+    Arguments pertaining to which model/config/image processor we are going to pre-train.
     """
 
     model_name_or_path: str = field(
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
@@ -132,13 +142,13 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    feature_extractor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
-    use_auth_token: bool = field(
-        default=False,
+    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    token: str = field(
+        default=None,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
         },
     )
@@ -186,6 +196,10 @@ def main():
         handlers=[logging.StreamHandler(sys.stdout)],
     )
 
+    if training_args.should_log:
+        # The default of training_args.log_level is passive, so we set log level at info here to have that default.
+        transformers.utils.logging.set_verbosity_info()
+
     log_level = training_args.get_process_log_level()
     logger.setLevel(log_level)
     transformers.utils.logging.set_verbosity(log_level)
@@ -194,8 +208,8 @@ def main():
 
     # Log on each process the small summary:
     logger.warning(
-        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
-        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        + f"distributed training: {training_args.parallel_mode.value == 'distributed'}, 16-bits training: {training_args.fp16}"
     )
     logger.info(f"Training/evaluation parameters {training_args}")
 
@@ -220,7 +234,8 @@ def main():
         data_args.dataset_config_name,
         data_files=data_args.data_files,
         cache_dir=model_args.cache_dir,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=data_args.trust_remote_code,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -230,7 +245,7 @@ def main():
         ds["train"] = split["train"]
         ds["validation"] = split["test"]
 
-    # Load pretrained model and feature extractor
+    # Load pretrained model and image processor
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
@@ -238,7 +253,7 @@ def main():
     config_kwargs = {
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
-        "use_auth_token": True if model_args.use_auth_token else None,
+        "token": model_args.token,
     }
     if model_args.config_name:
         config = ViTMAEConfig.from_pretrained(model_args.config_name, **config_kwargs)
@@ -260,13 +275,13 @@ def main():
         }
     )
 
-    # create feature extractor
-    if model_args.feature_extractor_name:
-        feature_extractor = ViTFeatureExtractor.from_pretrained(model_args.feature_extractor_name, **config_kwargs)
+    # create image processor
+    if model_args.image_processor_name:
+        image_processor = ViTImageProcessor.from_pretrained(model_args.image_processor_name, **config_kwargs)
     elif model_args.model_name_or_path:
-        feature_extractor = ViTFeatureExtractor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        image_processor = ViTImageProcessor.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
-        feature_extractor = ViTFeatureExtractor()
+        image_processor = ViTImageProcessor()
 
     # create model
     if model_args.model_name_or_path:
@@ -276,7 +291,7 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         logger.info("Training new model from scratch")
@@ -298,13 +313,17 @@ def main():
 
     # transformations as done in original MAE paper
     # source: https://github.com/facebookresearch/mae/blob/main/main_pretrain.py
+    if "shortest_edge" in image_processor.size:
+        size = image_processor.size["shortest_edge"]
+    else:
+        size = (image_processor.size["height"], image_processor.size["width"])
     transforms = Compose(
         [
             Lambda(lambda img: img.convert("RGB") if img.mode != "RGB" else img),
-            RandomResizedCrop(feature_extractor.size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),
+            RandomResizedCrop(size, scale=(0.2, 1.0), interpolation=InterpolationMode.BICUBIC),
             RandomHorizontalFlip(),
             ToTensor(),
-            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
+            Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
         ]
     )
 
@@ -345,7 +364,7 @@ def main():
         args=training_args,
         train_dataset=ds["train"] if training_args.do_train else None,
         eval_dataset=ds["validation"] if training_args.do_eval else None,
-        tokenizer=feature_extractor,
+        processing_class=image_processor,
         data_collator=collate_fn,
     )
 
@@ -378,6 +397,11 @@ def main():
         trainer.push_to_hub(**kwargs)
     else:
         trainer.create_model_card(**kwargs)
+
+
+def _mp_fn(index):
+    # For xla_spawn (TPUs)
+    main()
 
 
 if __name__ == "__main__":

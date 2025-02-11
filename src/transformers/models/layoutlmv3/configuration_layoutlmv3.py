@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LayoutLMv3 model configuration"""
+"""LayoutLMv3 model configuration"""
 
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional
@@ -31,10 +31,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-LAYOUTLMV3_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/resolve/main/config.json",
-}
 
 
 class LayoutLMv3Config(PretrainedConfig):
@@ -63,7 +59,7 @@ class LayoutLMv3Config(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
@@ -108,17 +104,18 @@ class LayoutLMv3Config(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import LayoutLMv3Model, LayoutLMv3Config
+    >>> from transformers import LayoutLMv3Config, LayoutLMv3Model
 
     >>> # Initializing a LayoutLMv3 microsoft/layoutlmv3-base style configuration
     >>> configuration = LayoutLMv3Config()
 
-    >>> # Initializing a model from the microsoft/layoutlmv3-base style configuration
+    >>> # Initializing a model (with random weights) from the microsoft/layoutlmv3-base style configuration
     >>> model = LayoutLMv3Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "layoutlmv3"
 
     def __init__(
@@ -153,7 +150,7 @@ class LayoutLMv3Config(PretrainedConfig):
         num_channels=3,
         patch_size=16,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             vocab_size=vocab_size,
@@ -191,7 +188,6 @@ class LayoutLMv3Config(PretrainedConfig):
 
 
 class LayoutLMv3OnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.12")
 
     @property
@@ -261,7 +257,7 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         """
 
         # A dummy image is used so OCR should not be applied
-        setattr(processor.feature_extractor, "apply_ocr", False)
+        setattr(processor.image_processor, "apply_ocr", False)
 
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
         batch_size = compute_effective_axis_dimension(
@@ -292,3 +288,6 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         )
 
         return inputs
+
+
+__all__ = ["LayoutLMv3Config", "LayoutLMv3OnnxConfig"]

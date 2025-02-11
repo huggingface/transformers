@@ -26,7 +26,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "funnel-transformer/small"
     tokenizer_class = FunnelTokenizer
     rust_tokenizer_class = FunnelTokenizerFast
     test_rust_tokenizer = True
@@ -61,23 +61,23 @@ class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return FunnelTokenizerFast.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
-        input_text = "UNwant\u00E9d,running"
+        input_text = "UNwant\u00e9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
 
     def test_full_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file)
 
-        tokens = tokenizer.tokenize("UNwant\u00E9d,running")
+        tokens = tokenizer.tokenize("UNwant\u00e9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
 
     def test_token_type_ids(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
-            inputs = tokenizer("UNwant\u00E9d,running")
+            inputs = tokenizer("UNwant\u00e9d,running")
             sentence_len = len(inputs["input_ids"]) - 1
             self.assertListEqual(inputs["token_type_ids"], [2] + [0] * sentence_len)
 
-            inputs = tokenizer("UNwant\u00E9d,running", "UNwant\u00E9d,running")
+            inputs = tokenizer("UNwant\u00e9d,running", "UNwant\u00e9d,running")
             self.assertListEqual(inputs["token_type_ids"], [2] + [0] * sentence_len + [1] * sentence_len)

@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -26,18 +26,11 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/spiece.model"}
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/pegasus-xsum": 512,
-}
-
 
 logger = logging.get_logger(__name__)
 
 
+# TODO ArthurZ refactor this to only use the added_tokens_encoder
 class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
@@ -95,11 +88,8 @@ class PegasusTokenizer(PreTrainedTokenizer):
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
     """
-    vocab_files_names = VOCAB_FILES_NAMES
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -113,7 +103,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         offset=103,  # entries 2 - 104 are only used for pretraining
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.offset = offset
         if additional_special_tokens is not None:
@@ -122,7 +112,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
                     f"additional_special_tokens should be of type {type(list)}, but is"
                     f" {type(additional_special_tokens)}"
                 )
-
             additional_special_tokens_extended = (
                 ([mask_token_sent] + additional_special_tokens)
                 if mask_token_sent not in additional_special_tokens and mask_token_sent is not None
@@ -140,10 +129,31 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
+            additional_special_tokens_extended = []
             additional_special_tokens = [mask_token_sent] if mask_token_sent is not None else []
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        self.mask_token_sent = mask_token_sent
+        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
+
+        _added_tokens_decoder = {
+            0: AddedToken(str(pad_token), special=True),
+            1: AddedToken(str(eos_token), special=True),
+        }
+
+        if self.mask_token_sent is not None:
+            _added_tokens_decoder[2] = AddedToken(mask_token_sent, special=True)
+            _added_tokens_decoder[3] = AddedToken(str(mask_token), special=True)
+
+        for i in range(2, self.offset):
+            _added_tokens_decoder[len(_added_tokens_decoder)] = AddedToken(f"<unk_{i}>", special=True)
+
+        # Force update as we want to make sure vocab is enforced (same as fast)
+        self._added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
+        self._added_tokens_decoder.update(_added_tokens_decoder)
 
         super().__init__(
             eos_token=eos_token,
@@ -156,31 +166,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        self.mask_token_sent = mask_token_sent
-        self.vocab_file = vocab_file
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
-
-        # add special tokens to encoder dict
-        self.encoder: Dict[int, str] = {
-            0: self.pad_token,
-            1: self.eos_token,
-        }
-
-        if self.mask_token_sent is not None:
-            self.encoder.update(
-                {
-                    2: self.mask_token_sent,
-                    3: self.mask_token,
-                }
-            )
-
-        if self.offset > 0:
-            # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
-            # mask_token_sent is already added to list -> so start at 1
-            self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
-
-        self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
     @property
     def vocab_size(self) -> int:
@@ -212,27 +197,29 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) to an id using the vocab."""
-        if token in self.decoder:
-            return self.decoder[token]
-        elif token in self.added_tokens_decoder:
-            return self.added_tokens_decoder[token]
         sp_id = self.sp_model.piece_to_id(token)
         return sp_id + self.offset
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) to a token (str) using the vocab."""
-        if index in self.encoder:
-            return self.encoder[index]
-        elif index in self.added_tokens_encoder:
-            return self.added_tokens_encoder[index]
-        else:
-            token = self.sp_model.IdToPiece(index - self.offset)
+        if index < self.offset:
+            return self.sp_model.IdToPiece(index)
+        token = self.sp_model.IdToPiece(index - self.offset)
         return token
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
@@ -296,3 +283,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["PegasusTokenizer"]

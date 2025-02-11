@@ -29,14 +29,14 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
     SudachiTokenizer,
     WordpieceTokenizer,
 )
-from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
+from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi_projection
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 @custom_tokenizers
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "cl-tohoku/bert-base-japanese"
     tokenizer_class = BertJapaneseTokenizer
     test_rust_tokenizer = False
     space_between_special_tokens = True
@@ -61,6 +61,15 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "##、",
             "。",
             "##。",
+            "アップルストア",
+            "外国",
+            "##人",
+            "参政",
+            "##権",
+            "此れ",
+            "は",
+            "猫",
+            "です",
         ]
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
@@ -114,6 +123,15 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokens, tokens_loaded)
 
+    def test_mecab_full_tokenizer_with_mecab_kwargs(self):
+        tokenizer = self.tokenizer_class(
+            self.vocab_file, word_tokenizer_type="mecab", mecab_kwargs={"mecab_dic": "ipadic"}
+        )
+
+        text = "ｱｯﾌﾟﾙストア"
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(tokens, ["アップルストア"])
+
     def test_mecab_tokenizer_ipadic(self):
         tokenizer = MecabTokenizer(mecab_dic="ipadic")
 
@@ -135,6 +153,12 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_mecab_tokenizer_unidic(self):
         try:
+            import unidic
+
+            self.assertTrue(
+                os.path.isdir(unidic.DICDIR),
+                "The content of unidic was not downloaded. Run `python -m unidic download` before running this test case. Note that this requires 2.1GB on disk.",
+            )
             tokenizer = MecabTokenizer(mecab_dic="unidic")
         except ModuleNotFoundError:
             return
@@ -174,7 +198,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["ｱｯﾌﾟﾙストア", "で", "iPhone", "８", "が", "発売", "さ", "れ", "た", "　", "。"],
         )
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_pickle_sudachi_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="sudachi")
         self.assertIsNotNone(tokenizer)
@@ -195,58 +219,72 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokens, tokens_loaded)
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_core(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core")
 
+        # fmt: off
         self.assertListEqual(
             tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            # fmt: off
-            [" ", "\t", "アップル", "ストア", "で", "iPhone", "8", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", " ", "。", " ", " "],
-            # fmt: on
+            [" ",  "\t",  "アップル",  "ストア",  "で",  "iPhone",  "8",  " ",  "が",  " ",  " ",  "\n ",  "発売",  "さ",  "れ",  "た",  " ",  "。",  " ",  " "],
         )
+        # fmt: on
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_split_mode_A(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="A")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国", "人", "参政", "権"])
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_split_mode_B(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="B")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国人", "参政権"])
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_split_mode_C(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="C")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国人参政権"])
 
-    @require_sudachi
+    @require_sudachi_projection
+    def test_sudachi_full_tokenizer_with_sudachi_kwargs_split_mode_B(self):
+        tokenizer = self.tokenizer_class(
+            self.vocab_file, word_tokenizer_type="sudachi", sudachi_kwargs={"sudachi_split_mode": "B"}
+        )
+
+        self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国", "##人", "参政", "##権"])
+
+    @require_sudachi_projection
+    def test_sudachi_tokenizer_projection(self):
+        tokenizer = SudachiTokenizer(
+            sudachi_dict_type="core", sudachi_split_mode="A", sudachi_projection="normalized_nouns"
+        )
+
+        self.assertListEqual(tokenizer.tokenize("これはねこです。"), ["此れ", "は", "猫", "です", "。"])
+
+    @require_sudachi_projection
+    def test_sudachi_full_tokenizer_with_sudachi_kwargs_sudachi_projection(self):
+        tokenizer = self.tokenizer_class(
+            self.vocab_file, word_tokenizer_type="sudachi", sudachi_kwargs={"sudachi_projection": "normalized_nouns"}
+        )
+
+        self.assertListEqual(tokenizer.tokenize("これはねこです。"), ["此れ", "は", "猫", "です", "。"])
+
+    @require_sudachi_projection
     def test_sudachi_tokenizer_lower(self):
         tokenizer = SudachiTokenizer(do_lower_case=True, sudachi_dict_type="core")
 
-        self.assertListEqual(
-            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            # fmt: off
-            [" ", "\t", "アップル", "ストア", "で", "iphone", "8", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", " ", "。", " ", " "],
-            # fmt: on
-        )
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),[" ", "\t", "アップル", "ストア", "で", "iphone", "8", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", " ", "。", " ", " "])  # fmt: skip
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_no_normalize(self):
         tokenizer = SudachiTokenizer(normalize_text=False, sudachi_dict_type="core")
 
-        self.assertListEqual(
-            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            # fmt: off
-            [" ", "\t", "ｱｯﾌﾟﾙ", "ストア", "で", "iPhone", "８", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", "\u3000", "。", " ", " "],
-            # fmt: on
-        )
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),[" ", "\t", "ｱｯﾌﾟﾙ", "ストア", "で", "iPhone", "８", " ", "が", " ", " ", "\n ", "発売", "さ", "れ", "た", "\u3000", "。", " ", " "])  # fmt: skip
 
-    @require_sudachi
+    @require_sudachi_projection
     def test_sudachi_tokenizer_trim_whitespace(self):
         tokenizer = SudachiTokenizer(trim_whitespace=True, sudachi_dict_type="core")
 
@@ -281,33 +319,19 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = JumanppTokenizer()
 
         self.assertListEqual(
-            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            # fmt: off
-            ["アップル", "ストア", "で", "iPhone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],
-            # fmt: on
-        )
+            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iPhone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"])  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_lower(self):
         tokenizer = JumanppTokenizer(do_lower_case=True)
 
-        self.assertListEqual(
-            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            # fmt: off
-            ["アップル", "ストア", "で", "iphone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],
-            # fmt: on
-        )
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["アップル", "ストア", "で", "iphone", "8", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],)  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_no_normalize(self):
         tokenizer = JumanppTokenizer(normalize_text=False)
 
-        self.assertListEqual(
-            tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),
-            # fmt: off
-            ["ｱ", "ｯ", "ﾌ", "ﾟ", "ﾙ", "ストア", "で", "iPhone", "８", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],
-            # fmt: on
-        )
+        self.assertListEqual(tokenizer.tokenize(" \tｱｯﾌﾟﾙストアでiPhone８ が  \n 発売された　。  "),["ｱ", "ｯ", "ﾌ", "ﾟ", "ﾙ", "ストア", "で", "iPhone", "８", "\u3000", "が", "\u3000", "\u3000", "\u3000", "発売", "さ", "れた", "\u3000", "。"],)  # fmt: skip
 
     @require_jumanpp
     def test_jumanpp_tokenizer_trim_whitespace(self):
@@ -318,8 +342,28 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れた", "。"],
         )
 
+    @require_jumanpp
+    def test_jumanpp_full_tokenizer_with_jumanpp_kwargs_trim_whitespace(self):
+        tokenizer = self.tokenizer_class(
+            self.vocab_file, word_tokenizer_type="jumanpp", jumanpp_kwargs={"trim_whitespace": True}
+        )
+
+        text = "こんにちは、世界。\nこんばんは、世界。"
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
+
+    @require_jumanpp
+    def test_jumanpp_tokenizer_ext(self):
+        tokenizer = JumanppTokenizer()
+
+        self.assertListEqual(
+            tokenizer.tokenize("ありがとうございますm(_ _)ｍ見つけるのが大変です。"),
+            ["ありがとう", "ございます", "m(_ _)m", "見つける", "の", "が", "大変です", "。"],
+        )
+
     def test_wordpiece_tokenizer(self):
-        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こんにちは", "こん", "にちは", "ばんは", "##こん", "##にちは", "##ばんは"]
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こんにちは", "こん", "にちは", "ばんは", "##こん", "##にちは", "##ばんは"]  # fmt: skip
 
         vocab = {}
         for i, token in enumerate(vocab_tokens):
@@ -332,7 +376,17 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokenizer.tokenize("こんばんは"), ["こん", "##ばんは"])
 
-        self.assertListEqual(tokenizer.tokenize("こんばんは こんばんにちは こんにちは"), ["こん", "##ばんは", "[UNK]", "こんにちは"])
+        self.assertListEqual(tokenizer.tokenize("こんばんは こんばんにちは こんにちは"), ["こん", "##ばんは", "[UNK]", "こんにちは"])  # fmt: skip
+
+    def test_sentencepiece_tokenizer(self):
+        tokenizer = BertJapaneseTokenizer.from_pretrained("nlp-waseda/roberta-base-japanese-with-auto-jumanpp")
+        subword_tokenizer = tokenizer.subword_tokenizer
+
+        tokens = subword_tokenizer.tokenize("国境 の 長い トンネル を 抜ける と 雪国 であった 。")
+        self.assertListEqual(tokens, ["▁国境", "▁の", "▁長い", "▁トンネル", "▁を", "▁抜ける", "▁と", "▁雪", "国", "▁であった", "▁。"])  # fmt: skip
+
+        tokens = subword_tokenizer.tokenize("こんばんは こんばん にち は こんにちは")
+        self.assertListEqual(tokens, ["▁こん", "ばん", "は", "▁こん", "ばん", "▁に", "ち", "▁は", "▁こんにちは"])
 
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("cl-tohoku/bert-base-japanese")
@@ -350,7 +404,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
 @custom_tokenizers
 class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
+    from_pretrained_id = "cl-tohoku/bert-base-japanese"
     tokenizer_class = BertJapaneseTokenizer
     test_rust_tokenizer = False
 
@@ -384,9 +438,7 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         tokenizer = self.tokenizer_class(self.vocab_file, subword_tokenizer_type="character")
 
         tokens = tokenizer.tokenize("こんにちは、世界。 \nこんばんは、世界。")
-        self.assertListEqual(
-            tokens, ["こ", "ん", "に", "ち", "は", "、", "世", "界", "。", "こ", "ん", "ば", "ん", "は", "、", "世", "界", "。"]
-        )
+        self.assertListEqual(tokens, ["こ", "ん", "に", "ち", "は", "、", "世", "界", "。", "こ", "ん", "ば", "ん", "は", "、", "世", "界", "。"])  # fmt: skip
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens), [3, 4, 5, 6, 7, 11, 9, 10, 12, 3, 4, 8, 4, 7, 11, 9, 10, 12]
         )
@@ -438,7 +490,7 @@ class BertTokenizerMismatchTest(unittest.TestCase):
                     " is called from."
                 )
             )
-        EXAMPLE_BERT_ID = "bert-base-cased"
+        EXAMPLE_BERT_ID = "google-bert/bert-base-cased"
         with self.assertLogs("transformers", level="WARNING") as cm:
             BertJapaneseTokenizer.from_pretrained(EXAMPLE_BERT_ID)
             self.assertTrue(

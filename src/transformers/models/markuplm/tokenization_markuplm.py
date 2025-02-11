@@ -39,23 +39,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/markuplm-base": "https://huggingface.co/microsoft/markuplm-base/resolve/main/vocab.json",
-        "microsoft/markuplm-large": "https://huggingface.co/microsoft/markuplm-large/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "microsoft/markuplm-base": "https://huggingface.co/microsoft/markuplm-base/resolve/main/merges.txt",
-        "microsoft/markuplm-large": "https://huggingface.co/microsoft/markuplm-large/resolve/main/merges.txt",
-    },
-}
-
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/markuplm-base": 512,
-    "microsoft/markuplm-large": 512,
-}
-
 
 MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             add_special_tokens (`bool`, *optional*, defaults to `True`):
@@ -96,7 +79,7 @@ MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
                 argument defines the number of overlapping tokens.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -198,8 +181,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
         self,
@@ -220,7 +201,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         pad_width=1001,
         pad_token_label=-100,
         only_label_first_subword=True,
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -231,27 +212,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
-        super().__init__(
-            vocab_file=vocab_file,
-            merges_file=merges_file,
-            tags_dict=tags_dict,
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            max_depth=max_depth,
-            max_width=max_width,
-            pad_width=pad_width,
-            pad_token_label=pad_token_label,
-            only_label_first_subword=only_label_first_subword,
-            **kwargs,
-        )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -279,6 +239,28 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         self.pad_tag_id = self.unk_tag_id + 1
         self.pad_xpath_tags_seq = [self.pad_tag_id] * self.max_depth
         self.pad_xpath_subs_seq = [self.pad_width] * self.max_depth
+
+        super().__init__(
+            vocab_file=vocab_file,
+            merges_file=merges_file,
+            tags_dict=tags_dict,
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            max_depth=max_depth,
+            max_width=max_width,
+            pad_width=pad_width,
+            pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
+            **kwargs,
+        )
+
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
@@ -301,7 +283,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             xpath_subs_list.append(min(self.max_width, sub))
 
         xpath_tags_list = xpath_tags_list[: self.max_depth]
-        xpath_subs_list = xpath_tags_list[: self.max_depth]
+        xpath_subs_list = xpath_subs_list[: self.max_depth]
         xpath_tags_list += [self.pad_tag_id] * (self.max_depth - len(xpath_tags_list))
         xpath_subs_list += [self.pad_width] * (self.max_depth - len(xpath_subs_list))
 
@@ -312,7 +294,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def get_vocab(self):
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = self.encoder.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def bpe(self, token):
         if token in self.cache:
@@ -428,6 +412,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         adding special tokens. A RoBERTa sequence has the following format:
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
@@ -514,10 +499,11 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         node_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -526,7 +512,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -617,6 +603,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -639,6 +626,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -663,10 +651,11 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         node_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -675,7 +664,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -698,6 +687,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -725,6 +715,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -733,7 +724,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -753,6 +744,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
             return_overflowing_tokens=return_overflowing_tokens,
@@ -777,6 +769,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -808,6 +801,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=None,  # we pad in batch afterward
+                padding_side=None,  # we pad in batch afterward
                 return_attention_mask=False,  # we pad in batch afterward
                 return_token_type_ids=return_token_type_ids,
                 return_overflowing_tokens=return_overflowing_tokens,
@@ -828,6 +822,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             padding=padding_strategy.value,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_attention_mask=return_attention_mask,
         )
 
@@ -844,10 +839,11 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         node_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -856,7 +852,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> List[int]:
         encoded_inputs = self.encode_plus(
             text=text,
@@ -869,6 +865,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -891,10 +888,11 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         node_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -903,7 +901,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
@@ -938,6 +936,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -961,6 +960,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -969,7 +969,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if return_offsets_mapping:
             raise NotImplementedError(
@@ -991,6 +991,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
@@ -1010,10 +1011,11 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         node_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -1023,7 +1025,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return_length: bool = False,
         verbose: bool = True,
         prepend_batch_axis: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Prepares a sequence or a pair of sequences so that it can be used by the model. It adds special tokens,
@@ -1218,6 +1220,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 max_length=max_length,
                 padding=padding_strategy.value,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_attention_mask=return_attention_mask,
             )
 
@@ -1314,8 +1317,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 )
                 if truncation_strategy == TruncationStrategy.ONLY_FIRST:
                     error_msg = (
-                        error_msg
-                        + "Please select another truncation strategy than "
+                        error_msg + "Please select another truncation strategy than "
                         f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
                     )
                 logger.error(error_msg)
@@ -1373,6 +1375,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -1391,7 +1394,10 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
+            padding_side:
+                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+                Default value is picked from the class attribute of the same name.
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
@@ -1415,7 +1421,8 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            if self.padding_side == "right":
+            padding_side = padding_side if padding_side is not None else self.padding_side
+            if padding_side == "right":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
@@ -1435,7 +1442,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
-            elif self.padding_side == "left":
+            elif padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
@@ -1456,6 +1463,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+                raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["MarkupLMTokenizer"]

@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow ViTMAE model. """
+"""Testing suite for the TensorFlow ViTMAE model."""
 
+from __future__ import annotations
 
 import copy
 import inspect
@@ -32,18 +33,20 @@ from transformers.testing_utils import require_tf, require_vision, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFViTMAEForPreTraining, TFViTMAEModel
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class TFViTMAEModelTester:
@@ -57,7 +60,7 @@ class TFViTMAEModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -68,6 +71,7 @@ class TFViTMAEModelTester:
         num_labels=3,
         mask_ratio=0.6,
         scope=None,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -87,6 +91,7 @@ class TFViTMAEModelTester:
         self.initializer_range = initializer_range
         self.mask_ratio = mask_ratio
         self.scope = scope
+        self.attn_implementation = attn_implementation
 
         # in ViTMAE, the expected sequence length = (num_patches + 1) * (1 - config.mask_ratio), rounded above
         # (we add 1 for the [CLS] token)
@@ -123,6 +128,7 @@ class TFViTMAEModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             mask_ratio=self.mask_ratio,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -155,13 +161,14 @@ class TFViTMAEModelTester:
 
 
 @require_tf
-class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViTMAE does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (TFViTMAEModel, TFViTMAEForPreTraining) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFViTMAEModel} if is_tf_available() else {}
 
     test_pruning = False
     test_onnx = False
@@ -184,9 +191,9 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -266,7 +273,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-
         # make masks reproducible
         np.random.seed(2)
 
@@ -280,52 +286,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
         super().check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
 
-    # overwrite from common since TFViTMAEForPretraining outputs loss along with
-    # logits and mask indices. loss and mask indices are not suitable for integration
-    # with other keras modules.
-    def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        for model_class in self.all_model_classes:
-            # `pixel_values` implies that the input is an image
-            inputs = tf.keras.Input(
-                batch_shape=(
-                    3,
-                    self.model_tester.num_channels,
-                    self.model_tester.image_size,
-                    self.model_tester.image_size,
-                ),
-                name="pixel_values",
-                dtype="float32",
-            )
-
-            # Prepare our model
-            model = model_class(config)
-            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-            # Let's load it from the disk to be sure we can use pretrained weights
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=False)
-                model = model_class.from_pretrained(tmpdirname)
-
-            outputs_dict = model(inputs)
-            hidden_states = outputs_dict[0]
-
-            # `TFViTMAEForPreTraining` outputs are not recommended to be used for
-            #  downstream application. This is just to check if the outputs of
-            # `TFViTMAEForPreTraining` can be integrated with other keras modules.
-            if model_class.__name__ == "TFViTMAEForPreTraining":
-                hidden_states = outputs_dict["logits"]
-
-            # Add a dense layer on top to test integration with other keras modules
-            outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-            # Compile extended model
-            extended_model = tf.keras.Model(inputs=[inputs], outputs=[outputs])
-            extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
     def test_keras_save_load(self):
@@ -334,7 +294,7 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        tf_main_layer_classes = set(
+        tf_main_layer_classes = {
             module_member
             for model_class in self.all_model_classes
             for module in (import_module(model_class.__module__),)
@@ -344,9 +304,9 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
-            and tf.keras.layers.Layer in module_member.__bases__
+            and keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
-        )
+        }
 
         num_patches = int((config.image_size // config.patch_size) ** 2)
         noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
@@ -357,19 +317,17 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
             main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
 
-            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
-                model = tf.keras.models.load_model(
-                    filepath, custom_objects={main_layer_class.__name__: main_layer_class}
-                )
-                assert isinstance(model, tf.keras.Model)
+                model = keras.models.load_model(filepath, custom_objects={main_layer_class.__name__: main_layer_class})
+                assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
@@ -453,7 +411,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-
         model = TFViTMAEModel.from_pretrained("google/vit-base-patch16-224")
         self.assertIsNotNone(model)
 
@@ -468,8 +425,8 @@ def prepare_img():
 @require_vision
 class TFViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
 
     @slow
     def test_inference_for_pretraining(self):
@@ -478,9 +435,9 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
 
         model = TFViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # prepare a noise vector that will be also used for testing the TF model
         # (this way we can ensure that the PT and TF models operate on the same inputs)
@@ -500,3 +457,32 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
         )
 
         tf.debugging.assert_near(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # ViTMAE models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+
+        # make random mask reproducible across the PT and TF model
+        np.random.seed(2)
+
+        model = TFViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, do_resize=False, return_tensors="tf")
+
+        # prepare a noise vector that will be also used for testing the TF model
+        # (this way we can ensure that the PT and TF models operate on the same inputs)
+        vit_mae_config = ViTMAEConfig()
+        num_patches = (image.height // vit_mae_config.patch_size) * (image.width // vit_mae_config.patch_size)
+        noise = np.random.uniform(size=(1, num_patches))
+
+        # forward pass
+        outputs = model(**inputs, noise=noise, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = tf.convert_to_tensor([1, 1200, 768])
+        self.assertEqual(outputs.logits.shape, expected_shape)

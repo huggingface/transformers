@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch LUKE model. """
+"""Testing suite for the PyTorch LUKE model."""
+
 import unittest
 
 from transformers import LukeConfig, is_torch_available
@@ -20,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,7 +39,6 @@ if is_torch_available():
         LukeModel,
         LukeTokenizer,
     )
-    from transformers.models.luke.modeling_luke import LUKE_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class LukeModelTester:
@@ -60,7 +61,7 @@ class LukeModelTester:
         entity_vocab_size=10,
         entity_emb_size=6,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -585,8 +586,7 @@ class LukeModelTester:
 
 
 @require_torch
-class LukeModelTest(ModelTesterMixin, unittest.TestCase):
-
+class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LukeModel,
@@ -602,10 +602,38 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LukeModel,
+            "fill-mask": LukeForMaskedLM,
+            "question-answering": LukeForQuestionAnswering,
+            "text-classification": LukeForSequenceClassification,
+            "token-classification": LukeForTokenClassification,
+            "zero-shot": LukeForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = True
     test_head_masking = True
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name in ["QAPipelineTests", "ZeroShotClassificationPipelineTests"]:
+            return True
+
+        return False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         entity_inputs_dict = {k: v for k, v in inputs_dict.items() if k.startswith("entity")}
@@ -678,9 +706,9 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LUKE_PRETRAINED_MODEL_ARCHIVE_LIST:
-            model = LukeModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "studio-ousia/luke-base"
+        model = LukeModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -834,6 +862,24 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(entity_hidden_states.grad)
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
 
 @require_torch
 class LukeModelIntegrationTests(unittest.TestCase):
@@ -863,14 +909,14 @@ class LukeModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.0037, 0.1368, -0.0091], [0.1099, 0.3329, -0.1095], [0.0765, 0.5335, 0.1179]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # Verify entity hidden states
         expected_shape = torch.Size((1, 1, 768))
         self.assertEqual(outputs.entity_last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_large_model(self):
@@ -898,11 +944,11 @@ class LukeModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.0133, 0.0865, 0.0095], [0.3093, -0.2576, -0.7418], [-0.1720, -0.2117, -0.2869]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # Verify entity hidden states
         expected_shape = torch.Size((1, 1, 1024))
         self.assertEqual(outputs.entity_last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor([[0.0466, -0.0106, -0.0179]]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

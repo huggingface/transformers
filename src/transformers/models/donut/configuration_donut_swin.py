@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Donut Swin Transformer model configuration"""
+"""Donut Swin Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "naver-clova-ix/donut-base": "https://huggingface.co/naver-clova-ix/donut-base/resolve/main/config.json",
-    # See all Donut models at https://huggingface.co/models?filter=donut-swin
-}
 
 
 class DonutSwinConfig(PretrainedConfig):
@@ -45,15 +40,15 @@ class DonutSwinConfig(PretrainedConfig):
             The number of input channels.
         embed_dim (`int`, *optional*, defaults to 96):
             Dimensionality of patch embedding.
-        depths (`list(int)`, *optional*, defaults to [2, 2, 6, 2]):
+        depths (`list(int)`, *optional*, defaults to `[2, 2, 6, 2]`):
             Depth of each layer in the Transformer encoder.
-        num_heads (`list(int)`, *optional*, defaults to [3, 6, 12, 24]):
+        num_heads (`list(int)`, *optional*, defaults to `[3, 6, 12, 24]`):
             Number of attention heads in each layer of the Transformer encoder.
         window_size (`int`, *optional*, defaults to 7):
             Size of windows.
         mlp_ratio (`float`, *optional*, defaults to 4.0):
             Ratio of MLP hidden dimensionality to embedding dimensionality.
-        qkv_bias (`bool`, *optional*, defaults to True):
+        qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether or not a learnable bias should be added to the queries, keys and values.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout probability for all fully connected layers in the embeddings and encoder.
@@ -64,13 +59,11 @@ class DonutSwinConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder. If string, `"gelu"`, `"relu"`,
             `"selu"` and `"gelu_new"` are supported.
-        use_absolute_embeddings (`bool`, *optional*, defaults to False):
+        use_absolute_embeddings (`bool`, *optional*, defaults to `False`):
             Whether or not to add absolute position embeddings to the patch embeddings.
-        patch_norm (`bool`, *optional*, defaults to True):
-            Whether or not to add layer normalization after patch embedding.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
 
     Example:
@@ -87,6 +80,7 @@ class DonutSwinConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "donut-swin"
 
     attribute_map = {
@@ -110,10 +104,9 @@ class DonutSwinConfig(PretrainedConfig):
         drop_path_rate=0.1,
         hidden_act="gelu",
         use_absolute_embeddings=False,
-        patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -132,9 +125,11 @@ class DonutSwinConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.hidden_act = hidden_act
         self.use_absolute_embeddings = use_absolute_embeddings
-        self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         # we set the hidden_size attribute in order to make Swin work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
         self.hidden_size = int(embed_dim * 2 ** (len(depths) - 1))
+
+
+__all__ = ["DonutSwinConfig"]

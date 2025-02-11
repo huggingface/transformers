@@ -33,8 +33,11 @@ if is_torch_available():
         get_constant_schedule_with_warmup,
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
+        get_inverse_sqrt_schedule,
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
+        get_scheduler,
+        get_wsd_schedule,
     )
 
 
@@ -56,7 +59,7 @@ def unwrap_and_save_reload_schedule(scheduler, num_steps=10):
                 file_name = os.path.join(tmpdirname, "schedule.bin")
                 torch.save(scheduler.state_dict(), file_name)
 
-                state_dict = torch.load(file_name)
+                state_dict = torch.load(file_name, weights_only=False)
                 scheduler.load_state_dict(state_dict)
     return lrs
 
@@ -120,7 +123,6 @@ class ScheduleInitTest(unittest.TestCase):
             self.assertAlmostEqual(a, b, delta=tol, msg=msg)
 
     def test_schedulers(self):
-
         common_kwargs = {"num_warmup_steps": 2, "num_training_steps": 10}
         # schedulers doct format
         # function: (sched_args_dict, expected_learning_rates)
@@ -146,6 +148,14 @@ class ScheduleInitTest(unittest.TestCase):
                 {**common_kwargs, "power": 2.0, "lr_end": 1e-7},
                 [0.0, 5.0, 10.0, 7.656, 5.625, 3.906, 2.5, 1.406, 0.625, 0.156],
             ),
+            get_inverse_sqrt_schedule: (
+                {"num_warmup_steps": 2},
+                [0.0, 5.0, 10.0, 8.165, 7.071, 6.325, 5.774, 5.345, 5.0, 4.714],
+            ),
+            get_wsd_schedule: (
+                {**common_kwargs, "num_decay_steps": 2, "min_lr_ratio": 0.0},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
+            ),
         }
 
         for scheduler_func, data in scheds.items():
@@ -162,5 +172,62 @@ class ScheduleInitTest(unittest.TestCase):
             )
 
             scheduler = scheduler_func(self.optimizer, **kwargs)
+            if scheduler_func.__name__ != "get_constant_schedule":
+                LambdaScheduleWrapper.wrap_scheduler(scheduler)  # wrap to test picklability of the schedule
             lrs_2 = unwrap_and_save_reload_schedule(scheduler, self.num_steps)
             self.assertListEqual(lrs_1, lrs_2, msg=f"failed for {scheduler_func} in save and reload")
+
+    def test_get_scheduler(self):
+        test_params = [
+            {
+                "name": "warmup_stable_decay",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {
+                    "num_decay_steps": 2,
+                    "warmup_type": "linear",
+                    "decay_type": "linear",
+                },
+            },
+            {
+                "name": "warmup_stable_decay",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {
+                    "num_decay_steps": 2,
+                    "warmup_type": "cosine",
+                    "decay_type": "cosine",
+                },
+            },
+            {
+                "name": "warmup_stable_decay",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {
+                    "num_decay_steps": 2,
+                    "warmup_type": "1-sqrt",
+                    "decay_type": "1-sqrt",
+                },
+            },
+            {"name": "cosine", "optimizer": self.optimizer, "num_warmup_steps": 2, "num_training_steps": 10},
+        ]
+
+        for param in test_params:
+            self.assertTrue(get_scheduler(**param), msg=f"failed for {param['name']} in get_scheduler")
+
+
+class LambdaScheduleWrapper:
+    """See https://github.com/huggingface/transformers/issues/21689"""
+
+    def __init__(self, fn):
+        self.fn = fn
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
+
+    @classmethod
+    def wrap_scheduler(cls, scheduler):
+        scheduler.lr_lambdas = list(map(cls, scheduler.lr_lambdas))

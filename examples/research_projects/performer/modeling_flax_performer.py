@@ -15,13 +15,13 @@
 
 from typing import Callable, Dict, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.random import PRNGKey
 from modeling_flax_performer_utils import make_fast_softmax_attention
+
 from transformers.file_utils import add_start_docstrings
 from transformers.modeling_flax_utils import ACT2FN
 from transformers.models.bert.configuration_bert import BertConfig
@@ -366,7 +366,6 @@ class FlaxPerformerModel(FlaxBertPreTrainedModel):
 
             # SelfAttention needs also to replace "weight" by "kernel"
             if {"query", "key", "value"} & key_parts:
-
                 # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
                 if "bias" in key:
                     jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
@@ -443,7 +442,6 @@ class FlaxPerformerModel(FlaxBertPreTrainedModel):
     def __call__(
         self, input_ids, token_type_ids=None, position_ids=None, dropout_rng: PRNGKey = None, attention_mask=None
     ):
-
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             input_ids, attention_mask, token_type_ids, position_ids
         )

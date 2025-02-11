@@ -19,12 +19,16 @@ Feature extractor class for Whisper
 from typing import List, Optional, Union
 
 import numpy as np
-from numpy.fft import fft
 
+from ... import is_torch_available
+from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
+
+if is_torch_available():
+    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -33,23 +37,23 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Whisper feature extractor.
 
-    This feature extractor inherits from [`WhisperFeatureExtractor`] which contains most of the main methods. Users
-    should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
     Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
     Args:
-        feature_size (`int`, defaults to 80):
+        feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 16000):
-            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        hop_length (`int`, defaults to 160):
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        hop_length (`int`, *optional*, defaults to 160):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, defaults to 30):
+        chunk_length (`int`, *optional*, defaults to 30):
             The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
-        n_fft (`int`, defaults to 400):
+        n_fft (`int`, *optional*, defaults to 400):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
@@ -66,7 +70,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         n_fft=400,
         padding_value=0.0,
         return_attention_mask=False,  # pad inputs to max length with silence token (zero) and no attention mask
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             feature_size=feature_size,
@@ -81,139 +85,92 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
+        self.mel_filters = mel_filter_bank(
+            num_frequency_bins=1 + n_fft // 2,
+            num_mel_filters=feature_size,
+            min_frequency=0.0,
+            max_frequency=8000.0,
+            sampling_rate=sampling_rate,
+            norm="slaney",
+            mel_scale="slaney",
+        )
 
-    def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
-        # Initialize the weights
-        n_mels = int(n_mels)
-        weights = np.zeros((n_mels, int(1 + n_fft // 2)), dtype=dtype)
-
-        # Center freqs of each FFT bin
-        fftfreqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sr)
-
-        # 'Center freqs' of mel bands - uniformly spaced between limits
-        min_mel = 0.0
-        max_mel = 45.245640471924965
-
-        mels = np.linspace(min_mel, max_mel, n_mels + 2)
-
-        mels = np.asanyarray(mels)
-
-        # Fill in the linear scale
-        f_min = 0.0
-        f_sp = 200.0 / 3
-        freqs = f_min + f_sp * mels
-
-        # And now the nonlinear scale
-        min_log_hz = 1000.0  # beginning of log region (Hz)
-        min_log_mel = (min_log_hz - f_min) / f_sp  # same (Mels)
-        logstep = np.log(6.4) / 27.0  # step size for log region
-
-        # If we have vector data, vectorize
-        log_t = mels >= min_log_mel
-        freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
-
-        mel_f = freqs
-
-        fdiff = np.diff(mel_f)
-        ramps = np.subtract.outer(mel_f, fftfreqs)
-
-        for i in range(n_mels):
-            # lower and upper slopes for all bins
-            lower = -ramps[i] / fdiff[i]
-            upper = ramps[i + 2] / fdiff[i + 1]
-
-            # .. then intersect them with each other and zero
-            weights[i] = np.maximum(0, np.minimum(lower, upper))
-
-        # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
-        weights *= enorm[:, np.newaxis]
-
-        return weights
-
-    def fram_wave(self, waveform, center=True):
+    def _np_extract_fbank_features(self, waveform_batch: np.array, device: str) -> np.ndarray:
         """
-        Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
-        contain in each frame (smalle waveform), while the hope length defines the step between the beginning of each
-        new frame.
-
-        Centering is done by reflecting the waveform which is first centered around `frame_idx * hop_length`.
-        """
-        frames = []
-        for i in range(0, waveform.shape[0] + 1, self.hop_length):
-            half_window = (self.n_fft - 1) // 2 + 1
-            if center:
-                start = i - half_window if i > half_window else 0
-                end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
-
-                frame = waveform[start:end]
-
-                if start == 0:
-                    padd_width = (-i + half_window, 0)
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-                elif end == waveform.shape[0]:
-                    padd_width = (0, (i - waveform.shape[0] + half_window))
-                    frame = np.pad(frame, pad_width=padd_width, mode="reflect")
-
-            else:
-                frame = waveform[i : i + self.n_fft]
-                frame_width = frame.shape[0]
-                if frame_width < waveform.shape[0]:
-                    frame = np.lib.pad(
-                        frame, pad_width=(0, self.n_fft - frame_width), mode="constant", constant_values=0
-                    )
-
-            frames.append(frame)
-        return np.stack(frames, 0)
-
-    def stft(self, frames, window):
-        """
-        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as `torch.stft`.
-        """
-        frame_size = frames.shape[1]
-        fft_size = self.n_fft
-
-        if fft_size is None:
-            fft_size = frame_size
-
-        if fft_size < frame_size:
-            raise ValueError("FFT size must greater or equal the frame size")
-        # number of FFT bins to store
-        num_fft_bins = (fft_size >> 1) + 1
-
-        data = np.empty((len(frames), num_fft_bins), dtype=np.complex64)
-        fft_signal = np.zeros(fft_size)
-
-        for f, frame in enumerate(frames):
-            if window is not None:
-                np.multiply(frame, window, out=fft_signal[:frame_size])
-            else:
-                fft_signal[:frame_size] = frame
-            data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
-        return data.T
-
-    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
-        """
-        Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
+        Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
         """
-        window = np.hanning(self.n_fft + 1)[:-1]
+        if device != "cpu":
+            raise ValueError(
+                f"Got device `{device}` for feature extraction, but feature extraction on CUDA accelerator "
+                "devices requires torch, which is not installed. Either set `device='cpu'`, or "
+                "install torch according to the official instructions: https://pytorch.org/get-started/locally/"
+            )
+        log_spec_batch = []
+        for waveform in waveform_batch:
+            log_spec = spectrogram(
+                waveform,
+                window_function(self.n_fft, "hann"),
+                frame_length=self.n_fft,
+                hop_length=self.hop_length,
+                power=2.0,
+                mel_filters=self.mel_filters,
+                log_mel="log10",
+            )
+            log_spec = log_spec[:, :-1]
+            log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
+            log_spec = (log_spec + 4.0) / 4.0
+            log_spec_batch.append(log_spec)
+        log_spec_batch = np.array(log_spec_batch)
+        return log_spec_batch
 
-        frames = self.fram_wave(waveform)
-        stft = self.stft(frames, window=window)
-        magnitudes = np.abs(stft[:, :-1]) ** 2
+    def _torch_extract_fbank_features(self, waveform: np.array, device: str = "cpu") -> np.ndarray:
+        """
+        Compute the log-mel spectrogram of the audio using PyTorch's GPU-accelerated STFT implementation with batching,
+        yielding results similar to cpu computing with 1e-5 tolerance.
+        """
+        waveform = torch.from_numpy(waveform).to(device, torch.float32)
+        window = torch.hann_window(self.n_fft, device=device)
 
-        filters = self.mel_filters
-        mel_spec = filters @ magnitudes
+        stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
+        magnitudes = stft[..., :-1].abs() ** 2
 
-        log_spec = np.log10(np.clip(mel_spec, a_min=1e-10, a_max=None))
-        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
+        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
+        mel_spec = mel_filters.T @ magnitudes
+
+        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+        if waveform.dim() == 2:
+            max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+            log_spec = torch.maximum(log_spec, max_val - 8.0)
+        else:
+            log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
+        if device != "cpu":
+            log_spec = log_spec.detach().cpu()
+        return log_spec.numpy()
 
-        return log_spec
+    @staticmethod
+    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+    ) -> List[np.ndarray]:
+        """
+        Every array in the list is normalized to have zero mean and unit variance
+        """
+        if attention_mask is not None:
+            attention_mask = np.array(attention_mask, np.int32)
+            normed_input_values = []
+
+            for vector, length in zip(input_values, attention_mask.sum(-1)):
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if length < normed_slice.shape[0]:
+                    normed_slice[length:] = padding_value
+
+                normed_input_values.append(normed_slice)
+        else:
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+
+        return normed_input_values
 
     def __call__(
         self,
@@ -225,22 +182,27 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
         sampling_rate: Optional[int] = None,
-        **kwargs
+        do_normalize: Optional[bool] = None,
+        device: Optional[str] = "cpu",
+        return_token_timestamps: Optional[bool] = None,
+        **kwargs,
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s).
+        Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch for
+        the STFT computation if available, otherwise a slower NumPy based one.
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
+                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
+                stereo, i.e. single float per timestep.
             truncation (`bool`, *optional*, default to `True`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
             pad_to_multiple_of (`int`, *optional*, defaults to None):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+                `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -249,8 +211,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
                 <Tip>
 
-                For WhisperTransoformer models, `attention_mask` should alwys be passed for batched inference, to avoid
-                subtle bugs.
+                For Whisper models, `attention_mask` should always be passed for batched inference, to avoid subtle
+                bugs.
 
                 </Tip>
 
@@ -264,16 +226,25 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            padding_value (`float`, defaults to 0.0):
+            padding_value (`float`, *optional*, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
+            do_normalize (`bool`, *optional*, defaults to `False`):
+                Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
+                improve the performance of the model.
+            device (`str`, *optional*, defaults to `'cpu'`):
+                Specifies the device for computation of the log-mel spectrogram of audio signals in the
+                `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
+            return_token_timestamps (`bool`, *optional*, defaults to `None`):
+                Whether or not to return the number of frames of the input raw_speech.
+                These num_frames can be used by the model to compute word level timestamps.
         """
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
-                    f" {self.sampling_rate} and not {sampling_rate}."
+                    f"The model corresponding to this feature extractor: {self.__class__.__name__} was trained using a"
+                    f" sampling rate of {self.sampling_rate}. Please make sure that the provided `raw_speech` input"
+                    f" was sampled with {self.sampling_rate} and not {sampling_rate}."
                 )
         else:
             logger.warning(
@@ -281,9 +252,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        if is_batched_numpy and len(raw_speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
@@ -307,19 +280,43 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            **kwargs,
+            return_attention_mask=return_attention_mask or do_normalize,
         )
+
+        # zero-mean and unit-variance normalization
+        if do_normalize:
+            padded_inputs["input_features"] = self.zero_mean_unit_var_norm(
+                padded_inputs["input_features"],
+                attention_mask=padded_inputs["attention_mask"],
+                padding_value=self.padding_value,
+            )
+            padded_inputs["input_features"] = np.stack(padded_inputs["input_features"], axis=0)
+
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
-        input_features = [self._np_extract_fbank_features(waveform) for waveform in input_features[0]]
+        extract_fbank_features = (
+            self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
+        )
+        input_features = extract_fbank_features(input_features[0], device)
 
         if isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+
         else:
             padded_inputs["input_features"] = input_features
+
+        if return_attention_mask:
+            # rescale from sample (48000) to feature (3000)
+            padded_inputs["attention_mask"] = padded_inputs["attention_mask"][:, :: self.hop_length]
+
+        if return_token_timestamps is not None:
+            padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
+
+
+__all__ = ["WhisperFeatureExtractor"]

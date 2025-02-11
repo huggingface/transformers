@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XLM_ROBERTa_XL configuration"""
+"""XLM_ROBERTa_XL configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -23,12 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/xlm-roberta-xl": "https://huggingface.co/facebook/xlm-roberta-xl/resolve/main/config.json",
-    "facebook/xlm-roberta-xxl": "https://huggingface.co/facebook/xlm-roberta-xxl/resolve/main/config.json",
-    # See all XLM-RoBERTa-XL models at https://huggingface.co/models?filter=xlm-roberta-xl
-}
 
 
 class XLMRobertaXLConfig(PretrainedConfig):
@@ -88,15 +82,16 @@ class XLMRobertaXLConfig(PretrainedConfig):
     ```python
     >>> from transformers import XLMRobertaXLConfig, XLMRobertaXLModel
 
-    >>> # Initializing a XLM_ROBERTA_XL bert-base-uncased style configuration
+    >>> # Initializing a XLM_ROBERTA_XL google-bert/bert-base-uncased style configuration
     >>> configuration = XLMRobertaXLConfig()
 
-    >>> # Initializing a model (with random weights) from the bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the google-bert/bert-base-uncased style configuration
     >>> model = XLMRobertaXLModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "xlm-roberta-xl"
 
     def __init__(
@@ -119,7 +114,7 @@ class XLMRobertaXLConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
@@ -153,3 +148,6 @@ class XLMRobertaXLOnnxConfig(OnnxConfig):
                 ("attention_mask", dynamic_axis),
             ]
         )
+
+
+__all__ = ["XLMRobertaXLConfig", "XLMRobertaXLOnnxConfig"]

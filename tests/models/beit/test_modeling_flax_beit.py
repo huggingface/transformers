@@ -27,15 +27,16 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 
 if is_flax_available():
     import jax
+
     from transformers import FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling, FlaxBeitModel
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BeitFeatureExtractor
+    from transformers import BeitImageProcessor
 
 
-class FlaxBeitModelTester(unittest.TestCase):
+class FlaxBeitModelTester:
     def __init__(
         self,
         parent,
@@ -47,7 +48,7 @@ class FlaxBeitModelTester(unittest.TestCase):
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -140,7 +141,6 @@ class FlaxBeitModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (FlaxBeitModel, FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling) if is_flax_available() else ()
     )
@@ -219,21 +219,19 @@ def prepare_img():
 @require_flax
 class FlaxBeitModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return (
-            BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
-        )
+    def default_image_processor(self):
+        return BeitImageProcessor.from_pretrained("microsoft/beit-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_masked_image_modeling_head(self):
         model = FlaxBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        pixel_values = feature_extractor(images=image, return_tensors="np").pixel_values
+        pixel_values = image_processor(images=image, return_tensors="np").pixel_values
 
         # prepare bool_masked_pos
-        bool_masked_pos = np.ones((1, 196), dtype=np.bool)
+        bool_masked_pos = np.ones((1, 196), dtype=bool)
 
         # forward pass
         outputs = model(pixel_values=pixel_values, bool_masked_pos=bool_masked_pos)
@@ -253,9 +251,9 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head_imagenet_1k(self):
         model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="np")
+        inputs = image_processor(images=image, return_tensors="np")
 
         # forward pass
         outputs = model(**inputs)
@@ -276,9 +274,9 @@ class FlaxBeitModelIntegrationTest(unittest.TestCase):
     def test_inference_image_classification_head_imagenet_22k(self):
         model = FlaxBeitForImageClassification.from_pretrained("microsoft/beit-large-patch16-224-pt22k-ft22k")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="np")
+        inputs = image_processor(images=image, return_tensors="np")
 
         # forward pass
         outputs = model(**inputs)

@@ -30,7 +30,7 @@ from transformers.utils import is_sentencepiece_available
 
 
 if is_sentencepiece_available():
-    from transformers.models.m2m_100.tokenization_m2m_100 import save_json, VOCAB_FILES_NAMES
+    from transformers.models.m2m_100.tokenization_m2m_100 import VOCAB_FILES_NAMES, save_json
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -48,6 +48,7 @@ FR_CODE = 128028
 
 @require_sentencepiece
 class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "facebook/m2m100_418M"
     tokenizer_class = M2M100Tokenizer
     test_rust_tokenizer = False
     test_seq2seq = False
@@ -84,19 +85,14 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
 
     def test_get_vocab(self):
-        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
+        tokenizer = self.get_tokenizer()
+        vocab_keys = list(tokenizer.get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "</s>")
         self.assertEqual(vocab_keys[1], "<unk>")
         self.assertEqual(vocab_keys[-1], "<s>")
-        self.assertEqual(len(vocab_keys), 10)
-
-    def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 117)
-
-    @unittest.skip("Skip this test while all models are still to be uploaded.")
-    def test_pretrained_model_lists(self):
-        pass
+        # The length of the vocab keys can be different
+        # self.assertEqual(len(vocab_keys), tokenizer.vocab_size)
 
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
@@ -117,9 +113,7 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenizer_integration(self):
-        # fmt: off
-        expected_encoding = {'input_ids': [[128022, 110108, 397, 11, 38272, 2247, 124811, 285, 18105, 1586, 207, 7, 39534, 4428, 397, 1019, 18105, 1586, 207, 7, 41337, 16786, 241, 7, 20214, 17, 125690, 10398, 7, 44378, 58069, 68342, 7798, 7343, 11, 299, 33310, 4, 158, 37350, 94077, 4569, 299, 33310, 90, 4, 52840, 290, 4, 31270, 112, 299, 682, 4, 52840, 39953, 14079, 193, 52519, 90894, 17894, 120697, 11, 40445, 551, 17, 1019, 52519, 90894, 17756, 963, 11, 40445, 480, 17, 9792, 1120, 5173, 1393, 6240, 16786, 241, 120996, 28, 1245, 1393, 118240, 11123, 1019, 93612, 2691, 10618, 98058, 120409, 1928, 279, 4, 40683, 367, 178, 207, 1019, 103, 103121, 506, 65296, 5, 2], [128022, 21217, 367, 117, 125450, 128, 719, 7, 7308, 40, 93612, 12669, 1116, 16704, 71, 17785, 3699, 15592, 35, 144, 9584, 241, 11943, 713, 950, 799, 2247, 88427, 150, 149, 118813, 120706, 1019, 106906, 81518, 28, 1224, 22799, 397, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [128022, 1658, 123311, 5155, 5578, 4722, 279, 14947, 2366, 1120, 1197, 14, 1348, 9232, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
-        # fmt: on
+        expected_encoding = {'input_ids': [[128022, 110108, 397, 11, 38272, 2247, 124811, 285, 18105, 1586, 207, 7, 39534, 4428, 397, 1019, 18105, 1586, 207, 7, 41337, 16786, 241, 7, 20214, 17, 125690, 10398, 7, 44378, 58069, 68342, 7798, 7343, 11, 299, 33310, 4, 158, 37350, 94077, 4569, 299, 33310, 90, 4, 52840, 290, 4, 31270, 112, 299, 682, 4, 52840, 39953, 14079, 193, 52519, 90894, 17894, 120697, 11, 40445, 551, 17, 1019, 52519, 90894, 17756, 963, 11, 40445, 480, 17, 9792, 1120, 5173, 1393, 6240, 16786, 241, 120996, 28, 1245, 1393, 118240, 11123, 1019, 93612, 2691, 10618, 98058, 120409, 1928, 279, 4, 40683, 367, 178, 207, 1019, 103, 103121, 506, 65296, 5, 2], [128022, 21217, 367, 117, 125450, 128, 719, 7, 7308, 40, 93612, 12669, 1116, 16704, 71, 17785, 3699, 15592, 35, 144, 9584, 241, 11943, 713, 950, 799, 2247, 88427, 150, 149, 118813, 120706, 1019, 106906, 81518, 28, 1224, 22799, 397, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [128022, 1658, 123311, 5155, 5578, 4722, 279, 14947, 2366, 1120, 1197, 14, 1348, 9232, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # fmt: skip
 
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
@@ -142,9 +136,7 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
         "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
     ]
 
-    # fmt: off
-    expected_src_tokens = [EN_CODE, 593, 1949, 115781, 4, 71586, 4234, 60633, 126233, 432, 123808, 15592, 1197, 117132, 120618, 5, 2]
-    # fmt: on
+    expected_src_tokens = [EN_CODE, 593, 1949, 115781, 4, 71586, 4234, 60633, 126233, 432, 123808, 15592, 1197, 117132, 120618, 5, 2]  # fmt: skip
 
     @classmethod
     def setUpClass(cls):
@@ -160,6 +152,12 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.get_lang_id("ro"), 128076)
         self.assertEqual(self.tokenizer.get_lang_id("mr"), 128063)
 
+    def test_get_vocab(self):
+        vocab = self.tokenizer.get_vocab()
+        self.assertEqual(len(vocab), len(self.tokenizer))
+        self.assertEqual(vocab["<unk>"], 3)
+        self.assertIn(self.tokenizer.get_lang_token("en"), vocab)
+
     def test_tokenizer_batch_encode_plus(self):
         self.tokenizer.src_lang = "en"
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
@@ -167,20 +165,18 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
 
     def test_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(FR_CODE, self.tokenizer.all_special_ids)
-        # fmt: off
-        generated_ids = [FR_CODE, 5364, 82, 8642, 4, 294, 47, 8, 14028, 136, 3286, 9706, 6, 90797, 6, 144012, 162, 88128, 30061, 5, 2]
-        # fmt: on
+        generated_ids = [FR_CODE, 5364, 82, 8642, 4, 294, 47, 8, 14028, 136, 3286, 9706, 6, 90797, 6, 144012, 162, 88128, 30061, 5, 2]  # fmt: skip
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
         expected_french = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
         self.assertEqual(result, expected_french)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
     def test_special_tokens_unaffacted_by_save_load(self):
-        tmpdirname = tempfile.mkdtemp()
-        original_special_tokens = self.tokenizer.lang_token_to_id
-        self.tokenizer.save_pretrained(tmpdirname)
-        new_tok = M2M100Tokenizer.from_pretrained(tmpdirname)
-        self.assertDictEqual(new_tok.lang_token_to_id, original_special_tokens)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            original_special_tokens = self.tokenizer.lang_token_to_id
+            self.tokenizer.save_pretrained(tmpdirname)
+            new_tok = M2M100Tokenizer.from_pretrained(tmpdirname)
+            self.assertDictEqual(new_tok.lang_token_to_id, original_special_tokens)
 
     @require_torch
     def test_batch_fairseq_parity(self):

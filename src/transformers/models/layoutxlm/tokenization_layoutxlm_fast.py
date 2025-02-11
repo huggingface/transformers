@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for LayoutXLM model."""
-
+"""Tokenization classes for LayoutXLM model."""
 
 import os
 from shutil import copyfile
@@ -31,8 +30,6 @@ from ...tokenization_utils_base import (
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
 from ..xlm_roberta.tokenization_xlm_roberta_fast import (
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-    PRETRAINED_VOCAB_FILES_MAP,
     VOCAB_FILES_NAMES,
 )
 
@@ -85,7 +82,7 @@ LAYOUTXLM_ENCODE_KWARGS_DOCSTRING = r"""
                 argument defines the number of overlapping tokens.
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
-                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+                the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -212,8 +209,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = LayoutXLMTokenizer
 
@@ -233,7 +228,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
-        **kwargs
+        **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -257,7 +252,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -265,6 +259,10 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
@@ -275,10 +273,11 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -287,7 +286,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         """
         Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
@@ -306,6 +305,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             word_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Word-level integer labels (for token classification tasks such as FUNSD, CORD).
         """
+
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -381,6 +381,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -403,6 +404,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                 max_length=max_length,
                 stride=stride,
                 pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
                 return_attention_mask=return_attention_mask,
@@ -416,6 +418,11 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
 
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
+
+        self._tokenizer.encode_special_tokens = kwargs.pop(
+            "split_special_tokens", self._tokenizer.encode_special_tokens
+        )
+
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
         )
@@ -438,6 +445,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -448,7 +456,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -459,6 +466,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
         )
 
         if is_pair:
@@ -592,6 +600,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         max_length: Optional[int] = None,
         stride: int = 0,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -600,9 +609,8 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
-
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str
@@ -621,6 +629,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
+            padding_side=padding_side,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
@@ -653,6 +662,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
+        padding_side: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
@@ -674,7 +684,10 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                `>= 7.5` (Volta).
+            padding_side (`str`, *optional*):
+                The side on which the model should have padding applied. Should be selected between ['right', 'left'].
+                Default value is picked from the class attribute of the same name.
             return_attention_mask:
                 (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
@@ -698,7 +711,8 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            if self.padding_side == "right":
+            padding_side = padding_side if padding_side is not None else self.padding_side
+            if padding_side == "right":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
@@ -712,7 +726,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
-            elif self.padding_side == "left":
+            elif padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
@@ -727,7 +741,7 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+                raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
 
@@ -800,3 +814,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+__all__ = ["LayoutXLMTokenizerFast"]

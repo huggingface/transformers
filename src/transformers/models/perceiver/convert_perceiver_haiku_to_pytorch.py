@@ -14,28 +14,27 @@
 # limitations under the License.
 """Convert Perceiver checkpoints originally implemented in Haiku."""
 
-
 import argparse
 import json
 import pickle
 from pathlib import Path
 
+import haiku as hk
 import numpy as np
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import haiku as hk
-import requests
-from huggingface_hub import hf_hub_download
 from transformers import (
     PerceiverConfig,
-    PerceiverFeatureExtractor,
     PerceiverForImageClassificationConvProcessing,
     PerceiverForImageClassificationFourier,
     PerceiverForImageClassificationLearned,
     PerceiverForMaskedLM,
     PerceiverForMultimodalAutoencoding,
     PerceiverForOpticalFlow,
+    PerceiverImageProcessor,
     PerceiverTokenizer,
 )
 from transformers.utils import logging
@@ -283,7 +282,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         params = checkpoint
 
     # turn into initial state dict
-    state_dict = dict()
+    state_dict = {}
     for scope_name, parameters in hk.data_structures.to_mutable_dict(params).items():
         for param_name, param in parameters.items():
             state_dict[scope_name + "/" + param_name] = param
@@ -389,16 +388,16 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
         inputs = encoding.input_ids
         input_mask = encoding.attention_mask
     elif architecture in ["image_classification", "image_classification_fourier", "image_classification_conv"]:
-        feature_extractor = PerceiverFeatureExtractor()
+        image_processor = PerceiverImageProcessor()
         image = prepare_img()
-        encoding = feature_extractor(image, return_tensors="pt")
+        encoding = image_processor(image, return_tensors="pt")
         inputs = encoding.pixel_values
     elif architecture == "optical_flow":
         inputs = torch.randn(1, 2, 27, 368, 496)
     elif architecture == "multimodal_autoencoding":
         images = torch.randn((1, 16, 3, 224, 224))
         audio = torch.randn((1, 30720, 1))
-        inputs = dict(image=images, audio=audio, label=torch.zeros((images.shape[0], 700)))
+        inputs = {"image": images, "audio": audio, "label": torch.zeros((images.shape[0], 700))}
 
     # forward pass
     if architecture == "multimodal_autoencoding":
@@ -445,7 +444,8 @@ if __name__ == "__main__":
         type=str,
         default=None,
         required=True,
-        help="Path to local pickle file of a Perceiver checkpoint you'd like to convert.",
+        help="Path to local pickle file of a Perceiver checkpoint you'd like to convert.\n"
+        "Given the files are in the pickle format, please be wary of passing it files you trust.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

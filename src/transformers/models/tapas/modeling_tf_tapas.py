@@ -14,6 +14,8 @@
 # limitations under the License.
 """TF 2.0 TAPAS model."""
 
+from __future__ import annotations
+
 import enum
 import math
 from dataclasses import dataclass
@@ -35,10 +37,11 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     get_initializer,
+    keras,
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -46,7 +49,6 @@ from ...utils import (
     is_tensorflow_probability_available,
     logging,
     replace_return_docstrings,
-    requires_backends,
 )
 from .configuration_tapas import TapasConfig
 
@@ -63,48 +65,23 @@ if is_tensorflow_probability_available():
         n = tfp.distributions.Normal(loc=0.0, scale=1.0)
     except ImportError:
         logger.error(
-            "TAPAS models are not usable since `tensorflow_probability` can't be loaded."
-            "It seems you have `tensorflow_probability` installed with the wrong tensorflow version."
+            "TAPAS models are not usable since `tensorflow_probability` can't be loaded. "
+            "It seems you have `tensorflow_probability` installed with the wrong tensorflow version. "
             "Please try to reinstall it following the instructions here: https://github.com/tensorflow/probability."
         )
+else:
+    try:
+        import tensorflow_probability as tfp
+
+        # On the first call, check whether a compatible version of TensorFlow is installed
+        # TensorFlow Probability depends on a recent stable release of TensorFlow
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
+    except ImportError:
+        pass
 
 _CONFIG_FOR_DOC = "TapasConfig"
-_TOKENIZER_FOR_DOC = "TapasTokenizer"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
 
-TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # large models
-    "google/tapas-large",
-    "google/tapas-large-finetuned-sqa",
-    "google/tapas-large-finetuned-wtq",
-    "google/tapas-large-finetuned-wikisql-supervised",
-    "google/tapas-large-finetuned-tabfact",
-    # base models
-    "google/tapas-base",
-    "google/tapas-base-finetuned-sqa",
-    "google/tapas-base-finetuned-wtq",
-    "google/tapas-base-finetuned-wikisql-supervised",
-    "google/tapas-base-finetuned-tabfact",
-    # small models
-    "google/tapas-small",
-    "google/tapas-small-finetuned-sqa",
-    "google/tapas-small-finetuned-wtq",
-    "google/tapas-small-finetuned-wikisql-supervised",
-    "google/tapas-small-finetuned-tabfact",
-    # mini models
-    "google/tapas-mini",
-    "google/tapas-mini-finetuned-sqa",
-    "google/tapas-mini-finetuned-wtq",
-    "google/tapas-mini-finetuned-wikisql-supervised",
-    "google/tapas-mini-finetuned-tabfact",
-    # tiny models
-    "google/tapas-tiny",
-    "google/tapas-tiny-finetuned-sqa",
-    "google/tapas-tiny-finetuned-wtq",
-    "google/tapas-tiny-finetuned-wikisql-supervised",
-    "google/tapas-tiny-finetuned-tabfact",
-    # See all TAPAS models at https://huggingface.co/models?filter=tapas
-]
 
 EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
@@ -133,14 +110,14 @@ class TFTableQuestionAnsweringOutput(ModelOutput):
             the self-attention heads.
     """
 
-    loss: Optional[tf.Tensor] = None
+    loss: tf.Tensor | None = None
     logits: tf.Tensor = None
-    logits_aggregation: Optional[tf.Tensor] = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    logits_aggregation: tf.Tensor | None = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
-class TFTapasEmbeddings(tf.keras.layers.Layer):
+class TFTapasEmbeddings(keras.layers.Layer):
     """
     Construct the embeddings from word, position and token_type embeddings. Same as BertEmbeddings but with a number of
     additional token type embeddings to encode tabular structure.
@@ -149,21 +126,20 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
-        self.type_vocab_sizes = config.type_vocab_sizes
+        self.config = config
         self.number_of_token_type_embeddings = len(config.type_vocab_sizes)
         self.reset_position_index_per_cell = config.reset_position_index_per_cell
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape=None):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.config.vocab_size, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -173,7 +149,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                 shape=[self.max_position_embeddings, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
-        for i, type_vocab_size in enumerate(self.type_vocab_sizes):
+        for i, type_vocab_size in enumerate(self.config.type_vocab_sizes):
             with tf.name_scope(f"token_type_embeddings_{i}"):
                 setattr(
                     self,
@@ -185,7 +161,12 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                     ),
                 )
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
 
     def call(
         self,
@@ -218,11 +199,10 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
             position_ids = tf.broadcast_to(position_ids, shape=input_shape)
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.reset_position_index_per_cell:
-
                 # shape (batch_size, seq_len)
-                col_index = IndexMap(token_type_ids[:, :, 1], self.type_vocab_sizes[1], batch_dims=1)
+                col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
                 # shape (batch_size, seq_len)
-                row_index = IndexMap(token_type_ids[:, :, 2], self.type_vocab_sizes[2], batch_dims=1)
+                row_index = IndexMap(token_type_ids[:, :, 2], self.config.type_vocab_sizes[2], batch_dims=1)
                 # shape (batch_size, seq_len)
                 full_index = ProductIndexMap(col_index, row_index)
                 # shape (max_rows * max_columns,). First absolute position for every cell
@@ -234,6 +214,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
                 position_ids = tf.math.minimum(self.max_position_embeddings - 1, position - first_position)
 
         if input_ids is not None:
+            check_embeddings_within_bounds(input_ids, self.config.vocab_size)
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
         position_embeddings = tf.gather(self.position_embeddings, indices=position_ids)
@@ -251,7 +232,7 @@ class TFTapasEmbeddings(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Tapas
-class TFTapasSelfAttention(tf.keras.layers.Layer):
+class TFTapasSelfAttention(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -266,18 +247,19 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.Dense(
+        self.query = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.Dense(
+        self.key = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.Dense(
+        self.value = keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+        self.dropout = keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
         self.is_decoder = config.is_decoder
+        self.config = config
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
@@ -367,17 +349,32 @@ class TFTapasSelfAttention(tf.keras.layers.Layer):
             outputs = outputs + (past_key_value,)
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "query", None) is not None:
+            with tf.name_scope(self.query.name):
+                self.query.build([None, None, self.config.hidden_size])
+        if getattr(self, "key", None) is not None:
+            with tf.name_scope(self.key.name):
+                self.key.build([None, None, self.config.hidden_size])
+        if getattr(self, "value", None) is not None:
+            with tf.name_scope(self.value.name):
+                self.value.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Tapas
-class TFTapasSelfOutput(tf.keras.layers.Layer):
+class TFTapasSelfOutput(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -386,9 +383,20 @@ class TFTapasSelfOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Tapas
-class TFTapasAttention(tf.keras.layers.Layer):
+class TFTapasAttention(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -427,13 +435,24 @@ class TFTapasAttention(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "self_attention", None) is not None:
+            with tf.name_scope(self.self_attention.name):
+                self.self_attention.build(None)
+        if getattr(self, "dense_output", None) is not None:
+            with tf.name_scope(self.dense_output.name):
+                self.dense_output.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Tapas
-class TFTapasIntermediate(tf.keras.layers.Layer):
+class TFTapasIntermediate(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
@@ -441,6 +460,7 @@ class TFTapasIntermediate(tf.keras.layers.Layer):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -448,17 +468,26 @@ class TFTapasIntermediate(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Tapas
-class TFTapasOutput(tf.keras.layers.Layer):
+class TFTapasOutput(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -467,9 +496,20 @@ class TFTapasOutput(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.intermediate_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Tapas
-class TFTapasLayer(tf.keras.layers.Layer):
+class TFTapasLayer(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -488,9 +528,9 @@ class TFTapasLayer(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
-        past_key_value: Optional[Tuple[tf.Tensor]],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
+        past_key_value: Tuple[tf.Tensor] | None,
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
@@ -554,9 +594,26 @@ class TFTapasLayer(tf.keras.layers.Layer):
 
         return outputs
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "attention", None) is not None:
+            with tf.name_scope(self.attention.name):
+                self.attention.build(None)
+        if getattr(self, "intermediate", None) is not None:
+            with tf.name_scope(self.intermediate.name):
+                self.intermediate.build(None)
+        if getattr(self, "bert_output", None) is not None:
+            with tf.name_scope(self.bert_output.name):
+                self.bert_output.build(None)
+        if getattr(self, "crossattention", None) is not None:
+            with tf.name_scope(self.crossattention.name):
+                self.crossattention.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Tapas
-class TFTapasEncoder(tf.keras.layers.Layer):
+class TFTapasEncoder(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -567,9 +624,9 @@ class TFTapasEncoder(tf.keras.layers.Layer):
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
-        encoder_hidden_states: Optional[tf.Tensor],
-        encoder_attention_mask: Optional[tf.Tensor],
-        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]],
+        encoder_hidden_states: tf.Tensor | None,
+        encoder_attention_mask: tf.Tensor | None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None,
         use_cache: Optional[bool],
         output_attentions: bool,
         output_hidden_states: bool,
@@ -624,18 +681,28 @@ class TFTapasEncoder(tf.keras.layers.Layer):
             cross_attentions=all_cross_attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "layer", None) is not None:
+            for layer in self.layer:
+                with tf.name_scope(layer.name):
+                    layer.build(None)
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Tapas
-class TFTapasPooler(tf.keras.layers.Layer):
+class TFTapasPooler(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
@@ -645,13 +712,21 @@ class TFTapasPooler(tf.keras.layers.Layer):
 
         return pooled_output
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Tapas
-class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
+class TFTapasPredictionHeadTransform(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
+        self.dense = keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
@@ -662,7 +737,8 @@ class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
         else:
             self.transform_act_fn = config.hidden_act
 
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.config = config
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
@@ -671,13 +747,24 @@ class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
 
         return hidden_states
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "dense", None) is not None:
+            with tf.name_scope(self.dense.name):
+                self.dense.build([None, None, self.config.hidden_size])
+        if getattr(self, "LayerNorm", None) is not None:
+            with tf.name_scope(self.LayerNorm.name):
+                self.LayerNorm.build([None, None, self.config.hidden_size])
+
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Tapas
-class TFTapasLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TFTapasLMPredictionHead(keras.layers.Layer):
+    def __init__(self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
-        self.vocab_size = config.vocab_size
+        self.config = config
         self.hidden_size = config.hidden_size
 
         self.transform = TFTapasPredictionHeadTransform(config, name="transform")
@@ -686,12 +773,17 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
-    def build(self, input_shape: tf.TensorShape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+    def build(self, input_shape=None):
+        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
-        super().build(input_shape)
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "transform", None) is not None:
+            with tf.name_scope(self.transform.name):
+                self.transform.build(None)
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
+    def get_output_embeddings(self) -> keras.layers.Layer:
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
@@ -703,22 +795,22 @@ class TFTapasLMPredictionHead(tf.keras.layers.Layer):
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.config.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->Tapas
-class TFTapasMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config: TapasConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
+class TFTapasMLMHead(keras.layers.Layer):
+    def __init__(self, config: TapasConfig, input_embeddings: keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TFTapasLMPredictionHead(config, input_embeddings, name="predictions")
@@ -728,13 +820,20 @@ class TFTapasMLMHead(tf.keras.layers.Layer):
 
         return prediction_scores
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "predictions", None) is not None:
+            with tf.name_scope(self.predictions.name):
+                self.predictions.build(None)
+
 
 @keras_serializable
-class TFTapasMainLayer(tf.keras.layers.Layer):
+class TFTapasMainLayer(keras.layers.Layer):
     config_class = TapasConfig
 
     def __init__(self, config: TapasConfig, add_pooling_layer: bool = True, **kwargs):
-        requires_backends(self, "tensorflow_probability")
         super().__init__(**kwargs)
 
         self.config = config
@@ -743,7 +842,7 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         self.encoder = TFTapasEncoder(config, name="encoder")
         self.pooler = TFTapasPooler(config, name="pooler") if add_pooling_layer else None
 
-    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+    def get_input_embeddings(self) -> keras.layers.Layer:
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
@@ -760,18 +859,17 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -852,6 +950,20 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "embeddings", None) is not None:
+            with tf.name_scope(self.embeddings.name):
+                self.embeddings.build(None)
+        if getattr(self, "encoder", None) is not None:
+            with tf.name_scope(self.encoder.name):
+                self.encoder.build(None)
+        if getattr(self, "pooler", None) is not None:
+            with tf.name_scope(self.pooler.name):
+                self.pooler.build(None)
+
 
 class TFTapasPreTrainedModel(TFPreTrainedModel):
     """
@@ -862,18 +974,13 @@ class TFTapasPreTrainedModel(TFPreTrainedModel):
     config_class = TapasConfig
     base_model_prefix = "tapas"
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int64, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-        return self.serving_output(output)
+    @property
+    def input_signature(self):
+        return {
+            "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
+            "token_type_ids": tf.TensorSpec((None, None, 7), tf.int32, name="token_type_ids"),
+        }
 
 
 TAPAS_START_DOCSTRING = r"""
@@ -882,7 +989,7 @@ TAPAS_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    This model is also a [keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
     as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
     behavior.
 
@@ -923,7 +1030,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`TapasTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -935,7 +1042,7 @@ TAPAS_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`np.ndarray` or `tf.Tensor` of shape `({0}, 7)`, *optional*):
-            Token indices that encode tabular structure. Indices can be obtained using [`TapasTokenizer`]. See this
+            Token indices that encode tabular structure. Indices can be obtained using [`AutoTokenizer`]. See this
             class for more info.
 
             [What are token type IDs?](../glossary#token-type-ids)
@@ -987,12 +1094,12 @@ class TFTapasModel(TFTapasPreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1004,10 +1111,10 @@ class TFTapasModel(TFTapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasModel
+        >>> from transformers import AutoTokenizer, TapasModel
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base")
         >>> model = TapasModel.from_pretrained("google/tapas-base")
 
         >>> data = {
@@ -1038,16 +1145,13 @@ class TFTapasModel(TFTapasPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "tapas", None) is not None:
+            with tf.name_scope(self.tapas.name):
+                self.tapas.build(None)
 
 
 @add_start_docstrings("""Tapas Model with a `language modeling` head on top.""", TAPAS_START_DOCSTRING)
@@ -1064,7 +1168,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         self.tapas = TFTapasMainLayer(config, add_pooling_layer=False, name="tapas")
         self.lm_head = TFTapasMLMHead(config, input_embeddings=self.tapas.embeddings, name="cls")
 
-    def get_lm_head(self) -> tf.keras.layers.Layer:
+    def get_lm_head(self) -> keras.layers.Layer:
         return self.lm_head.predictions
 
     @unpack_inputs
@@ -1072,16 +1176,16 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
     @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1095,10 +1199,10 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForMaskedLM
+        >>> from transformers import AutoTokenizer, TapasForMaskedLM
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base")
         >>> model = TapasForMaskedLM.from_pretrained("google/tapas-base")
 
         >>> data = {
@@ -1145,14 +1249,19 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "tapas", None) is not None:
+            with tf.name_scope(self.tapas.name):
+                self.tapas.build(None)
+        if getattr(self, "lm_head", None) is not None:
+            with tf.name_scope(self.lm_head.name):
+                self.lm_head.build(None)
 
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
-
-class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
+class TFTapasComputeTokenLogits(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1166,7 +1275,7 @@ class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
                 trainable=True,
                 initializer=tf.zeros_initializer()
                 if config.init_cell_selection_weights_to_zero
-                else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+                else keras.initializers.TruncatedNormal(stddev=config.initializer_range),
             )
             self.output_bias = self.add_weight(
                 name="output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
@@ -1188,7 +1297,7 @@ class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
         return logits
 
 
-class TFTapasComputeColumnLogits(tf.keras.layers.Layer):
+class TFTapasComputeColumnLogits(keras.layers.Layer):
     def __init__(self, config: TapasConfig, **kwargs):
         super().__init__(**kwargs)
 
@@ -1200,7 +1309,7 @@ class TFTapasComputeColumnLogits(tf.keras.layers.Layer):
                 trainable=True,
                 initializer=tf.zeros_initializer()
                 if config.init_cell_selection_weights_to_zero
-                else tf.keras.initializers.TruncatedNormal(stddev=config.initializer_range),
+                else keras.initializers.TruncatedNormal(stddev=config.initializer_range),
             )
             self.column_output_bias = self.add_weight(
                 name="column_output_bias", shape=(), trainable=True, initializer=tf.zeros_initializer()
@@ -1265,14 +1374,14 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         self.tapas = TFTapasMainLayer(config, name="tapas")
 
         # dropout
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
 
         self.compute_token_logits = TFTapasComputeTokenLogits(config, name="compute_token_logits")
 
         self.compute_column_logits = TFTapasComputeColumnLogits(config, name="compute_column_logits")
 
         if config.num_aggregation_labels > 0:
-            self.aggregation_classifier = tf.keras.layers.Dense(
+            self.aggregation_classifier = keras.layers.Dense(
                 config.num_aggregation_labels,
                 kernel_initializer=get_initializer(config.initializer_range),
                 name="aggregation_classifier",
@@ -1284,21 +1393,21 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
     @replace_return_docstrings(output_type=TFTableQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        table_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        aggregation_labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        float_answer: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        numeric_values: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        numeric_values_scale: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        table_mask: np.ndarray | tf.Tensor | None = None,
+        aggregation_labels: np.ndarray | tf.Tensor | None = None,
+        float_answer: np.ndarray | tf.Tensor | None = None,
+        numeric_values: np.ndarray | tf.Tensor | None = None,
+        numeric_values_scale: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFTableQuestionAnsweringOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1307,7 +1416,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             padding are 0.
         labels (`tf.Tensor` of shape `(batch_size, seq_length)`, *optional*):
             Labels per token for computing the hierarchical cell selection loss. This encodes the positions of the
-            answer appearing in the table. Can be obtained using [`TapasTokenizer`].
+            answer appearing in the table. Can be obtained using [`AutoTokenizer`].
 
             - 1 for tokens that are **part of the answer**,
             - 0 for tokens that are **not part of the answer**.
@@ -1321,10 +1430,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             required in case of weak supervision (WTQ) to calculate the aggregate mask and regression loss.
         numeric_values (`tf.Tensor` of shape `(batch_size, seq_length)`, *optional*):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using
-            [`TapasTokenizer`]. Only required in case of weak supervision for aggregation (WTQ) to calculate the
+            [`AutoTokenizer`]. Only required in case of weak supervision for aggregation (WTQ) to calculate the
             regression loss.
         numeric_values_scale (`tf.Tensor` of shape `(batch_size, seq_length)`, *optional*):
-            Scale of the numeric values of every token. Can be obtained using [`TapasTokenizer`]. Only required in case
+            Scale of the numeric values of every token. Can be obtained using [`AutoTokenizer`]. Only required in case
             of weak supervision for aggregation (WTQ) to calculate the regression loss.
 
         Returns:
@@ -1332,10 +1441,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
+        >>> from transformers import AutoTokenizer, TapasForQuestionAnswering
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base-finetuned-wtq")
         >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
 
         >>> data = {
@@ -1574,16 +1683,22 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFTableQuestionAnsweringOutput) -> TFTableQuestionAnsweringOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTableQuestionAnsweringOutput(
-            logits=output.logits,
-            logits_aggregation=output.logits_aggregation,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "tapas", None) is not None:
+            with tf.name_scope(self.tapas.name):
+                self.tapas.build(None)
+        if getattr(self, "compute_token_logits", None) is not None:
+            with tf.name_scope(self.compute_token_logits.name):
+                self.compute_token_logits.build(None)
+        if getattr(self, "compute_column_logits", None) is not None:
+            with tf.name_scope(self.compute_column_logits.name):
+                self.compute_column_logits.build(None)
+        if getattr(self, "aggregation_classifier", None) is not None:
+            with tf.name_scope(self.aggregation_classifier.name):
+                self.aggregation_classifier.build([None, None, self.config.hidden_size])
 
 
 @add_start_docstrings(
@@ -1599,26 +1714,27 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         self.num_labels = config.num_labels
 
         self.tapas = TFTapasMainLayer(config, name="tapas")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
-        self.classifier = tf.keras.layers.Dense(
+        self.dropout = keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+        self.classifier = keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
+        self.config = config
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(TAPAS_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
@@ -1633,11 +1749,11 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         Examples:
 
         ```python
-        >>> from transformers import TapasTokenizer, TapasForSequenceClassification
+        >>> from transformers import AutoTokenizer, TapasForSequenceClassification
         >>> import tensorflow as tf
         >>> import pandas as pd
 
-        >>> tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-tabfact")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/tapas-base-finetuned-tabfact")
         >>> model = TapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
 
         >>> data = {
@@ -1687,11 +1803,19 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
+    def build(self, input_shape=None):
+        if self.built:
+            return
+        self.built = True
+        if getattr(self, "tapas", None) is not None:
+            with tf.name_scope(self.tapas.name):
+                self.tapas.build(None)
+        if getattr(self, "dropout", None) is not None:
+            with tf.name_scope(self.dropout.name):
+                self.dropout.build(None)
+        if getattr(self, "classifier", None) is not None:
+            with tf.name_scope(self.classifier.name):
+                self.classifier.build([None, None, self.config.hidden_size])
 
 
 """ TAPAS utilities."""
@@ -1706,7 +1830,7 @@ class AverageApproximationFunction(str, enum.Enum):
 # Beginning of everything related to segmented tensors
 
 
-class IndexMap(object):
+class IndexMap:
     """Index grouping entries within a tensor."""
 
     def __init__(self, indices, num_segments, batch_dims=0):
@@ -2327,3 +2451,12 @@ def _calculate_regression_loss(
         )
     per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
     return per_example_answer_loss_scaled, large_answer_loss_mask
+
+
+__all__ = [
+    "TFTapasForMaskedLM",
+    "TFTapasForQuestionAnswering",
+    "TFTapasForSequenceClassification",
+    "TFTapasModel",
+    "TFTapasPreTrainedModel",
+]

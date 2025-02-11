@@ -50,7 +50,7 @@ python run_audio_classification.py \
     --dataloader_num_workers 4 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model accuracy \
@@ -81,7 +81,7 @@ python run_audio_classification.py \
     --do_train \
     --do_eval \
     --fp16 \
-    --learning_rate 3e-5 \
+    --learning_rate 3e-4 \
     --max_length_seconds 16 \
     --attention_mask False \
     --warmup_ratio 0.1 \
@@ -92,7 +92,7 @@ python run_audio_classification.py \
     --dataloader_num_workers 8 \
     --logging_strategy steps \
     --logging_steps 10 \
-    --evaluation_strategy epoch \
+    --eval_strategy epoch \
     --save_strategy epoch \
     --load_best_model_at_end True \
     --metric_for_best_model accuracy \

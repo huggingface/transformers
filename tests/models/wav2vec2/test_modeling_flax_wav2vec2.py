@@ -14,6 +14,8 @@
 
 import inspect
 import math
+import multiprocessing
+import traceback
 import unittest
 
 import numpy as np
@@ -21,6 +23,7 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2Config, is_flax_available
 from transformers.testing_utils import (
+    CaptureLogger,
     is_flaky,
     is_librosa_available,
     is_pt_flax_cross_test,
@@ -29,6 +32,7 @@ from transformers.testing_utils import (
     require_librosa,
     require_pyctcdecode,
     require_soundfile,
+    run_test_in_subprocess,
     slow,
 )
 
@@ -40,6 +44,7 @@ if is_flax_available():
     import jax.numpy as jnp
     import optax
     from flax.traverse_util import flatten_dict
+
     from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Processor
     from transformers.models.wav2vec2.modeling_flax_wav2vec2 import (
         FlaxWav2Vec2ForCTC,
@@ -52,11 +57,53 @@ if is_flax_available():
 
 
 if is_pyctcdecode_available():
+    import pyctcdecode.decoder
+
     from transformers import Wav2Vec2ProcessorWithLM
+    from transformers.models.wav2vec2_with_lm import processing_wav2vec2_with_lm
 
 
 if is_librosa_available():
     import librosa
+
+
+def _test_wav2vec2_with_lm_invalid_pool(in_queue, out_queue, timeout):
+    error = None
+    try:
+        _ = in_queue.get(timeout=timeout)
+
+        ds = load_dataset("legacy-datasets/common_voice", "es", split="test", streaming=True, trust_remote_code=True)
+        sample = next(iter(ds))
+
+        resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
+
+        model = FlaxWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(resampled_audio, return_tensors="np").input_values
+
+        logits = model(input_values).logits
+
+        # use a spawn pool, which should trigger a warning if different than fork
+        with CaptureLogger(pyctcdecode.decoder.logger) as cl, multiprocessing.get_context("spawn").Pool(1) as pool:
+            transcription = processor.batch_decode(np.array(logits), pool).text
+
+        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
+        unittest.TestCase().assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+
+        # force batch_decode to internally create a spawn pool, which should trigger a warning if different than fork
+        multiprocessing.set_start_method("spawn", force=True)
+        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl:
+            transcription = processor.batch_decode(np.array(logits)).text
+
+        unittest.TestCase().assertIn("Falling back to sequential decoding.", cl.out)
+        unittest.TestCase().assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+    except Exception:
+        error = f"{traceback.format_exc()}"
+
+    results = {"error": error}
+    out_queue.put(results, timeout=timeout)
+    out_queue.join()
 
 
 class FlaxWav2Vec2ModelTester:
@@ -76,7 +123,7 @@ class FlaxWav2Vec2ModelTester:
         conv_bias=False,
         num_conv_pos_embeddings=16,
         num_conv_pos_embedding_groups=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
         intermediate_size=20,
@@ -229,7 +276,6 @@ class FlaxWav2Vec2ModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
-
                     self.assertEqual(jitted_output.shape, output.shape)
 
     def test_freeze_feature_encoder(self):
@@ -359,7 +405,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         self.assertTrue(abs(ppl.item() - 141.4291) < 1e-3)
 
         # mask half of the input
-        mask = np.ones((2,), dtype=np.bool)
+        mask = np.ones((2,), dtype=bool)
         mask[0] = 0
 
         ppl = FlaxWav2Vec2GumbelVectorQuantizer._compute_perplexity(probs, mask)
@@ -418,7 +464,7 @@ class FlaxWav2Vec2UtilsTest(unittest.TestCase):
         negative_indices = _sample_negative_indices(features.shape, num_negatives, attention_mask=attention_mask)
 
         # make sure that no padding tokens are sampled
-        self.assertTrue(all([idx not in negative_indices for idx in forbidden_indices]))
+        self.assertTrue(all(idx not in negative_indices for idx in forbidden_indices))
 
         features = features.reshape(-1, hidden_size)  # BTC => (BxT)C
         # take negative vectors from sampled indices
@@ -539,7 +585,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
     @require_pyctcdecode
     @require_librosa
     def test_wav2vec2_with_lm(self):
-        ds = load_dataset("common_voice", "es", split="test", streaming=True)
+        ds = load_dataset("legacy-datasets/common_voice", "es", split="test", streaming=True, trust_remote_code=True)
         sample = next(iter(ds))
 
         resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
@@ -554,3 +600,40 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         transcription = processor.batch_decode(np.array(logits)).text
 
         self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+
+    @require_pyctcdecode
+    @require_librosa
+    def test_wav2vec2_with_lm_pool(self):
+        ds = load_dataset("legacy-datasets/common_voice", "es", split="test", streaming=True, trust_remote_code=True)
+        sample = next(iter(ds))
+
+        resampled_audio = librosa.resample(sample["audio"]["array"], 48_000, 16_000)
+
+        model = FlaxWav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+        processor = Wav2Vec2ProcessorWithLM.from_pretrained("patrickvonplaten/wav2vec2-large-xlsr-53-spanish-with-lm")
+
+        input_values = processor(resampled_audio, return_tensors="np").input_values
+
+        logits = model(input_values).logits
+
+        # test user-managed pool
+        with multiprocessing.get_context("fork").Pool(2) as pool:
+            transcription = processor.batch_decode(np.array(logits), pool).text
+
+        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+
+        # user-managed pool + num_processes should trigger a warning
+        with CaptureLogger(processing_wav2vec2_with_lm.logger) as cl, multiprocessing.get_context("fork").Pool(
+            2
+        ) as pool:
+            transcription = processor.batch_decode(np.array(logits), pool, num_processes=2).text
+
+        self.assertIn("num_process", cl.out)
+        self.assertIn("it will be ignored", cl.out)
+
+        self.assertEqual(transcription[0], "bien y qué regalo vas a abrir primero")
+
+    @require_pyctcdecode
+    @require_librosa
+    def test_wav2vec2_with_lm_invalid_pool(self):
+        run_test_in_subprocess(test_case=self, target_func=_test_wav2vec2_with_lm_invalid_pool, inputs=None)

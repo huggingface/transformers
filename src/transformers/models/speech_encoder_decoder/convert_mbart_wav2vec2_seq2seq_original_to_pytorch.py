@@ -14,7 +14,6 @@
 # limitations under the License.
 """Convert Wav2Vec2 checkpoint."""
 
-
 import argparse
 
 import fairseq
@@ -264,7 +263,7 @@ def convert_wav2vec2_checkpoint(
         add_adapter=True,
         adapter_stride=adapter_stride,
         adapter_kernel_size=adapter_kernel_size,
-        use_auth_token=True,
+        token_token=True,
         output_hidden_size=encoder_output_dim,
     )
     decoder_config = MBartConfig.from_pretrained(decoder_config_path)
@@ -282,7 +281,7 @@ def convert_wav2vec2_checkpoint(
     model = model[0].eval()
 
     # load feature extractor
-    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, use_auth_token=True)
+    feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, token_token=True)
 
     # set weights for wav2vec2 encoder
     hf_encoder = Wav2Vec2Model(encoder_config)

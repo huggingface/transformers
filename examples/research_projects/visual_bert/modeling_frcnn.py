@@ -1,20 +1,21 @@
 """
- coding=utf-8
- Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal
- Adapted From Facebook Inc, Detectron2 && Huggingface Co.
+coding=utf-8
+Copyright 2018, Antonio Mendoza Hao Tan, Mohit Bansal
+Adapted From Facebook Inc, Detectron2 && Huggingface Co.
 
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-     http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.import copy
- """
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.import copy
+"""
+
 import itertools
 import math
 import os
@@ -169,7 +170,6 @@ def get_norm(norm, out_channels):
 
 
 def _create_grid_offsets(size: List[int], stride: int, offset: float, device):
-
     grid_height, grid_width = size
     shifts_x = torch.arange(
         offset * stride,
@@ -390,7 +390,6 @@ def assign_boxes_to_levels(
     canonical_box_size: int,
     canonical_level: int,
 ):
-
     box_sizes = torch.sqrt(torch.cat([boxes.area() for boxes in box_lists]))
     # Eqn.(1) in FPN paper
     level_assignments = torch.floor(canonical_level + torch.log2(box_sizes / canonical_box_size + 1e-8))
@@ -418,7 +417,7 @@ class ShapeSpec(namedtuple("_ShapeSpec", ["channels", "height", "width", "stride
         return super().__new__(cls, channels, height, width, stride)
 
 
-class Box2BoxTransform(object):
+class Box2BoxTransform:
     """
     This R-CNN transformation scales the box's width and height
     by exp(dw), exp(dh) and shifts a box's center by the offset
@@ -520,7 +519,7 @@ class Box2BoxTransform(object):
         return pred_boxes
 
 
-class Matcher(object):
+class Matcher:
     """
     This class assigns to each predicted "element" (e.g., a box) a ground-truth
     element. Each predicted element will have exactly zero or one matches; each
@@ -556,8 +555,8 @@ class Matcher(object):
         assert thresholds[0] > 0
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
-        assert all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])])
-        assert all([label_i in [-1, 0, 1] for label_i in labels])
+        assert all(low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:]))
+        assert all(label_i in [-1, 0, 1] for label_i in labels)
         assert len(labels) == len(thresholds) - 1
         self.thresholds = thresholds
         self.labels = labels
@@ -623,7 +622,7 @@ class Matcher(object):
         match_labels[pred_inds_with_highest_quality] = 1
 
 
-class RPNOutputs(object):
+class RPNOutputs:
     def __init__(
         self,
         box2box_transform,
@@ -1097,7 +1096,7 @@ class ROIPooler(nn.Module):
         Returns:
             A tensor of shape(N*B, Channels, output_size, output_size)
         """
-        x = [v for v in feature_maps.values()]
+        x = list(feature_maps.values())
         num_level_assignments = len(self.level_poolers)
         assert len(x) == num_level_assignments and len(boxes) == x[0].size(0)
 
@@ -1133,7 +1132,7 @@ class ROIPooler(nn.Module):
         return output
 
 
-class ROIOutputs(object):
+class ROIOutputs:
     def __init__(self, cfg, training=False):
         self.smooth_l1_beta = cfg.ROI_BOX_HEAD.SMOOTH_L1_BETA
         self.box2box_transform = Box2BoxTransform(weights=cfg.ROI_BOX_HEAD.BBOX_REG_WEIGHTS)
@@ -1708,9 +1707,8 @@ class GeneralizedRCNN(nn.Module):
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert from_tf, (
-                    "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint"
-                    .format(pretrained_model_name_or_path + ".index")
+                assert from_tf, "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
+                    pretrained_model_name_or_path + ".index"
                 )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:

@@ -32,19 +32,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/sentencepiece.bpe.model",
-    },
-    "tokenizer_file": {
-        "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/tokenizer.json",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/xglm-564M": 2048,
-}
-
 
 class XGLMTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -95,8 +82,6 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = XGLMTokenizer
 
@@ -110,13 +95,13 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        **kwargs
+        **kwargs,
     ):
         # Compatibility with the original tokenizer
         self.num_madeup_words = 7
         madeup_words = [f"<madeupword{i}>" for i in range(self.num_madeup_words)]
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
         kwargs["additional_special_tokens"] += [
             word for word in madeup_words if word not in kwargs["additional_special_tokens"]
         ]
@@ -134,7 +119,10 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -203,3 +191,6 @@ class XGLMTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+__all__ = ["XGLMTokenizerFast"]

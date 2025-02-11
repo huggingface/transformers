@@ -26,12 +26,12 @@ import torch
 import torch.optim as optim
 import torch.utils.data as data
 from nltk.tokenize.treebank import TreebankWordDetokenizer
+from pplm_classification_head import ClassificationHead
 from torch import nn
 from torchtext import data as torchtext_data
 from torchtext import datasets
 from tqdm import tqdm, trange
 
-from pplm_classification_head import ClassificationHead
 from transformers import GPT2LMHeadModel, GPT2Tokenizer
 
 
@@ -45,7 +45,7 @@ max_length_seq = 100
 class Discriminator(nn.Module):
     """Transformer encoder followed by a Classification Head"""
 
-    def __init__(self, class_size, pretrained_model="gpt2-medium", cached_mode=False, device="cpu"):
+    def __init__(self, class_size, pretrained_model="openai-community/gpt2-medium", cached_mode=False, device="cpu"):
         super().__init__()
         self.tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model)
         self.encoder = GPT2LMHeadModel.from_pretrained(pretrained_model)
@@ -218,7 +218,7 @@ def get_cached_data_loader(dataset, batch_size, discriminator, shuffle=False, de
 def train_discriminator(
     dataset,
     dataset_fp=None,
-    pretrained_model="gpt2-medium",
+    pretrained_model="openai-community/gpt2-medium",
     epochs=10,
     batch_size=64,
     log_interval=10,
@@ -490,8 +490,8 @@ if __name__ == "__main__":
         default="SST",
         choices=("SST", "clickbait", "toxic", "generic"),
         help=(
-            "dataset to train the discriminator on."
-            "In case of generic, the dataset is expected"
+            "dataset to train the discriminator on. "
+            "In case of generic, the dataset is expected "
             "to be a TSBV file with structure: class \\t text"
         ),
     )
@@ -502,7 +502,10 @@ if __name__ == "__main__":
         help="File path of the dataset to use. Needed only in case of generic datadset",
     )
     parser.add_argument(
-        "--pretrained_model", type=str, default="gpt2-medium", help="Pretrained model to use as encoder"
+        "--pretrained_model",
+        type=str,
+        default="openai-community/gpt2-medium",
+        help="Pretrained model to use as encoder",
     )
     parser.add_argument("--epochs", type=int, default=10, metavar="N", help="Number of training epochs")
     parser.add_argument(

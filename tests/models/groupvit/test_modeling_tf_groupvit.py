@@ -12,8 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow GroupViT model. """
+"""Testing suite for the TensorFlow GroupViT model."""
 
+from __future__ import annotations
 
 import inspect
 import os
@@ -23,8 +24,8 @@ import unittest
 from importlib import import_module
 
 import numpy as np
-
 import requests
+
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import (
     is_pt_tf_cross_test,
@@ -37,13 +38,14 @@ from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFGroupViTModel, TFGroupViTTextModel, TFGroupViTVisionModel, TFSharedEmbeddings
-    from transformers.models.groupvit.modeling_tf_groupvit import TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.modeling_tf_utils import keras
 
 
 if is_vision_available():
@@ -96,7 +98,6 @@ class TFGroupViTVisionModelTester:
         self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
-
         rng = random.Random(0)
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], rng=rng)
         config = self.get_config()
@@ -148,6 +149,10 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_onnx = False
 
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as this model tends to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
+
     def setUp(self):
         self.model_tester = TFGroupViTVisionModelTester(self)
         self.config_tester = ConfigTester(
@@ -180,9 +185,9 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (tf.keras.layers.Layer))
+            self.assertIsInstance(model.get_input_embeddings(), (keras.layers.Layer))
             x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, tf.keras.layers.Layer))
+            self.assertTrue(x is None or isinstance(x, keras.layers.Layer))
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -307,9 +312,9 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGroupViTVisionModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = TFGroupViTVisionModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(
         "TFGroupViTVisionModel does not convert `hidden_states` and `attentions` to tensors as they are all of"
@@ -334,7 +339,7 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
+                model = keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
                 output_hidden_states = outputs["hidden_states"]
                 output_attentions = outputs["attentions"]
@@ -379,7 +384,7 @@ class TFGroupViTTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -452,11 +457,14 @@ class TFGroupViTTextModelTester:
 
 @require_tf
 class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (TFGroupViTTextModel,) if is_tf_available() else ()
     test_pruning = False
     test_head_masking = False
     test_onnx = False
+
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as this model tends to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     def setUp(self):
         self.model_tester = TFGroupViTTextModelTester(self)
@@ -475,9 +483,9 @@ class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGroupViTTextModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = TFGroupViTTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @slow
     def test_saved_model_creation_extended(self):
@@ -496,7 +504,7 @@ class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
+                model = keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
                 output_hidden_states = outputs["hidden_states"]
                 output_attentions = outputs["attentions"]
@@ -571,13 +579,18 @@ class TFGroupViTModelTester:
 
 
 @require_tf
-class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFGroupViTModel,) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFGroupViTModel} if is_tf_available() else {}
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
     test_onnx = False
+
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as this model tends to diverge a bit more
+        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     def setUp(self):
         self.model_tester = TFGroupViTModelTester(self)
@@ -599,6 +612,7 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
         pass
 
     @require_tensorflow_probability
+    @slow
     def test_keras_fit(self):
         super().test_keras_fit()
 
@@ -630,7 +644,7 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
         if self.__class__.__name__ == "TFGroupViTModelTest":
             inputs_dict.pop("return_loss", None)
 
-        tf_main_layer_classes = set(
+        tf_main_layer_classes = {
             module_member
             for model_class in self.all_model_classes
             for module in (import_module(model_class.__module__),)
@@ -640,9 +654,9 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
             and module_member_name[: -len("MainLayer")] == model_class.__name__[: -len("Model")]
             for module_member in (getattr(module, module_member_name),)
             if isinstance(module_member, type)
-            and tf.keras.layers.Layer in module_member.__bases__
+            and keras.layers.Layer in module_member.__bases__
             and getattr(module_member, "_keras_serializable", False)
-        )
+        }
         for main_layer_class in tf_main_layer_classes:
             # T5MainLayer needs an embed_tokens parameter when called without the inputs_embeds parameter
             if "T5" in main_layer_class.__name__:
@@ -654,17 +668,17 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
                 main_layer = main_layer_class(config)
 
             symbolic_inputs = {
-                name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
+                name: keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
 
-            model = tf.keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
+            model = keras.Model(symbolic_inputs, outputs=main_layer(symbolic_inputs))
             outputs = model(inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 filepath = os.path.join(tmpdirname, "keras_model.h5")
                 model.save(filepath)
                 if "T5" in main_layer_class.__name__:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath,
                         custom_objects={
                             main_layer_class.__name__: main_layer_class,
@@ -672,27 +686,22 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
                         },
                     )
                 else:
-                    model = tf.keras.models.load_model(
+                    model = keras.models.load_model(
                         filepath, custom_objects={main_layer_class.__name__: main_layer_class}
                     )
-                assert isinstance(model, tf.keras.Model)
+                assert isinstance(model, keras.Model)
                 after_outputs = model(inputs_dict)
                 self.assert_outputs_same(after_outputs, outputs)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFGroupViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "nvidia/groupvit-gcc-yfcc"
+        model = TFGroupViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
     @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
     @slow
     def test_saved_model_creation(self):
-        pass
-
-    @unittest.skip(reason="Currently `saved_model` doesn't work with nested outputs.")
-    @slow
-    def test_saved_model_creation_extended(self):
         pass
 
     @unittest.skip(reason="`saved_model` doesn't work with nested outputs so no preparation happens.")

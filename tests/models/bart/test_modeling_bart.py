@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch BART model. """
-
+"""Testing suite for the PyTorch BART model."""
 
 import copy
 import tempfile
@@ -22,12 +21,20 @@ import unittest
 import timeout_decorator  # noqa
 
 from transformers import BartConfig, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -116,12 +123,6 @@ class BartModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
-        # forcing a certain token to be generated, sets all other tokens to -inf
-        # if however the token to be generated is already at -inf then it can lead token
-        # `nan` values and thus break generation
-        self.forced_bos_token_id = None
-        self.forced_eos_token_id = None
-
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -151,8 +152,6 @@ class BartModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            forced_bos_token_id=self.forced_bos_token_id,
-            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def get_pipeline_config(self):
@@ -382,12 +381,12 @@ class BartHeadTests(unittest.TestCase):
             bart_toks = tokenizer.encode(ex, return_tensors="pt").squeeze()
             assert_tensors_close(desired_result.long(), bart_toks, prefix=ex)
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
         model = BartForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
@@ -414,17 +413,31 @@ class BartHeadTests(unittest.TestCase):
 
 
 @require_torch
-class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (BartModel, BartForConditionalGeneration, BartForSequenceClassification, BartForQuestionAnswering)
         if is_torch_available()
         else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": BartModel,
+            "fill-mask": BartForConditionalGeneration,
+            "question-answering": BartForQuestionAnswering,
+            "summarization": BartForConditionalGeneration,
+            "text-classification": BartForSequenceClassification,
+            "text-generation": BartForCausalLM,
+            "text2text-generation": BartForConditionalGeneration,
+            "translation": BartForConditionalGeneration,
+            "zero-shot": BartForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     is_encoder_decoder = True
-    fx_compatible = True
+    fx_compatible = False  # Fix me Michael
     test_pruning = False
-    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
@@ -481,15 +494,33 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 model(**inputs)[0]
 
+    @require_torch_fp16
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = BartForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
+        model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    def test_resize_embeddings_persists_embeddings_type(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+
+        config.scale_embedding = True
+        model = BartForConditionalGeneration(config)
+        old_type = type(model.model.decoder.embed_tokens)
+
+        model.resize_token_embeddings(new_num_tokens=config.vocab_size)
+
+        new_type = type(model.model.decoder.embed_tokens)
+        self.assertIs(old_type, new_type)
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -854,9 +885,9 @@ class BartModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_base_mask_filling(self):
@@ -940,7 +971,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_config_generation_params(self):
         config = BartConfig.from_pretrained("facebook/bart-large-xsum")
-        expected_params = dict(num_beams=6, do_sample=False, early_stopping=True, length_penalty=1.0)
+        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": 1.0}
         config_params = {k: getattr(config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 
@@ -1181,6 +1212,82 @@ class BartModelIntegrationTests(unittest.TestCase):
         )
         assert generated_summaries == EXPECTED
 
+    @slow
+    def test_contrastive_search_bart(self):
+        article = (
+            " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A"
+            " year later, she got married again in Westchester County, but to a different man and without divorcing"
+            " her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos"
+            ' declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married'
+            " once more, this time in the Bronx. In an application for a marriage license, she stated it was her"
+            ' "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false'
+            ' instrument for filing in the first degree," referring to her false statements on the 2010 marriage'
+            " license application, according to court documents. Prosecutors said the marriages were part of an"
+            " immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to"
+            " her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was"
+            " arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New"
+            " York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total,"
+            " Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All"
+            " occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be"
+            " married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors"
+            " said the immigration scam involved some of her husbands, who filed for permanent residence status"
+            " shortly after the marriages.  Any divorces happened only after such filings were approved. It was"
+            " unclear whether any of the men will be prosecuted. The case was referred to the Bronx District"
+            " Attorney's Office by Immigration and Customs Enforcement and the Department of Homeland Security's"
+            ' Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt,'
+            " Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his"
+            " native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces"
+            " up to four years in prison.  Her next court appearance is scheduled for May 18."
+        )
+        bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
+        input_ids = bart_tokenizer(
+            article, add_special_tokens=False, truncation=True, max_length=512, return_tensors="pt"
+        ).input_ids.to(torch_device)
+
+        outputs = bart_model.generate(input_ids, penalty_alpha=0.5, top_k=5, max_length=64, num_beams=1)
+        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "Liana Barrientos, 39, pleaded not guilty to charges related to false marriage statements. "
+                "Prosecutors say she married at least 10 times, sometimes within two weeks of each other. She is "
+                "accused of being part of an immigration scam to get permanent residency. If convicted, she faces up "
+                "to four years in"
+            ],
+        )
+
+    @slow
+    def test_decoder_attention_mask(self):
+        model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", forced_bos_token_id=0).to(
+            torch_device
+        )
+        tokenizer = self.default_tokenizer
+        sentence = "UN Chief Says There Is No <mask> in Syria"
+        input_ids = tokenizer(sentence, return_tensors="pt").input_ids.to(torch_device)
+        padding_size = 3
+        decoder_input_ids = torch.tensor(
+            [
+                [model.config.decoder_start_token_id]
+                + padding_size * [model.config.pad_token_id]
+                + [model.config.bos_token_id]
+            ],
+            dtype=torch.long,
+            device=torch_device,
+        )
+        decoder_attention_mask = torch.where(decoder_input_ids == model.config.pad_token_id, 0, 1).to(torch_device)
+        generated_ids = model.generate(
+            input_ids=input_ids,
+            use_cache=False,
+            max_new_tokens=20,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+        generated_sentence = tokenizer.batch_decode(generated_ids)[0]
+        expected_sentence = "</s><pad><pad><pad><s>UN Chief Says There Is No Plan B for Peace in Syria</s>"
+        self.assertEqual(generated_sentence, expected_sentence)
+
 
 class BartStandaloneDecoderModelTester:
     def __init__(
@@ -1197,7 +1304,7 @@ class BartStandaloneDecoderModelTester:
         use_labels=True,
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
-        decoder_layers=4,
+        decoder_layers=2,
         encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,
@@ -1399,6 +1506,7 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     fx_comptatible = True
     test_pruning = False
     is_encoder_decoder = False
+    test_missing_keys = False
 
     def setUp(
         self,
@@ -1417,6 +1525,10 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
 
+    @unittest.skip(reason="Decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
         return
+
+    @unittest.skip
+    def test_save_load_fast_init_from_base(self):
+        pass

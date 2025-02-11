@@ -12,12 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fast Tokenization class for model DeBERTa."""
+"""Fast Tokenization class for model DeBERTa."""
 
-import json
-from typing import TYPE_CHECKING, List, Optional, Tuple
-
-from tokenizers import pre_tokenizers
+from typing import List, Optional, Tuple
 
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -25,50 +22,9 @@ from ...utils import logging
 from .tokenization_deberta import DebertaTokenizer
 
 
-if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
-
-
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/vocab.json",
-        "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/vocab.json",
-        "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/vocab.json"
-        ),
-    },
-    "merges_file": {
-        "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/merges.txt",
-        "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/merges.txt",
-        "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge-mnli": (
-            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/merges.txt"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/deberta-base": 512,
-    "microsoft/deberta-large": 512,
-    "microsoft/deberta-xlarge": 512,
-    "microsoft/deberta-base-mnli": 512,
-    "microsoft/deberta-large-mnli": 512,
-    "microsoft/deberta-xlarge-mnli": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/deberta-base": {"do_lower_case": False},
-    "microsoft/deberta-large": {"do_lower_case": False},
-}
 
 
 class DebertaTokenizerFast(PreTrainedTokenizerFast):
@@ -79,13 +35,15 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import DebertaTokenizerFast
+
     >>> tokenizer = DebertaTokenizerFast.from_pretrained("microsoft/deberta-base")
-    >>> tokenizer("Hello world")['input_ids']
-    [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
-    [18435, 995]
+    >>> tokenizer("Hello world")["input_ids"]
+    [1, 31414, 232, 2]
+
+    >>> tokenizer(" Hello world")["input_ids"]
+    [1, 20920, 232, 2]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer, but since
@@ -101,9 +59,9 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
+        vocab_file (`str`, *optional*):
             Path to the vocabulary file.
-        merges_file (`str`):
+        merges_file (`str`, *optional*):
             Path to the merges file.
         tokenizer_file (`str`, *optional*):
             The path to a tokenizer file to use instead of the vocab file.
@@ -135,8 +93,6 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask", "token_type_ids"]
     slow_tokenizer_class = DebertaTokenizer
 
@@ -154,9 +110,8 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
         pad_token="[PAD]",
         mask_token="[MASK]",
         add_prefix_space=False,
-        **kwargs
+        **kwargs,
     ):
-
         super().__init__(
             vocab_file,
             merges_file,
@@ -173,14 +128,6 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         self.add_bos_token = kwargs.pop("add_bos_token", False)
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
     @property
     def mask_token(self) -> str:
@@ -288,13 +235,5 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2_fast.GPT2TokenizerFast._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
 
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+__all__ = ["DebertaTokenizerFast"]

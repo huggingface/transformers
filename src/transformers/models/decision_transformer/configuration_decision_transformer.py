@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Decision Transformer model configuration"""
+"""Decision Transformer model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "edbeeching/decision-transformer-gym-hopper-medium": (
-        "https://huggingface.co/edbeeching/decision-transformer-gym-hopper-medium/resolve/main/config.json"
-    ),
-    # See all DecisionTransformer models at https://huggingface.co/models?filter=decision_transformer
-}
 
 
 class DecisionTransformerConfig(PretrainedConfig):
@@ -57,11 +50,9 @@ class DecisionTransformerConfig(PretrainedConfig):
         n_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        n_embd (`int`, *optional*, defaults to 768):
-            Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 12):
+        n_layer (`int`, *optional*, defaults to 3):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
+        n_head (`int`, *optional*, defaults to 1):
             Number of attention heads for each attention layer in the Transformer encoder.
         n_inner (`int`, *optional*):
             Dimensionality of the inner feed-forward layers. If unset, will default to 4 times `n_embd`.
@@ -90,13 +81,13 @@ class DecisionTransformerConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import DecisionTransformerModel, DecisionTransformerConfig
+    >>> from transformers import DecisionTransformerConfig, DecisionTransformerModel
 
     >>> # Initializing a DecisionTransformer configuration
     >>> configuration = DecisionTransformerConfig()
 
-    >>> # Initializing a model from the configuration
-    >>> model = DecisionTransformerConfig(configuration)
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = DecisionTransformerModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -119,7 +110,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         action_tanh=True,
         vocab_size=1,
         n_positions=1024,
-        n_embd=768,
         n_layer=3,
         n_head=1,
         n_inner=None,
@@ -129,11 +119,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
-        summary_type="cls_index",
-        summary_use_proj=True,
-        summary_activation=None,
-        summary_proj_to_labels=True,
-        summary_first_dropout=0.1,
         scale_attn_weights=True,
         use_cache=True,
         bos_token_id=50256,
@@ -142,7 +127,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         reorder_and_upcast_attn=False,
         **kwargs,
     ):
-
         self.state_dim = state_dim
         self.act_dim = act_dim
         self.hidden_size = hidden_size
@@ -150,7 +134,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.action_tanh = action_tanh
         self.vocab_size = vocab_size
         self.n_positions = n_positions
-        self.n_embd = n_embd
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_inner = n_inner
@@ -160,11 +143,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.attn_pdrop = attn_pdrop
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
-        self.summary_type = summary_type
-        self.summary_use_proj = summary_use_proj
-        self.summary_activation = summary_activation
-        self.summary_first_dropout = summary_first_dropout
-        self.summary_proj_to_labels = summary_proj_to_labels
         self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
@@ -174,3 +152,6 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+__all__ = ["DecisionTransformerConfig"]

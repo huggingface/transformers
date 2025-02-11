@@ -30,6 +30,7 @@ FSMT_TINY2 = "stas/tiny-wmt19-en-ru"
 
 
 class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "stas/tiny-wmt19-en-de"
     tokenizer_class = FSMTTokenizer
     test_rust_tokenizer = False
 
@@ -159,10 +160,10 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected = ["us", "a</w>", "is</w>", "un", "i", "ted</w>", "st", "ates</w>", "of</w>", "am", "er", "ica</w>"]
         self.assertListEqual(tokens, expected)
 
-    @unittest.skip("FSMTConfig.__init__  requires non-optional args")
+    @unittest.skip(reason="FSMTConfig.__init__  requires non-optional args")
     def test_torch_encode_plus_sent_to_model(self):
         pass
 
-    @unittest.skip("FSMTConfig.__init__  requires non-optional args")
+    @unittest.skip(reason="FSMTConfig.__init__  requires non-optional args")
     def test_np_encode_plus_sent_to_model(self):
         pass

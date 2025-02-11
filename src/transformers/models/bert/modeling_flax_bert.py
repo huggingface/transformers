@@ -15,12 +15,11 @@
 
 from typing import Callable, Optional, Tuple
 
-import numpy as np
-
 import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, make_causal_mask
 from flax.linen import partitioning as nn_partitioning
@@ -53,9 +52,8 @@ from .configuration_bert import BertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bert-base-uncased"
+_CHECKPOINT_FOR_DOC = "google-bert/bert-base-uncased"
 _CONFIG_FOR_DOC = "BertConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 remat = nn_partitioning.remat
 
@@ -95,9 +93,10 @@ BERT_START_DOCSTRING = r"""
     This model inherits from [`FlaxPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
 
-    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
+    This model is also a
+    [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it as
+    a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+    behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -142,7 +141,7 @@ BERT_INPUTS_DOCSTRING = r"""
         input_ids (`numpy.ndarray` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -187,16 +186,19 @@ class FlaxBertEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.position_embeddings = nn.Embed(
             self.config.max_position_embeddings,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.token_type_embeddings = nn.Embed(
             self.config.type_vocab_size,
             self.config.hidden_size,
             embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            dtype=self.dtype,
         )
         self.LayerNorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
@@ -294,7 +296,7 @@ class FlaxBertSelfAttention(nn.Module):
         hidden_states,
         attention_mask,
         layer_head_mask,
-        key_value_states: Optional[jnp.array] = None,
+        key_value_states: Optional[jnp.ndarray] = None,
         init_cache: bool = False,
         deterministic=True,
         output_attentions: bool = False,
@@ -355,7 +357,7 @@ class FlaxBertSelfAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, -1e10).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
             )
         else:
             attention_bias = None
@@ -773,7 +775,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
         gradient_checkpointing: bool = False,
-        **kwargs
+        **kwargs,
     ):
         module = self.module_class(
             config=config,
@@ -1029,9 +1031,7 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
     module_class = FlaxBertModule
 
 
-append_call_sample_docstring(
-    FlaxBertModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBertModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutputWithPooling, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForPreTrainingModule(nn.Module):
@@ -1059,7 +1059,6 @@ class FlaxBertForPreTrainingModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-
         # Model
         outputs = self.bert(
             input_ids,
@@ -1113,10 +1112,10 @@ FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import BertTokenizer, FlaxBertForPreTraining
+    >>> from transformers import AutoTokenizer, FlaxBertForPreTraining
 
-    >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    >>> model = FlaxBertForPreTraining.from_pretrained("bert-base-uncased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    >>> model = FlaxBertForPreTraining.from_pretrained("google-bert/bert-base-uncased")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
     >>> outputs = model(**inputs)
@@ -1198,9 +1197,7 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForMaskedLMModule
 
 
-append_call_sample_docstring(
-    FlaxBertForMaskedLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBertForMaskedLM, _CHECKPOINT_FOR_DOC, FlaxMaskedLMOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBertForNextSentencePredictionModule(nn.Module):
@@ -1270,10 +1267,10 @@ FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING = """
     Example:
 
     ```python
-    >>> from transformers import BertTokenizer, FlaxBertForNextSentencePrediction
+    >>> from transformers import AutoTokenizer, FlaxBertForNextSentencePrediction
 
-    >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    >>> model = FlaxBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    >>> model = FlaxBertForNextSentencePrediction.from_pretrained("google-bert/bert-base-uncased")
 
     >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
     >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1369,7 +1366,6 @@ class FlaxBertForSequenceClassification(FlaxBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBertForSequenceClassification,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxSequenceClassifierOutput,
     _CONFIG_FOR_DOC,
@@ -1452,7 +1448,7 @@ overwrite_call_docstring(
     FlaxBertForMultipleChoice, BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
 )
 append_call_sample_docstring(
-    FlaxBertForMultipleChoice, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC
+    FlaxBertForMultipleChoice, _CHECKPOINT_FOR_DOC, FlaxMultipleChoiceModelOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -1527,7 +1523,7 @@ class FlaxBertForTokenClassification(FlaxBertPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxBertForTokenClassification, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC
+    FlaxBertForTokenClassification, _CHECKPOINT_FOR_DOC, FlaxTokenClassifierOutput, _CONFIG_FOR_DOC
 )
 
 
@@ -1573,7 +1569,7 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
         hidden_states = outputs[0]
 
         logits = self.qa_outputs(hidden_states)
-        start_logits, end_logits = logits.split(self.config.num_labels, axis=-1)
+        start_logits, end_logits = jnp.split(logits, self.config.num_labels, axis=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
 
@@ -1601,7 +1597,6 @@ class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBertForQuestionAnswering,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
@@ -1683,7 +1678,7 @@ class FlaxBertForCausalLMModule(nn.Module):
 class FlaxBertForCausalLM(FlaxBertPreTrainedModel):
     module_class = FlaxBertForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
@@ -1712,8 +1707,21 @@ class FlaxBertForCausalLM(FlaxBertPreTrainedModel):
 
 append_call_sample_docstring(
     FlaxBertForCausalLM,
-    _TOKENIZER_FOR_DOC,
     _CHECKPOINT_FOR_DOC,
     FlaxCausalLMOutputWithCrossAttentions,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxBertForCausalLM",
+    "FlaxBertForMaskedLM",
+    "FlaxBertForMultipleChoice",
+    "FlaxBertForNextSentencePrediction",
+    "FlaxBertForPreTraining",
+    "FlaxBertForQuestionAnswering",
+    "FlaxBertForSequenceClassification",
+    "FlaxBertForTokenClassification",
+    "FlaxBertModel",
+    "FlaxBertPreTrainedModel",
+]

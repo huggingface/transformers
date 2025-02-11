@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow Speech2Text model. """
+"""Testing suite for the TensorFlow Speech2Text model."""
+
+from __future__ import annotations
 
 import inspect
 import unittest
@@ -23,6 +25,7 @@ from transformers.utils import cached_property, is_tf_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -209,9 +212,10 @@ class TFSpeech2TextModelTester:
 
 
 @require_tf
-class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFSpeech2TextModel, TFSpeech2TextForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFSpeech2TextForConditionalGeneration,) if is_tf_available() else ()
+    pipeline_model_mapping = {"feature-extraction": TFSpeech2TextModel} if is_tf_available() else {}
     is_encoder_decoder = True
     test_pruning = False
     test_missing_keys = False
@@ -240,6 +244,18 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
         pass
 
     def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_generate_fp16(self):
@@ -400,66 +416,6 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_generate_without_input_ids(self):
         pass
 
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = tf.repeat(encoder_outputs.last_hidden_state, num_interleave, axis=0)
-
-        input_ids = input_ids[:, :, 0]
-        input_ids = tf.zeros_like(input_ids[:, :1], dtype=tf.int64) + model._get_decoder_start_token_id()
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
-
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
-        batch_size, seq_length = input_ids.shape[:2]
-        subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
-        num_sequences_in_output = batch_size * num_return_sequences
-        gen_len = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
-        )
-
-        # scores
-        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
-
-        # Attentions
-        # encoder
-        self._check_encoder_attention_for_generate(
-            output.encoder_attentions, batch_size, config, subsampled_seq_length
-        )
-        # decoder
-        self._check_attentions_for_generate(
-            num_sequences_in_output,
-            output.decoder_attentions,
-            min_length=1,
-            max_length=output.sequences.shape[-1],
-            config=config,
-            use_cache=use_cache,
-        )
-
-        # Hidden States
-        # encoder
-        self._check_encoder_hidden_states_for_generate(
-            output.encoder_hidden_states, batch_size, config, subsampled_seq_length
-        )
-
-        # decoder
-        self._check_hidden_states_for_generate(
-            num_sequences_in_output,
-            output.decoder_hidden_states,
-            min_length=1,
-            max_length=output.sequences.shape[-1],
-            config=config,
-            use_cache=use_cache,
-        )
-
     # overwritten from parent due to the inability to work when non-text inputs are not passed AND because the input is
     # `input_features`
     def test_lm_head_model_random_no_beam_search_generate(self):
@@ -553,6 +509,10 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
                 "decoder_attention_mask",
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
+        # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
+        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
 
 @require_tf

@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-pruning Masked BERT for question-answering on SQuAD."""
-
+"""Fine-pruning Masked BERT for question-answering on SQuAD."""
 
 import argparse
 import glob
@@ -25,12 +24,12 @@ import timeit
 
 import numpy as np
 import torch
+from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
-from emmental import MaskedBertConfig, MaskedBertForQuestionAnswering
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -102,7 +101,7 @@ def regularization(model: nn.Module, mode: str):
             elif mode == "l0":
                 regu += torch.sigmoid(param - 2 / 3 * np.log(0.1 / 1.1)).sum() / param.numel()
             else:
-                ValueError("Don't know this mode.")
+                raise ValueError("Don't know this mode.")
             counter += 1
     return regu / counter
 
@@ -236,7 +235,6 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -790,7 +788,7 @@ def main():
         default=1,
         type=int,
         help=(
-            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays"
+            "Run `initial_warmup` * `warmup_steps` steps of threshold warmup during which threshold stays "
             "at its `initial_threshold` value (sparsity schedule)."
         ),
     )
@@ -799,7 +797,7 @@ def main():
         default=2,
         type=int,
         help=(
-            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays"
+            "Run `final_warmup` * `warmup_steps` steps of threshold cool-down during which threshold stays "
             "at its final_threshold value (sparsity schedule)."
         ),
     )
@@ -947,7 +945,7 @@ def main():
         type=str,
         default="O1",
         help=(
-            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
             "See details at https://nvidia.github.io/apex/amp.html"
         ),
     )
@@ -1110,10 +1108,10 @@ def main():
             logger.info("Loading checkpoints saved during training for evaluation")
             checkpoints = [args.output_dir]
             if args.eval_all_checkpoints:
-                checkpoints = list(
+                checkpoints = [
                     os.path.dirname(c)
                     for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-                )
+                ]
 
         else:
             logger.info("Loading checkpoint %s for evaluation", args.model_name_or_path)
@@ -1130,7 +1128,7 @@ def main():
             # Evaluate
             result = evaluate(args, model, tokenizer, prefix=global_step)
 
-            result = dict((k + ("_{}".format(global_step) if global_step else ""), v) for k, v in result.items())
+            result = {k + ("_{}".format(global_step) if global_step else ""): v for k, v in result.items()}
             results.update(result)
 
     logger.info("Results: {}".format(results))

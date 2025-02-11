@@ -14,17 +14,15 @@
 # limitations under the License.
 """Tokenization classes for CodeGen"""
 
-
 import json
 import os
 from functools import lru_cache
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
-
 import regex as re
 
-from ...utils import is_tf_available, is_torch_available, logging
+from ...utils import is_tf_available, is_torch_available, logging, to_py_obj
 
 
 if TYPE_CHECKING:
@@ -41,19 +39,6 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "Salesforce/codegen-350M-mono": "https://huggingface.co/Salesforce/codegen-350M-mono/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "Salesforce/codegen-350M-mono": "https://huggingface.co/Salesforce/codegen-350M-mono/resolve/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "Salesforce/codegen-350M-mono": 2048,
 }
 
 
@@ -103,12 +88,14 @@ class CodeGenTokenizer(PreTrainedTokenizer):
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
 
-    ```
+    ```python
     >>> from transformers import CodeGenTokenizer
+
     >>> tokenizer = CodeGenTokenizer.from_pretrained("Salesforce/codegen-350M-mono")
-    >>> tokenizer("Hello world")['input_ids']
+    >>> tokenizer("Hello world")["input_ids"]
     [15496, 995]
-    >>> tokenizer(" Hello world")['input_ids']
+
+    >>> tokenizer(" Hello world")["input_ids"]
     [18435, 995]
     ```
 
@@ -132,21 +119,25 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
+        pad_token (`str`, *optional*):
+            The token used for padding, for example when batching sequences of different lengths.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. (CodeGen tokenizer detect beginning of words by the preceding space).
+        add_bos_token (`bool`, *optional*, defaults to `False`):
+            Whether to add a beginning of sequence token at the start of sequences.
+        return_token_type_ids (`bool`, *optional*, defaults to `False`):
+            Whether to return token type IDs.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -160,23 +151,17 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         pad_token=None,
         add_prefix_space=False,
         add_bos_token=False,
-        **kwargs
+        return_token_type_ids=False,
+        **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
-            **kwargs,
-        )
+        bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
         self.add_bos_token = add_bos_token
+        self.return_token_type_ids = return_token_type_ids
+        if self.return_token_type_ids:
+            self.model_input_names.append("token_type_ids")
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -193,6 +178,17 @@ class CodeGenTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            add_prefix_space=add_prefix_space,
+            add_bos_token=add_bos_token,
+            return_token_type_ids=return_token_type_ids,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self):
@@ -280,6 +276,35 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A sequence
+        pair mask has the following format:
+
+        ```
+        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
+        | first sequence    | second sequence |
+        ```
+
+        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
+        """
+        sep = [self.sep_token_id] if self.sep_token_id is not None else []
+        cls = [self.cls_token_id] if self.sep_token_id is not None else []
+        if token_ids_1 is None:
+            return len(cls + token_ids_0 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -319,9 +344,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: bool = True,
+        clean_up_tokenization_spaces: bool = None,
         truncate_before_pattern: Optional[List[str]] = None,
-        **kwargs
+        **kwargs,
     ) -> str:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
@@ -334,8 +359,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
                 List of tokenized input ids. Can be obtained using the `__call__` method.
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not to remove special tokens in the decoding.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
-                Whether or not to clean up the tokenization spaces.
+            clean_up_tokenization_spaces (`bool`, *optional*):
+                Whether or not to clean up the tokenization spaces. If `None`, will default to
+                `self.clean_up_tokenization_spaces` (available in the `tokenizer_config`).
             truncate_before_pattern (`List[str]`, *optional*, defaults to `None`):
                 A list of regular expression strings that will be used to truncate the returned string. This can be
                 used to remove extra pieces of code (e.g. truncate if observing a comment symbol "#" at the beginning
@@ -346,6 +372,9 @@ class CodeGenTokenizer(PreTrainedTokenizer):
         Returns:
             `str`: The decoded sentence.
         """
+
+        token_ids = to_py_obj(token_ids)
+
         decoded_text = super()._decode(
             token_ids=token_ids,
             skip_special_tokens=skip_special_tokens,
@@ -385,3 +414,6 @@ class CodeGenTokenizer(PreTrainedTokenizer):
             return completion[: min(terminals_pos)]
         else:
             return completion
+
+
+__all__ = ["CodeGenTokenizer"]

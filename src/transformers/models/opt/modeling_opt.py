@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch OPT model."""
-import random
+"""PyTorch OPT model."""
+
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -22,6 +22,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_causal_attention_mask,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -33,17 +38,22 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_2_available,
+    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_opt import OPTConfig
 
 
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
+
+
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/opt-350m"
 _CONFIG_FOR_DOC = "OPTConfig"
-_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
@@ -52,46 +62,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
 _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-
-OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/opt-125m",
-    "facebook/opt-350m",
-    "facebook/opt-1.3b",
-    "facebook/opt-2.7b",
-    "facebook/opt-6.7b",
-    "facebook/opt-13b",
-    "facebook/opt-30b",
-    # See all OPT models at https://huggingface.co/models?filter=opt
-]
-
-
-def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
-    """
-    Make causal mask used for bi-directional self-attention.
-    """
-    bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
-    mask_cond = torch.arange(mask.size(-1))
-    mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
-
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
-    return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 class OPTLearnedPositionalEmbedding(nn.Embedding):
@@ -105,17 +75,21 @@ class OPTLearnedPositionalEmbedding(nn.Embedding):
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
-    def forward(self, attention_mask: torch.LongTensor, past_key_values_length: int = 0):
+    def forward(
+        self,
+        attention_mask: torch.LongTensor,
+        past_key_values_length: int = 0,
+        position_ids: Optional[torch.LongTensor] = None,
+    ):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        attention_mask = attention_mask.long()
 
-        # create positions depending on attention_mask
-        positions = (torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask).long() - 1
+        if position_ids is None:
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
+            # cut positions if `past_key_values_length` is > 0
+            position_ids = position_ids[:, past_key_values_length:]
 
-        # cut positions if `past_key_values_length` is > 0
-        positions = positions[:, past_key_values_length:]
-
-        return super().forward(positions + self.offset)
+        return super().forward(position_ids + self.offset)
 
 
 class OPTAttention(nn.Module):
@@ -123,82 +97,58 @@ class OPTAttention(nn.Module):
 
     def __init__(
         self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
+        config: OPTConfig,
+        **kwargs,
     ):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.attention_dropout
+        self.enable_bias = config.enable_bias
 
-        if (self.head_dim * num_heads) != self.embed_dim:
+        self.head_dim = self.embed_dim // self.num_heads
+        self.is_causal = True
+
+        if (self.head_dim * self.num_heads) != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
+                f" and `num_heads`: {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int) -> torch.Tensor:
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        # isn't needed in normal attention, but needed in flash attention so to keep the signature same
+        position_ids: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
         # get key, value proj
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_states = past_key_value[0]
-            value_states = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
-        elif past_key_value is not None:
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        if past_key_value is not None:
             # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_states, value_states)
+        past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -220,7 +170,9 @@ class OPTAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = torch.max(attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min))
+            attn_weights = torch.max(
+                attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # upcast to fp32 if the weights are in fp16. Please see https://github.com/huggingface/transformers/pull/17437
@@ -270,33 +222,209 @@ class OPTAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+class OptFlashAttention2(OPTAttention):
+    """
+    OPT flash attention module. This module inherits from `OPTAttention` as the weights of the module stays untouched.
+    The only required change would be on the forward pass where it needs to correctly call the public API of flash
+    attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        bsz, _, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states)
+        # get key, value proj
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        if past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        past_key_value = (key_states, value_states)
+
+        query_length = query_states.shape[1]
+        tgt_len = key_states.shape[-2]
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        query_states = query_states.view(bsz, query_length, self.num_heads, self.head_dim)
+        key_states = key_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
+        value_states = value_states.transpose(1, 2).view(bsz, tgt_len, self.num_heads, self.head_dim)
+
+        attn_dropout = self.dropout if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in float16 just to be sure everything works as expected.
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            query_length,
+            position_ids=position_ids,
+            dropout=attn_dropout,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
+        attn_output = self.out_proj(attn_weights_reshaped)
+
+        if not output_attentions:
+            attn_weights_reshaped = None
+
+        return attn_output, attn_weights_reshaped, past_key_value
+
+
+class OPTSdpaAttention(OPTAttention):
+    """
+    OPT sdpa attention module. This module inherits from `OPTAttention` as the weights of the module stays untouched.
+    The only required change would be on the forward pass where it needs to correctly call the public API of sdpa
+    attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        if output_attentions or layer_head_mask is not None:
+            logger.warning_once(
+                "OPTModel is using SDPA attention, which currently does not support output_attentions=True."
+                'failing back to eager attention. remove warning using attn_implementation="eager".'
+            )
+
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+            )  # TODO after merge add position_ids=position_ids
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self._shape(query_states, -1, bsz)
+
+        # get key, value proj
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+        if past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+
+        past_key_value = (key_states, value_states)
+
+        # shape now is (bsz, num_heads, seq_len, head_dim), all are continuous
+
+        causal_mask = attention_mask
+        if attention_mask is not None:
+            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if causal_mask is None and q_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=causal_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
+            # this model uses the scaling factor in the query projection for some reason, but not in Q@K^T
+            # so we need to scale to remove scaling in SDPA to have similar results with eager.
+            # Maybe needs a change in the model to remove scaling in query projection
+            scale=1.0,
+        )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(bsz, q_len, -1)
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
+OPT_ATTENTION_CLASSES = {
+    "eager": OPTAttention,
+    "flash_attention_2": OptFlashAttention2,
+    "sdpa": OPTSdpaAttention,
+}
+
+
 class OPTDecoderLayer(nn.Module):
     def __init__(self, config: OPTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = OPTAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
+
+        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](config=config)
+
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
-        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(
+            self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine
+        )
+        self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim, bias=config.enable_bias)
+        self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=config.enable_bias)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -324,6 +452,7 @@ class OPTDecoderLayer(nn.Module):
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=past_key_value,
+            position_ids=position_ids,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
@@ -389,12 +518,12 @@ OPT_START_DOCSTRING = r"""
     OPT_START_DOCSTRING,
 )
 class OPTPreTrainedModel(PreTrainedModel):
-
     config_class = OPTConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["OPTDecoderLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -407,10 +536,6 @@ class OPTPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (OPTDecoder)):
-            module.gradient_checkpointing = value
-
 
 OPT_INPUTS_DOCSTRING = r"""
     Args:
@@ -418,7 +543,7 @@ OPT_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`GPT2Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -430,7 +555,7 @@ OPT_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-            Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
@@ -471,6 +596,11 @@ OPT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`. for padding use -1.
+
+            [What are position IDs?](../glossary#position-ids)
 """
 
 
@@ -507,11 +637,15 @@ class OPTDecoder(OPTPreTrainedModel):
         # with checkpoints that have been fine-tuned before transformers v4.20.1
         # see https://github.com/facebookresearch/metaseq/pull/164
         if config.do_layer_norm_before and not config._remove_final_layer_norm:
-            self.final_layer_norm = nn.LayerNorm(config.hidden_size)
+            self.final_layer_norm = nn.LayerNorm(
+                config.hidden_size, elementwise_affine=config.layer_norm_elementwise_affine
+            )
         else:
             self.final_layer_norm = None
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -523,26 +657,48 @@ class OPTDecoder(OPTPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
-        # create causal mask
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-            ).to(inputs_embeds.device)
-
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
+    def _update_causal_mask(
+        self,
+        inputs_embeds: torch.Tensor,
+        input_shape: Tuple[int, int],
+        past_key_values_length: int,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+    ):
+        """
+        Updates the causal mask for the decoder.
+        """
+        batch_size, seq_length = input_shape
+        mask_seq_length = past_key_values_length + seq_length
+        if self._use_flash_attention_2:
+            # 2d mask is passed through the layers
+            causal_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+            attention_mask = (
+                torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+                if attention_mask is None
+                else attention_mask
             )
-            combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+
+            return causal_attention_mask, attention_mask
+
+        if attention_mask is None:
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
+        elif attention_mask.shape[1] != mask_seq_length:
+            raise ValueError(
+                f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                f"{mask_seq_length} (sum of the lengths of current and past inputs)"
+            )
+        if self._use_sdpa and not output_attentions and head_mask is None:
+            causal_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask, input_shape, inputs_embeds, past_key_values_length
+            )
+        else:
+            causal_attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, input_shape, inputs_embeds, past_key_values_length
             )
 
-        return combined_attention_mask
+        return causal_attention_mask, attention_mask
 
     def forward(
         self,
@@ -555,6 +711,7 @@ class OPTDecoder(OPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
         Args:
@@ -562,7 +719,7 @@ class OPTDecoder(OPTPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -602,6 +759,11 @@ class OPTDecoder(OPTPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+                config.n_positions - 1]`. for padding use -1.
+
+                [What are position IDs?](../glossary#position-ids)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -622,24 +784,35 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        # embed positions
-        if attention_mask is None:
-            attention_mask = torch.ones(inputs_embeds.shape[:2], dtype=torch.bool, device=inputs_embeds.device)
-        pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        causal_attention_mask, attention_mask = self._update_causal_mask(
+            inputs_embeds, input_shape, past_key_values_length, attention_mask, head_mask, output_attentions
         )
+        # embed positions
+
+        if position_ids is None:
+            position_ids = torch.cumsum(attention_mask, dim=1)
+            position_ids = (position_ids * attention_mask - 1).long()
+            # cut positions if `past_key_values_length` is > 0
+            position_ids = position_ids[:, past_key_values_length:]
+
+        pos_embeds = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + pos_embeds
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -660,39 +833,29 @@ class OPTDecoder(OPTPreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        # None for past_key_value
-                        return module(*inputs, output_attentions, None)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(decoder_layer),
+                layer_outputs = self._gradient_checkpointing_func(
+                    decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
+                    causal_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
                     None,
+                    output_attentions,
+                    use_cache,
+                    position_ids,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=causal_attention_mask,
+                    position_ids=position_ids,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
@@ -750,7 +913,6 @@ class OPTModel(OPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -767,8 +929,8 @@ class OPTModel(OPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -780,6 +942,7 @@ class OPTModel(OPTPreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -800,8 +963,8 @@ class OPTModel(OPTPreTrainedModel):
         )
 
 
-class OPTForCausalLM(OPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -844,6 +1007,8 @@ class OPTForCausalLM(OPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -851,7 +1016,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using [`OPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
                 [`PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
@@ -899,24 +1064,29 @@ class OPTForCausalLM(OPTPreTrainedModel):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+                config.n_positions - 1]`. for padding use -1.
+
+                [What are position IDs?](../glossary#position-ids)
 
         Returns:
 
         Example:
 
         ```python
-        >>> from transformers import GPT2Tokenizer, OPTForCausalLM
+        >>> from transformers import AutoTokenizer, OPTForCausalLM
 
         >>> model = OPTForCausalLM.from_pretrained("facebook/opt-350m")
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
-        >>> prompt = "Hey, are you consciours? Can you talk to me?"
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious. I'm just a little bit of a weirdo."
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -929,6 +1099,7 @@ class OPTForCausalLM(OPTPreTrainedModel):
         outputs = self.model.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -942,12 +1113,14 @@ class OPTForCausalLM(OPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(logits.device)
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -961,26 +1134,13 @@ class OPTForCausalLM(OPTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_ids.shape)
-
-        if past:
-            input_ids = input_ids[:, -1:]
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "past_key_values": past,
-            "use_cache": use_cache,
-        }
-
     @staticmethod
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
         return reordered_past
 
 
@@ -1000,8 +1160,6 @@ class OPTForCausalLM(OPTPreTrainedModel):
     OPT_START_DOCSTRING,
 )
 class OPTForSequenceClassification(OPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1013,7 +1171,6 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
@@ -1032,6 +1189,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1045,6 +1203,7 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1060,19 +1219,23 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
+        if self.config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
-            if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
-            else:
-                sequence_lengths = -1
-                logger.warning(
-                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-                )
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
 
         loss = None
         if labels is not None:
@@ -1123,8 +1286,6 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
     OPT_START_DOCSTRING,
 )
 class OPTForQuestionAnswering(OPTPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
-
     def __init__(self, config: OPTConfig):
         super().__init__(config)
         self.model = OPTModel(config)
@@ -1148,6 +1309,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1164,11 +1326,11 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import GPT2Tokenizer, OPTForQuestionAnswering
+        >>> from transformers import AutoTokenizer, OPTForQuestionAnswering
         >>> import torch
 
         >>> torch.manual_seed(4)  # doctest: +IGNORE_RESULT
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
         >>> # note: we are loading a OPTForQuestionAnswering from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random
@@ -1183,10 +1345,14 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         >>> answer_start_index = outputs.start_logits.argmax()
         >>> answer_end_index = outputs.end_logits.argmax()
 
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> answer_offset = len(tokenizer(question)[0])
+
+        >>> predict_answer_tokens = inputs.input_ids[
+        ...     0, answer_offset + answer_start_index : answer_offset + answer_end_index + 1
+        ... ]
         >>> predicted = tokenizer.decode(predict_answer_tokens)
         >>> predicted
-        ' Henson?'
+        ' a nice puppet'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1194,6 +1360,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
             input_ids,
             past_key_values=past_key_values,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
@@ -1217,8 +1384,8 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
                 end_positions = end_positions.squeeze(-1)
             # sometimes the start/end positions are outside our model inputs, we ignore these terms
             ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
+            start_positions = start_positions.clamp(0, ignored_index).to(logits.device)
+            end_positions = end_positions.clamp(0, ignored_index).to(logits.device)
 
             loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
             start_loss = loss_fct(start_logits, start_positions)
@@ -1242,3 +1409,12 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
+
+
+__all__ = [
+    "OPTForCausalLM",
+    "OPTModel",
+    "OPTPreTrainedModel",
+    "OPTForSequenceClassification",
+    "OPTForQuestionAnswering",
+]

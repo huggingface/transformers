@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for ."""
+
 import os
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
@@ -28,16 +29,6 @@ logger = logging.get_logger(__name__)
 SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/sentencepiece.bpe.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/xglm-564M": 2048,
-}
 
 
 class XGLMTokenizer(PreTrainedTokenizer):
@@ -83,11 +74,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (`str`, *optional*, defaults to `"<mask>"`):
-            The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -110,8 +96,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -124,7 +108,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
@@ -132,21 +116,10 @@ class XGLMTokenizer(PreTrainedTokenizer):
         self.num_madeup_words = 7
         madeup_words = [f"<madeupword{i}>" for i in range(self.num_madeup_words)]
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
+        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
         kwargs["additional_special_tokens"] += [
             word for word in madeup_words if word not in kwargs["additional_special_tokens"]
         ]
-
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
@@ -169,6 +142,17 @@ class XGLMTokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids.update(madeup_words)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -311,3 +295,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["XGLMTokenizer"]

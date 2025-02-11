@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Training and inference using the library models for sequence classification on GLUE (Bert, Albert) with PABEE."""
-
+"""Training and inference using the library models for sequence classification on GLUE (Bert, Albert) with PABEE."""
 
 import argparse
 import glob
@@ -25,14 +24,14 @@ import random
 
 import numpy as np
 import torch
+from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
+from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 import transformers
-from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
-from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from transformers import (
     WEIGHTS_NAME,
     AdamW,
@@ -148,7 +147,7 @@ def train(args, train_dataset, model, tokenizer):
     steps_trained_in_current_epoch = 0
     # Check if continuing training from a checkpoint
     if os.path.exists(args.model_name_or_path):
-        # set global_step to gobal_step of last saved checkpoint from model path
+        # set global_step to global_step of last saved checkpoint from model path
         global_step = int(args.model_name_or_path.split("-")[-1].split("/")[0])
         epochs_trained = global_step // (len(train_dataloader) // args.gradient_accumulation_steps)
         steps_trained_in_current_epoch = global_step % (len(train_dataloader) // args.gradient_accumulation_steps)
@@ -169,11 +168,10 @@ def train(args, train_dataset, model, tokenizer):
         desc="Epoch",
         disable=args.local_rank not in [-1, 0],
     )
-    set_seed(args)  # Added here for reproductibility
+    set_seed(args)  # Added here for reproducibility
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
-
             # Skip past any already trained steps if resuming training
             if steps_trained_in_current_epoch > 0:
                 steps_trained_in_current_epoch -= 1
@@ -263,7 +261,6 @@ def train(args, train_dataset, model, tokenizer):
 
 
 def evaluate(args, model, tokenizer, prefix="", patience=0):
-
     if args.model_type == "albert":
         model.albert.set_regression_threshold(args.regression_threshold)
         model.albert.set_patience(patience)
@@ -577,7 +574,7 @@ def main():
         type=str,
         default="O1",
         help=(
-            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. "
             "See details at https://nvidia.github.io/apex/amp.html"
         ),
     )
@@ -616,7 +613,7 @@ def main():
     if args.local_rank == -1 or args.no_cuda:
         device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
         args.n_gpu = torch.cuda.device_count()
-    else:  # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+    else:  # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
         torch.cuda.set_device(args.local_rank)
         device = torch.device("cuda", args.local_rank)
         torch.distributed.init_process_group(backend="nccl")
@@ -729,14 +726,13 @@ def main():
         tokenizer = tokenizer_class.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
         checkpoints = [args.output_dir]
         if args.eval_all_checkpoints:
-            checkpoints = list(
+            checkpoints = [
                 os.path.dirname(c) for c in sorted(glob.glob(args.output_dir + "/**/" + WEIGHTS_NAME, recursive=True))
-            )
+            ]
 
         logger.info("Evaluate the following checkpoints: %s", checkpoints)
 
         for checkpoint in checkpoints:
-
             global_step = checkpoint.split("-")[-1] if len(checkpoints) > 1 else ""
             prefix = checkpoint.split("/")[-1] if checkpoint.find("checkpoint") != -1 else ""
 
@@ -746,7 +742,7 @@ def main():
             print(f"Evaluation for checkpoint {prefix}")
             for patience in patience_list:
                 result = evaluate(args, model, tokenizer, prefix=prefix, patience=patience)
-                result = dict((k + "_{}".format(global_step), v) for k, v in result.items())
+                result = {k + "_{}".format(global_step): v for k, v in result.items()}
                 results.update(result)
     return results
 

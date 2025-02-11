@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GLPN model configuration"""
+"""GLPN model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "vinvino02/glpn-kitti": "https://huggingface.co/vinvino02/glpn-kitti/resolve/main/config.json",
-    # See all GLPN models at https://huggingface.co/models?filter=glpn
-}
 
 
 class GLPNConfig(PretrainedConfig):
@@ -51,7 +46,7 @@ class GLPNConfig(PretrainedConfig):
             Patch size before each encoder block.
         strides (`List[int]`, *optional*, defaults to `[4, 2, 2, 2]`):
             Stride before each encoder block.
-        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 4, 8]`):
+        num_attention_heads (`List[int]`, *optional*, defaults to `[1, 2, 5, 8]`):
             Number of attention heads for each attention layer in each block of the Transformer encoder.
         mlp_ratios (`List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
             Ratio of the size of the hidden layer compared to the size of the input layer of the Mix FFNs in the
@@ -67,9 +62,9 @@ class GLPNConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         drop_path_rate (`float`, *optional*, defaults to 0.1):
             The dropout probability for stochastic depth, used in the blocks of the Transformer encoder.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        decoder_hidden_size (`int`, *optional*, defaults to 32):
+        decoder_hidden_size (`int`, *optional*, defaults to 64):
             The dimension of the decoder.
         max_depth (`int`, *optional*, defaults to 10):
             The maximum depth of the decoder.
@@ -90,6 +85,7 @@ class GLPNConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "glpn"
 
     def __init__(
@@ -109,11 +105,10 @@ class GLPNConfig(PretrainedConfig):
         initializer_range=0.02,
         drop_path_rate=0.1,
         layer_norm_eps=1e-6,
-        is_encoder_decoder=False,
         decoder_hidden_size=64,
         max_depth=10,
         head_in_index=-1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -135,3 +130,6 @@ class GLPNConfig(PretrainedConfig):
         self.decoder_hidden_size = decoder_hidden_size
         self.max_depth = max_depth
         self.head_in_index = head_in_index
+
+
+__all__ = ["GLPNConfig"]

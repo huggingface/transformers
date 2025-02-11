@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Adapted from PyTorch Vision (https://github.com/pytorch/vision/blob/master/references/detection/group_by_aspect_ratio.py)
-"""
+"""Adapted from PyTorch Vision (https://github.com/pytorch/vision/blob/master/references/detection/group_by_aspect_ratio.py)"""
+
 import bisect
 import copy
 from collections import defaultdict
@@ -27,7 +27,7 @@ from utils import logger
 def _quantize(x, bins):
     bins = copy.deepcopy(bins)
     bins = sorted(bins)
-    quantized = list(map(lambda y: bisect.bisect_right(bins, y), x))
+    quantized = [bisect.bisect_right(bins, y) for y in x]
     return quantized
 
 
@@ -59,7 +59,7 @@ class GroupedBatchSampler(BatchSampler):
 
     def __init__(self, sampler, group_ids, batch_size):
         if not isinstance(sampler, Sampler):
-            raise ValueError(
+            raise TypeError(
                 "sampler should be an instance of torch.utils.data.Sampler, but got sampler={}".format(sampler)
             )
         self.sampler = sampler

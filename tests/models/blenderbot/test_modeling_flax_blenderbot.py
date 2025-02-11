@@ -20,7 +20,7 @@ import timeout_decorator  # noqa
 from transformers import BlenderbotConfig, is_flax_available
 from transformers.testing_utils import jax_device, require_flax, slow
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -34,6 +34,7 @@ if is_flax_available():
 
     import jax
     import jax.numpy as jnp
+
     from transformers import BlenderbotTokenizer
     from transformers.models.blenderbot.modeling_flax_blenderbot import (
         FlaxBlenderbotForConditionalGeneration,
@@ -86,7 +87,7 @@ class FlaxBlenderbotModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=32,
+        max_position_embeddings=50,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -401,8 +402,8 @@ class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGener
     @unittest.skipUnless(jax_device != "cpu", "3B test too slow on CPU.")
     @slow
     def test_generation_from_short_input_same_as_parlai_3B(self):
-        FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
-        TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
+        FASTER_GEN_KWARGS = {"num_beams": 1, "early_stopping": True, "min_length": 15, "max_length": 25}
+        TOK_DECODE_KW = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
 
         model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-3B", from_pt=True)
         tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")

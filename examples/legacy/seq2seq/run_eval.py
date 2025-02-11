@@ -76,7 +76,7 @@ def generate_summaries_or_translations(
     fout.close()
     runtime = int(time.time() - start_time)  # seconds
     n_obs = len(examples)
-    return dict(n_obs=n_obs, runtime=runtime, seconds_per_sample=round(runtime / n_obs, 4))
+    return {"n_obs": n_obs, "runtime": runtime, "seconds_per_sample": round(runtime / n_obs, 4)}
 
 
 def datetime_now():
@@ -100,14 +100,14 @@ def run_generate(verbose=True):
     """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,t5-base, etc.")
+    parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,google-t5/t5-base, etc.")
     parser.add_argument("input_path", type=str, help="like cnn_dm/test.source")
     parser.add_argument("save_path", type=str, help="where to save summaries")
     parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
     parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
     parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument(
-        "--prefix", type=str, required=False, default=None, help="will be added to the begininng of src examples"
+        "--prefix", type=str, required=False, default=None, help="will be added to the beginning of src examples"
     )
     parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for DPR."""
 
-
 import collections
 from typing import List, Optional, Union
 
@@ -28,88 +27,6 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt"
-        ),
-        "facebook/dpr-ctx_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json"
-        ),
-        "facebook/dpr-ctx_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
-QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt"
-        ),
-        "facebook/dpr-question_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json"
-        ),
-        "facebook/dpr-question_encoder-multiset-base": (
-            "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
-READER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt"
-        ),
-        "facebook/dpr-reader-multiset-base": (
-            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt"
-        ),
-    },
-    "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": (
-            "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json"
-        ),
-        "facebook/dpr-reader-multiset-base": (
-            "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-ctx_encoder-single-nq-base": 512,
-    "facebook/dpr-ctx_encoder-multiset-base": 512,
-}
-QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-question_encoder-single-nq-base": 512,
-    "facebook/dpr-question_encoder-multiset-base": 512,
-}
-READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-reader-single-nq-base": 512,
-    "facebook/dpr-reader-multiset-base": 512,
-}
-
-
-CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-ctx_encoder-multiset-base": {"do_lower_case": True},
-}
-QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-question_encoder-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-question_encoder-multiset-base": {"do_lower_case": True},
-}
-READER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-reader-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-reader-multiset-base": {"do_lower_case": True},
-}
-
 
 class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     r"""
@@ -122,9 +39,6 @@ class DPRContextEncoderTokenizerFast(BertTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = DPRContextEncoderTokenizer
 
 
@@ -139,9 +53,6 @@ class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = DPRQuestionEncoderTokenizer
 
 
@@ -231,7 +142,7 @@ class CustomDPRReaderTokenizerMixin:
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
             return super().__call__(
@@ -316,6 +227,7 @@ class CustomDPRReaderTokenizerMixin:
         >>> outputs = model(**encoded_inputs)
         >>> predicted_spans = tokenizer.decode_best_spans(encoded_inputs, outputs)
         >>> print(predicted_spans[0].text)  # best span
+        a song
         ```"""
         input_ids = reader_input["input_ids"]
         start_logits, end_logits, relevance_logits = reader_output[:3]
@@ -376,11 +288,9 @@ class CustomDPRReaderTokenizerMixin:
             length = end_index - start_index + 1
             assert length <= max_answer_length, f"Span is too long: {length} > {max_answer_length}"
             if any(
-                [
-                    start_index <= prev_start_index <= prev_end_index <= end_index
-                    or prev_start_index <= start_index <= end_index <= prev_end_index
-                    for (prev_start_index, prev_end_index) in chosen_span_intervals
-                ]
+                start_index <= prev_start_index <= prev_end_index <= end_index
+                or prev_start_index <= start_index <= end_index <= prev_end_index
+                for (prev_start_index, prev_end_index) in chosen_span_intervals
             ):
                 continue
             chosen_span_intervals.append((start_index, end_index))
@@ -404,8 +314,8 @@ class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = DPRReaderTokenizer
+
+
+__all__ = ["DPRContextEncoderTokenizerFast", "DPRQuestionEncoderTokenizerFast", "DPRReaderTokenizerFast"]

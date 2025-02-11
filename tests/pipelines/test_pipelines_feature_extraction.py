@@ -18,18 +18,27 @@ import numpy as np
 
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
+    IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
     TF_MODEL_MAPPING,
     FeatureExtractionPipeline,
     LxmertConfig,
+    is_tf_available,
+    is_torch_available,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_torch
-
-from .test_pipelines_common import PipelineTestCaseMeta
+from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
 
 
-class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+if is_torch_available():
+    import torch
+
+if is_tf_available():
+    import tensorflow as tf
+
+
+@is_pipeline_test
+class FeatureExtractionPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
     tf_model_mapping = TF_MODEL_MAPPING
 
@@ -133,6 +142,22 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 tokenize_kwargs=tokenize_kwargs,
             )
 
+    @require_torch
+    def test_return_tensors_pt(self):
+        feature_extractor = pipeline(
+            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+        outputs = feature_extractor("This is a test", return_tensors=True)
+        self.assertTrue(torch.is_tensor(outputs))
+
+    @require_tf
+    def test_return_tensors_tf(self):
+        feature_extractor = pipeline(
+            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+        outputs = feature_extractor("This is a test", return_tensors=True)
+        self.assertTrue(tf.is_tensor(outputs))
+
     def get_shape(self, input_, shape=None):
         if shape is None:
             shape = []
@@ -146,16 +171,28 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         elif isinstance(input_, float):
             return 0
         else:
-            raise ValueError("We expect lists of floats, nothing else")
+            raise TypeError("We expect lists of floats, nothing else")
         return shape
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
         if tokenizer is None:
-            self.skipTest("No tokenizer")
-            return
-        elif type(model.config) in FEATURE_EXTRACTOR_MAPPING or isinstance(model.config, LxmertConfig):
-            self.skipTest("This is a bimodal model, we need to find a more consistent way to switch on those models.")
-            return
+            self.skipTest(reason="No tokenizer")
+        elif (
+            type(model.config) in FEATURE_EXTRACTOR_MAPPING
+            or isinstance(model.config, LxmertConfig)
+            or type(model.config) in IMAGE_PROCESSOR_MAPPING
+        ):
+            self.skipTest(
+                reason="This is a bimodal model, we need to find a more consistent way to switch on those models."
+            )
         elif model.config.is_encoder_decoder:
             self.skipTest(
                 """encoder_decoder models are trickier for this pipeline.
@@ -164,12 +201,15 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 For now ignore those.
                 """
             )
-
-            return
-        feature_extractor = FeatureExtractionPipeline(
-            model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
+        feature_extractor_pipeline = FeatureExtractionPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
         )
-        return feature_extractor, ["This is a test", "This is another test"]
+        return feature_extractor_pipeline, ["This is a test", "This is another test"]
 
     def run_pipeline_test(self, feature_extractor, examples):
         outputs = feature_extractor("This is a test")

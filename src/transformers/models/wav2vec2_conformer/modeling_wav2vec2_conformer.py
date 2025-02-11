@@ -12,9 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Wav2Vec2-Conformer model."""
+"""PyTorch Wav2Vec2-Conformer model."""
 
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -25,7 +26,8 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -35,12 +37,12 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import torch_int_div
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_peft_available,
     logging,
     replace_return_docstrings,
 )
@@ -54,7 +56,6 @@ _HIDDEN_STATES_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "Wav2Vec2ConformerConfig"
-_PROCESSOR_FOR_DOC = "Wav2Vec2Processor"
 
 # Base docstring
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-conformer-rope-large-960h-ft"
@@ -63,26 +64,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 1024]
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
 _CTC_EXPECTED_LOSS = 64.21
-
-# Audio class docstring
-_FEAT_EXTRACTOR_FOR_DOC = "Wav2Vec2FeatureExtractor"
-_SEQ_CLASS_CHECKPOINT = "hf-internal-testing/wav2vec2-conformer-seq-class"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.68
-
-# Frame class docstring
-_FRAME_CLASS_CHECKPOINT = "hf-internal-testing/wav2vec2-conformer-frame-class"
-_FRAME_EXPECTED_OUTPUT = [1, 0]
-
-# Speaker Verification docstring
-_XVECTOR_CHECKPOINT = "hf-internal-testing/wav2vec2-conformer-xvector"
-_XVECTOR_EXPECTED_OUTPUT = 1.0
-
-
-WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-conformer-rel-pos-large",
-    # See all Wav2Vec2Conformer models at https://huggingface.co/models?filter=wav2vec2-conformer
-]
 
 
 @dataclass
@@ -190,7 +171,7 @@ def _compute_mask_indices(
     )
 
     # SpecAugment mask to fill
-    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=bool)
     spec_aug_mask_idxs = []
 
     max_num_masked_span = compute_num_masked_span(sequence_length)
@@ -264,7 +245,7 @@ def _sample_negative_indices(
     sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
 
     mask_time_indices = (
-        mask_time_indices.astype(np.bool) if mask_time_indices is not None else np.ones(features_shape, dtype=np.bool)
+        mask_time_indices.astype(bool) if mask_time_indices is not None else np.ones(features_shape, dtype=bool)
     )
 
     for batch_idx in range(batch_size):
@@ -372,15 +353,25 @@ class Wav2Vec2ConformerPositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
-            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
+            if hasattr(self.conv, "parametrizations"):
+                weight_g = self.conv.parametrizations.weight.original0
+                weight_v = self.conv.parametrizations.weight.original1
+            else:
+                weight_g = self.conv.weight_g
+                weight_v = self.conv.weight_v
+            deepspeed.zero.register_external_parameter(self, weight_v)
+            deepspeed.zero.register_external_parameter(self, weight_g)
         else:
-            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = Wav2Vec2ConformerSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -406,7 +397,7 @@ class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
         dim = config.hidden_size // config.num_attention_heads
         base = config.rotary_embedding_base
 
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         self.register_buffer("inv_freq", inv_freq)
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
@@ -418,13 +409,15 @@ class Wav2Vec2ConformerRotaryPositionalEmbedding(nn.Module):
             return self.cached_rotary_positional_embedding
 
         self.cached_sequence_length = sequence_length
+        # Embeddings are computed in the dtype of the inv_freq constant
         time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
         freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
         embeddings = torch.cat((freqs, freqs), dim=-1)
 
         cos_embeddings = embeddings.cos()[:, None, None, :]
         sin_embeddings = embeddings.sin()[:, None, None, :]
-        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings])
+        # Computed embeddings are cast to the dtype of the hidden state inputs
+        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings]).type_as(hidden_states)
         return self.cached_rotary_positional_embedding
 
 
@@ -452,9 +445,9 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
         # are to the left (i>j) and negative relative positions otherwise (i<j).
         pe_positive = torch.zeros(x.size(1), self.d_model)
         pe_negative = torch.zeros(x.size(1), self.d_model)
-        position = torch.arange(0, x.size(1), dtype=torch.float32).unsqueeze(1)
+        position = torch.arange(0, x.size(1), dtype=torch.int64).float().unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, self.d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / self.d_model)
+            torch.arange(0, self.d_model, 2, dtype=torch.int64).float() * -(math.log(10000.0) / self.d_model)
         )
         pe_positive[:, 0::2] = torch.sin(position * div_term)
         pe_positive[:, 1::2] = torch.cos(position * div_term)
@@ -528,15 +521,8 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
+                hidden_states = self._gradient_checkpointing_func(
+                    conv_layer.__call__,
                     hidden_states,
                 )
             else:
@@ -594,7 +580,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         if (config.conv_depthwise_kernel_size - 1) % 2 == 1:
             raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
         self.layer_norm = nn.LayerNorm(config.hidden_size)
-        self.pointwise_conv1 = torch.nn.Conv1d(
+        self.pointwise_conv1 = nn.Conv1d(
             config.hidden_size,
             2 * config.hidden_size,
             kernel_size=1,
@@ -602,8 +588,8 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.glu = torch.nn.GLU(dim=1)
-        self.depthwise_conv = torch.nn.Conv1d(
+        self.glu = nn.GLU(dim=1)
+        self.depthwise_conv = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             config.conv_depthwise_kernel_size,
@@ -612,9 +598,9 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             groups=config.hidden_size,
             bias=False,
         )
-        self.batch_norm = torch.nn.BatchNorm1d(config.hidden_size)
+        self.batch_norm = nn.BatchNorm1d(config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.pointwise_conv2 = torch.nn.Conv1d(
+        self.pointwise_conv2 = nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
             kernel_size=1,
@@ -622,7 +608,7 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             padding=0,
             bias=False,
         )
-        self.dropout = torch.nn.Dropout(config.conformer_conv_dropout)
+        self.dropout = nn.Dropout(config.conformer_conv_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.layer_norm(hidden_states)
@@ -808,7 +794,7 @@ class Wav2Vec2ConformerEncoderLayer(nn.Module):
 
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
-        self.self_attn_dropout = torch.nn.Dropout(dropout)
+        self.self_attn_dropout = nn.Dropout(dropout)
         self.self_attn = Wav2Vec2ConformerSelfAttention(config)
 
         # Conformer Convolution
@@ -892,7 +878,8 @@ class Wav2Vec2ConformerEncoder(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens output 0
-            hidden_states[~attention_mask] = 0.0
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_attention_mask] = 0.0
 
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
@@ -908,31 +895,25 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         else:
             relative_position_embeddings = None
 
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
-                # under deepspeed zero3 all gpus must run in sync
+            if not skip_the_layer or synced_gpus:
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
-                    # create gradient checkpointing function
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                    layer_outputs = self._gradient_checkpointing_func(
+                        layer.__call__,
                         hidden_states,
                         attention_mask,
                         relative_position_embeddings,
+                        output_attentions,
                     )
                 else:
                     layer_outputs = layer(
@@ -1099,13 +1080,18 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
     config_class = Wav2Vec2ConformerConfig
     base_model_prefix = "wav2vec2_conformer"
     main_input_name = "input_values"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
+        # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
+        if isinstance(module, Wav2Vec2ConformerForPreTraining):
+            module.project_hid.reset_parameters()
+            module.project_q.reset_parameters()
+            module.project_hid._is_hf_initialized = True
+            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
-        if isinstance(module, Wav2Vec2ConformerGumbelVectorQuantizer):
+        elif isinstance(module, Wav2Vec2ConformerGumbelVectorQuantizer):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
@@ -1152,7 +1138,7 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch_int_div(input_length - kernel_size, stride) + 1
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1183,10 +1169,6 @@ class Wav2Vec2ConformerPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (Wav2Vec2ConformerEncoder, Wav2Vec2ConformerFeatureEncoder)):
-            module.gradient_checkpointing = value
-
 
 WAV2VEC2_CONFORMER_START_DOCSTRING = r"""
     Wav2Vec2Conformer was proposed in [wav2vec 2.0: A Framework for Self-Supervised Learning of Speech
@@ -1209,10 +1191,10 @@ WAV2VEC2_CONFORMER_START_DOCSTRING = r"""
 WAV2VEC2_CONFORMER_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
-            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
-            soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
-            and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the [`AutoProcessor`] should be used for padding and
+            conversion into a tensor of type `torch.FloatTensor`. See [`Wav2Vec2Processor.__call__`] for details.
         attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in `[0,
             1]`:
@@ -1258,7 +1240,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         self.encoder = Wav2Vec2ConformerEncoder(config)
 
@@ -1324,7 +1306,6 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1397,12 +1378,11 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         self.quantizer = Wav2Vec2ConformerGumbelVectorQuantizer(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
-        # make sure that project_hid & project_q are initialized like normal linear layers
         self.project_hid = nn.Linear(config.hidden_size, config.proj_codevector_dim)
         self.project_q = nn.Linear(config.codevector_dim, config.proj_codevector_dim)
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForPreTraining.set_gumbel_temperature
     def set_gumbel_temperature(self, temperature: int):
@@ -1469,10 +1449,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         ```python
         >>> import torch
         >>> from transformers import AutoFeatureExtractor, Wav2Vec2ConformerForPreTraining
-        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import (
-        ...     _compute_mask_indices,
-        ...     _sample_negative_indices,
-        ... )
+        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import _compute_mask_indices, _sample_negative_indices
         >>> from datasets import load_dataset
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
@@ -1543,6 +1520,8 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         quantized_features, codevector_perplexity = self.quantizer(
             extract_features, mask_time_indices=mask_time_indices
         )
+
+        quantized_features = quantized_features.to(self.project_q.weight.dtype)
         quantized_features = self.project_q(quantized_features)
 
         loss = contrastive_loss = diversity_loss = None
@@ -1612,18 +1591,20 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 )
 class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.__init__ with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
-    def __init__(self, config):
+    def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
+        self.target_lang = target_lang
+
         if config.vocab_size is None:
             raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that does not define the"
-                " vocabulary size of the language model head. Please instantiate the model as follows:"
-                " `Wav2Vec2ConformerForCTC.from_pretrained(..., vocab_size=vocab_size)`. or define `vocab_size` of"
-                " your model's configuration."
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `Wav2Vec2ConformerForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = (
             config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
@@ -1643,7 +1624,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -1667,8 +1647,10 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None and labels.max() >= self.config.vocab_size:
+            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
         outputs = self.wav2vec2_conformer(
             input_values,
@@ -1685,10 +1667,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-
-            if labels.max() >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
-
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
@@ -1738,8 +1716,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Sequence classification does not support the use of Wav2Vec2Conformer adapters"
-                " (config.add_adapter=True)"
+                "Sequence classification does not support the use of Wav2Vec2Conformer adapters (config.add_adapter=True)"
             )
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
@@ -1769,13 +1746,10 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_SEQ_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
     def forward(
@@ -1818,7 +1792,8 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -1853,8 +1828,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
         if hasattr(config, "add_adapter") and config.add_adapter:
             raise ValueError(
-                "Audio frame classification does not support the use of Wav2Vec2Conformer adapters"
-                " (config.add_adapter=True)"
+                "Audio frame classification does not support the use of Wav2Vec2Conformer adapters (config.add_adapter=True)"
             )
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
         num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
@@ -1884,12 +1858,10 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_FRAME_CLASS_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_FRAME_EXPECTED_OUTPUT,
     )
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForAudioFrameClassification.forward with wav2vec2->wav2vec2_conformer
     def forward(
@@ -1982,16 +1954,21 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.unsqueeze(1)
-        hidden_states = nn.functional.unfold(
-            hidden_states,
-            (self.kernel_size, self.in_conv_dim),
-            stride=(1, self.in_conv_dim),
-            dilation=(self.dilation, 1),
-        )
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if is_peft_available():
+            from peft.tuners.lora import LoraLayer
+
+            if isinstance(self.kernel, LoraLayer):
+                warnings.warn(
+                    "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "
+                    "You should exclude TDNNLayer from LoRA's target modules.",
+                )
+
+        # for backward compatibility, we keep nn.Linear but call F.conv1d for speed up
         hidden_states = hidden_states.transpose(1, 2)
-        hidden_states = self.kernel(hidden_states)
+        weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).transpose(1, 2)
+        hidden_states = nn.functional.conv1d(hidden_states, weight, self.kernel.bias, dilation=self.dilation)
+        hidden_states = hidden_states.transpose(1, 2)
 
         hidden_states = self.activation(hidden_states)
         return hidden_states
@@ -2058,12 +2035,10 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_XVECTOR_CHECKPOINT,
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=XVectorOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
-        expected_output=_XVECTOR_EXPECTED_OUTPUT,
     )
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForXVector.forward with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer,WAV_2_VEC_2->WAV2VEC2_CONFORMER
     def forward(
@@ -2140,3 +2115,14 @@ class Wav2Vec2ConformerForXVector(Wav2Vec2ConformerPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Wav2Vec2ConformerForAudioFrameClassification",
+    "Wav2Vec2ConformerForCTC",
+    "Wav2Vec2ConformerForPreTraining",
+    "Wav2Vec2ConformerForSequenceClassification",
+    "Wav2Vec2ConformerForXVector",
+    "Wav2Vec2ConformerModel",
+    "Wav2Vec2ConformerPreTrainedModel",
+]

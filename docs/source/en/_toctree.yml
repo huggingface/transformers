@@ -5,152 +5,281 @@
     title: Quick tour
   - local: installation
     title: Installation
+  - local: add_new_model
+    title: Adding a new model to `transformers`
   title: Get started
 - sections:
   - local: pipeline_tutorial
-    title: Pipelines for inference
+    title: Run inference with pipelines
   - local: autoclass_tutorial
-    title: Load pretrained instances with an AutoClass
+    title: Write portable code with AutoClass
   - local: preprocessing
-    title: Preprocess
+    title: Preprocess data
   - local: training
     title: Fine-tune a pretrained model
+  - local: run_scripts
+    title: Train with a script
   - local: accelerate
-    title: Distributed training with 🤗 Accelerate
+    title: Set up distributed training with 🤗 Accelerate
+  - local: peft
+    title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
-    title: Share a model
+    title: Share your model
+  - local: agents
+    title: Agents 101
+  - local: agents_advanced
+    title: Agents, supercharged - Multi-agents, External tools, and more
+  - local: llm_tutorial
+    title: Generation with LLMs
+  - local: conversations
+    title: Chatting with Transformers
   title: Tutorials
 - sections:
-  - sections:
-    - local: create_a_model
-      title: Create a custom architecture
-    - local: custom_models
-      title: Sharing custom models
-    - local: run_scripts
-      title: Train with a script
-    - local: sagemaker
-      title: Run training on Amazon SageMaker
-    - local: converting_tensorflow_models
-      title: Converting from TensorFlow checkpoints
-    - local: serialization
-      title: Export to ONNX
-    - local: torchscript
-      title: Export to TorchScript
-    - local: troubleshooting
-      title: Troubleshoot
-    title: General usage
-  - sections:
-    - local: fast_tokenizers
-      title: Use tokenizers from 🤗 Tokenizers
-    - local: multilingual
-      title: Inference for multilingual models
-    - sections:
-      - local: tasks/sequence_classification
-        title: Text classification
-      - local: tasks/token_classification
-        title: Token classification
-      - local: tasks/question_answering
-        title: Question answering
-      - local: tasks/language_modeling
-        title: Language modeling
-      - local: tasks/translation
-        title: Translation
-      - local: tasks/summarization
-        title: Summarization
-      - local: tasks/multiple_choice
-        title: Multiple choice
-      title: Task guides
-      isExpanded: false
+  - isExpanded: false
+    sections:
+    - local: tasks/sequence_classification
+      title: Text classification
+    - local: tasks/token_classification
+      title: Token classification
+    - local: tasks/question_answering
+      title: Question answering
+    - local: tasks/language_modeling
+      title: Causal language modeling
+    - local: tasks/masked_language_modeling
+      title: Masked language modeling
+    - local: tasks/translation
+      title: Translation
+    - local: tasks/summarization
+      title: Summarization
+    - local: tasks/multiple_choice
+      title: Multiple choice
     title: Natural Language Processing
-  - sections:
+  - isExpanded: false
+    sections:
     - local: tasks/audio_classification
       title: Audio classification
     - local: tasks/asr
       title: Automatic speech recognition
     title: Audio
-  - sections:
+  - isExpanded: false
+    sections:
     - local: tasks/image_classification
       title: Image classification
     - local: tasks/semantic_segmentation
-      title: Semantic segmentation
+      title: Image segmentation
+    - local: tasks/video_classification
+      title: Video classification
+    - local: tasks/object_detection
+      title: Object detection
+    - local: tasks/zero_shot_object_detection
+      title: Zero-shot object detection
+    - local: tasks/zero_shot_image_classification
+      title: Zero-shot image classification
+    - local: tasks/monocular_depth_estimation
+      title: Depth estimation
+    - local: tasks/image_to_image
+      title: Image-to-Image
+    - local: tasks/image_feature_extraction
+      title: Image Feature Extraction
+    - local: tasks/mask_generation
+      title: Mask Generation
+    - local: tasks/keypoint_detection
+      title: Keypoint Detection
+    - local: tasks/knowledge_distillation_for_image_classification
+      title: Knowledge Distillation for Computer Vision
     title: Computer Vision
-  - sections:
-    - local: performance
-      title: Overview
-    - local: perf_train_gpu_one
-      title: Training on one GPU
-    - local: perf_train_gpu_many
-      title: Training on many GPUs
-    - local: perf_train_cpu
-      title: Training on CPU
-    - local: perf_train_cpu_many
-      title: Training on many CPUs
-    - local: perf_train_tpu
-      title: Training on TPUs
-    - local: perf_train_special
-      title: Training on Specialized Hardware
-    - local: perf_infer_cpu
-      title: Inference on CPU
-    - local: perf_infer_gpu_one
-      title: Inference on one GPU
-    - local: perf_infer_gpu_many
-      title: Inference on many GPUs
-    - local: perf_infer_special
-      title: Inference on Specialized Hardware
-    - local: perf_hardware
-      title: Custom hardware for training
-    - local: big_models
-      title: Instantiating a big model
-    - local: debugging
-      title: Debugging
-    - local: hpo_train
-      title: Hyperparameter Search using Trainer API
-    title: Performance and scalability
-  - sections:
-    - local: contributing
-      title: How to contribute to transformers?
-    - local: add_new_model
-      title: How to add a model to 🤗 Transformers?
-    - local: add_tensorflow_model
-      title: How to convert a 🤗 Transformers model to TensorFlow?
-    - local: add_new_pipeline
-      title: How to add a pipeline to 🤗 Transformers?
-    - local: testing
-      title: Testing
-    - local: pr_checks
-      title: Checks on a Pull Request
-    title: Contribute
+  - isExpanded: false
+    sections:
+    - local: tasks/image_captioning
+      title: Image captioning
+    - local: tasks/document_question_answering
+      title: Document Question Answering
+    - local: tasks/visual_question_answering
+      title: Visual Question Answering
+    - local: tasks/text-to-speech
+      title: Text to speech
+    - local: tasks/image_text_to_text
+      title: Image-text-to-text
+    - local: tasks/video_text_to_text
+      title: Video-text-to-text
+    title: Multimodal
+  - isExpanded: false
+    sections:
+    - local: generation_strategies
+      title: Customize the generation strategy
+    - local: kv_cache
+      title: Best Practices for Generation with Cache
+    title: Generation
+  - isExpanded: false
+    sections:
+    - local: tasks/idefics
+      title: Image tasks with IDEFICS
+    - local: tasks/prompting
+      title: LLM prompting guide
+    title: Prompting
+  title: Task Guides
+- sections:
+  - local: fast_tokenizers
+    title: Use fast tokenizers from 🤗 Tokenizers
+  - local: multilingual
+    title: Run inference with multilingual models
+  - local: create_a_model
+    title: Use model-specific APIs
+  - local: custom_models
+    title: Share a custom model
+  - local: chat_templating
+    title: Chat templates
+  - local: trainer
+    title: Trainer
+  - local: sagemaker
+    title: Run training on Amazon SageMaker
+  - local: serialization
+    title: Export to ONNX
+  - local: tflite
+    title: Export to TFLite
+  - local: torchscript
+    title: Export to TorchScript
   - local: notebooks
-    title: 🤗 Transformers Notebooks
+    title: Notebooks with examples
   - local: community
     title: Community resources
-  - local: benchmarks
-    title: Benchmarks
-  - local: migration
-    title: Migrating from previous packages
-  title: How-to guides
+  - local: troubleshooting
+    title: Troubleshoot
+  - local: gguf
+    title: Interoperability with GGUF files
+  - local: tiktoken
+    title: Interoperability with TikToken files
+  - local: modular_transformers
+    title: Modularity in `transformers`
+  - local: how_to_hack_models
+    title: Model Hacking (overwriting a class to your usage)
+  title: Developer guides
+- sections:
+  - local: quantization/overview
+    title: Getting started
+  - local: quantization/bitsandbytes
+    title: bitsandbytes
+  - local: quantization/gptq
+    title: GPTQ
+  - local: quantization/awq
+    title: AWQ
+  - local: quantization/aqlm
+    title: AQLM
+  - local: quantization/vptq
+    title: VPTQ
+  - local: quantization/quanto
+    title: Quanto
+  - local: quantization/eetq
+    title: EETQ
+  - local: quantization/higgs
+    title: HIGGS
+  - local: quantization/hqq
+    title: HQQ
+  - local: quantization/fbgemm_fp8
+    title: FBGEMM_FP8
+  - local: quantization/optimum
+    title: Optimum
+  - local: quantization/torchao
+    title: TorchAO
+  - local: quantization/bitnet
+    title: BitNet
+  - local: quantization/compressed_tensors
+    title: compressed-tensors
+  - local: quantization/contribute
+    title: Contribute new quantization method
+  title: Quantization Methods
+- sections:
+  - local: performance
+    title: Overview
+  - local: llm_optims
+    title: LLM inference optimization
+  - sections:
+    - local: perf_train_gpu_one
+      title: Methods and tools for efficient training on a single GPU
+    - local: perf_train_gpu_many
+      title: Multiple GPUs and parallelism
+    - local: fsdp
+      title: Fully Sharded Data Parallel
+    - local: deepspeed
+      title: DeepSpeed
+    - local: perf_train_cpu
+      title: Efficient training on CPU
+    - local: perf_train_cpu_many
+      title: Distributed CPU training
+    - local: perf_train_tpu_tf
+      title: Training on TPU with TensorFlow
+    - local: perf_train_special
+      title: PyTorch training on Apple silicon
+    - local: perf_hardware
+      title: Custom hardware for training
+    - local: hpo_train
+      title: Hyperparameter Search using Trainer API
+    title: Efficient training techniques
+  - sections:
+    - local: perf_infer_cpu
+      title: CPU inference
+    - local: perf_infer_gpu_one
+      title: GPU inference
+    - local: perf_infer_gpu_multi
+      title: Multi-GPU inference
+    title: Optimizing inference
+  - local: big_models
+    title: Instantiate a big model
+  - local: debugging
+    title: Debugging
+  - local: tf_xla
+    title: XLA Integration for TensorFlow Models
+  - local: perf_torch_compile
+    title: Optimize inference using `torch.compile()`
+  title: Performance and scalability
+- sections:
+  - local: contributing
+    title: How to contribute to 🤗 Transformers?
+  - local: add_new_model
+    title: How to add a model to 🤗 Transformers?
+  - local: add_new_pipeline
+    title: How to add a pipeline to 🤗 Transformers?
+  - local: testing
+    title: Testing
+  - local: pr_checks
+    title: Checks on a Pull Request
+  title: Contribute
 - sections:
   - local: philosophy
     title: Philosophy
   - local: glossary
     title: Glossary
   - local: task_summary
-    title: Summary of the tasks
+    title: What 🤗 Transformers can do
+  - local: tasks_explained
+    title: How 🤗 Transformers solve tasks
   - local: model_summary
-    title: Summary of the models
+    title: The Transformer model family
   - local: tokenizer_summary
     title: Summary of the tokenizers
+  - local: attention
+    title: Attention mechanisms
   - local: pad_truncation
     title: Padding and truncation
   - local: bertology
     title: BERTology
   - local: perplexity
     title: Perplexity of fixed-length models
+  - local: pipeline_webserver
+    title: Pipelines for webserver inference
+  - local: model_memory_anatomy
+    title: Model training anatomy
+  - local: llm_tutorial_optimization
+    title: Getting the most out of LLMs
   title: Conceptual guides
 - sections:
   - sections:
+    - local: main_classes/agent
+      title: Agents and Tools
     - local: model_doc/auto
       title: Auto Classes
+    - local: main_classes/backbones
+      title: Backbones
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -175,20 +304,28 @@
       title: Pipelines
     - local: main_classes/processors
       title: Processors
+    - local: main_classes/quantization
+      title: Quantization
     - local: main_classes/tokenizer
       title: Tokenizer
     - local: main_classes/trainer
       title: Trainer
     - local: main_classes/deepspeed
-      title: DeepSpeed Integration
+      title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: Feature Extractor
+    - local: main_classes/image_processor
+      title: Image Processor
     title: Main Classes
   - sections:
     - isExpanded: false
       sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/bamba
+        title: Bamba
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
@@ -207,6 +344,8 @@
         title: BigBird
       - local: model_doc/bigbird_pegasus
         title: BigBirdPegasus
+      - local: model_doc/biogpt
+        title: BioGpt
       - local: model_doc/blenderbot
         title: Blenderbot
       - local: model_doc/blenderbot-small
@@ -223,18 +362,30 @@
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
+      - local: model_doc/cohere
+        title: Cohere
+      - local: model_doc/cohere2
+        title: Cohere2
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
         title: CPM
+      - local: model_doc/cpmant
+        title: CPMANT
       - local: model_doc/ctrl
         title: CTRL
+      - local: model_doc/dbrx
+        title: DBRX
       - local: model_doc/deberta
         title: DeBERTa
       - local: model_doc/deberta-v2
         title: DeBERTa-v2
       - local: model_doc/dialogpt
         title: DialoGPT
+      - local: model_doc/diffllama
+        title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
       - local: model_doc/dpr
@@ -245,8 +396,20 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/ernie_m
+        title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/falcon
+        title: Falcon
+      - local: model_doc/falcon3
+        title: Falcon3
+      - local: model_doc/falcon_mamba
+        title: FalconMamba
+      - local: model_doc/flan-t5
+        title: FLAN-T5
+      - local: model_doc/flan-ul2
+        title: FLAN-UL2
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
@@ -255,6 +418,14 @@
         title: FSMT
       - local: model_doc/funnel
         title: Funnel Transformer
+      - local: model_doc/fuyu
+        title: Fuyu
+      - local: model_doc/gemma
+        title: Gemma
+      - local: model_doc/gemma2
+        title: Gemma2
+      - local: model_doc/glm
+        title: GLM
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -267,16 +438,38 @@
         title: GPT-J
       - local: model_doc/gpt2
         title: GPT2
+      - local: model_doc/gpt_bigcode
+        title: GPTBigCode
+      - local: model_doc/gptsan-japanese
+        title: GPTSAN Japanese
+      - local: model_doc/gpt-sw3
+        title: GPTSw3
+      - local: model_doc/granite
+        title: Granite
+      - local: model_doc/granitemoe
+        title: GraniteMoe
+      - local: model_doc/granitevision
+        title: GraniteVision
+      - local: model_doc/helium
+        title: Helium
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
-      - local: model_doc/layoutlm
-        title: LayoutLM
+      - local: model_doc/jamba
+        title: Jamba
+      - local: model_doc/jetmoe
+        title: JetMoe
+      - local: model_doc/jukebox
+        title: Jukebox
       - local: model_doc/led
         title: LED
-      - local: model_doc/lilt
-        title: LiLT
+      - local: model_doc/llama
+        title: LLaMA
+      - local: model_doc/llama2
+        title: Llama2
+      - local: model_doc/llama3
+        title: Llama3
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -285,38 +478,78 @@
         title: LUKE
       - local: model_doc/m2m_100
         title: M2M100
+      - local: model_doc/madlad-400
+        title: MADLAD-400
+      - local: model_doc/mamba
+        title: Mamba
+      - local: model_doc/mamba2
+        title: mamba2
       - local: model_doc/marian
         title: MarianMT
       - local: model_doc/markuplm
         title: MarkupLM
       - local: model_doc/mbart
         title: MBart and MBart-50
+      - local: model_doc/mega
+        title: MEGA
       - local: model_doc/megatron-bert
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/mistral
+        title: Mistral
+      - local: model_doc/mixtral
+        title: Mixtral
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert
         title: MobileBERT
+      - local: model_doc/modernbert
+        title: ModernBert
       - local: model_doc/mpnet
         title: MPNet
+      - local: model_doc/mpt
+        title: MPT
+      - local: model_doc/mra
+        title: MRA
       - local: model_doc/mt5
         title: MT5
       - local: model_doc/mvp
         title: MVP
+      - local: model_doc/myt5
+        title: myt5
+      - local: model_doc/nemotron
+        title: Nemotron
       - local: model_doc/nezha
         title: NEZHA
       - local: model_doc/nllb
         title: NLLB
+      - local: model_doc/nllb-moe
+        title: NLLB-MoE
       - local: model_doc/nystromformer
         title: Nyströmformer
+      - local: model_doc/olmo
+        title: OLMo
+      - local: model_doc/olmo2
+        title: OLMo2
+      - local: model_doc/olmoe
+        title: OLMoE
+      - local: model_doc/open-llama
+        title: Open-Llama
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
         title: Pegasus
       - local: model_doc/pegasus_x
         title: PEGASUS-X
+      - local: model_doc/persimmon
+        title: Persimmon
+      - local: model_doc/phi
+        title: Phi
+      - local: model_doc/phi3
+        title: Phi-3
+      - local: model_doc/phimoe
+        title: PhiMoE
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -325,10 +558,16 @@
         title: ProphetNet
       - local: model_doc/qdqbert
         title: QDQBert
+      - local: model_doc/qwen2
+        title: Qwen2
+      - local: model_doc/qwen2_moe
+        title: Qwen2MoE
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
         title: REALM
+      - local: model_doc/recurrent_gemma
+        title: RecurrentGemma
       - local: model_doc/reformer
         title: Reformer
       - local: model_doc/rembert
@@ -337,24 +576,38 @@
         title: RetriBERT
       - local: model_doc/roberta
         title: RoBERTa
+      - local: model_doc/roberta-prelayernorm
+        title: RoBERTa-PreLayerNorm
+      - local: model_doc/roc_bert
+        title: RoCBert
       - local: model_doc/roformer
         title: RoFormer
+      - local: model_doc/rwkv
+        title: RWKV
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
         title: SqueezeBERT
+      - local: model_doc/stablelm
+        title: StableLm
+      - local: model_doc/starcoder2
+        title: Starcoder2
+      - local: model_doc/switch_transformers
+        title: SwitchTransformers
       - local: model_doc/t5
         title: T5
       - local: model_doc/t5v1.1
         title: T5v1.1
-      - local: model_doc/tapas
-        title: TAPAS
       - local: model_doc/tapex
         title: TAPEX
       - local: model_doc/transfo-xl
         title: Transformer XL
       - local: model_doc/ul2
         title: UL2
+      - local: model_doc/umt5
+        title: UMT5
+      - local: model_doc/xmod
+        title: X-MOD
       - local: model_doc/xglm
         title: XGLM
       - local: model_doc/xlm
@@ -365,72 +618,182 @@
         title: XLM-RoBERTa
       - local: model_doc/xlm-roberta-xl
         title: XLM-RoBERTa-XL
+      - local: model_doc/xlm-v
+        title: XLM-V
       - local: model_doc/xlnet
         title: XLNet
       - local: model_doc/yoso
         title: YOSO
+      - local: model_doc/zamba
+        title: Zamba
+      - local: model_doc/zamba2
+        title: Zamba2
       title: Text models
     - isExpanded: false
       sections:
       - local: model_doc/beit
         title: BEiT
+      - local: model_doc/bit
+        title: BiT
       - local: model_doc/conditional_detr
         title: Conditional DETR
       - local: model_doc/convnext
         title: ConvNeXT
+      - local: model_doc/convnextv2
+        title: ConvNeXTV2
       - local: model_doc/cvt
         title: CvT
+      - local: model_doc/dab-detr
+        title: DAB-DETR
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
+      - local: model_doc/depth_anything
+        title: Depth Anything
+      - local: model_doc/depth_anything_v2
+        title: Depth Anything V2
+      - local: model_doc/depth_pro
+        title: DepthPro
+      - local: model_doc/deta
+        title: DETA
       - local: model_doc/detr
         title: DETR
+      - local: model_doc/dinat
+        title: DiNAT
+      - local: model_doc/dinov2
+        title: DINOV2
+      - local: model_doc/dinov2_with_registers
+        title: DINOv2 with Registers
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
         title: DPT
+      - local: model_doc/efficientformer
+        title: EfficientFormer
+      - local: model_doc/efficientnet
+        title: EfficientNet
+      - local: model_doc/focalnet
+        title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/hiera
+        title: Hiera
+      - local: model_doc/ijepa
+        title: I-JEPA
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
         title: LeViT
+      - local: model_doc/mask2former
+        title: Mask2Former
       - local: model_doc/maskformer
         title: MaskFormer
+      - local: model_doc/mobilenet_v1
+        title: MobileNetV1
+      - local: model_doc/mobilenet_v2
+        title: MobileNetV2
       - local: model_doc/mobilevit
         title: MobileViT
+      - local: model_doc/mobilevitv2
+        title: MobileViTV2
+      - local: model_doc/nat
+        title: NAT
       - local: model_doc/poolformer
         title: PoolFormer
+      - local: model_doc/pvt
+        title: Pyramid Vision Transformer (PVT)
+      - local: model_doc/pvt_v2
+        title: Pyramid Vision Transformer v2 (PVTv2)
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
+      - local: model_doc/rt_detr
+        title: RT-DETR
+      - local: model_doc/rt_detr_v2
+        title: RT-DETRv2
       - local: model_doc/segformer
         title: SegFormer
+      - local: model_doc/seggpt
+        title: SegGpt
+      - local: model_doc/superglue
+        title: SuperGlue
+      - local: model_doc/superpoint
+        title: SuperPoint
+      - local: model_doc/swiftformer
+        title: SwiftFormer
       - local: model_doc/swin
         title: Swin Transformer
       - local: model_doc/swinv2
         title: Swin Transformer V2
+      - local: model_doc/swin2sr
+        title: Swin2SR
+      - local: model_doc/table-transformer
+        title: Table Transformer
+      - local: model_doc/textnet
+        title: TextNet
+      - local: model_doc/timm_wrapper
+        title: Timm Wrapper
+      - local: model_doc/upernet
+        title: UperNet
       - local: model_doc/van
         title: VAN
-      - local: model_doc/videomae
-        title: VideoMAE
       - local: model_doc/vit
         title: Vision Transformer (ViT)
+      - local: model_doc/vit_hybrid
+        title: ViT Hybrid
+      - local: model_doc/vitdet
+        title: ViTDet
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
       - local: model_doc/yolos
         title: YOLOS
+      - local: model_doc/zoedepth
+        title: ZoeDepth
       title: Vision models
     - isExpanded: false
       sections:
+      - local: model_doc/audio-spectrogram-transformer
+        title: Audio Spectrogram Transformer
+      - local: model_doc/bark
+        title: Bark
+      - local: model_doc/clap
+        title: CLAP
+      - local: model_doc/dac
+        title: dac
+      - local: model_doc/encodec
+        title: EnCodec
+      - local: model_doc/fastspeech2_conformer
+        title: FastSpeech2Conformer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
         title: MCTCT
+      - local: model_doc/mimi
+        title: Mimi
+      - local: model_doc/mms
+        title: MMS
+      - local: model_doc/moonshine
+        title: Moonshine
+      - local: model_doc/moshi
+        title: Moshi
+      - local: model_doc/musicgen
+        title: MusicGen
+      - local: model_doc/musicgen_melody
+        title: MusicGen Melody
+      - local: model_doc/pop2piano
+        title: Pop2Piano
+      - local: model_doc/seamless_m4t
+        title: Seamless-M4T
+      - local: model_doc/seamless_m4t_v2
+        title: SeamlessM4T-v2
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -439,12 +802,20 @@
         title: Speech2Text
       - local: model_doc/speech_to_text_2
         title: Speech2Text2
+      - local: model_doc/speecht5
+        title: SpeechT5
       - local: model_doc/unispeech
         title: UniSpeech
       - local: model_doc/unispeech-sat
         title: UniSpeech-SAT
+      - local: model_doc/univnet
+        title: UnivNet
+      - local: model_doc/vits
+        title: VITS
       - local: model_doc/wav2vec2
         title: Wav2Vec2
+      - local: model_doc/wav2vec2-bert
+        title: Wav2Vec2-BERT
       - local: model_doc/wav2vec2-conformer
         title: Wav2Vec2-Conformer
       - local: model_doc/wav2vec2_phoneme
@@ -460,34 +831,143 @@
       title: Audio models
     - isExpanded: false
       sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: model_doc/videomae
+        title: VideoMAE
+      - local: model_doc/vivit
+        title: ViViT
+      title: Video models
+    - isExpanded: false
+      sections:
+      - local: model_doc/align
+        title: ALIGN
+      - local: model_doc/altclip
+        title: AltCLIP
+      - local: model_doc/aria
+        title: Aria
+      - local: model_doc/blip
+        title: BLIP
+      - local: model_doc/blip-2
+        title: BLIP-2
+      - local: model_doc/bridgetower
+        title: BridgeTower
+      - local: model_doc/bros
+        title: BROS
+      - local: model_doc/chameleon
+        title: Chameleon
+      - local: model_doc/chinese_clip
+        title: Chinese-CLIP
       - local: model_doc/clip
         title: CLIP
+      - local: model_doc/clipseg
+        title: CLIPSeg
+      - local: model_doc/clvp
+        title: CLVP
+      - local: model_doc/colpali
+        title: ColPali
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deplot
+        title: DePlot
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/emu3
+        title: Emu3
       - local: model_doc/flava
         title: FLAVA
+      - local: model_doc/git
+        title: GIT
+      - local: model_doc/got_ocr2
+        title: GOT-OCR2
+      - local: model_doc/grounding-dino
+        title: Grounding DINO
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/idefics
+        title: IDEFICS
+      - local: model_doc/idefics2
+        title: Idefics2
+      - local: model_doc/idefics3
+        title: Idefics3
+      - local: model_doc/instructblip
+        title: InstructBLIP
+      - local: model_doc/instructblipvideo
+        title: InstructBlipVideo
+      - local: model_doc/kosmos-2
+        title: KOSMOS-2
+      - local: model_doc/layoutlm
+        title: LayoutLM
       - local: model_doc/layoutlmv2
         title: LayoutLMV2
       - local: model_doc/layoutlmv3
         title: LayoutLMV3
       - local: model_doc/layoutxlm
         title: LayoutXLM
+      - local: model_doc/lilt
+        title: LiLT
+      - local: model_doc/llava
+        title: Llava
+      - local: model_doc/llava_next
+        title: LLaVA-NeXT
+      - local: model_doc/llava_next_video
+        title: LLaVa-NeXT-Video
+      - local: model_doc/llava_onevision
+        title: LLaVA-Onevision
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/matcha
+        title: MatCha
+      - local: model_doc/mgp-str
+        title: MGP-STR
+      - local: model_doc/mllama
+        title: mllama
+      - local: model_doc/nougat
+        title: Nougat
+      - local: model_doc/omdet-turbo
+        title: OmDet-Turbo
+      - local: model_doc/oneformer
+        title: OneFormer
       - local: model_doc/owlvit
         title: OWL-ViT
+      - local: model_doc/owlv2
+        title: OWLv2
+      - local: model_doc/paligemma
+        title: PaliGemma
       - local: model_doc/perceiver
         title: Perceiver
+      - local: model_doc/pix2struct
+        title: Pix2Struct
+      - local: model_doc/pixtral
+        title: Pixtral
+      - local: model_doc/qwen2_5_vl
+        title: Qwen2.5-VL
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
+      - local: model_doc/sam
+        title: Segment Anything
+      - local: model_doc/siglip
+        title: SigLIP
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
+      - local: model_doc/tapas
+        title: TAPAS
       - local: model_doc/trocr
         title: TrOCR
+      - local: model_doc/tvlt
+        title: TVLT
+      - local: model_doc/tvp
+        title: TVP
+      - local: model_doc/udop
+        title: UDOP
+      - local: model_doc/video_llava
+        title: VideoLlava
       - local: model_doc/vilt
         title: ViLT
+      - local: model_doc/vipllava
+        title: VipLlava
       - local: model_doc/vision-encoder-decoder
         title: Vision Encoder Decoder Models
       - local: model_doc/vision-text-dual-encoder
@@ -506,9 +986,22 @@
       title: Reinforcement learning models
     - isExpanded: false
       sections:
+      - local: model_doc/autoformer
+        title: Autoformer
+      - local: model_doc/informer
+        title: Informer
+      - local: model_doc/patchtsmixer
+        title: PatchTSMixer
+      - local: model_doc/patchtst
+        title: PatchTST
       - local: model_doc/time_series_transformer
         title: Time Series Transformer
       title: Time series models
+    - isExpanded: false
+      sections:
+      - local: model_doc/graphormer
+        title: Graphormer
+      title: Graph models
     title: Models
   - sections:
     - local: internal/modeling_utils
@@ -523,7 +1016,11 @@
       title: Utilities for Generation
     - local: internal/image_processing_utils
       title: Utilities for Image Processors
+    - local: internal/audio_utils
+      title: Utilities for Audio processing
     - local: internal/file_utils
       title: General Utilities
+    - local: internal/time_series_utils
+      title: Utilities for Time Series
     title: Internal Helpers
   title: API

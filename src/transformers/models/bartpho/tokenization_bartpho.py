@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for BARTpho-syllable model."""
-
+"""Tokenization classes for BARTpho-syllable model."""
 
 import os
 from shutil import copyfile
@@ -30,17 +29,6 @@ logger = logging.get_logger(__name__)
 SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "monolingual_vocab_file": "dict.txt"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/sentencepiece.bpe.model",
-    },
-    "monolingual_vocab_file": {
-        "vinai/bartpho-syllable": "https://huggingface.co/vinai/bartpho-syllable/resolve/main/dict.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"vinai/bartpho-syllable": 1024}
 
 
 class BartphoTokenizer(PreTrainedTokenizer):
@@ -92,8 +80,6 @@ class BartphoTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
-            Additional special tokens used by the tokenizer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -116,8 +102,6 @@ class BartphoTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -132,24 +116,12 @@ class BartphoTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
 
         self.vocab_file = vocab_file
         self.monolingual_vocab_file = monolingual_vocab_file
@@ -173,6 +145,18 @@ class BartphoTokenizer(PreTrainedTokenizer):
             self.fairseq_tokens_to_ids[str(mask_token)] = len(self.fairseq_tokens_to_ids)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -327,3 +311,6 @@ class BartphoTokenizer(PreTrainedTokenizer):
                         fp.write(f"{str(token)} \n")
 
         return out_vocab_file, out_monolingual_vocab_file
+
+
+__all__ = ["BartphoTokenizer"]

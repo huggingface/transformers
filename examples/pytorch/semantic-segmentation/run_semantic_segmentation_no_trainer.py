@@ -12,168 +12,68 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning any 🤗 Transformers model supported by AutoModelForSemanticSegmentation for semantic segmentation."""
+"""Finetuning any 🤗 Transformers model supported by AutoModelForSemanticSegmentation for semantic segmentation."""
 
 import argparse
 import json
 import math
 import os
-import random
+import warnings
+from functools import partial
 from pathlib import Path
 
+import albumentations as A
 import datasets
+import evaluate
 import numpy as np
 import torch
-from datasets import load_dataset
-from PIL import Image
-from torch.utils.data import DataLoader
-from torchvision import transforms
-from torchvision.transforms import functional
-from tqdm.auto import tqdm
-
-import evaluate
-import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from huggingface_hub import Repository, hf_hub_download
+from albumentations.pytorch import ToTensorV2
+from datasets import load_dataset
+from huggingface_hub import HfApi, hf_hub_download
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
+
+import transformers
 from transformers import (
     AutoConfig,
-    AutoFeatureExtractor,
+    AutoImageProcessor,
     AutoModelForSemanticSegmentation,
     SchedulerType,
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.24.0.dev0")
+check_min_version("4.49.0.dev0")
 
 logger = get_logger(__name__)
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
 
-def pad_if_smaller(img, size, fill=0):
-    min_size = min(img.size)
-    if min_size < size:
-        original_width, original_height = img.size
-        pad_height = size - original_height if original_height < size else 0
-        pad_width = size - original_width if original_width < size else 0
-        img = functional.pad(img, (0, 0, pad_width, pad_height), fill=fill)
-    return img
+def reduce_labels_transform(labels: np.ndarray, **kwargs) -> np.ndarray:
+    """Set `0` label as with value 255 and then reduce all other labels by 1.
 
+    Example:
+        Initial class labels:         0 - background; 1 - road; 2 - car;
+        Transformed class labels:   255 - background; 0 - road; 1 - car;
 
-class Compose:
-    def __init__(self, transforms):
-        self.transforms = transforms
-
-    def __call__(self, image, target):
-        for t in self.transforms:
-            image, target = t(image, target)
-        return image, target
-
-
-class Identity:
-    def __init__(self):
-        pass
-
-    def __call__(self, image, target):
-        return image, target
-
-
-class Resize:
-    def __init__(self, size):
-        self.size = size
-
-    def __call__(self, image, target):
-        image = functional.resize(image, self.size)
-        target = functional.resize(target, self.size, interpolation=transforms.InterpolationMode.NEAREST)
-        return image, target
-
-
-class RandomResize:
-    def __init__(self, min_size, max_size=None):
-        self.min_size = min_size
-        if max_size is None:
-            max_size = min_size
-        self.max_size = max_size
-
-    def __call__(self, image, target):
-        size = random.randint(self.min_size, self.max_size)
-        image = functional.resize(image, size)
-        target = functional.resize(target, size, interpolation=transforms.InterpolationMode.NEAREST)
-        return image, target
-
-
-class RandomCrop:
-    def __init__(self, size):
-        self.size = size
-
-    def __call__(self, image, target):
-        image = pad_if_smaller(image, self.size)
-        target = pad_if_smaller(target, self.size, fill=255)
-        crop_params = transforms.RandomCrop.get_params(image, (self.size, self.size))
-        image = functional.crop(image, *crop_params)
-        target = functional.crop(target, *crop_params)
-        return image, target
-
-
-class RandomHorizontalFlip:
-    def __init__(self, flip_prob):
-        self.flip_prob = flip_prob
-
-    def __call__(self, image, target):
-        if random.random() < self.flip_prob:
-            image = functional.hflip(image)
-            target = functional.hflip(target)
-        return image, target
-
-
-class PILToTensor:
-    def __call__(self, image, target):
-        image = functional.pil_to_tensor(image)
-        target = torch.as_tensor(np.array(target), dtype=torch.int64)
-        return image, target
-
-
-class ConvertImageDtype:
-    def __init__(self, dtype):
-        self.dtype = dtype
-
-    def __call__(self, image, target):
-        image = functional.convert_image_dtype(image, self.dtype)
-        return image, target
-
-
-class Normalize:
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
-
-    def __call__(self, image, target):
-        image = functional.normalize(image, mean=self.mean, std=self.std)
-        return image, target
-
-
-class ReduceLabels:
-    def __call__(self, image, target):
-        if not isinstance(target, np.ndarray):
-            target = np.array(target).astype(np.uint8)
-        # avoid using underflow conversion
-        target[target == 0] = 255
-        target = target - 1
-        target[target == 254] = 255
-
-        target = Image.fromarray(target)
-        return image, target
+    **kwargs are required to use this function with albumentations.
+    """
+    labels[labels == 0] = 255
+    labels = labels - 1
+    labels[labels == 254] = 255
+    return labels
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a image semantic segmentation task")
     parser.add_argument(
         "--model_name_or_path",
         type=str,
@@ -185,6 +85,11 @@ def parse_args():
         type=str,
         help="Name of the dataset on the hub.",
         default="segments/sidewalk-semantic",
+    )
+    parser.add_argument(
+        "--do_reduce_labels",
+        action="store_true",
+        help="Whether or not to reduce all labels by 1 and replace background by 255.",
     )
     parser.add_argument(
         "--reduce_labels",
@@ -274,6 +179,15 @@ def parse_args():
     )
     parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
     parser.add_argument(
+        "--trust_remote_code",
+        action="store_true",
+        help=(
+            "Whether to trust the execution of code from datasets/models defined on the Hub."
+            " This option should only be set to `True` for repositories you trust and in which you have read the"
+            " code, as it will execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--checkpointing_steps",
         type=str,
         default=None,
@@ -297,7 +211,7 @@ def parse_args():
         default="all",
         help=(
             'The integration to report the results and logs to. Supported platforms are `"tensorboard"`,'
-            ' `"wandb"` and `"comet_ml"`. Use `"all"` (default) to report to all integrations.'
+            ' `"wandb"`, `"comet_ml"` and `"clearml"`. Use `"all"` (default) to report to all integrations. '
             "Only applicable when `--with_tracking` is passed."
         ),
     )
@@ -309,6 +223,14 @@ def parse_args():
             raise ValueError(
                 "Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified."
             )
+
+    # Deprecation
+    if args.reduce_labels:
+        args.do_reduce_labels = args.reduce_labels
+        warnings.warn(
+            "The `reduce_labels` argument is deprecated and will be removed in v4.45. Please use `do_reduce_labels` instead.",
+            FutureWarning,
+        )
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -330,7 +252,7 @@ def main():
 
     if args.with_tracking:
         accelerator_log_kwargs["log_with"] = args.report_to
-        accelerator_log_kwargs["logging_dir"] = args.output_dir
+        accelerator_log_kwargs["project_dir"] = args.output_dir
 
     accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
 
@@ -350,11 +272,13 @@ def main():
     # Handle the repository creation
     if accelerator.is_main_process:
         if args.push_to_hub:
-            if args.hub_model_id is None:
-                repo_name = get_full_repo_name(Path(args.output_dir).name, token=args.hub_token)
-            else:
-                repo_name = args.hub_model_id
-            repo = Repository(args.output_dir, clone_from=repo_name)
+            # Retrieve of infer repo_name
+            repo_name = args.hub_model_id
+            if repo_name is None:
+                repo_name = Path(args.output_dir).absolute().name
+            # Create repo and retrieve repo_id
+            api = HfApi()
+            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -369,7 +293,7 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     # TODO support datasets from local folders
-    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir)
+    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
 
     # Rename column names to standardized names (only "image" and "label" need to be present)
     if "pixel_values" in dataset["train"].column_names:
@@ -396,68 +320,68 @@ def main():
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
-    # Load pretrained model and feature extractor
-    config = AutoConfig.from_pretrained(args.model_name_or_path, id2label=id2label, label2id=label2id)
-    feature_extractor = AutoFeatureExtractor.from_pretrained(args.model_name_or_path)
-    model = AutoModelForSemanticSegmentation.from_pretrained(args.model_name_or_path, config=config)
-
-    # Preprocessing the datasets
-    # Define torchvision transforms to be applied to each image + target.
-    # Not that straightforward in torchvision: https://github.com/pytorch/vision/issues/9
-    # Currently based on official torchvision references: https://github.com/pytorch/vision/blob/main/references/segmentation/transforms.py
-    train_transforms = Compose(
-        [
-            ReduceLabels() if args.reduce_labels else Identity(),
-            RandomCrop(size=feature_extractor.size),
-            RandomHorizontalFlip(flip_prob=0.5),
-            PILToTensor(),
-            ConvertImageDtype(torch.float),
-            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
-        ]
+    # Load pretrained model and image processor
+    config = AutoConfig.from_pretrained(
+        args.model_name_or_path, id2label=id2label, label2id=label2id, trust_remote_code=args.trust_remote_code
     )
-    # Define torchvision transform to be applied to each image.
-    # jitter = ColorJitter(brightness=0.25, contrast=0.25, saturation=0.25, hue=0.1)
-    val_transforms = Compose(
-        [
-            ReduceLabels() if args.reduce_labels else Identity(),
-            Resize(size=(feature_extractor.size, feature_extractor.size)),
-            PILToTensor(),
-            ConvertImageDtype(torch.float),
-            Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std),
-        ]
+    image_processor = AutoImageProcessor.from_pretrained(
+        args.model_name_or_path, trust_remote_code=args.trust_remote_code
+    )
+    model = AutoModelForSemanticSegmentation.from_pretrained(
+        args.model_name_or_path,
+        config=config,
+        trust_remote_code=args.trust_remote_code,
+        do_reduce_labels=args.do_reduce_labels,
     )
 
-    def preprocess_train(example_batch):
+    # Define transforms to be applied to each image and target.
+    if "shortest_edge" in image_processor.size:
+        # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
+        height, width = image_processor.size["shortest_edge"], image_processor.size["shortest_edge"]
+    else:
+        height, width = image_processor.size["height"], image_processor.size["width"]
+    train_transforms = A.Compose(
+        [
+            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
+            # pad image with 255, because it is ignored by loss
+            A.PadIfNeeded(min_height=height, min_width=width, border_mode=0, value=255, p=1.0),
+            A.RandomCrop(height=height, width=width, p=1.0),
+            A.HorizontalFlip(p=0.5),
+            A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),
+            ToTensorV2(),
+        ]
+    )
+    val_transforms = A.Compose(
+        [
+            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
+            A.Resize(height=height, width=width, p=1.0),
+            A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),
+            ToTensorV2(),
+        ]
+    )
+
+    def preprocess_batch(example_batch, transforms: A.Compose):
         pixel_values = []
         labels = []
         for image, target in zip(example_batch["image"], example_batch["label"]):
-            image, target = train_transforms(image.convert("RGB"), target)
-            pixel_values.append(image)
-            labels.append(target)
+            transformed = transforms(image=np.array(image.convert("RGB")), mask=np.array(target))
+            pixel_values.append(transformed["image"])
+            labels.append(transformed["mask"])
 
-        encoding = dict()
-        encoding["pixel_values"] = torch.stack(pixel_values)
-        encoding["labels"] = torch.stack(labels)
-
-        return encoding
-
-    def preprocess_val(example_batch):
-        pixel_values = []
-        labels = []
-        for image, target in zip(example_batch["image"], example_batch["label"]):
-            image, target = val_transforms(image.convert("RGB"), target)
-            pixel_values.append(image)
-            labels.append(target)
-
-        encoding = dict()
-        encoding["pixel_values"] = torch.stack(pixel_values)
-        encoding["labels"] = torch.stack(labels)
+        encoding = {}
+        encoding["pixel_values"] = torch.stack(pixel_values).to(torch.float)
+        encoding["labels"] = torch.stack(labels).to(torch.long)
 
         return encoding
+
+    # Preprocess function for dataset should have only one input argument,
+    # so we use partial to pass transforms
+    preprocess_train_batch_fn = partial(preprocess_batch, transforms=train_transforms)
+    preprocess_val_batch_fn = partial(preprocess_batch, transforms=val_transforms)
 
     with accelerator.main_process_first():
-        train_dataset = dataset["train"].with_transform(preprocess_train)
-        eval_dataset = dataset["validation"].with_transform(preprocess_val)
+        train_dataset = dataset["train"].with_transform(preprocess_train_batch_fn)
+        eval_dataset = dataset["validation"].with_transform(preprocess_val_batch_fn)
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=args.per_device_train_batch_size
@@ -489,8 +413,10 @@ def main():
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
-        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+        num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
+        num_training_steps=args.max_train_steps
+        if overrode_max_train_steps
+        else args.max_train_steps * accelerator.num_processes,
     )
 
     # Prepare everything with our `accelerator`.
@@ -506,7 +432,7 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Instantiate metric
-    metric = evaluate.load("mean_iou")
+    metric = evaluate.load("mean_iou", cache_dir=args.cache_dir)
 
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
@@ -534,36 +460,45 @@ def main():
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
-            accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
-            accelerator.load_state(args.resume_from_checkpoint)
+            checkpoint_path = args.resume_from_checkpoint
             path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+            checkpoint_path = path
+            path = os.path.basename(checkpoint_path)
+
+        accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
+        accelerator.load_state(checkpoint_path)
         # Extract `epoch_{i}` or `step_{i}`
         training_difference = os.path.splitext(path)[0]
 
         if "epoch" in training_difference:
             starting_epoch = int(training_difference.replace("epoch_", "")) + 1
             resume_step = None
+            completed_steps = starting_epoch * num_update_steps_per_epoch
         else:
-            resume_step = int(training_difference.replace("step_", ""))
+            # need to multiply `gradient_accumulation_steps` to reflect real steps
+            resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
             starting_epoch = resume_step // len(train_dataloader)
+            completed_steps = resume_step // args.gradient_accumulation_steps
             resume_step -= starting_epoch * len(train_dataloader)
 
+    # update the progress_bar if load from checkpoint
+    progress_bar.update(completed_steps)
+
     for epoch in range(starting_epoch, args.num_train_epochs):
+        model.train()
         if args.with_tracking:
             total_loss = 0
-        model.train()
-        for step, batch in enumerate(train_dataloader):
-            # We need to skip steps until we reach the resumed step
-            if args.resume_from_checkpoint and epoch == starting_epoch:
-                if resume_step is not None and step < resume_step:
-                    completed_steps += 1
-                    continue
-
+        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
+            # We skip the first `n` batches in the dataloader when resuming from a checkpoint
+            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+        else:
+            active_dataloader = train_dataloader
+        for step, batch in enumerate(active_dataloader):
             with accelerator.accumulate(model):
                 outputs = model(**batch)
                 loss = outputs.loss
@@ -581,8 +516,8 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
-                    output_dir = f"step_{completed_steps }"
+                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
+                    output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
@@ -596,11 +531,13 @@ def main():
                             save_function=accelerator.save,
                         )
                         if accelerator.is_main_process:
-                            feature_extractor.save_pretrained(args.output_dir)
-                            repo.push_to_hub(
-                                commit_message=f"Training in progress {completed_steps} steps",
-                                blocking=False,
-                                auto_lfs_prune=True,
+                            image_processor.save_pretrained(args.output_dir)
+                            api.upload_folder(
+                                commit_message=f"Training in progress epoch {epoch}",
+                                folder_path=args.output_dir,
+                                repo_id=repo_id,
+                                repo_type="model",
+                                token=args.hub_token,
                             )
 
             if completed_steps >= args.max_train_steps:
@@ -651,9 +588,13 @@ def main():
                 args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
             )
             if accelerator.is_main_process:
-                feature_extractor.save_pretrained(args.output_dir)
-                repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                image_processor.save_pretrained(args.output_dir)
+                api.upload_folder(
+                    commit_message=f"Training in progress epoch {epoch}",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
                 )
 
         if args.checkpointing_steps == "epoch":
@@ -672,12 +613,21 @@ def main():
             args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
         )
         if accelerator.is_main_process:
-            feature_extractor.save_pretrained(args.output_dir)
+            image_processor.save_pretrained(args.output_dir)
             if args.push_to_hub:
-                repo.push_to_hub(commit_message="End of training", auto_lfs_prune=True)
+                api.upload_folder(
+                    commit_message="End of training",
+                    folder_path=args.output_dir,
+                    repo_id=repo_id,
+                    repo_type="model",
+                    token=args.hub_token,
+                )
 
+            all_results = {
+                f"eval_{k}": v.tolist() if isinstance(v, np.ndarray) else v for k, v in eval_metrics.items()
+            }
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
-                json.dump({"eval_overall_accuracy": eval_metrics["overall_accuracy"]}, f)
+                json.dump(all_results, f, indent=2)
 
 
 if __name__ == "__main__":

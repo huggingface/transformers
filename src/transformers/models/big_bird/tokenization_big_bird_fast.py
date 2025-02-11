@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for Big Bird model."""
-
+"""Tokenization classes for Big Bird model."""
 
 import os
 from shutil import copyfile
@@ -31,35 +30,6 @@ else:
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
-
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model",
-        "google/bigbird-roberta-large": (
-            "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model"
-        ),
-        "google/bigbird-base-trivia-itc": (
-            "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/spiece.model"
-        ),
-    },
-    "tokenizer_file": {
-        "google/bigbird-roberta-base": (
-            "https://huggingface.co/google/bigbird-roberta-base/resolve/main/tokenizer.json"
-        ),
-        "google/bigbird-roberta-large": (
-            "https://huggingface.co/google/bigbird-roberta-large/resolve/main/tokenizer.json"
-        ),
-        "google/bigbird-base-trivia-itc": (
-            "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/tokenizer.json"
-        ),
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/bigbird-roberta-base": 4096,
-    "google/bigbird-roberta-large": 4096,
-    "google/bigbird-base-trivia-itc": 4096,
-}
 
 
 SPIECE_UNDERLINE = "▁"
@@ -107,8 +77,6 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = BigBirdTokenizer
     model_input_names = ["input_ids", "attention_mask"]
     prefix_tokens: List[int] = []
@@ -124,7 +92,7 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         sep_token="[SEP]",
         mask_token="[MASK]",
         cls_token="[CLS]",
-        **kwargs
+        **kwargs,
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -150,7 +118,10 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -202,7 +173,7 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formatted with special tokens for the model."
                 )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return [1 if x in [self.sep_token_id, self.cls_token_id] else 0 for x in token_ids_0]
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
@@ -256,3 +227,6 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+
+__all__ = ["BigBirdTokenizerFast"]

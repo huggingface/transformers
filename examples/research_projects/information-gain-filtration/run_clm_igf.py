@@ -28,11 +28,9 @@ Last, a plot is generated to compare the performance of IGF to standard fine-tun
 import argparse
 import random
 
+import joblib
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, RandomSampler
-
-import joblib
 from igf.igf import (
     SecondaryLearner,
     collect_objective_set,
@@ -43,6 +41,8 @@ from igf.igf import (
     set_seed,
     train_secondary_learner,
 )
+from torch.utils.data import DataLoader, RandomSampler
+
 from transformers import GPT2LMHeadModel
 
 
@@ -55,7 +55,6 @@ def generate_n_pairs(
     data_file="data/tokenized_stories_train_wikitext103.jbl",
     igf_data_file="igf_context_pairs.jbl",
 ):
-
     """
     Collecting *n* pairs for training the secondary learner
     Args:
@@ -85,7 +84,7 @@ def generate_n_pairs(
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # load pretrained model
-    model = load_gpt2("gpt2").to(device)
+    model = load_gpt2("openai-community/gpt2").to(device)
     print("computing perplexity on objective set")
     orig_perp = compute_perplexity(model, objective_set, context_len).item()
     print("perplexity on objective set:", orig_perp)
@@ -122,7 +121,7 @@ def training_secondary_learner(
     set_seed(42)
 
     # Load pre-trained model
-    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
 
     # Initialize secondary learner to use embedding weights of model
     secondary_learner = SecondaryLearner(model)
@@ -154,7 +153,7 @@ def finetune(
     recopy_model=recopy_gpt2,
     secondary_learner=None,
     eval_interval=10,
-    finetuned_model_name="gpt2_finetuned.pt",
+    finetuned_model_name="openai-community/gpt2_finetuned.pt",
 ):
     """
     fine-tune with IGF if secondary_learner is not None, else standard fine-tuning
@@ -347,7 +346,10 @@ def main():
     )
 
     parser.add_argument(
-        "--batch_size", default=16, type=int, help="batch size of training data of language model(gpt2) "
+        "--batch_size",
+        default=16,
+        type=int,
+        help="batch size of training data of language model(openai-community/gpt2) ",
     )
 
     parser.add_argument(
@@ -355,7 +357,7 @@ def main():
         default=10,
         type=int,
         help=(
-            "decay the selectivity of our secondary learner filter from"
+            "decay the selectivity of our secondary learner filter from "
             "1 standard deviation above average to 1 below average after 10 batches"
         ),
     )
@@ -384,7 +386,9 @@ def main():
         ),
     )
 
-    parser.add_argument("--finetuned_model_name", default="gpt2_finetuned.pt", type=str, help="finetuned_model_name")
+    parser.add_argument(
+        "--finetuned_model_name", default="openai-community/gpt2_finetuned.pt", type=str, help="finetuned_model_name"
+    )
 
     parser.add_argument(
         "--recopy_model",
@@ -417,16 +421,16 @@ def main():
         igf_model_path="igf_model.pt",
     )
 
-    # load pretrained gpt2 model
-    model = GPT2LMHeadModel.from_pretrained("gpt2")
+    # load pretrained openai-community/gpt2 model
+    model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
     set_seed(42)
 
-    # Generate train and test data to train and evaluate gpt2 model
+    # Generate train and test data to train and evaluate openai-community/gpt2 model
     train_dataset, test_dataset = generate_datasets(
         context_len=32, file="data/tokenized_stories_train_wikitext103.jbl", number=100, min_len=1026, trim=True
     )
 
-    # fine-tuning of the gpt2 model using igf (Information Gain Filtration)
+    # fine-tuning of the openai-community/gpt2 model using igf (Information Gain Filtration)
     finetune(
         model,
         train_dataset,
@@ -438,7 +442,7 @@ def main():
         recopy_model=recopy_gpt2,
         secondary_learner=secondary_learner,
         eval_interval=10,
-        finetuned_model_name="gpt2_finetuned.pt",
+        finetuned_model_name="openai-community/gpt2_finetuned.pt",
     )
 
 

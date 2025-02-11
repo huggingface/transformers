@@ -23,13 +23,15 @@ from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
-from ...generation.test_generation_utils import GenerationTesterMixin
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -38,8 +40,6 @@ if is_torch_available():
         LongT5ForConditionalGeneration,
         LongT5Model,
     )
-    from transformers.models.longt5.modeling_longt5 import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_less_than_1_11
 
 
 class LongT5ModelTester:
@@ -58,7 +58,7 @@ class LongT5ModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -71,7 +71,6 @@ class LongT5ModelTester:
         decoder_layers=None,
         large_model_config_path="google/long-t5-local-large",
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -501,10 +500,19 @@ class LongT5ModelTester:
 
 
 @require_torch
-class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
+class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": LongT5Model,
+            "summarization": LongT5ForConditionalGeneration,
+            "text2text-generation": LongT5ForConditionalGeneration,
+            "translation": LongT5ForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = False
     test_pruning = False
     test_torchscript = True
@@ -567,6 +575,41 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             lm_labels,
         )
 
+    # overwrite because T5 doesn't accept position ids as input and expects `decoder_input_ids`
+    def test_custom_4d_attention_mask(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+
+            (
+                input_ids,
+                _,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                _,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(
+                decoder_input_ids=input_ids,
+                input_ids=input_dict["input_ids"][:3],
+            ).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids=input_dict["input_ids"][:1],
+                decoder_input_ids=input_ids_shared_prefix,
+                decoder_attention_mask=mask_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -581,14 +624,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = LongT5Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/long-t5-local-base"
+        model = LongT5Model.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
-    @unittest.skipIf(
-        not is_torch_available() or is_torch_less_than_1_11,
-        "Test failed with torch < 1.11 with an exception in a C++ file.",
-    )
     @slow
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -599,7 +638,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
                 f"{tmpdirname}/longt5_test.onnx",
                 export_params=True,
-                opset_version=13,
+                opset_version=14,
                 input_names=["input_ids", "decoder_input_ids"],
             )
 
@@ -639,7 +678,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -746,14 +785,20 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
-        encoder_expected_shape = (batch_size, 1, config.num_attention_heads, block_len, 3 * block_len)
+        encoder_expected_shape = (batch_size, 2, config.num_attention_heads, block_len, 3 * block_len)
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [layer_attentions.shape for layer_attentions in attentions],
             [encoder_expected_shape] * len(attentions),
         )
+
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 @require_torch
@@ -766,7 +811,7 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -875,13 +920,13 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len + global_seq_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
         global_block_size = getattr(self.model_tester, "global_block_size", None)
-        global_seq_length = seq_length // global_block_size
+        global_seq_length = prompt_length // global_block_size
         encoder_expected_shape = (
             batch_size,
-            1,
+            2,
             config.num_attention_heads,
             block_len,
             3 * block_len + global_seq_length,
@@ -906,7 +951,7 @@ class LongT5EncoderOnlyModelTester:
         # For common tests
         use_attention_mask=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,
@@ -919,7 +964,6 @@ class LongT5EncoderOnlyModelTester:
         scope=None,
         large_model_config_path="google/long-t5-local-large",
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -1033,7 +1077,7 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1095,6 +1139,12 @@ class LongT5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len],
                 )
 
+    @unittest.skip(
+        reason="This architecure has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
 
 class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
     def setUp(self):
@@ -1105,7 +1155,7 @@ class LongT5EncoderOnlyTGlobalModelTest(LongT5EncoderOnlyModelTest):
 
     def test_attention_outputs(self):
         if not self.has_attentions:
-            pass
+            self.skipTest(reason="has_attentions is set to False")
 
         else:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1312,8 +1362,10 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
 
         # check if encoder_outputs match
         expected_output_slice = torch.tensor([0.0629, -0.1294, -0.0089, 0.0772, 0.0663], device=torch_device)
-        self.assertTrue(torch.allclose(output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, atol=1e-4))
+        torch.testing.assert_close(
+            output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, rtol=1e-4, atol=1e-4
+        )
 
         # check if logits match
         expected_output_slice = torch.tensor([5.5231, 6.1058, 3.1766, 8.2391, -5.9453], device=torch_device)
-        self.assertTrue(torch.allclose(output.logits[0, 0, :5], expected_output_slice, atol=1e-4))
+        torch.testing.assert_close(output.logits[0, 0, :5], expected_output_slice, rtol=1e-4, atol=1e-4)

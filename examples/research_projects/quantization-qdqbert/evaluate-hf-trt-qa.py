@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
+"""Finetuning the library models for question-answering on SQuAD (DistilBERT, Bert, XLM, XLNet)."""
+
 import argparse
 import logging
 import os
@@ -21,19 +22,19 @@ import timeit
 
 import datasets
 import numpy as np
-import torch
-from absl import logging as absl_logging
-from datasets import load_dataset, load_metric
-from torch.utils.data import DataLoader
-
 import pycuda.autoinit  # noqa: F401
 import pycuda.driver as cuda
 import tensorrt as trt
-import transformers
+import torch
+from absl import logging as absl_logging
 from accelerate import Accelerator
+from datasets import load_dataset, load_metric
+from torch.utils.data import DataLoader
+from utils_qa import postprocess_qa_predictions
+
+import transformers
 from transformers import AutoTokenizer, EvalPrediction, default_data_collator, set_seed
 from transformers.trainer_pt_utils import nested_concat, nested_truncate
-from utils_qa import postprocess_qa_predictions
 
 
 TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
@@ -153,7 +154,7 @@ if args.tokenizer_name:
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True)
 else:
     raise ValueError(
-        "You are instantiating a new tokenizer from scratch. This is not supported by this script."
+        "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
         "You can do it from another script, save it, and load it from here, using --tokenizer_name."
     )
 
@@ -272,10 +273,10 @@ if args.dataset_name is not None:
 else:
     raise ValueError("Evaluation requires a dataset name")
 # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
-# https://huggingface.co/docs/datasets/loading_datasets.html.
+# https://huggingface.co/docs/datasets/loading_datasets.
 
 # Preprocessing the datasets.
-# Preprocessing is slighlty different for training and evaluation.
+# Preprocessing is slightly different for training and evaluation.
 
 column_names = raw_datasets["validation"].column_names
 
@@ -288,7 +289,7 @@ pad_on_right = tokenizer.padding_side == "right"
 
 if args.max_seq_length > tokenizer.model_max_length:
     logger.warning(
-        f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the"
+        f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the "
         f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
     )
 
@@ -395,7 +396,6 @@ logger.info("Loading ONNX model %s for evaluation", args.onnx_model_path)
 with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.deserialize_cuda_engine(
     f.read()
 ) as engine, engine.create_execution_context() as context:
-
     # setup for TRT inferrence
     for i in range(len(input_names)):
         context.set_binding_shape(i, INPUT_SHAPE)
@@ -427,7 +427,6 @@ with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.d
 
     all_preds = None
     for step, batch in enumerate(eval_dataloader):
-
         outputs, infer_time = model_infer(batch, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream)
         total_time += infer_time
         niter += 1

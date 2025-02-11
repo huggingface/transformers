@@ -12,18 +12,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViT model. """
+"""Testing suite for the PyTorch ViT model."""
 
-
-import inspect
 import unittest
 
 from transformers import ViTConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_accelerator,
+    require_torch_fp16,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -31,13 +38,12 @@ if is_torch_available():
     from torch import nn
 
     from transformers import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class ViTModelTester:
@@ -51,7 +57,7 @@ class ViTModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -61,6 +67,8 @@ class ViTModelTester:
         initializer_range=0.02,
         scope=None,
         encoder_stride=2,
+        mask_ratio=0.5,
+        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -80,10 +88,14 @@ class ViTModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.encoder_stride = encoder_stride
+        self.attn_implementation = attn_implementation
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
+        self.mask_ratio = mask_ratio
+        self.num_masks = int(mask_ratio * self.seq_length)
+        self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -111,6 +123,7 @@ class ViTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             encoder_stride=self.encoder_stride,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -126,7 +139,7 @@ class ViTModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -137,7 +150,7 @@ class ViTModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -169,7 +182,7 @@ class ViTModelTester:
 
 
 @require_torch
-class ViTModelTest(ModelTesterMixin, unittest.TestCase):
+class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -184,15 +197,28 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {"image-feature-extraction": ViTModel, "image-classification": ViTForImageClassification}
+        if is_torch_available()
+        else {}
+    )
     fx_compatible = True
 
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ViTModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
+
+    @unittest.skip(
+        "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
+        "If `nvidia-xxx-cu118` are also installed, no failure (even with `torch==2.3+cu121`)."
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        super().test_multi_gpu_data_parallel_forward()
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -201,7 +227,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -209,18 +235,6 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -236,9 +250,9 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/vit-base-patch16-224"
+        model = ViTModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -251,16 +265,16 @@ def prepare_img():
 @require_vision
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -272,7 +286,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -282,9 +296,9 @@ class ViTModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = ViTModel.from_pretrained("facebook/dino-vits8").to(torch_device)
 
-        feature_extractor = ViTFeatureExtractor.from_pretrained("facebook/dino-vits8", size=480)
+        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-vits8", size=480)
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt")
+        inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # forward pass
@@ -299,4 +313,23 @@ class ViTModelIntegrationTest(unittest.TestCase):
             [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    @require_accelerate
+    @require_torch_accelerator
+    @require_torch_fp16
+    def test_inference_fp16(self):
+        r"""
+        A small test to make sure that inference work in half precision without any problem.
+        """
+        model = ViTModel.from_pretrained("facebook/dino-vits8", torch_dtype=torch.float16, device_map="auto")
+        image_processor = self.default_image_processor
+
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt")
+        pixel_values = inputs.pixel_values.to(torch_device)
+
+        # forward pass to make sure inference works in fp16
+        with torch.no_grad():
+            _ = model(pixel_values)

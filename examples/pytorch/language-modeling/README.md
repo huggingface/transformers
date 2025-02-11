@@ -36,7 +36,7 @@ the tokenization). The loss here is that of causal language modeling.
 
 ```bash
 python run_clm.py \
-    --model_name_or_path gpt2 \
+    --model_name_or_path openai-community/gpt2 \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
@@ -53,7 +53,7 @@ To run on your own training and validation files, use the following command:
 
 ```bash
 python run_clm.py \
-    --model_name_or_path gpt2 \
+    --model_name_or_path openai-community/gpt2 \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
     --per_device_train_batch_size 8 \
@@ -69,9 +69,60 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 python run_clm_no_trainer.py \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
-    --model_name_or_path gpt2 \
+    --model_name_or_path openai-community/gpt2 \
     --output_dir /tmp/test-clm
 ```
+
+### GPT-2/GPT and causal language modeling with fill-in-the middle objective
+
+The following example fine-tunes GPT-2 on WikiText-2 but using the Fill-in-middle training objective. FIM objective was proposed in [Efficient Training of Language Models to Fill in the Middle](https://arxiv.org/abs/2207.14255). They showed that autoregressive language models can learn to infill text after applying a straightforward transformation to the dataset, which simply moves a span of text from the middle of a document to its end.
+
+We're using the raw WikiText-2 (no tokens were replaced before the tokenization). The loss here is that of causal language modeling.
+
+```bash
+python run_fim.py \
+    --model_name_or_path gpt2 \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --fim_rate 0.5 \
+    --fim_spm_rate 0.2 \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-clm
+```
+
+To run on your own training and validation files, use the following command:
+
+```bash
+python run_fim.py \
+    --model_name_or_path gpt2 \
+    --train_file path_to_train_file \
+    --validation_file path_to_validation_file \
+    --per_device_train_batch_size 8 \
+    --per_device_eval_batch_size 8 \
+    --fim_rate 0.5 \
+    --fim_spm_rate 0.2 \
+    --do_train \
+    --do_eval \
+    --output_dir /tmp/test-clm
+```
+
+This uses the built in HuggingFace `Trainer` for training. If you want to use a custom training loop, you can utilize or adapt the `run_fim_no_trainer.py` script. Take a look at the script for a list of supported arguments. An example is shown below:
+
+```bash
+python run_fim_no_trainer.py \
+    --model_name_or_path gpt2 \
+    --dataset_name wikitext \
+    --dataset_config_name wikitext-2-raw-v1 \
+    --model_name_or_path gpt2 \
+    --fim_rate 0.5 \
+    --fim_spm_rate 0.2 \
+    --output_dir /tmp/test-clm
+```
+
+**Note**: Passing in FIM rate as `0.5` means that FIM transformations will be applied to the dataset with a probability of 50%. Whereas passing in FIM SPM rate as `0.2` means that 20% of FIM transformations will use SPM (or Suffix-Prefix-Middle) and the remaining 80% will use PSM (or Prefix-Suffix-Middle) mode of transformation.
 
 ### RoBERTa/BERT/DistilBERT and masked language modeling
 
@@ -84,7 +135,7 @@ converge slightly slower (over-fitting takes more epochs).
 
 ```bash
 python run_mlm.py \
-    --model_name_or_path roberta-base \
+    --model_name_or_path FacebookAI/roberta-base \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
@@ -98,7 +149,7 @@ To run on your own training and validation files, use the following command:
 
 ```bash
 python run_mlm.py \
-    --model_name_or_path roberta-base \
+    --model_name_or_path FacebookAI/roberta-base \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
     --per_device_train_batch_size 8 \
@@ -117,7 +168,7 @@ This uses the built in HuggingFace `Trainer` for training. If you want to use a 
 python run_mlm_no_trainer.py \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
-    --model_name_or_path roberta-base \
+    --model_name_or_path FacebookAI/roberta-base \
     --output_dir /tmp/test-mlm
 ```
 
@@ -144,7 +195,7 @@ Here is how to fine-tune XLNet on wikitext-2:
 
 ```bash
 python run_plm.py \
-    --model_name_or_path=xlnet-base-cased \
+    --model_name_or_path=xlnet/xlnet-base-cased \
     --dataset_name wikitext \
     --dataset_config_name wikitext-2-raw-v1 \
     --per_device_train_batch_size 8 \
@@ -158,7 +209,7 @@ To fine-tune it on your own training and validation file, run:
 
 ```bash
 python run_plm.py \
-    --model_name_or_path=xlnet-base-cased \
+    --model_name_or_path=xlnet/xlnet-base-cased \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
     --per_device_train_batch_size 8 \
@@ -174,6 +225,13 @@ concatenates all texts and then splits them in blocks of the same length).
 **Note:** On TPU, you should use the flag `--pad_to_max_length` in conjunction with the `--line_by_line` flag to make
 sure all your batches have the same length.
 
+## Streaming
+
+To use the streaming dataset mode which can be very useful for large datasets, add `--streaming` to the command line. This is supported by `run_mlm.py`, `run_clm.py` and `run_fim.py`. Make sure to adapt the other scripts to your use case by taking inspiration from them.
+
+## Low Cpu Memory Usage
+
+To use low cpu memory mode which can be very useful for LLM, add `--low_cpu_mem_usage` to the command line. This is currently supported by `run_clm.py`,`run_mlm.py`, `run_plm.py`, `run_fim.py`, `run_mlm_no_trainer.py`, `run_clm_no_trainer.py` and `run_fim_no_trainer.py`.
 
 ## Creating a model on the fly
 
@@ -181,8 +239,8 @@ When training a model from scratch, configuration values may be overridden with 
 
 
 ```bash
-python run_clm.py --model_type gpt2 --tokenizer_name gpt2 \ --config_overrides="n_embd=1024,n_head=16,n_layer=48,n_positions=102" \
+python run_clm.py --model_type gpt2 --tokenizer_name openai-community/gpt2 \ --config_overrides="n_embd=1024,n_head=16,n_layer=48,n_positions=102" \
 [...]
 ```
 
-This feature is only available in `run_clm.py`, `run_plm.py` and `run_mlm.py`.
+This feature is only available in `run_clm.py`, `run_plm.py`, `run_mlm.py` and `run_fim.py`.

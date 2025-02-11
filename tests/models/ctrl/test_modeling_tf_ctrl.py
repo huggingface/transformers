@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import CTRLConfig, is_tf_available
@@ -21,20 +23,21 @@ from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers.modeling_tf_utils import keras
     from transformers.models.ctrl.modeling_tf_ctrl import (
-        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCTRLForSequenceClassification,
         TFCTRLLMHeadModel,
         TFCTRLModel,
     )
 
 
-class TFCTRLModelTester(object):
+class TFCTRLModelTester:
     def __init__(
         self,
         parent,
@@ -49,7 +52,7 @@ class TFCTRLModelTester(object):
         self.use_mc_token_ids = True
         self.vocab_size = 99
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"
@@ -92,7 +95,7 @@ class TFCTRLModelTester(object):
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
+            dff=self.intermediate_size,
             # hidden_act=self.hidden_act,
             # hidden_dropout_prob=self.hidden_dropout_prob,
             # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -168,12 +171,40 @@ class TFCTRLModelTester(object):
 
 
 @require_tf
-class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
-
+class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel, TFCTRLForSequenceClassification) if is_tf_available() else ()
     all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": TFCTRLModel,
+            "text-classification": TFCTRLForSequenceClassification,
+            "text-generation": TFCTRLLMHeadModel,
+            "zero-shot": TFCTRLForSequenceClassification,
+        }
+        if is_tf_available()
+        else {}
+    )
     test_head_masking = False
     test_onnx = False
+
+    # TODO: Fix the failed tests
+    def is_pipeline_test_to_skip(
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
+    ):
+        if pipeline_test_case_name == "ZeroShotClassificationPipelineTests":
+            # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
+            # `CTRLConfig` was never used in pipeline tests, either because of a missing checkpoint or because a tiny
+            # config could not be created.
+            return True
+
+        return False
 
     def setUp(self):
         self.model_tester = TFCTRLModelTester(self)
@@ -201,18 +232,19 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            model.build_in_name_scope()  # may be needed for the get_bias() call below
+            assert isinstance(model.get_input_embeddings(), keras.layers.Layer)
 
             if model_class in list_lm_models:
                 x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
+                assert isinstance(x, keras.layers.Layer)
                 name = model.get_bias()
                 assert isinstance(name, dict)
                 for k, v in name.items():
                     assert isinstance(v, tf.Variable)
             elif model_class in list_other_models_with_output_ebd:
                 x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
+                assert isinstance(x, keras.layers.Layer)
                 name = model.get_bias()
                 assert name is None
             else:
@@ -223,16 +255,16 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFCTRLModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "Salesforce/ctrl"
+        model = TFCTRLModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_tf
 class TFCTRLModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_ctrl(self):
-        model = TFCTRLLMHeadModel.from_pretrained("ctrl")
+        model = TFCTRLLMHeadModel.from_pretrained("Salesforce/ctrl")
         input_ids = tf.convert_to_tensor([[11859, 0, 1611, 8]], dtype=tf.int32)  # Legal the president is
         expected_output_ids = [
             11859,

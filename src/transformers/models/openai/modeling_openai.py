@@ -15,7 +15,6 @@
 # limitations under the License.
 """PyTorch OpenAI GPT model."""
 
-
 import json
 import math
 import os
@@ -27,6 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu_new, silu
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
@@ -43,14 +43,8 @@ from .configuration_openai import OpenAIGPTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "openai-gpt"
+_CHECKPOINT_FOR_DOC = "openai-community/openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
-_TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"
-
-OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "openai-gpt",
-    # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
-]
 
 
 def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
@@ -131,7 +125,7 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     return model
 
 
-ACT_FNS = {"relu": nn.ReLU, "silu": silu, "gelu": gelu_new, "swish": silu}
+ACT_FNS = {"relu": nn.ReLU(), "silu": silu, "gelu": gelu_new, "swish": silu}
 
 
 class Attention(nn.Module):
@@ -142,7 +136,9 @@ class Attention(nn.Module):
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
         self.register_buffer(
-            "bias", torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions)
+            "bias",
+            torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions),
+            persistent=False,
         )
         self.n_head = config.n_head
         self.split_size = n_state
@@ -275,7 +271,6 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config_class = OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -350,7 +345,7 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`OpenAIGPTTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -408,7 +403,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
 
-        self.register_buffer("position_ids", torch.arange(config.n_positions))
+        self.register_buffer("position_ids", torch.arange(config.n_positions), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -427,7 +422,6 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -453,6 +447,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
@@ -530,7 +525,9 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
     """,
     OPENAI_GPT_START_DOCSTRING,
 )
-class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
+class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.transformer = OpenAIGPTModel(config)
@@ -547,7 +544,6 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -564,6 +560,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -589,12 +586,13 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_function(
+                lm_logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
@@ -608,6 +606,7 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
+        # Overwritten -- old model with reduced inputs
         return {"input_ids": input_ids}
 
 
@@ -621,6 +620,8 @@ input sequence).
     OPENAI_GPT_START_DOCSTRING,
 )
 class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -672,11 +673,11 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import OpenAIGPTTokenizer, OpenAIGPTDoubleHeadsModel
+        >>> from transformers import AutoTokenizer, OpenAIGPTDoubleHeadsModel
         >>> import torch
 
-        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained("openai-gpt")
-        >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained("openai-gpt")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai-community/openai-gpt")
+        >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained("openai-community/openai-gpt")
         >>> tokenizer.add_special_tokens(
         ...     {"cls_token": "[CLS]"}
         ... )  # Add a [CLS] to the vocabulary (we should train it also!)
@@ -758,7 +759,6 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
@@ -807,20 +807,21 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         # Ensure the batch size is > 1 if there is no padding.
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
-            if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
-            else:
-                sequence_lengths = -1
-                logger.warning(
-                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-                )
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
 
-        pooled_logits = logits[range(batch_size), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
 
         loss = None
         if labels is not None:
@@ -854,3 +855,13 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "OpenAIGPTDoubleHeadsModel",
+    "OpenAIGPTForSequenceClassification",
+    "OpenAIGPTLMHeadModel",
+    "OpenAIGPTModel",
+    "OpenAIGPTPreTrainedModel",
+    "load_tf_weights_in_openai_gpt",
+]

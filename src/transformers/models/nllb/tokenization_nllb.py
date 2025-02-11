@@ -29,21 +29,8 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/nllb-200-distilled-600M": (
-            "https://huggingface.co/facebook/nllb-200-distilled-600M/blob/main/sentencepiece.bpe.model"
-        ),
-    }
-}
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/nllb-200-distilled-600M": 1024,
-}
-
-# fmt: off
-FAIRSEQ_LANGUAGE_CODES = ['ace_Arab', 'ace_Latn', 'acm_Arab', 'acq_Arab', 'aeb_Arab', 'afr_Latn', 'ajp_Arab', 'aka_Latn', 'amh_Ethi', 'apc_Arab', 'arb_Arab', 'ars_Arab', 'ary_Arab', 'arz_Arab', 'asm_Beng', 'ast_Latn', 'awa_Deva', 'ayr_Latn', 'azb_Arab', 'azj_Latn', 'bak_Cyrl', 'bam_Latn', 'ban_Latn', 'bel_Cyrl', 'bem_Latn', 'ben_Beng', 'bho_Deva', 'bjn_Arab', 'bjn_Latn', 'bod_Tibt', 'bos_Latn', 'bug_Latn', 'bul_Cyrl', 'cat_Latn', 'ceb_Latn', 'ces_Latn', 'cjk_Latn', 'ckb_Arab', 'crh_Latn', 'cym_Latn', 'dan_Latn', 'deu_Latn', 'dik_Latn', 'dyu_Latn', 'dzo_Tibt', 'ell_Grek', 'eng_Latn', 'epo_Latn', 'est_Latn', 'eus_Latn', 'ewe_Latn', 'fao_Latn', 'pes_Arab', 'fij_Latn', 'fin_Latn', 'fon_Latn', 'fra_Latn', 'fur_Latn', 'fuv_Latn', 'gla_Latn', 'gle_Latn', 'glg_Latn', 'grn_Latn', 'guj_Gujr', 'hat_Latn', 'hau_Latn', 'heb_Hebr', 'hin_Deva', 'hne_Deva', 'hrv_Latn', 'hun_Latn', 'hye_Armn', 'ibo_Latn', 'ilo_Latn', 'ind_Latn', 'isl_Latn', 'ita_Latn', 'jav_Latn', 'jpn_Jpan', 'kab_Latn', 'kac_Latn', 'kam_Latn', 'kan_Knda', 'kas_Arab', 'kas_Deva', 'kat_Geor', 'knc_Arab', 'knc_Latn', 'kaz_Cyrl', 'kbp_Latn', 'kea_Latn', 'khm_Khmr', 'kik_Latn', 'kin_Latn', 'kir_Cyrl', 'kmb_Latn', 'kon_Latn', 'kor_Hang', 'kmr_Latn', 'lao_Laoo', 'lvs_Latn', 'lij_Latn', 'lim_Latn', 'lin_Latn', 'lit_Latn', 'lmo_Latn', 'ltg_Latn', 'ltz_Latn', 'lua_Latn', 'lug_Latn', 'luo_Latn', 'lus_Latn', 'mag_Deva', 'mai_Deva', 'mal_Mlym', 'mar_Deva', 'min_Latn', 'mkd_Cyrl', 'plt_Latn', 'mlt_Latn', 'mni_Beng', 'khk_Cyrl', 'mos_Latn', 'mri_Latn', 'zsm_Latn', 'mya_Mymr', 'nld_Latn', 'nno_Latn', 'nob_Latn', 'npi_Deva', 'nso_Latn', 'nus_Latn', 'nya_Latn', 'oci_Latn', 'gaz_Latn', 'ory_Orya', 'pag_Latn', 'pan_Guru', 'pap_Latn', 'pol_Latn', 'por_Latn', 'prs_Arab', 'pbt_Arab', 'quy_Latn', 'ron_Latn', 'run_Latn', 'rus_Cyrl', 'sag_Latn', 'san_Deva', 'sat_Beng', 'scn_Latn', 'shn_Mymr', 'sin_Sinh', 'slk_Latn', 'slv_Latn', 'smo_Latn', 'sna_Latn', 'snd_Arab', 'som_Latn', 'sot_Latn', 'spa_Latn', 'als_Latn', 'srd_Latn', 'srp_Cyrl', 'ssw_Latn', 'sun_Latn', 'swe_Latn', 'swh_Latn', 'szl_Latn', 'tam_Taml', 'tat_Cyrl', 'tel_Telu', 'tgk_Cyrl', 'tgl_Latn', 'tha_Thai', 'tir_Ethi', 'taq_Latn', 'taq_Tfng', 'tpi_Latn', 'tsn_Latn', 'tso_Latn', 'tuk_Latn', 'tum_Latn', 'tur_Latn', 'twi_Latn', 'tzm_Tfng', 'uig_Arab', 'ukr_Cyrl', 'umb_Latn', 'urd_Arab', 'uzn_Latn', 'vec_Latn', 'vie_Latn', 'war_Latn', 'wol_Latn', 'xho_Latn', 'ydd_Hebr', 'yor_Latn', 'yue_Hant', 'zho_Hans', 'zho_Hant', 'zul_Latn']
-# fmt: on
+FAIRSEQ_LANGUAGE_CODES = ['ace_Arab', 'ace_Latn', 'acm_Arab', 'acq_Arab', 'aeb_Arab', 'afr_Latn', 'ajp_Arab', 'aka_Latn', 'amh_Ethi', 'apc_Arab', 'arb_Arab', 'ars_Arab', 'ary_Arab', 'arz_Arab', 'asm_Beng', 'ast_Latn', 'awa_Deva', 'ayr_Latn', 'azb_Arab', 'azj_Latn', 'bak_Cyrl', 'bam_Latn', 'ban_Latn', 'bel_Cyrl', 'bem_Latn', 'ben_Beng', 'bho_Deva', 'bjn_Arab', 'bjn_Latn', 'bod_Tibt', 'bos_Latn', 'bug_Latn', 'bul_Cyrl', 'cat_Latn', 'ceb_Latn', 'ces_Latn', 'cjk_Latn', 'ckb_Arab', 'crh_Latn', 'cym_Latn', 'dan_Latn', 'deu_Latn', 'dik_Latn', 'dyu_Latn', 'dzo_Tibt', 'ell_Grek', 'eng_Latn', 'epo_Latn', 'est_Latn', 'eus_Latn', 'ewe_Latn', 'fao_Latn', 'pes_Arab', 'fij_Latn', 'fin_Latn', 'fon_Latn', 'fra_Latn', 'fur_Latn', 'fuv_Latn', 'gla_Latn', 'gle_Latn', 'glg_Latn', 'grn_Latn', 'guj_Gujr', 'hat_Latn', 'hau_Latn', 'heb_Hebr', 'hin_Deva', 'hne_Deva', 'hrv_Latn', 'hun_Latn', 'hye_Armn', 'ibo_Latn', 'ilo_Latn', 'ind_Latn', 'isl_Latn', 'ita_Latn', 'jav_Latn', 'jpn_Jpan', 'kab_Latn', 'kac_Latn', 'kam_Latn', 'kan_Knda', 'kas_Arab', 'kas_Deva', 'kat_Geor', 'knc_Arab', 'knc_Latn', 'kaz_Cyrl', 'kbp_Latn', 'kea_Latn', 'khm_Khmr', 'kik_Latn', 'kin_Latn', 'kir_Cyrl', 'kmb_Latn', 'kon_Latn', 'kor_Hang', 'kmr_Latn', 'lao_Laoo', 'lvs_Latn', 'lij_Latn', 'lim_Latn', 'lin_Latn', 'lit_Latn', 'lmo_Latn', 'ltg_Latn', 'ltz_Latn', 'lua_Latn', 'lug_Latn', 'luo_Latn', 'lus_Latn', 'mag_Deva', 'mai_Deva', 'mal_Mlym', 'mar_Deva', 'min_Latn', 'mkd_Cyrl', 'plt_Latn', 'mlt_Latn', 'mni_Beng', 'khk_Cyrl', 'mos_Latn', 'mri_Latn', 'zsm_Latn', 'mya_Mymr', 'nld_Latn', 'nno_Latn', 'nob_Latn', 'npi_Deva', 'nso_Latn', 'nus_Latn', 'nya_Latn', 'oci_Latn', 'gaz_Latn', 'ory_Orya', 'pag_Latn', 'pan_Guru', 'pap_Latn', 'pol_Latn', 'por_Latn', 'prs_Arab', 'pbt_Arab', 'quy_Latn', 'ron_Latn', 'run_Latn', 'rus_Cyrl', 'sag_Latn', 'san_Deva', 'sat_Beng', 'scn_Latn', 'shn_Mymr', 'sin_Sinh', 'slk_Latn', 'slv_Latn', 'smo_Latn', 'sna_Latn', 'snd_Arab', 'som_Latn', 'sot_Latn', 'spa_Latn', 'als_Latn', 'srd_Latn', 'srp_Cyrl', 'ssw_Latn', 'sun_Latn', 'swe_Latn', 'swh_Latn', 'szl_Latn', 'tam_Taml', 'tat_Cyrl', 'tel_Telu', 'tgk_Cyrl', 'tgl_Latn', 'tha_Thai', 'tir_Ethi', 'taq_Latn', 'taq_Tfng', 'tpi_Latn', 'tsn_Latn', 'tso_Latn', 'tuk_Latn', 'tum_Latn', 'tur_Latn', 'twi_Latn', 'tzm_Tfng', 'uig_Arab', 'ukr_Cyrl', 'umb_Latn', 'urd_Arab', 'uzn_Latn', 'vec_Latn', 'vie_Latn', 'war_Latn', 'wol_Latn', 'xho_Latn', 'ydd_Hebr', 'yor_Latn', 'yue_Hant', 'zho_Hans', 'zho_Hant', 'zul_Latn']  # fmt: skip
 
 
 class NllbTokenizer(PreTrainedTokenizer):
@@ -118,8 +105,6 @@ class NllbTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
@@ -140,13 +125,39 @@ class NllbTokenizer(PreTrainedTokenizer):
         tgt_lang=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
-        **kwargs
+        legacy_behaviour=False,
+        **kwargs,
     ):
-
+        if additional_special_tokens is None:
+            additional_special_tokens = FAIRSEQ_LANGUAGE_CODES
+        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
+        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
+        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, normalized=True, lstrip=True, special=True)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        self.legacy_behaviour = legacy_behaviour
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(str(vocab_file))
+        self.vocab_file = vocab_file
+        # Original fairseq vocab and spm vocab must be "aligned":
+        # Vocab    |    0    |    1    |   2    |    3    |  4   |  5   |  6   |   7  |   8  |  9
+        # -------- | ------- | ------- | ------ | ------- | ---- | ---- | ---- | ---- | ---- | ----
+        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | 'an' | '▁n' | '▁m' | '▁t' | '▁k' | '▁a'
+        # spm      | '<unk>' | '<s>'   | '</s>' | 'an'    | '▁n' | '▁m' | '▁t' | '▁k' | '▁a' | '▁s'
+
+        # unk token needs to be in the vocab with correct index
+        self._added_tokens_decoder = {0: bos_token, 1: pad_token, 2: eos_token, 3: unk_token}
+        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
+        self.fairseq_offset = 1
+        self.sp_model_size = len(self.sp_model)
 
         super().__init__(
             bos_token=bos_token,
@@ -161,44 +172,12 @@ class NllbTokenizer(PreTrainedTokenizer):
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
 
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(str(vocab_file))
-        self.vocab_file = vocab_file
-
-        # Original fairseq vocab and spm vocab must be "aligned":
-        # Vocab    |    0    |    1    |   2    |    3    |  4   |  5   |  6   |   7  |   8  |  9
-        # -------- | ------- | ------- | ------ | ------- | ---- | ---- | ---- | ---- | ---- | ----
-        # fairseq  | '<s>'   | '<pad>' | '</s>' | '<unk>' | 'an' | '▁n' | '▁m' | '▁t' | '▁k' | '▁a'
-        # spm      | '<unk>' | '<s>'   | '</s>' | 'an'    | '▁n' | '▁m' | '▁t' | '▁k' | '▁a' | '▁s'
-
-        # Mimic fairseq token-to-id alignment for the first 4 token
-        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
-
-        # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
-        self.fairseq_offset = 1
-
-        self.sp_model_size = len(self.sp_model)
-        self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
-        }
-        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
-
-        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
-
-        if additional_special_tokens is not None:
-            # Only add those special tokens if they are not already there.
-            self._additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
-            )
-
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+        self.cur_lang_code_id = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
@@ -220,7 +199,7 @@ class NllbTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+        return len(self.sp_model) + self.fairseq_offset
 
     @property
     def src_lang(self) -> str:
@@ -335,17 +314,12 @@ class NllbTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token in self.fairseq_tokens_to_ids:
-            return self.fairseq_tokens_to_ids[token]
         spm_id = self.sp_model.PieceToId(token)
-
         # Need to return unknown token if the SP model returned 0
         return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.fairseq_ids_to_tokens:
-            return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
     def convert_tokens_to_string(self, tokens):
@@ -389,13 +363,30 @@ class NllbTokenizer(PreTrainedTokenizer):
         return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
-        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        """Reset the special tokens to the source lang setting.
+        - In legacy mode: No prefix and suffix=[eos, src_lang_code].
+        - In default mode: Prefix=[src_lang_code], suffix = [eos]
+        """
+        self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
+        if self.legacy_behaviour:
+            self.prefix_tokens = []
+            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        else:
+            self.prefix_tokens = [self.cur_lang_code]
+            self.suffix_tokens = [self.eos_token_id]
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
-        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
-        self.cur_lang_code = self.lang_code_to_id[lang]
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        """Reset the special tokens to the target lang setting.
+        - In legacy mode: No prefix and suffix=[eos, tgt_lang_code].
+        - In default mode: Prefix=[tgt_lang_code], suffix = [eos]
+        """
+        self.cur_lang_code = self.convert_tokens_to_ids(lang)
+        if self.legacy_behaviour:
+            self.prefix_tokens = []
+            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        else:
+            self.prefix_tokens = [self.cur_lang_code]
+            self.suffix_tokens = [self.eos_token_id]
+
+
+__all__ = ["NllbTokenizer"]

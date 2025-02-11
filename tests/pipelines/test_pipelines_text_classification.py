@@ -20,14 +20,40 @@ from transformers import (
     TextClassificationPipeline,
     pipeline,
 )
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import (
+    is_pipeline_test,
+    is_torch_available,
+    nested_simplify,
+    require_tf,
+    require_torch,
+    require_torch_bf16,
+    require_torch_fp16,
+    slow,
+    torch_device,
+)
 
-from .test_pipelines_common import ANY, PipelineTestCaseMeta
+from .test_pipelines_common import ANY
 
 
-class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+if is_torch_available():
+    import torch
+
+
+# These 2 model types require different inputs than those of the usual text models.
+_TO_SKIP = {"LayoutLMv2Config", "LayoutLMv3Config"}
+
+
+@is_pipeline_test
+class TextClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
     tf_model_mapping = TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+
+    if model_mapping is not None:
+        model_mapping = {config: model for config, model in model_mapping.items() if config.__name__ not in _TO_SKIP}
+    if tf_model_mapping is not None:
+        tf_model_mapping = {
+            config: model for config, model in tf_model_mapping.items() if config.__name__ not in _TO_SKIP
+        }
 
     @require_torch
     def test_small_model_pt(self):
@@ -82,15 +108,45 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
             ],
         )
 
+        # Do not apply any function to output for regression tasks
+        # hack: changing problem_type artifically (so keep this test at last)
+        text_classifier.model.config.problem_type = "regression"
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.01}])
+
     @require_torch
     def test_accepts_torch_device(self):
-        import torch
-
         text_classifier = pipeline(
             task="text-classification",
             model="hf-internal-testing/tiny-random-distilbert",
             framework="pt",
-            device=torch.device("cpu"),
+            device=torch_device,
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+    @require_torch_fp16
+    def test_accepts_torch_fp16(self):
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-distilbert",
+            framework="pt",
+            device=torch_device,
+            torch_dtype=torch.float16,
+        )
+
+        outputs = text_classifier("This is great !")
+        self.assertEqual(nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}])
+
+    @require_torch_bf16
+    def test_accepts_torch_bf16(self):
+        text_classifier = pipeline(
+            task="text-classification",
+            model="hf-internal-testing/tiny-random-distilbert",
+            framework="pt",
+            device=torch_device,
+            torch_dtype=torch.bfloat16,
         )
 
         outputs = text_classifier("This is great !")
@@ -129,8 +185,23 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         outputs = text_classifier("Birds are a type of animal")
         self.assertEqual(nested_simplify(outputs), [{"label": "POSITIVE", "score": 0.988}])
 
-    def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        text_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        text_classifier = TextClassificationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return text_classifier, ["HuggingFace is in", "This is another test"]
 
     def run_pipeline_test(self, text_classifier, _):

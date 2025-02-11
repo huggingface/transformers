@@ -28,6 +28,7 @@ SAMPLE_ENTITY_VOCAB = get_tests_dir("fixtures/test_entity_vocab.json")
 
 
 class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+    from_pretrained_id = "studio-ousia/mluke-base"
     tokenizer_class = MLukeTokenizer
     test_rust_tokenizer = False
     from_pretrained_kwargs = {"cls_token": "<s>"}
@@ -41,7 +42,6 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         kwargs.update(self.special_tokens_map)
         kwargs.update({"task": task})
         tokenizer = MLukeTokenizer(vocab_file=SAMPLE_VOCAB, entity_vocab_file=SAMPLE_ENTITY_VOCAB, **kwargs)
-        tokenizer.sanitize_special_tokens()
         return tokenizer
 
     def get_input_output_texts(self, tokenizer):
@@ -93,6 +93,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
 
+    @unittest.skip
     def test_pretokenized_inputs(self):
         pass
 
@@ -108,11 +109,9 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 # token_type_ids should put 0 everywhere
                 self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
-                # token_type_ids should put 0 everywhere
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
-
                 # attention_mask should put 1 everywhere, so sum over length should be 1
                 self.assertEqual(
+                    sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
                     sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
                 )
 
@@ -150,7 +149,7 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             tokenizer(sentence, entities=tuple(entities), entity_spans=spans)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises(TypeError):
             tokenizer(sentence, entities=entities, entity_spans=tuple(spans))
 
         with self.assertRaises(ValueError):

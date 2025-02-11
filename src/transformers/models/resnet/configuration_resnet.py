@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ResNet model configuration"""
+"""ResNet model configuration"""
 
 from collections import OrderedDict
 from typing import Mapping
@@ -22,16 +22,13 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
 
-RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
-}
 
-
-class ResNetConfig(PretrainedConfig):
+class ResNetConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -58,6 +55,18 @@ class ResNetConfig(PretrainedConfig):
             are supported.
         downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
             If `True`, the first stage will downsample the inputs using a `stride` of 2.
+        downsample_in_bottleneck (`bool`, *optional*, defaults to `False`):
+            If `True`, the first conv 1x1 in ResNetBottleNeckLayer will downsample the inputs using a `stride` of 2.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
 
     Example:
     ```python
@@ -73,6 +82,7 @@ class ResNetConfig(PretrainedConfig):
     >>> configuration = model.config
     ```
     """
+
     model_type = "resnet"
     layer_types = ["basic", "bottleneck"]
 
@@ -85,7 +95,10 @@ class ResNetConfig(PretrainedConfig):
         layer_type="bottleneck",
         hidden_act="relu",
         downsample_in_first_stage=False,
-        **kwargs
+        downsample_in_bottleneck=False,
+        out_features=None,
+        out_indices=None,
+        **kwargs,
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
@@ -97,10 +110,14 @@ class ResNetConfig(PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
+        self.downsample_in_bottleneck = downsample_in_bottleneck
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
 
 
 class ResNetOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property
@@ -114,3 +131,6 @@ class ResNetOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-3
+
+
+__all__ = ["ResNetConfig", "ResNetOnnxConfig"]

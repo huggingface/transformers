@@ -13,8 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for question-answering."""
-
+"""Fine-tuning the library models for question-answering."""
 
 import logging
 import os
@@ -30,9 +29,10 @@ from transformers import (
     DataCollatorWithPadding,
     HfArgumentParser,
     SquadDataset,
+    Trainer,
+    TrainingArguments,
 )
 from transformers import SquadDataTrainingArguments as DataTrainingArguments
-from transformers import Trainer, TrainingArguments
 from transformers.trainer_utils import is_main_process
 
 

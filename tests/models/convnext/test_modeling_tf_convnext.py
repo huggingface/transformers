@@ -12,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the TensorFlow ConvNext model. """
+"""Testing suite for the TensorFlow ConvNext model."""
+
+from __future__ import annotations
 
 import inspect
 import unittest
@@ -24,6 +26,7 @@ from transformers.utils import cached_property, is_tf_available, is_vision_avail
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_tf_available():
@@ -35,7 +38,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConvNextFeatureExtractor
+    from transformers import ConvNextImageProcessor
 
 
 class TFConvNextModelTester:
@@ -117,18 +120,24 @@ class TFConvNextModelTester:
 
 
 @require_tf
-class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFConvNextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ConvNext does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (TFConvNextModel, TFConvNextForImageClassification) if is_tf_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": TFConvNextModel, "image-classification": TFConvNextForImageClassification}
+        if is_tf_available()
+        else {}
+    )
 
     test_pruning = False
     test_onnx = False
     test_resize_embeddings = False
     test_head_masking = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = TFConvNextModelTester(self)
@@ -147,6 +156,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
         reason="TF does not support backprop for grouped convolutions on CPU.",
     )
+    @slow
     def test_keras_fit(self):
         super().test_keras_fit()
 
@@ -169,10 +179,6 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="Model doesn't have attention layers")
-    def test_attention_outputs(self):
-        pass
 
     @unittest.skipIf(
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
@@ -273,18 +279,16 @@ def prepare_img():
 @require_vision
 class TFConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return (
-            ConvNextFeatureExtractor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
-        )
+    def default_image_processor(self):
+        return ConvNextImageProcessor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         model = TFConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # forward pass
         outputs = model(**inputs)

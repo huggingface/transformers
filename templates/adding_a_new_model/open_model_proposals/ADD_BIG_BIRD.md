@@ -7,7 +7,7 @@ Begin: 12.02.2020
 
 Estimated End: 19.03.2020
 
-Contributor: [Vasudev](https://github.com/vasudevgupta7)
+Contributor: [Vasudev](https://github.com/thevasudevgupta)
 
 Adding a new model is often difficult and requires an in-depth knowledge
 of the 🤗 Transformers library and ideally also of the model's original
@@ -25,7 +25,7 @@ open-source contribution to Transformers. Along the way, you will:
 -   understand the design principles of one of the most popular NLP
     libraries
 -   learn how to do efficiently test large NLP models
--   learn how to integrate Python utilities like `black`, `isort`,
+-   learn how to integrate Python utilities like `black`, `ruff`,
     `make fix-copies` into a library to always ensure clean and readable
     code
 
@@ -372,10 +372,10 @@ execution which can be helpful to better split logical components from
 one another and to have faster debugging cycles as intermediate results
 can be stored. Also, notebooks are often easier to share with other
 contributors, which might be very helpful if you want to ask the Hugging
-Face team for help. If you are familiar with Jupiter notebooks, we
+Face team for help. If you are familiar with Jupyter notebooks, we
 strongly recommend you to work with them.
 
-The obvious disadvantage of Jupyther notebooks is that if you are not
+The obvious disadvantage of Jupyter notebooks is that if you are not
 used to working with them you will have to spend some time adjusting to
 the new programming environment and that you might not be able to use
 your known debugging tools anymore, like `ipdb`.
@@ -593,27 +593,27 @@ You should do the following:
 
 1.  Create a branch with a descriptive name from your main branch
 
-```
+```bash
     git checkout -b add_big_bird
 ```
 
 2.  Commit the automatically generated code:
 
-```
+```bash
     git add .
     git commit
 ```
 
 3.  Fetch and rebase to current main
 
-```
+```bash
     git fetch upstream
     git rebase upstream/main
 ```
 
 4.  Push the changes to your account using:
 
-```
+```bash
     git push -u origin a-descriptive-name-for-my-changes
 ```
 

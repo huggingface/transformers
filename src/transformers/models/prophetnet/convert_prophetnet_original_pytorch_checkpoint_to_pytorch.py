@@ -14,12 +14,9 @@
 # limitations under the License.
 """Convert ProphetNet checkpoint."""
 
-
 import argparse
 
 from torch import nn
-
-from transformers import ProphetNetForConditionalGeneration, XLMProphetNetForConditionalGeneration, logging
 
 # transformers_old should correspond to branch `save_old_prophetnet_model_structure` here
 # original prophetnet_checkpoints are saved under `patrickvonplaten/..._old` respectively
@@ -29,6 +26,8 @@ from transformers_old.modeling_prophetnet import (
 from transformers_old.modeling_xlm_prophetnet import (
     XLMProphetNetForConditionalGeneration as XLMProphetNetForConditionalGenerationOld,
 )
+
+from transformers import ProphetNetForConditionalGeneration, XLMProphetNetForConditionalGeneration, logging
 
 
 logger = logging.get_logger(__name__)

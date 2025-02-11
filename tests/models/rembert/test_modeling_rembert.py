@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch RemBERT model. """
-
+"""Testing suite for the PyTorch RemBERT model."""
 
 import unittest
 
@@ -22,6 +21,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -37,7 +37,6 @@ if is_torch_available():
         RemBertForTokenClassification,
         RemBertModel,
     )
-    from transformers.models.rembert.modeling_rembert import REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class RemBertModelTester:
@@ -54,7 +53,7 @@ class RemBertModelTester:
         hidden_size=32,
         input_embedding_size=18,
         output_embedding_size=43,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -360,8 +359,7 @@ class RemBertModelTester:
 
 
 @require_torch
-class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
-
+class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             RemBertModel,
@@ -376,6 +374,19 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (RemBertForCausalLM,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": RemBertModel,
+            "fill-mask": RemBertForMaskedLM,
+            "question-answering": RemBertForQuestionAnswering,
+            "text-classification": RemBertForSequenceClassification,
+            "text-generation": RemBertForCausalLM,
+            "token-classification": RemBertForTokenClassification,
+            "zero-shot": RemBertForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = RemBertModelTester(self)
@@ -452,9 +463,9 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = RemBertModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        model_name = "google/rembert"
+        model = RemBertModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
 
 
 @require_torch
@@ -465,7 +476,8 @@ class RemBertModelIntegrationTest(unittest.TestCase):
         model = RemBertModel.from_pretrained("google/rembert")
         input_ids = torch.tensor([[312, 56498, 313, 2125, 313]])
         segment_ids = torch.tensor([[0, 0, 0, 1, 1]])
-        output = model(input_ids, token_type_ids=segment_ids, output_hidden_states=True)
+        with torch.no_grad():
+            output = model(input_ids, token_type_ids=segment_ids, output_hidden_states=True)
 
         hidden_size = 1152
 
@@ -495,4 +507,6 @@ class RemBertModelIntegrationTest(unittest.TestCase):
         #     [-0.15887849032878876, -0.054529931396245956, 0.5356100797653198]
         # ]]
 
-        self.assertTrue(torch.allclose(output["last_hidden_state"][:, :, :3], expected_implementation, atol=1e-4))
+        torch.testing.assert_close(
+            output["last_hidden_state"][:, :, :3], expected_implementation, rtol=1e-4, atol=1e-4
+        )

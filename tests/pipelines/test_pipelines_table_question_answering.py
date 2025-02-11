@@ -23,18 +23,17 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    is_pipeline_test,
     require_pandas,
     require_tensorflow_probability,
     require_tf,
     require_torch,
-    require_torch_scatter,
     slow,
 )
 
-from .test_pipelines_common import PipelineTestCaseMeta
 
-
-class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+@is_pipeline_test
+class TQAPipelineTests(unittest.TestCase):
     # Putting it there for consistency, but TQA do not have fast tokenizer
     # which are needed to generate automatic tests
     model_mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
@@ -145,10 +144,9 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @require_torch
-    @require_torch_scatter
-    def test_small_model_pt(self):
+    def test_small_model_pt(self, torch_dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-wtq"
-        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
+        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.assertIsInstance(model.config.aggregation_labels, dict)
         self.assertIsInstance(model.config.no_aggregation_label_index, int)
@@ -248,10 +246,13 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @require_torch
-    @require_torch_scatter
-    def test_slow_tokenizer_sqa_pt(self):
+    def test_small_model_pt_fp16(self):
+        self.test_small_model_pt(torch_dtype="float16")
+
+    @require_torch
+    def test_slow_tokenizer_sqa_pt(self, torch_dtype="float32"):
         model_id = "lysandre/tiny-tapas-random-sqa"
-        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id)
+        model = AutoModelForTableQuestionAnswering.from_pretrained(model_id, torch_dtype=torch_dtype)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         table_querier = TableQuestionAnsweringPipeline(model=model, tokenizer=tokenizer)
 
@@ -366,6 +367,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
                     "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
                 },
             )
+
+    @require_torch
+    def test_slow_tokenizer_sqa_pt_fp16(self):
+        self.test_slow_tokenizer_sqa_pt(torch_dtype="float16")
 
     @require_tf
     @require_tensorflow_probability
@@ -490,9 +495,9 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             )
 
     @slow
-    @require_torch_scatter
-    def test_integration_wtq_pt(self):
-        table_querier = pipeline("table-question-answering")
+    @require_torch
+    def test_integration_wtq_pt(self, torch_dtype="float32"):
+        table_querier = pipeline("table-question-answering", torch_dtype=torch_dtype)
 
         data = {
             "Repository": ["Transformers", "Datasets", "Tokenizers"],
@@ -533,6 +538,11 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
         ]
         self.assertListEqual(results, expected_results)
+
+    @slow
+    @require_torch
+    def test_integration_wtq_pt_fp16(self):
+        self.test_integration_wtq_pt(torch_dtype="float16")
 
     @slow
     @require_tensorflow_probability
@@ -584,12 +594,13 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertListEqual(results, expected_results)
 
     @slow
-    @require_torch_scatter
-    def test_integration_sqa_pt(self):
+    @require_torch
+    def test_integration_sqa_pt(self, torch_dtype="float32"):
         table_querier = pipeline(
             "table-question-answering",
             model="google/tapas-base-finetuned-sqa",
             tokenizer="google/tapas-base-finetuned-sqa",
+            torch_dtype=torch_dtype,
         )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
@@ -606,6 +617,11 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             {"answer": "28 november 1967", "coordinates": [(2, 3)], "cells": ["28 november 1967"]},
         ]
         self.assertListEqual(results, expected_results)
+
+    @slow
+    @require_torch
+    def test_integration_sqa_pt_fp16(self):
+        self.test_integration_sqa_pt(torch_dtype="float16")
 
     @slow
     @require_tensorflow_probability
@@ -637,11 +653,12 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
     @slow
     @require_torch
-    def test_large_model_pt_tapex(self):
+    def test_large_model_pt_tapex(self, torch_dtype="float32"):
         model_id = "microsoft/tapex-large-finetuned-wtq"
         table_querier = pipeline(
             "table-question-answering",
             model=model_id,
+            torch_dtype=torch_dtype,
         )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],

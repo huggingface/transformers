@@ -12,23 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" The distiller to distil the student.
-    Adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
+"""The distiller to distil the student.
+Adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM)
 """
+
 import math
 import os
 import time
 
 import psutil
 import torch
+from grouped_batch_sampler import GroupedBatchSampler, create_lengths_groups
+from lm_seqs_dataset import LmSeqsDataset
 from torch import nn
 from torch.optim import AdamW
 from torch.utils.data import BatchSampler, DataLoader, RandomSampler
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm
 
-from grouped_batch_sampler import GroupedBatchSampler, create_lengths_groups
-from lm_seqs_dataset import LmSeqsDataset
 from transformers import get_linear_schedule_with_warmup
 from utils import logger
 

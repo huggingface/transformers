@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Convert BertExtAbs's checkpoints.
+"""Convert BertExtAbs's checkpoints.
 
 The script looks like it is doing something trivial but it is not. The "weights"
 proposed by the authors are actually the entire model pickled. We need to load
@@ -24,9 +24,9 @@ import logging
 from collections import namedtuple
 
 import torch
-
 from model_bertabs import BertAbsSummarizer
 from models.model_builder import AbsSummarizer  # The authors' implementation
+
 from transformers import BertTokenizer
 
 
@@ -107,7 +107,7 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     # ----------------------------------
 
     logging.info("Make sure that the models' outputs are identical")
-    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
     # prepare the model inputs
     encoder_input_ids = tokenizer.encode("This is sample éàalj'-.")

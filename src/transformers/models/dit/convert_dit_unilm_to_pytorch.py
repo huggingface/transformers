@@ -14,17 +14,17 @@
 # limitations under the License.
 """Convert DiT checkpoints from the unilm repository."""
 
-
 import argparse
 import json
 from pathlib import Path
 
+import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-import requests
-from huggingface_hub import hf_hub_download
-from transformers import BeitConfig, BeitFeatureExtractor, BeitForImageClassification, BeitForMaskedImageModeling
+from transformers import BeitConfig, BeitForImageClassification, BeitForMaskedImageModeling, BeitImageProcessor
+from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
 
@@ -170,10 +170,12 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     model.load_state_dict(state_dict)
 
     # Check outputs on an image
-    feature_extractor = BeitFeatureExtractor(size=config.image_size, resample=Image.BILINEAR, do_center_crop=False)
+    image_processor = BeitImageProcessor(
+        size=config.image_size, resample=PILImageResampling.BILINEAR, do_center_crop=False
+    )
     image = prepare_img()
 
-    encoding = feature_extractor(images=image, return_tensors="pt")
+    encoding = image_processor(images=image, return_tensors="pt")
     pixel_values = encoding["pixel_values"]
 
     outputs = model(pixel_values)
@@ -186,18 +188,18 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         if has_lm_head:
             model_name = "dit-base" if "base" in checkpoint_url else "dit-large"
         else:
             model_name = "dit-base-finetuned-rvlcdip" if "dit-b" in checkpoint_url else "dit-large-finetuned-rvlcdip"
-        feature_extractor.push_to_hub(
+        image_processor.push_to_hub(
             repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
             organization="nielsr",
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             use_temp_dir=True,
         )
         model.push_to_hub(

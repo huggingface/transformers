@@ -250,7 +250,7 @@ def main():
             "nielsr/funsd-layoutlmv3",
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     elif data_args.dataset_name == "cord":
         # Downloading and loading a dataset from the hub.
@@ -258,7 +258,7 @@ def main():
             "nielsr/cord-layoutlmv3",
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     else:
         raise ValueError("This script only supports either FUNSD or CORD out-of-the-box.")
@@ -294,11 +294,11 @@ def main():
     if isinstance(features[label_column_name].feature, ClassLabel):
         label_list = features[label_column_name].feature.names
         # No need to convert the labels since they are already ints.
-        id2label = {k: v for k, v in enumerate(label_list)}
+        id2label = dict(enumerate(label_list))
         label2id = {v: k for k, v in enumerate(label_list)}
     else:
         label_list = get_label_list(datasets["train"][label_column_name])
-        id2label = {k: v for k, v in enumerate(label_list)}
+        id2label = dict(enumerate(label_list))
         label2id = {v: k for k, v in enumerate(label_list)}
     num_labels = len(label_list)
 
@@ -313,7 +313,7 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     processor = AutoProcessor.from_pretrained(
@@ -321,7 +321,7 @@ def main():
         cache_dir=model_args.cache_dir,
         use_fast=True,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
         add_prefix_space=True,
         apply_ocr=False,
     )
@@ -332,7 +332,7 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     # Set the correspondences label/ID inside the model config
@@ -340,7 +340,7 @@ def main():
     model.config.id2label = id2label
 
     # Preprocessing the dataset
-    # The processor does everything for us (prepare the image using LayoutLMv3FeatureExtractor
+    # The processor does everything for us (prepare the image using LayoutLMv3ImageProcessor
     # and prepare the words, boxes and word-level labels using LayoutLMv3TokenizerFast)
     def prepare_examples(examples):
         images = examples[image_column_name]

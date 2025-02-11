@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Tokenization classes for FNet model."""
+"""Tokenization classes for FNet model."""
 
 import os
 import unicodedata
@@ -28,17 +28,6 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "google/fnet-base": "https://huggingface.co/google/fnet-base/resolve/main/spiece.model",
-        "google/fnet-large": "https://huggingface.co/google/fnet-large/resolve/main/spiece.model",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "google/fnet-base": 512,
-    "google/fnet-large": 512,
-}
 
 SPIECE_UNDERLINE = "▁"
 
@@ -96,8 +85,6 @@ class FNetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "token_type_ids"]
 
     def __init__(
@@ -112,17 +99,23 @@ class FNetTokenizer(PreTrainedTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it and
         # is included in the raw text, there should be a match in a non-normalized sentence.
-        mask_token = (
-            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
-            if isinstance(mask_token, str)
-            else mask_token
-        )
-
+        mask_token = AddedToken(mask_token, lstrip=True, special=True) if isinstance(mask_token, str) else mask_token
+        cls_token = AddedToken(cls_token, special=True) if isinstance(cls_token, str) else cls_token
+        sep_token = AddedToken(sep_token, special=True) if isinstance(sep_token, str) else sep_token
+        mask_token = AddedToken(mask_token, special=True) if isinstance(mask_token, str) else mask_token
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.Load(vocab_file)
 
         super().__init__(
             do_lower_case=do_lower_case,
@@ -136,14 +129,6 @@ class FNetTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):
@@ -212,8 +197,46 @@ class FNetTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.sp_model.IdToPiece(index)
 
+    # Copied from transformers.models.albert.tokenization_albert.AlbertTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
-        return self.sp_model.decode(tokens)
+        """Converts a sequence of tokens (string) in a single string."""
+        current_sub_tokens = []
+        out_string = ""
+        prev_is_special = False
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                if not prev_is_special:
+                    out_string += " "
+                out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+                prev_is_special = False
+        out_string += self.sp_model.decode(current_sub_tokens)
+        return out_string.strip()
+
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = None,
+        spaces_between_special_tokens: bool = False,
+        **kwargs,
+    ) -> str:
+        text = super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            spaces_between_special_tokens=spaces_between_special_tokens,
+            **kwargs,
+        )
+        # Mimic the behavior of the Rust tokenizer:
+        # No space after <unk>
+        if not spaces_between_special_tokens:
+            text = text.replace("<unk> ", "<unk>")
+        return text
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -313,3 +336,6 @@ class FNetTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+
+__all__ = ["FNetTokenizer"]

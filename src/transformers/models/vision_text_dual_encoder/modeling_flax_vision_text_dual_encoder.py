@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Flax VisionTextDualEncoder model."""
-
+"""Flax VisionTextDualEncoder model."""
 
 from typing import Optional, Tuple
 
@@ -52,9 +51,10 @@ VISION_TEXT_DUAL_ENCODER_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-     This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
-     subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
-     general usage and behavior.
+     This model is also a
+     [flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html) subclass. Use it
+     as a regular Flax linen Module and refer to the Flax documentation for all matter related to general usage and
+     behavior.
 
     Finally, this model supports inherent JAX features such as:
 
@@ -88,7 +88,7 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`PreTrainedTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -106,8 +106,8 @@ VISION_TEXT_DUAL_ENCODER_INPUTS_DOCSTRING = r"""
             [What are position IDs?](../glossary#position-ids)
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            a feature extractor (e.g. if you use ViT as the encoder, you should use [`ViTFeatureExtractor`]). See
-            [`ViTFeatureExtractor.__call__`] for details.
+            an image processor (e.g. if you use ViT as the encoder, you should use [`AutoImageProcessor`]). See
+            [`ViTImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -227,9 +227,8 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
         _do_init: bool = True,
-        **kwargs
+        **kwargs,
     ):
-
         if not _do_init:
             raise ValueError(
                 "`FlaxVisionTextDualEncoderModel` cannot be created without initializing, `_do_init` must be `True`."
@@ -426,8 +425,6 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the vision model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -439,8 +436,6 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
                 Information necessary to initiate the text model. Can be either:
 
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
-                      Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
-                      user or organization name, like `dbmdz/bert-base-german-cased`.
                     - A path to a *directory* containing model weights saved using
                       [`~FlaxPreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
                     - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
@@ -468,7 +463,7 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
 
         >>> # initialize a model from pretrained ViT and BERT models. Note that the projection layers will be randomly initialized.
         >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
-        ...     "google/vit-base-patch16-224", "bert-base-uncased"
+        ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
         ... )
         >>> # saving model after fine-tuning
         >>> model.save_pretrained("./vit-bert")
@@ -556,15 +551,15 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     >>> from transformers import (
     ...     FlaxVisionTextDualEncoderModel,
     ...     VisionTextDualEncoderProcessor,
-    ...     ViTFeatureExtractor,
-    ...     BertTokenizer,
+    ...     AutoImageProcessor,
+    ...     AutoTokenizer,
     ... )
 
-    >>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-    >>> feature_extractor = ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
-    >>> processor = VisionTextDualEncoderProcessor(feature_extractor, tokenizer)
+    >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+    >>> image_processor = AutoImageProcesor.from_pretrained("google/vit-base-patch16-224")
+    >>> processor = VisionTextDualEncoderProcessor(image_processor, tokenizer)
     >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
-    ...     "google/vit-base-patch16-224", "bert-base-uncased"
+    ...     "google/vit-base-patch16-224", "google-bert/bert-base-uncased"
     ... )
 
     >>> # contrastive training
@@ -601,3 +596,6 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxVisionTextDualEncoderModel, output_type=FlaxCLIPOutput, config_class=_CONFIG_FOR_DOC
 )
+
+
+__all__ = ["FlaxVisionTextDualEncoderModel"]

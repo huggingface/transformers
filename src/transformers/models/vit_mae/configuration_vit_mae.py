@@ -12,18 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ViT MAE model configuration"""
+"""ViT MAE model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/vit-mae-base": "https://huggingface.co/facebook/vit-mae-base/resolve/main/config.json",
-    # See all ViT MAE models at https://huggingface.co/models?filter=vit-mae
-}
 
 
 class ViTMAEConfig(PretrainedConfig):
@@ -50,7 +45,7 @@ class ViTMAEConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -65,7 +60,7 @@ class ViTMAEConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 12):
+        decoder_num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the decoder.
         decoder_hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the decoder.
@@ -93,6 +88,7 @@ class ViTMAEConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "vit_mae"
 
     def __init__(
@@ -106,7 +102,6 @@ class ViTMAEConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        is_encoder_decoder=False,
         image_size=224,
         patch_size=16,
         num_channels=3,
@@ -117,7 +112,7 @@ class ViTMAEConfig(PretrainedConfig):
         decoder_intermediate_size=2048,
         mask_ratio=0.75,
         norm_pix_loss=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -140,3 +135,6 @@ class ViTMAEConfig(PretrainedConfig):
         self.decoder_intermediate_size = decoder_intermediate_size
         self.mask_ratio = mask_ratio
         self.norm_pix_loss = norm_pix_loss
+
+
+__all__ = ["ViTMAEConfig"]

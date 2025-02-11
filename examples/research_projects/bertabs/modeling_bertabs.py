@@ -24,18 +24,14 @@ import math
 
 import numpy as np
 import torch
+from configuration_bertabs import BertAbsConfig
 from torch import nn
 from torch.nn.init import xavier_uniform_
 
-from configuration_bertabs import BertAbsConfig
 from transformers import BertConfig, BertModel, PreTrainedModel
 
 
 MAX_SIZE = 5000
-
-BERTABS_FINETUNED_MODEL_ARCHIVE_LIST = [
-    "remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization",
-]
 
 
 class BertAbsPreTrainedModel(PreTrainedModel):
@@ -54,7 +50,7 @@ class BertAbs(BertAbsPreTrainedModel):
         load_bert_pretrained_extractive = True if bert_extractive_checkpoint else False
         if load_bert_pretrained_extractive:
             self.bert.model.load_state_dict(
-                dict([(n[11:], p) for n, p in bert_extractive_checkpoint.items() if n.startswith("bert.model")]),
+                {n[11:]: p for n, p in bert_extractive_checkpoint.items() if n.startswith("bert.model")},
                 strict=True,
             )
 
@@ -128,7 +124,7 @@ class Bert(nn.Module):
 
     def __init__(self):
         super().__init__()
-        config = BertConfig.from_pretrained("bert-base-uncased")
+        config = BertConfig.from_pretrained("google-bert/bert-base-uncased")
         self.model = BertModel(config)
 
     def forward(self, input_ids, attention_mask=None, token_type_ids=None, **kwargs):
@@ -561,7 +557,7 @@ class MultiHeadedAttention(nn.Module):
             return context
 
 
-class DecoderState(object):
+class DecoderState:
     """Interface for grouping together the current state of a recurrent
     decoder. In the simplest case just represents the hidden state of
     the model.  But can also be used for implementing various forms of
@@ -698,7 +694,7 @@ def build_predictor(args, tokenizer, symbols, model, logger=None):
     return translator
 
 
-class GNMTGlobalScorer(object):
+class GNMTGlobalScorer:
     """
     NMT re-ranking score from
     "Google's Neural Machine Translation System" :cite:`wu2016google`
@@ -721,7 +717,7 @@ class GNMTGlobalScorer(object):
         return normalized_probs
 
 
-class PenaltyBuilder(object):
+class PenaltyBuilder:
     """
     Returns the Length and Coverage Penalty function for Beam Search.
 
@@ -767,7 +763,7 @@ class PenaltyBuilder(object):
         return logprobs
 
 
-class Translator(object):
+class Translator:
     """
     Uses a model to translate a batch of sentences.
 
@@ -1006,7 +1002,7 @@ def tile(x, count, dim=0):
 #
 
 
-class BertSumOptimizer(object):
+class BertSumOptimizer:
     """Specific optimizer for BertSum.
 
     As described in [1], the authors fine-tune BertSum for abstractive

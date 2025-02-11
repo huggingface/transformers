@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for sequence classification."""
+"""Fine-tuning the library models for sequence classification."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
 import json
@@ -26,6 +26,7 @@ from typing import Optional
 
 import numpy as np
 from datasets import load_dataset
+from packaging.version import parse
 
 from transformers import (
     AutoConfig,
@@ -45,11 +46,24 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output 
 import tensorflow as tf  # noqa: E402
 
 
+try:
+    import tf_keras as keras
+except (ModuleNotFoundError, ImportError):
+    import keras
+
+    if parse(keras.__version__).major > 2:
+        raise ValueError(
+            "Your currently installed version of Keras is Keras 3, but this is not yet supported in "
+            "Transformers. Please install the backwards-compatible tf-keras package with "
+            "`pip install tf-keras`."
+        )
+
+
 logger = logging.getLogger(__name__)
 
 
 # region Helper classes
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
+class SavePretrainedCallback(keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
     # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
     # that saves the model with this method after each epoch.
@@ -100,7 +114,7 @@ class DataTrainingArguments:
         metadata={
             "help": (
                 "Whether to pad all samples to `max_seq_length`. "
-                "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch. "
                 "Data will always be padded when using TPUs."
             )
         },
@@ -170,12 +184,22 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option "
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will "
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -258,13 +282,13 @@ def main():
             "csv",
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         # Loading a dataset from local json files
         datasets = load_dataset("json", data_files=data_files, cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset at
-    # https://huggingface.co/docs/datasets/loading_datasets.html.
+    # https://huggingface.co/docs/datasets/loading_datasets.
     # endregion
 
     # region Label preprocessing
@@ -301,20 +325,23 @@ def main():
             num_labels=num_labels,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         config = AutoConfig.from_pretrained(
             config_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     # endregion
 
@@ -334,7 +361,7 @@ def main():
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
-            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
@@ -343,13 +370,13 @@ def main():
     if "train" in datasets:
         if not is_regression and config.label2id != PretrainedConfig(num_labels=num_labels).label2id:
             label_name_to_id = config.label2id
-            if list(sorted(label_name_to_id.keys())) == list(sorted(label_list)):
+            if sorted(label_name_to_id.keys()) == sorted(label_list):
                 label_to_id = label_name_to_id  # Use the model's labels
             else:
                 logger.warning(
-                    "Your model seems to have been trained with labels, but they don't match the dataset: ",
-                    f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels:"
-                    f" {list(sorted(label_list))}.\nIgnoring the model labels as a result.",
+                    "Your model seems to have been trained with labels, but they don't match the dataset: "
+                    f"model labels: {sorted(label_name_to_id.keys())}, dataset labels:"
+                    f" {sorted(label_list)}.\nIgnoring the model labels as a result.",
                 )
                 label_to_id = {v: i for i, v in enumerate(label_list)}
         elif not is_regression:
@@ -402,7 +429,8 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
         # endregion
 
@@ -411,7 +439,7 @@ def main():
         dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         num_replicas = training_args.strategy.num_replicas_in_sync
 
-        tf_data = dict()
+        tf_data = {}
         max_samples = {
             "train": data_args.max_train_samples,
             "validation": data_args.max_val_samples,
@@ -482,11 +510,13 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = None
+            optimizer = "sgd"  # Just use any default
         if is_regression:
             metrics = []
         else:
             metrics = ["accuracy"]
+        # Transformers models compute the right loss for their task by default when labels are passed, and will
+        # use this for training unless you specify your own loss function in compile().
         model.compile(optimizer=optimizer, metrics=metrics)
         # endregion
 
@@ -502,9 +532,8 @@ def main():
             callbacks = [
                 PushToHubCallback(
                     output_dir=training_args.output_dir,
-                    model_id=push_to_hub_model_id,
-                    organization=training_args.push_to_hub_organization,
-                    token=training_args.push_to_hub_token,
+                    hub_model_id=push_to_hub_model_id,
+                    hub_token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
                     **model_card_kwargs,
                 )
