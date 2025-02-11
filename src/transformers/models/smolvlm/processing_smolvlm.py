@@ -25,7 +25,7 @@ from decord import VideoReader
 decord.bridge.set_bridge("torch")
 from num2words import num2words
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Union, Any
+from typing import TYPE_CHECKING, Dict, List, Optional, Union, Any, Tuple
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
@@ -549,7 +549,7 @@ class SmolVLMProcessor(ProcessorMixin):
             new_content = []
             for block in msg["content"]:
                 if block.get("type") == "video":
-                    assert  frames is not None or timestamps is not None or duration_sec is not None,  "to use 'video' tokens, you must specify `frames`, `timestamps`, and `duration_sec`.
+                    assert  frames is not None or timestamps is not None or duration_sec is not None,  "to use 'video' tokens, you must specify `frames`, `timestamps`, and `duration_sec`."
                     # 1) Insert the intro
                     # frames, timestamps, duration_sec must be provided
                     # (Alternatively, you could dynamically load them here.)

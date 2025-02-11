@@ -512,6 +512,7 @@ _import_structure = {
     "models.idefics": ["IdeficsConfig"],
     "models.idefics2": ["Idefics2Config"],
     "models.idefics3": ["Idefics3Config"],
+    "models.smolvlm": ["SmolVLMConfig"],
     "models.ijepa": ["IJepaConfig"],
     "models.imagegpt": ["ImageGPTConfig"],
     "models.informer": ["InformerConfig"],
@@ -1252,6 +1253,7 @@ else:
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
+    _import_structure["models.smolvlm"].extend(["SmolVLMImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
@@ -2613,6 +2615,16 @@ else:
             "Idefics3Processor",
             "Idefics3VisionConfig",
             "Idefics3VisionTransformer",
+        ]
+    )
+    _import_structure["models.smolVLM"].extend(
+        [
+            "SmolVLMForConditionalGeneration",
+            "SmolVLMModel",
+            "SmolVLMPreTrainedModel",
+            "SmolVLMProcessor",
+            "SmolVLMVisionConfig",
+            "SmolVLMVisionTransformer",
         ]
     )
     _import_structure["models.ijepa"].extend(
@@ -5621,6 +5633,7 @@ if TYPE_CHECKING:
     )
     from .models.idefics2 import Idefics2Config
     from .models.idefics3 import Idefics3Config
+    from .models.smolvlm import SmolVLMConfig
     from .models.ijepa import IJepaConfig
     from .models.imagegpt import ImageGPTConfig
     from .models.informer import InformerConfig
@@ -6396,6 +6409,7 @@ if TYPE_CHECKING:
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.idefics3 import Idefics3ImageProcessor
+        from .models.smolvlm import SmolVLMImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
         from .models.layoutlmv2 import (
@@ -7534,6 +7548,14 @@ if TYPE_CHECKING:
             Idefics3Processor,
             Idefics3VisionConfig,
             Idefics3VisionTransformer,
+        )
+        from .models.smolvlm import (
+            SmolVLMForConditionalGeneration,
+            SmolVLMModel,
+            SmolVLMPreTrainedModel,
+            SmolVLMProcessor,
+            SmolVLMVisionConfig,
+            SmolVLMVisionTransformer,
         )
         from .models.ijepa import (
             IJepaForImageClassification,
