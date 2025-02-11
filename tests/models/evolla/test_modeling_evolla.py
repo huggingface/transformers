@@ -161,6 +161,9 @@ class EvollaModelTester:
 @require_torch
 class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EvollaModel,) if is_torch_available() else ()
+    test_pruning = False
+    test_headmasking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = EvollaModelTester(self)
@@ -298,6 +301,12 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Evolla requires both text and protein inputs which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self):
+        pass
 
 @require_torch
 @require_vision
