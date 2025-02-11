@@ -21,7 +21,6 @@ import unittest
 from typing import Tuple
 
 import numpy as np
-import requests
 from parameterized import parameterized
 from pytest import mark
 
@@ -65,9 +64,9 @@ if is_torch_sdpa_available():
     from torch.nn.attention import SDPBackend, sdpa_kernel
 
 if is_vision_available():
-    from PIL import Image
+    from PIL import Image, ImageDraw
 
-    from transformers import SiglipProcessor
+    from transformers import Siglip2Processor
 
 
 class Siglip2ModelTesterMixin(ModelTesterMixin):
@@ -956,11 +955,24 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
         super().test_sdpa_can_dispatch_composite_models()
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
-    return image
+# Draw a circle on an images with different aspect ratios
+def prepare_images():
+    shapes = [(224, 224), (1024, 1024), (224, 1024)]
+    images = []
+    for height, width in shapes:
+        image = Image.new("RGB", (width, height), color="red")
+        draw = ImageDraw.Draw(image)
+        center_x = image.width // 2
+        center_y = image.height // 2
+        radius = min(center_x, center_y) // 8 * 7
+        draw.ellipse(
+            (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
+            fill="blue",
+            outline="green",
+            width=image.width // 20,
+        )
+        images.append(image)
+    return images
 
 
 @require_vision
@@ -968,22 +980,33 @@ def prepare_img():
 class Siglip2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "google/siglip2"
+        # model_name = "s0225/siglip2-base-patch-16-naflex-256"
+        model_name = "./checkpoints/siglip2-hf/siglip2-base-patch-16-naflex-256/"
         model = Siglip2Model.from_pretrained(model_name).to(torch_device)
-        processor = SiglipProcessor.from_pretrained(model_name)
+        processor = Siglip2Processor.from_pretrained(model_name)
 
-        image = prepare_img()
-        inputs = processor(
-            text=["a photo of 2 cats", "a photo of 2 dogs"], images=image, padding="max_length", return_tensors="pt"
-        ).to(torch_device)
+        images = prepare_images()
+        text = [
+            "circle",
+            "ellipsoid",
+            "blue circle on red background",
+            "blue circle with green border on red background",
+            "green circle on red background",
+            "a dog",
+            "a blue dog with a green border on a red background",
+        ]
+
+        inputs = processor(text=text, images=images, return_tensors="pt")
+        inputs = inputs.to(torch_device)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
-            logits_per_image = outputs.logits_per_image
-            logits_per_text = outputs.logits_per_text
 
-        # verify the logits
+        logits_per_image = outputs.logits_per_image
+        logits_per_text = outputs.logits_per_text
+
+        # verify the logits shape
         self.assertEqual(
             logits_per_image.shape,
             torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
@@ -993,33 +1016,17 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[-0.7567, -10.3354]], device=torch_device)
+        # verify the logits values
+        expected_logits_per_text = torch.tensor(
+            [
+                [1.0775, 0.0974, -1.7726],
+                [-4.3421, -6.1043, -2.1243],
+                [4.1455, 4.8611, 3.1851],
+                [9.3390, 10.0336, 6.0143],
+                [2.3163, 2.9762, 4.0904],
+                [-12.1292, -13.6398, -14.2740],
+                [1.0461, 1.0337, -2.6771],
+            ]
+        ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
-
-        # verify the probs
-        probs = torch.sigmoid(logits_per_image)  # these are the probabilities
-        expected_probs = torch.tensor([[3.1937e-01, 3.2463e-05]], device=torch_device)
-        torch.testing.assert_close(probs, expected_probs, rtol=1e-3, atol=1e-3)
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        model_name = "google/siglip2"
-        model = Siglip2Model.from_pretrained(model_name).to(torch_device)
-
-        # 640 x 480 image
-        image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = SiglipProcessor.from_pretrained(model_name, do_resize=False, size={"height": 480, "width": 640})
-
-        inputs = processor(text="what's in the image", images=image, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs, interpolate_pos_encoding=True)
-
-        # verify the shape
-        # patch size = 16
-        # batch size 1, (640/16) * (480/16) = 1200 patches, 768 hidden size
-        expected_shape = torch.Size((1, 1200, 768))
-
-        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+        torch.testing.assert_close(outputs.logits_per_text, expected_logits_per_text, rtol=1e-3, atol=1e-3)
