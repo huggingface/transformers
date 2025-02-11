@@ -674,7 +674,7 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
+def _load_state_dict_into_model(model_to_load, state_dict, assign_to_params_buffers=False):
     # copy state_dict so _load_from_state_dict can modify it
     metadata = getattr(state_dict, "_metadata", None)
     state_dict = state_dict.copy()
@@ -714,7 +714,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, prefix=start_prefix, assign_to_params_buffers=assign_to_params_buffers)
+    load(model_to_load, state_dict, prefix="", assign_to_params_buffers=assign_to_params_buffers)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
     # it's safe to delete it.
     del state_dict
@@ -725,7 +725,6 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_
 def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
     state_dict: Dict,
-    start_prefix: str,
     expected_keys: List[str],
     device_map: Optional[Dict] = None,
     disk_offload_folder: Optional[str] = None,
@@ -745,8 +744,6 @@ def _load_state_dict_into_meta_model(
     params on a `meta` device. It replaces the model params with the data from the `state_dict`, while moving the
     params back to the normal device, but only for `loaded_state_dict_keys`.
 
-    `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
-    `bert.pooler.dense.weight`
 
     It also initialize tensor parallelism according to `tp_key_registry` if needed.
     """
@@ -769,9 +766,6 @@ def _load_state_dict_into_meta_model(
             full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
     for param_name, param in state_dict.items():
-        # Start by removing the prefix if needed
-        if param_name.startswith(start_prefix):
-            param_name = param_name[len(start_prefix) :]
 
         if param_name not in expected_keys:
             continue
@@ -1468,32 +1462,27 @@ def _find_missing_and_unexpected_keys(
 def _find_mismatched_keys(
     model_to_load: "PreTrainedModel",
     state_dict: Dict,
-    renamed_loaded_keys: List[str],
     ignore_mismatched_sizes: bool,
-    prefix_to_remove: str,
+    prefix: str,
 ) -> List:
     """Find mismatch of shapes between the model parameters and the loaded state dict, and optionally remove the
     problematic keys from `state_dict` if `ignore_mismatched_sizes` is `True`."""
     mismatched_keys = []
     if ignore_mismatched_sizes:
         model_state_dict = model_to_load.state_dict()
-        for key in renamed_loaded_keys:
-            # If the checkpoint is sharded, we may not have the key here.
-            if key not in state_dict:
-                continue
-            # Remove the prefix if needed
-            adjusted_key = key[len(prefix_to_remove) :] if key.startswith(prefix_to_remove) else key
-
-            if adjusted_key in model_state_dict and state_dict[key].shape != model_state_dict[adjusted_key].shape:
+        for key in state_dict.keys():
+            if key in model_state_dict and state_dict[key].shape != model_state_dict[key].shape:
                 if (
                     state_dict[key].shape[-1] == 1
-                    and state_dict[key].numel() * 2 == model_state_dict[adjusted_key].numel()
+                    and state_dict[key].numel() * 2 == model_state_dict[key].numel()
                 ):
                     # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                     # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                     pass
                 else:
-                    mismatched_keys.append((key, state_dict[key].shape, model_state_dict[adjusted_key].shape))
+                    # Add prefix if we removed it before, to add the correct state dict key to the warnings
+                    key_with_prefix = prefix + key
+                    mismatched_keys.append((key_with_prefix, state_dict[key].shape, model_state_dict[adjusted_key].shape))
                     del state_dict[key]
     return mismatched_keys
 
@@ -1567,6 +1556,16 @@ def _get_tp_key_registry(model_to_load: "PreTrainedModel") -> Dict[str, Dict]:
 class PipelineParallel(Enum):
     inputs: 0
     outputs: 1
+
+def _fix_state_dict_prefix(state_dict: Dict[str, torch.Tensor], start_prefix_to_remove: str) -> Dict[str, torch.Tensor]:
+    """Remove leading prefix of the state dict keys. Note that this is performed without copy for memory reasons."""
+    state_dict_keys = list(state_dict.keys())
+    for k in state_dict_keys:
+        if k.startswith(start_prefix_to_remove):
+            state_dict[k[len(start_prefix_to_remove):]] = state_dict.pop(k)
+    
+    return state_dict
+
 
 def _get_tp_key_registry(model: "PreTrainedModel") -> Dict[str, Dict]:
     """Create a registry of all keys of the model, and the entity under which they should be parallelized using
@@ -5000,11 +4999,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Modify the keys if needed
             state_dict = cls._fix_state_dict_keys_on_load(state_dict, key_mapping)
+            # Remove the prefix if needed
+            if loading_base_model_from_task_state_dict:
+                state_dict = _fix_state_dict_prefix(state_dict, start_prefix_to_remove)
 
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
             mismatched_keys += _find_mismatched_keys(
-                model_to_load, state_dict, renamed_loaded_keys, ignore_mismatched_sizes, start_prefix_to_remove
+                model_to_load, state_dict, ignore_mismatched_sizes, start_prefix_to_remove
             )
 
             if low_cpu_mem_usage or gguf_file is not None:
@@ -5013,7 +5015,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     new_error_msgs, disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                         model_to_load,
                         state_dict,
-                        start_prefix_to_remove,
                         expected_keys,
                         device_map=device_map,
                         disk_offload_folder=disk_offload_folder,
@@ -5034,7 +5035,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model_to_load, state_dict, start_prefix_to_remove
                 )
                 error_msgs += _load_state_dict_into_model(
-                    model_to_load, state_dict, start_prefix_to_remove, assign_to_params_buffers
+                    model_to_load, state_dict, assign_to_params_buffers
                 )
 
             # force memory release
