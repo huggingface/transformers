@@ -64,7 +64,7 @@ tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
 Beam search keeps track of several generated sequences (beams) at each time step. After a certain number of steps, it selects the sequence with the highest *overall* probability. Unlike greedy search, this strategy can "look ahead" and pick a sequence with a higher probability overall even if the initial tokens have a lower probability.
 
-> [TIP]
+> [!TIP]
 > Check out the [beam search visualizer](https://huggingface.co/spaces/m-ric/beam_search_visualizer) to see how beam search works.
 
 Enable beam search with the `num_beams` parameter (should be greater than 1 otherwise it's equivalent to greedy search).
@@ -144,7 +144,7 @@ outputs = model.generate(**inputs, max_new_tokens=50, do_sample=True, num_beams=
 
 ## Speculative decoding
 
-[Speculative](https://hf.co/papers/2211.17192) or assistive decoding isn't a search or sampling strategy. This method is especially useful for LLMs where it can be more costly and slower to generate tokens. Instead, speculative decoding adds a second smaller model to generate candidate tokens. The main model verifies the candidate tokens in a single `forward` pass, which speeds up the decoding process overall. Refer to the [speculative decoding](./llm_optims#speculative-decoding) guide to learn more.
+[Speculative](https://hf.co/papers/2211.17192) or assistive decoding isn't a search or sampling strategy. Instead, speculative decoding adds a second smaller model to generate candidate tokens. The main model verifies the candidate tokens in a single `forward` pass, which speeds up the decoding process overall. This method is especially useful for LLMs where it can be more costly and slower to generate tokens. Refer to the [speculative decoding](./llm_optims#speculative-decoding) guide to learn more.
 
 Currently, only greedy search and multinomial sampling are supported with speculative decoding. Batched inputs aren't supported either.
 
@@ -281,10 +281,10 @@ Enable DoLa with the following parameters.
 
   It can also be a list of integers that represent the layer indices between 0 and the total number of layers. Layer 0 is the word embedding, 1 is the first transformer layer, and so on. Refer to the table below for the range of layer indices depending on the number of model layers.
 
-| layers | low | high |
-|---|---|---|
-| > 40 | (0, 20, 2) | (N - 20, N, 2) |
-| <= 40 | range(0, N // 2, 2) | range(N // 2, N, 2) |
+  | layers | low | high |
+  |---|---|---|
+  | > 40 | (0, 20, 2) | (N - 20, N, 2) |
+  | <= 40 | range(0, N // 2, 2) | range(N // 2, N, 2) |
 
 - `repetition_penalty` reduces repetition and it is recommended to set it to 1.2.
 

@@ -112,7 +112,7 @@ model = SamModel.from_pretrained("facebook/sam-vit-base")
 
 With separate `q`, `k`, and `v` projections, apply LoRA to `q` and `v`.
 
-Create a [`~peft.LoraConfig`] and specify the rank `r`, `lora_alpha`, `lora_dropout`, `task_type`, and most importantly, the modules to target.
+Create a [LoraConfig](https://huggingface.co/docs/peft/package_reference/config#peft.PeftConfig) and specify the rank `r`, `lora_alpha`, `lora_dropout`, `task_type`, and most importantly, the modules to target.
 
 ```py
 from peft import LoraConfig, get_peft_model
@@ -127,13 +127,13 @@ config = LoraConfig(
 )
 ```
 
-Pass the model and [`~peft.LoraConfig`] to [`~peft.get_peft_model`] to apply LoRA to the model.
+Pass the model and [LoraConfig](https://huggingface.co/docs/peft/package_reference/config#peft.PeftConfig) to [get_peft_model](https://huggingface.co/docs/peft/package_reference/peft_model#peft.get_peft_model) to apply LoRA to the model.
 
 ```py
 model = get_peft_model(model, config)
 ```
 
-Call [`~peft.PeftModel.print_trainable_parameters`] to view the number of parameters you're training as a result versus the total number of parameters.
+Call [print_trainable_parameters](https://huggingface.co/docs/peft/package_reference/peft_model#peft.PeftMixedModel.print_trainable_parameters) to view the number of parameters you're training as a result versus the total number of parameters.
 
 ```py
 model.print_trainable_parameters()

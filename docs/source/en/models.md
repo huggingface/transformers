@@ -21,7 +21,7 @@ Transformers provides many pretrained models that are ready to use with a single
 Call [`~PreTrainedModel.from_pretrained`] to download and load a models weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
 
 > [!TIP]
-> [`~PreTrainedModel.from_pretrained`] loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.
+> The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -232,7 +232,7 @@ index["weight_map"]
 
 <Youtube id="MWCSGj9jEAo"/>
 
-[`~PreTrainedModel.from_pretrained`] method is supercharged with Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature.
+[`~PreTrainedModel.from_pretrained`] is supercharged with Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature.
 
 Big Model Inference creates a *model skeleton* on the PyTorch [meta](https://pytorch.org/docs/main/meta.html) device. The meta device doesn't store any real data, only the metadata.
 
