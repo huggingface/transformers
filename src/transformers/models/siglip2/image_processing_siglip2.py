@@ -169,7 +169,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values", "pixel_attention_mask", "pixel_position_ids"]
+    model_input_names = ["pixel_values", "pixel_attention_mask", "pixel_position_ids", "spatial_shapes"]
 
     def __init__(
         self,
@@ -356,13 +356,16 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         pixel_values = np.stack(pixel_values, axis=0)
         pixel_mask = np.stack(pixel_masks, axis=0)
         pixel_position_ids = np.stack(pixel_position_ids, axis=0)
+        spatial_shapes = (pixel_position_ids.max(axis=1) + 1).tolist()
 
         data = {
             "pixel_values": pixel_values,
             "pixel_attention_mask": pixel_mask,
             "pixel_position_ids": pixel_position_ids,
         }
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        batch_feature = BatchFeature(data=data, tensor_type=return_tensors)
+        batch_feature["spatial_shapes"] = spatial_shapes
+        return batch_feature
 
 
 __all__ = ["Siglip2ImageProcessor"]

@@ -7,7 +7,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -210,7 +210,9 @@ class Siglip2VisionEmbeddings(nn.Module):
         )
 
     @staticmethod
-    def sample_positional_embeddings(positional_embeddings: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+    def sample_positional_embeddings(
+        positional_embeddings: torch.Tensor, position_ids: torch.Tensor, spatial_shapes: List[Tuple[int, int]]
+    ) -> torch.Tensor:
         """
         Sample the positional embeddings with provided position ids (loop over batch elements, not optimized).
 
@@ -224,13 +226,12 @@ class Siglip2VisionEmbeddings(nn.Module):
             `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim)
             corresponding to the input pixel position ids.
         """
-        target_shapes = position_ids.max(dim=1).values + 1
 
         # Convert from (height, width, embed_dim) to (1, embed_dim, height, width) for interpolation
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
 
         resulted_positional_embeddings = []
-        for (height, width), position_ids_i in zip(target_shapes, position_ids):
+        for (height, width), position_ids_i in zip(spatial_shapes, position_ids):
             # resize positional embeddings for i-th image
             # 1, dim, height, width -> 1, dim, target_height, target_width
             resized_embeddings = F.interpolate(
@@ -298,7 +299,9 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         return embeddings
 
-    def forward(self, pixel_values: torch.FloatTensor, position_ids: torch.LongTensor) -> torch.Tensor:
+    def forward(
+        self, pixel_values: torch.FloatTensor, position_ids: torch.LongTensor, spatial_shapes: List[Tuple[int, int]]
+    ) -> torch.Tensor:
         """
         Args:
             pixel_values (`torch.FloatTensor`):
@@ -313,7 +316,9 @@ class Siglip2VisionEmbeddings(nn.Module):
         positional_embeddings = self.position_embedding.weight.reshape(
             self.position_embedding_size, self.position_embedding_size, -1
         )
-        embeddings = patch_embeds + self.sample_positional_embeddings(positional_embeddings, position_ids)
+        embeddings = patch_embeds + self.sample_positional_embeddings(
+            positional_embeddings, position_ids, spatial_shapes
+        )
         return embeddings
 
 
@@ -773,6 +778,7 @@ class Siglip2VisionTransformer(nn.Module):
         pixel_values: torch.FloatTensor,
         position_ids: torch.LongTensor,
         attention_mask: torch.Tensor,
+        spatial_shapes: List[Tuple[int, int]],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -788,7 +794,7 @@ class Siglip2VisionTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(pixel_values, position_ids)
+        hidden_states = self.embeddings(pixel_values, position_ids, spatial_shapes)
 
         if attention_mask is not None and not self._use_flash_attention_2:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
@@ -1266,6 +1272,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         pixel_position_ids: torch.LongTensor,
         pixel_attention_mask: torch.Tensor,
+        spatial_shapes: List[Tuple[int, int]],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1299,6 +1306,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
             pixel_values=pixel_values,
             position_ids=pixel_position_ids,
             attention_mask=pixel_attention_mask,
+            spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1397,6 +1405,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         pixel_position_ids: Optional[torch.LongTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
+        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1437,6 +1446,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
             pixel_values=pixel_values,
             position_ids=pixel_position_ids,
             attention_mask=pixel_attention_mask,
+            spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1457,6 +1467,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
         pixel_position_ids: Optional[torch.LongTensor] = None,
+        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1503,6 +1514,7 @@ class Siglip2Model(Siglip2PreTrainedModel):
             pixel_values=pixel_values,
             position_ids=pixel_position_ids,
             attention_mask=pixel_attention_mask,
+            spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1591,6 +1603,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         pixel_values: Optional[torch.Tensor] = None,
         pixel_position_ids: Optional[torch.LongTensor] = None,
         pixel_attention_mask: Optional[torch.Tensor] = None,
+        spatial_shapes: Optional[List[Tuple[int, int]]] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1640,6 +1653,7 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
             pixel_values,
             position_ids=pixel_position_ids,
             attention_mask=pixel_attention_mask,
+            spatial_shapes=spatial_shapes,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
