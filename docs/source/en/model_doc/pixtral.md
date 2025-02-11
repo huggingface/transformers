@@ -78,6 +78,10 @@ output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up
 
 [[autodoc]] PixtralVisionConfig
 
+## PixtralTextConfig
+
+[[autodoc]] PixtralTextConfig
+
 ## PixtralVisionModel
 
 [[autodoc]] PixtralVisionModel
