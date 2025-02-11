@@ -67,8 +67,8 @@ class SmolVLMVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers.models.smol_v_l_m.modeling_smol_v_l_m import SmolVLMVisionTransformer
-    >>> from transformers.models.smol_v_l_m.configuration_smol_v_l_m import SmolVLMVisionConfig
+    >>> from transformers.models.smolvlm.modeling_smolvlm import SmolVLMVisionTransformer
+    >>> from transformers.models.smolvlm.configuration_smolvlm import SmolVLMVisionConfig
 
     >>> # Initializing a SmolVLMVisionConfig with google/siglip-base-patch16-224 style configuration
     >>> configuration = SmolVLMVisionConfig()
@@ -80,8 +80,9 @@ class SmolVLMVisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "smol_v_l_m_vision"
+    model_type = "smolvlm_vision"
     base_config_key = "vision_config"
+    model_type = "smolvlm_vision"
 
     def __init__(
         self,
@@ -151,8 +152,9 @@ class SmolVLMConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "smol_v_l_m"
+    model_type = "smolvlm"
     sub_configs = {"text_config": AutoConfig, "vision_config": SmolVLMVisionConfig}
+    model_type = "smolvlm"
 
     def __init__(
         self,

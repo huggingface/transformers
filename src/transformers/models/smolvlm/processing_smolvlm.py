@@ -30,7 +30,7 @@ from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, 
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
 
-from .video_processing_smolvlm import DEFAULT_SYSTEM_MESSAGE, DEFAULT_VIDEO_INTRO, DEFAULT_MEDIA_OUTTRO, FRAME_TIMESTAMP_MESSAGE, load_video_from_disk_or_url
+from .video_processing_smolvlm import DEFAULT_SYSTEM_MESSAGE, DEFAULT_VIDEO_INTRO, DEFAULT_MEDIA_OUTTRO, FRAME_TIMESTAMP_MESSAGE, load_smolvlm_video
 
 
 if TYPE_CHECKING:
@@ -103,6 +103,7 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: SmolVLMImagesKwargs
 
     _defaults = {
+        "add_generation_prompt": False,
         "text_kwargs": {
             "add_special_tokens": True,
             "padding": False,
@@ -167,16 +168,6 @@ class SmolVLMProcessor(ProcessorMixin):
         # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
         # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
         self._regex_to_remove_extra_special_tokens = re.compile(r"(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+")
-
-        tokens_to_add = {
-            "additional_special_tokens": [
-                self.fake_image_token,
-                self.image_token,
-                self.end_of_utterance_token,
-            ]
-        }
-        tokenizer.add_special_tokens(tokens_to_add)
-
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def _extract_images_from_prompts(self, prompts):
@@ -282,8 +273,8 @@ class SmolVLMProcessor(ProcessorMixin):
         elif videos is not None:
             if is_str(videos) or is_url(videos):
                 # Single path/URL
-                frames, timestamps, duration_sec = load_video_from_disk_or_url(
-                    videos, sampling_fps=video_sampling_fps, max_frames = max_frames
+                frames, timestamps, duration_sec = load_smolvlm_video(
+                    videos, sampling_fps=video_sampling_fps, max_frames=max_frames
                 )
                 images = [frames]
                 

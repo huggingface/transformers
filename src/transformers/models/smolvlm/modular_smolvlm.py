@@ -26,7 +26,6 @@ from ...utils import (
 )
 
 from ..idefics3.modeling_idefics3 import (
-    IDEFICS3_INPUTS_DOCSTRING, 
     Idefics3BaseModelOutputWithPast, 
     Idefics3Model, 
     Idefics3ForConditionalGeneration
@@ -37,12 +36,17 @@ from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 logger = logging.get_logger(__name__)
 
 class SmolVLMVisionConfig(Idefics3VisionConfig):
+    model_type="smolvlm_vision"
     pass
 
 class SmolVLMConfig(Idefics3Config):
+    model_type="smolvlm"
     pass
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):
+    pass
+
+class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
     pass
 
 class SmolVLMModel(Idefics3Model):
@@ -167,20 +171,7 @@ class SmolVLMModel(Idefics3Model):
         merged_outputs = torch.stack(merged_outputs)
         #assert (old_merger_outputs==merged_outputs).all()
         return merged_outputs
-
-
-    @add_start_docstrings_to_model_forward(
-        """
-        Inputs fed to the model can have an arbitrary number of images. To account for this, pixel_values fed to
-        the model have image padding -> (batch_size, max_num_images, 3, max_heights, max_widths) where
-        max_num_images is the maximum number of images among the batch_size samples in the batch.
-        Padding images are not needed beyond padding the pixel_values at the entrance of the model.
-        For efficiency, we only pass through the vision_model's forward the real images by
-        discarding the padding images i.e. pixel_values of size (image_batch_size, 3, height, width) where
-        image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
-        """,
-        IDEFICS3_INPUTS_DOCSTRING,
-    )
+        
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -195,7 +186,7 @@ class SmolVLMModel(Idefics3Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Idefics3BaseModelOutputWithPast]:
+    ) -> Union[Tuple, SmolVLMBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -256,7 +247,7 @@ class SmolVLMModel(Idefics3Model):
                 )
             else:
                 # Remove padding images from the mask
-                pixel_attention_mask = pixel_attexntion_mask.view(
+                pixel_attention_mask = pixel_attention_mask.view(
                     batch_size * num_images, *pixel_attention_mask.shape[2:]
                 )
                 pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
@@ -301,7 +292,7 @@ class SmolVLMModel(Idefics3Model):
         if not return_dict:
             return tuple(v for v in [*outputs, image_hidden_states] if v is not None)
 
-        return Idefics3BaseModelOutputWithPast(
+        return SmolVLMBaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
