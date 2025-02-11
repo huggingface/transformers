@@ -766,7 +766,6 @@ def _load_state_dict_into_meta_model(
             full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
     for param_name, param in state_dict.items():
-
         if param_name not in expected_keys:
             continue
 
@@ -1472,17 +1471,14 @@ def _find_mismatched_keys(
         model_state_dict = model_to_load.state_dict()
         for key in state_dict.keys():
             if key in model_state_dict and state_dict[key].shape != model_state_dict[key].shape:
-                if (
-                    state_dict[key].shape[-1] == 1
-                    and state_dict[key].numel() * 2 == model_state_dict[key].numel()
-                ):
+                if state_dict[key].shape[-1] == 1 and state_dict[key].numel() * 2 == model_state_dict[key].numel():
                     # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                     # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                     pass
                 else:
                     # Add prefix if we removed it before, to add the correct state dict key to the warnings
                     key_with_prefix = prefix + key
-                    mismatched_keys.append((key_with_prefix, state_dict[key].shape, model_state_dict[adjusted_key].shape))
+                    mismatched_keys.append((key_with_prefix, state_dict[key].shape, model_state_dict[key].shape))
                     del state_dict[key]
     return mismatched_keys
 
@@ -1557,13 +1553,15 @@ class PipelineParallel(Enum):
     inputs: 0
     outputs: 1
 
-def _fix_state_dict_prefix(state_dict: Dict[str, torch.Tensor], start_prefix_to_remove: str) -> Dict[str, torch.Tensor]:
+def _fix_state_dict_prefix(
+    state_dict: Dict[str, torch.Tensor], start_prefix_to_remove: str
+) -> Dict[str, torch.Tensor]:
     """Remove leading prefix of the state dict keys. Note that this is performed without copy for memory reasons."""
     state_dict_keys = list(state_dict.keys())
     for k in state_dict_keys:
         if k.startswith(start_prefix_to_remove):
-            state_dict[k[len(start_prefix_to_remove):]] = state_dict.pop(k)
-    
+            state_dict[k[len(start_prefix_to_remove) :]] = state_dict.pop(k)
+
     return state_dict
 
 
@@ -5034,9 +5032,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix_to_remove
                 )
-                error_msgs += _load_state_dict_into_model(
-                    model_to_load, state_dict, assign_to_params_buffers
-                )
+                error_msgs += _load_state_dict_into_model(model_to_load, state_dict, assign_to_params_buffers)
 
             # force memory release
             del state_dict
