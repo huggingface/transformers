@@ -89,6 +89,7 @@ class SmolVLMVisionConfig(PretrainedConfig):
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         initializer_range=0.02,
+        max_frames=64,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -104,6 +105,7 @@ class SmolVLMVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.max_frames = max_frames
 
 
 class SmolVLMConfig(PretrainedConfig):

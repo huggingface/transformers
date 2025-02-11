@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 the HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -815,7 +815,7 @@ SMOLVLM_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """SmolVLM model consisting of a SIGLIP vision encoder and Llama3 language decoder""",
+    """SmolVLM model consisting of a SIGLIP vision encoder and SmolLM2 language decoder""",
     SMOLVLM_START_DOCSTRING,
 )
 class SmolVLMModel(SmolVLMPreTrainedModel):
@@ -1136,8 +1136,8 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
-        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/SmolVLM-8B-Llama3")
-        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/SmolVLM-8B-Llama3", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/SmolVL2-2B-Instruct")
+        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/SmolVL2-2B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [

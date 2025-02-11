@@ -19,11 +19,7 @@ Processor class for SmolVLM.
 import re
 from itertools import accumulate
 from datetime import timedelta
-import decord
-from PIL import Image
 import numpy as np
-from decord import VideoReader, cpu
-decord.bridge.set_bridge("torch")
 from num2words import num2words
 
 from typing import TYPE_CHECKING, Dict, List, Optional, Union, Any, Tuple
@@ -34,21 +30,14 @@ from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, 
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import logging
 
+from .video_processing_smolvlm import DEFAULT_SYSTEM_MESSAGE, DEFAULT_VIDEO_INTRO, DEFAULT_MEDIA_OUTTRO, FRAME_TIMESTAMP_MESSAGE, load_video_from_disk_or_url
+
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
 
 logger = logging.get_logger(__name__)
 
-DEFAULT_SYSTEM_MESSAGE = "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language."
-# DEFAULT_VIDEO_INTRO = "Here are some frames sampled from a video:"
-DEFAULT_VIDEO_INTRO = (
-    "You are provided the following series of {frame_count} frames "
-    "from a {video_duration} [H:MM:SS] video.\n"
-)
-DEFAULT_IMAGE_INTRO = "Here are some images:\n"
-DEFAULT_MEDIA_OUTTRO = "\n\n"
-FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
 
 
 def is_url(val) -> bool:
@@ -60,121 +49,6 @@ def is_str(val) -> bool:
 def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
-
-def load_video(
-    path: str,
-    max_frames: int = 64,
-    target_fps: float = 1.0,
-    skip_secs: float = 1.0
-) -> Tuple[List[Image.Image], List[str]]:
-    """
-    Loads a video from `path` using decord, sampling up to `max_frames` frames.
-    After deduplicating indices (e.g., to handle rounding collisions), each frame
-    is decoded into a PIL Image (in RGB mode). Timestamps are generated in "MM:SS" format
-    based on the frame index over `native_fps`.
-
-    Args:
-        path (str): Path to the video file (e.g., MP4).
-        max_frames (int): Hard cap on how many frames we ever pick in total.
-        target_fps (float): Target approximate sampling rate in frames per second.
-        skip_secs (float): Number of seconds to skip at the beginning and end if 
-            the video is sufficiently long ((duration - 2*skip_secs) > max_frames * target_fps).
-    
-    Returns:
-        Tuple[List[Image.Image], List[str]]:
-          - A list of PIL.Image objects corresponding to each selected frame.
-          - A list of parallel timestamps ("MM:SS" strings), one per selected frame.
-    """
-    try:
-        # Use decord with single-thread and CPU context
-        vr = VideoReader(path, num_threads=1, ctx=cpu(0))
-    except Exception as e:
-        raise RuntimeError(f"Failed to open video '{path}': {e}")
-
-    total_frames = len(vr)
-    if total_frames == 0:
-        raise RuntimeError(f"Video '{path}' has 0 frames.")
-
-    # Fallback to 30 if native_fps is None or zero
-    native_fps = vr.get_avg_fps() or 30.0
-    duration_seconds = total_frames / native_fps
-
-    # Estimate how many frames we'd get if we sample at `target_fps`.
-    estimated_frames = int(round(target_fps * duration_seconds)) if target_fps > 0 else max_frames
-    desired_frames = min(estimated_frames, max_frames)
-    if desired_frames < 1:
-        desired_frames = 1
-
-    start_idx = 0
-    end_idx = total_frames - 1
-
-    # Centered skip if we want fewer frames than max_frames
-    if desired_frames < max_frames:
-        leftover = total_frames - desired_frames
-        start_idx = leftover // 2
-        end_idx = total_frames - (leftover - start_idx)
-    # Otherwise, if video is long enough, skip a bit from start and end
-    elif skip_secs > 0 and (duration_seconds - 2 * skip_secs) > (max_frames * target_fps):
-        start_idx = int(skip_secs * native_fps)
-        end_idx = int(total_frames - skip_secs * native_fps)
-
-    # Ensure valid start / end
-    start_idx = max(start_idx, 0)
-    end_idx = min(end_idx, total_frames - 1)
-    if start_idx >= end_idx:
-        start_idx = 0
-        end_idx = total_frames - 1
-
-    # Uniformly sample the desired number of frames from [start_idx..end_idx]
-    frames_idx = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
-    frames_idx = np.unique(frames_idx).tolist()
-
-    # Read frames from decord
-    try:
-        frames_tensor = vr.get_batch(frames_idx).cpu().numpy()  # (N, H, W, C)
-    except Exception as e:
-        raise RuntimeError(f"Failed to read frames from '{path}': {e}")
-
-    # Convert to PIL Images
-    frames_out = [Image.fromarray(arr).convert("RGB") for arr in frames_tensor]
-
-    # Build timestamps (MM:SS) for each selected frame index
-    timestamps = []
-    for idx in frames_idx:
-        sec = idx / native_fps
-        mm = int(sec // 60)
-        ss = int(sec % 60)
-        timestamps.append(f"{mm:02d}:{ss:02d}")
-
-    return frames_out, timestamps, duration_seconds
-    
-
-def load_video_from_disk_or_url(path_or_url: str, sampling_fps: int = 1, max_frames: int = 48):
-    """
-    Minimal example of loading a video or frames from a URL/local path.
-    Returns: (frames, timestamps, duration_seconds).
-    This can be replaced by a more robust version with decord or ffmpeg, etc.
-    """
-    if is_url(path_or_url):
-        ## load video
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            filename = os.path.join(tmp_dir, "temp_video.mp4")
-            
-            # e.g. use requests
-            resp = requests.get(path_or_url, stream=True)
-            resp.raise_for_status()
-            with open(filename, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            
-            # 2) Actually load frames from the local temp file
-            frames, timestamps, duration_seconds = load_video(
-                filename, max_frames=max_frames, target_fps=sampling_fps
-            )
-    else:
-        frames, timestamps, duration_seconds = load_video(path_or_url, max_frames, sampling_fps)
-        
-    return frames, timestamps, duration_seconds
 
 def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token):
     """Prompt with expanded image tokens for when the image is split into patches."""
@@ -268,20 +142,21 @@ class SmolVLMProcessor(ProcessorMixin):
     image_processor_class = "SmolVLMImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str = None, sampling_fps = 1, video_frame_size=384, **kwargs):
+    def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str = None, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
             
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
-
+        
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
         self.image_token = AddedToken("<image>", normalized=False, special=True)
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
         self.global_image_tag = "<global-img>"  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
-        self.sampling_fps = sampling_fps
-        self.video_frame_size = video_frame_size
+        self.video_sampling_fps = image_processor.video_sampling['fps']
+        self.video_frame_size = image_processor.video_sampling['video_size']
+        self.max_frames = image_processor.video_sampling['max_frames']
 
         # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
         # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
@@ -314,7 +189,8 @@ class SmolVLMProcessor(ProcessorMixin):
         self,
         images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
         video: Union[str, List[ImageInput], List[List[ImageInput]]] = None,
-        video_frame_sampling_fps: int = 1, 
+        video_sampling_fps: int = None,
+        max_frames: int = None,
         text: Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]] = None,
         messages: Optional[List[Dict[str, Any]]] = None,
         add_generation_prompt: bool = False,
@@ -385,6 +261,8 @@ class SmolVLMProcessor(ProcessorMixin):
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        video_sampling_fps = video_sampling_fps if video_sampling_fps is not None else self.video_sampling_fps
+        max_frames = max_frames if max_frames is not None else self.max_frames
 
         n_images_in_text = []
         n_images_in_images = []
@@ -401,7 +279,7 @@ class SmolVLMProcessor(ProcessorMixin):
             if is_str(video) or is_url(video):
                 # Single path/URL
                 frames, timestamps, duration_sec = load_video_from_disk_or_url(
-                    video, sampling_fps=video_frame_sampling_fps
+                    video, sampling_fps=video_sampling_fps, max_frames = max_frames
                 )
                 images = [frames]
                 
@@ -414,11 +292,11 @@ class SmolVLMProcessor(ProcessorMixin):
                         # Build naive timestamps
                         timestamps = []
                         for i in range(len(frames)):
-                            mm = int(i // (60 * video_frame_sampling_fps))
-                            ss = int(i % (60 * video_frame_sampling_fps))
+                            mm = int(i // (60 * video_sampling_fps))
+                            ss = int(i % (60 * video_sampling_fps))
                             ts_str = f"{mm:02d}:{ss:02d}"
                             timestamps.append(ts_str)
-                        duration_sec = max(len(frames) - 1, 0) / float(video_frame_sampling_fps)
+                        duration_sec = max(len(frames) - 1, 0) / float(video_sampling_fps)
                 else:
                     raise ValueError("Invalid format for `video` argument when it's a list/tuple.")
             
@@ -429,7 +307,7 @@ class SmolVLMProcessor(ProcessorMixin):
             else:
                 raise ValueError("Invalid `video` format. Must be string/URL, list of frames, or nested frames.")
             
-            self.process_images(inputs, text, images, image_seq_len, output_kwargs, do_image_splitting=False, image_processor_size={"longest_edge": self.video_frame_size})
+            self.process_images(inputs, text, images, image_seq_len, output_kwargs, do_image_splitting=False, image_processor_size=self.video_frame_size)
 
         elif text is not None:
             if any(n_images_in_text):
@@ -524,23 +402,6 @@ class SmolVLMProcessor(ProcessorMixin):
             text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
 
-    def video_to_image_tokens(self, original_text: str, frames, timestamps, duration_sec: float) -> str:
-        """
-        Converts a single prompt containing <video> into a text
-        with an intro, N frame placeholders, and an outro.
-        """
-        td = timedelta(seconds=duration_sec)
-        video_intro = DEFAULT_VIDEO_INTRO.format(frame_count=num2words(len(frames)), video_duration=str(td))
-        new_text = video_intro
-
-        for i, ts in enumerate(timestamps):
-            new_text += f"\n{FRAME_TIMESTAMP_MESSAGE.format(timestamp=ts)} <image>"
-
-        new_text += f"\n{DEFAULT_MEDIA_OUTTRO}\n"
-        # append whatever else the user had in the original text after <video>
-        new_text += original_text
-        return new_text
-
     def apply_chat_template(self, messages, add_generation_prompt, num_frames=None, timestamps=None, duration_sec=None):
         """
         Overrides apply_chat_template to first convert any {'type': 'video'} blocks
@@ -573,24 +434,17 @@ class SmolVLMProcessor(ProcessorMixin):
                         # If user didn't pass these, raise or skip
                         raise ValueError("Must provide num_frames, timestamps, and duration_sec to insert 'video' blocks.")
 
-                    # Build the video intro text
-                    from datetime import timedelta
-                    from num2words import num2words
+                    # Build the video intro texts
                     td = timedelta(seconds=duration_sec)
-                    intro_str = (
-                        f"You are provided the following series of {num2words(num_frames)} frames "
-                        f"from a {str(td)} [H:MM:SS] video.\n"
-                    )
-                    new_content.append({"type": "text", "text": intro_str})
+                    new_content.append({"type": "text", "text": DEFAULT_VIDEO_INTRO.format(frame_count=num2words(num_frames), video_duration=str(td))})
 
                     # 2) Insert per-frame lines: "Frame from {timestamp}:", then an "image" block
                     for i, ts in enumerate(timestamps):
-                        frame_str = f"Frame from {ts}:"
-                        new_content.append({"type": "text", "text": frame_str})
+                        new_content.append({"type": "text", "text": FRAME_TIMESTAMP_MESSAGE.format(timestamp=ts)})
                         new_content.append({"type": "image"})
 
                     # 3) Optionally add an outro (e.g. "Now answer the question:")
-                    new_content.append({"type": "text", "text": "Now answer the following question:"})
+                    new_content.append({"type": "text", "text": DEFAULT_MEDIA_OUTTRO})
                     # Do NOT add the original block => we skip it (since we've replaced it)
                 else:
                     # keep original block
