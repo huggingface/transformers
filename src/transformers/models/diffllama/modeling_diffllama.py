@@ -31,7 +31,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
+from ...modeling_flash_attention_utils import (
+    FlashAttentionKwargs,
+    _flash_attention_forward,
+    get_position_ids_from_cu_seq_lens,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -748,20 +752,6 @@ DIFFLLAMA_INPUTS_DOCSTRING = r"""
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
-
-
-def get_position_ids_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    if cu_seq_lens.ndim != 1:
-        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
-    pos_ids = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
-    seq_lens = cu_seq_lens.diff(dim=-1)
-    max_arange = torch.arange(seq_lens.max(), dtype=torch.int32, device=cu_seq_lens.device)
-    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
-    for s in seq_lens:
-        pos_ids[start : start + s] = max_arange[:s]
-        start += s
-
-    return pos_ids[None]
 
 
 @add_start_docstrings(

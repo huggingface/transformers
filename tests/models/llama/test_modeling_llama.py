@@ -22,7 +22,7 @@ from pytest import mark
 
 from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs, get_position_ids_from_cu_seq_lens
 from transformers.models.llama.modeling_llama import get_position_ids_from_cu_seq_lens
 from transformers.testing_utils import (
     cleanup,
