@@ -56,6 +56,7 @@ class QuantizationMethod(str, Enum):
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
     BITNET = "bitnet"
+    SPINQUANT = "spinquant"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1540,6 +1541,24 @@ class BitNetConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.BITNET
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        pass
+
+
+@dataclass
+class SpinQuantConfig(QuantizationConfigMixin):
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.SPINQUANT
         self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 

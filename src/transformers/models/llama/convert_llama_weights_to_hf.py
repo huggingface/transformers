@@ -208,6 +208,9 @@ def write_model(
         max_position_embeddings = 16384
     else:
         max_position_embeddings = CONTEXT_LENGTH_FOR_VERSION[llama_version]
+    is_quantized = "quantization_args" in params
+    if is_quantized:
+        group_size = params["quantization_args"]["group_size"]
 
     if params.get("n_kv_heads", None) is not None:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
@@ -240,6 +243,16 @@ def write_model(
             filename = f"pytorch_model-{layer_i + 1}-of-{n_layers + 1}.bin"
             if num_shards == 1:
                 # Unsharded
+                # print(f"layer {layer_i}")
+                # print("Shape wq weight before: ")
+                # print(loaded[f"layers.{layer_i}.attention.wq.weight"])
+                # print("Shape wq scales before: ")
+                # print(loaded[f"layers.{layer_i}.attention.wq.scales"])
+                # print("Shape wk weight before: ")
+                # print(loaded[f"layers.{layer_i}.attention.wk.weight"])
+                # print("Shape wk scales before: ")
+                # print(loaded[f"layers.{layer_i}.attention.wk.scales"])
+
                 state_dict = {
                     f"model.layers.{layer_i}.self_attn.q_proj.weight": permute(
                         loaded[f"layers.{layer_i}.attention.wq.weight"], n_heads=n_heads
@@ -261,6 +274,41 @@ def write_model(
                         f"layers.{layer_i}.ffn_norm.weight"
                     ],
                 }
+                if is_quantized:
+                    state_dict.update({
+                        f"model.layers.{layer_i}.self_attn.q_proj.scales": permute(
+                        loaded[f"layers.{layer_i}.attention.wq.scales"], n_heads=n_heads, dim2=dim//group_size
+                    ),
+                        f"model.layers.{layer_i}.self_attn.k_proj.scales": permute(
+                        loaded[f"layers.{layer_i}.attention.wk.scales"],
+                        n_heads=num_key_value_heads,
+                        dim1=key_value_dim,
+                        dim2=dim//group_size
+                    ),
+                        f"model.layers.{layer_i}.self_attn.v_proj.scales": loaded[f"layers.{layer_i}.attention.wv.scales"],
+                        f"model.layers.{layer_i}.self_attn.o_proj.scales": loaded[f"layers.{layer_i}.attention.wo.scales"],
+                        f"model.layers.{layer_i}.mlp.gate_proj.scales": loaded[f"layers.{layer_i}.feed_forward.w1.scales"],
+                        f"model.layers.{layer_i}.mlp.down_proj.scales": loaded[f"layers.{layer_i}.feed_forward.w2.scales"],
+                        f"model.layers.{layer_i}.mlp.up_proj.scales": loaded[f"layers.{layer_i}.feed_forward.w3.scales"],
+                    })
+                # print(f"Shape wq weight after:")
+                # print(permute(loaded[f"layers.{layer_i}.attention.wq.weight"], n_heads=n_heads,))
+                # print(f"Shape wq scales after:")
+                # print(permute(loaded[f"layers.{layer_i}.attention.wq.scales"], n_heads=n_heads, dim2=dim//group_size))
+                # print(f"Shape wk weight after:")
+                # print(permute(
+                #         loaded[f"layers.{layer_i}.attention.wk.weight"],
+                #         n_heads=num_key_value_heads,
+                #         dim1=key_value_dim,
+                #     ))
+                # print(f"Shape wk scales after:")
+                # print(permute(
+                #         loaded[f"layers.{layer_i}.attention.wk.scales"],
+                #         n_heads=num_key_value_heads,
+                #         dim1=key_value_dim,
+                #         dim2=dim//group_size
+                #     ))
+                # raise
             else:
                 # Sharded
                 # Note that attention.w{q,k,v,o}, feed_fordward.w[1,2,3], attention_norm.weight and ffn_norm.weight share
@@ -338,6 +386,8 @@ def write_model(
                 "model.norm.weight": loaded["norm.weight"],
                 "lm_head.weight": loaded["output.weight"],
             }
+            if is_quantized:
+                state_dict.update({"lm_head.scales": loaded["output.scales"], "model.embed_tokens.scales": loaded["tok_embeddings.scales"],})
         else:
             concat_dim = 0 if is_llama_3(llama_version) else 1
             state_dict = {
@@ -381,6 +431,13 @@ def write_model(
         else:
             rope_scaling = None
 
+        tie_word_embeddings = False
+        if llama_version in ["3.2"] and not is_quantized:
+            tie_word_embeddings = True
+
+        if is_quantized:
+            quantization_config = {"quant_method":"spinquant"}
+
         config = LlamaConfig(
             hidden_size=dim,
             intermediate_size=compute_intermediate_size(dim, ffn_dim_multiplier, multiple_of),
@@ -394,8 +451,11 @@ def write_model(
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=True if llama_version in ["3.2"] else False,
+            tie_word_embeddings=tie_word_embeddings
         )
+        if is_quantized:
+            quantization_config = {"quant_method": "spinquant"}
+            config.quantization_config = quantization_config
 
         config.save_pretrained(tmp_model_path)
 
@@ -571,7 +631,9 @@ def main():
         # no special tokens by default
         args.special_tokens = DEFAULT_LLAMA_SPECIAL_TOKENS.get(str(args.llama_version), [])
 
-    spm_path = os.path.join(args.input_dir, "tokenizer.model")
+    from huggingface_hub import snapshot_download
+    input_dir = snapshot_download(args.input_dir)
+    spm_path = os.path.join(input_dir, "tokenizer.model")
     vocab_size = len(
         write_tokenizer(
             args.output_dir,
@@ -586,7 +648,7 @@ def main():
     if args.model_size != "tokenizer_only":
         write_model(
             model_path=args.output_dir,
-            input_base_path=args.input_dir,
+            input_base_path=input_dir,
             model_size=args.model_size,
             safe_serialization=args.safe_serialization,
             llama_version=args.llama_version,

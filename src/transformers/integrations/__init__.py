@@ -106,6 +106,7 @@ _import_structure = {
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "vptq": ["replace_with_vptq_linear"],
+    "spinquant": ["replace_with_spinquant_linear"]
 }
 
 try:
