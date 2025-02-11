@@ -250,11 +250,11 @@ class SmolVLMProcessor(ProcessorMixin):
         if text is not None and messages is not None:
             raise ValueError("You must provide only one of `text` or `messages'.")
             
-        if text is None and images is None and video is None:
-            raise ValueError("You must provide one of `text`, `images` or `video'.")
+        if text is None and images is None and videos is None:
+            raise ValueError("You must provide one of `text`, `images` or `videos'.")
 
-        if images is not None and video is not None:
-            raise ValueError("You must provide either `images` or `video', not both.")
+        if images is not None and videos is not None:
+            raise ValueError("You must provide either `images` or `videos', not both.")
 
         output_kwargs = self._merge_kwargs(
             SmolVLMProcessorKwargs,
@@ -263,9 +263,11 @@ class SmolVLMProcessor(ProcessorMixin):
         )
         video_sampling_fps = output_kwargs["videos_kwargs"]["sampling_fps"]
         max_frames = output_kwargs["videos_kwargs"]["max_frames"]
+        add_generation_prompt = kwargs['add_generation_prompt']
+        
         video_sampling_fps = video_sampling_fps if video_sampling_fps is not None else self.video_sampling_fps
         max_frames = max_frames if max_frames is not None else self.max_frames
-        add_generation_prompt = output_kwargs['add_generation_prompt'] if output_kwargs['add_generation_prompt'] is not None else False 
+        add_generation_prompt = add_generation_prompt if add_generation_prompt is not None else False 
 
         n_images_in_text = []
         n_images_in_images = []
@@ -275,20 +277,20 @@ class SmolVLMProcessor(ProcessorMixin):
             if messages is not None and text is None:
                 text = self.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
                 
-            self.process_images(inputs, text, images, image_seq_len, output_kwargs)
+            self.process_images(inputs, text, images, output_kwargs)
             
-        elif video is not None:
-            if is_str(video) or is_url(video):
+        elif videos is not None:
+            if is_str(videos) or is_url(videos):
                 # Single path/URL
                 frames, timestamps, duration_sec = load_video_from_disk_or_url(
-                    video, sampling_fps=video_sampling_fps, max_frames = max_frames
+                    videos, sampling_fps=video_sampling_fps, max_frames = max_frames
                 )
                 images = [frames]
                 
-            elif isinstance(video, (list, tuple)):
-                if video and is_image_or_image_url(video[0]):
+            elif isinstance(videos, (list, tuple)):
+                if videos and is_image_or_image_url(videos[0]):
                     # => single list of frames => wrap as [video]
-                    frames = list(video) 
+                    frames = list(videos) 
                     images = [frames]
                     # Possibly the user provides an explicit video_duration in "videos_kwargs"
                     duration_sec = output_kwargs["videos_kwargs"].get("video_duration", None)
@@ -306,7 +308,7 @@ class SmolVLMProcessor(ProcessorMixin):
                             ts_str = f"{mm:02d}:{ss:02d}"
                             timestamps.append(ts_str)
                 else:
-                    raise ValueError("Invalid format for `video` argument when it's a list/tuple.")
+                    raise ValueError("Invalid format for `videos` argument when it's a list/tuple.")
             
             if messages is not None and text is None:
                 self.process_video_token(
@@ -314,9 +316,9 @@ class SmolVLMProcessor(ProcessorMixin):
                 )
                 text = self.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
             else:
-                raise ValueError("Invalid `video` format. Must be string/URL, list of frames, or nested frames.")
+                raise ValueError("Invalid `videos` format. Must be string/URL, list of frames, or nested frames.")
             
-            self.process_images(inputs, text, images, image_seq_len, output_kwargs, do_image_splitting=False, image_processor_size=self.video_frame_size)
+            self.process_images(inputs, text, images, output_kwargs, do_image_splitting=False, image_processor_size=self.video_frame_size)
 
         elif text is not None:
             if any(n_images_in_text):
@@ -328,8 +330,8 @@ class SmolVLMProcessor(ProcessorMixin):
 
         return inputs
 
-    def process_images(self, inputs, text, images, image_seq_len, output_kwargs, do_image_splitting=None, image_processor_size=None):
-        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+    def process_images(self, inputs, text, images, output_kwargs, do_image_splitting=None, image_processor_size=None):
+        image_seq_len = self.image_seq_len
         if text is not None:
             if isinstance(text, str):
                 text = [text]
