@@ -243,9 +243,8 @@ class Cohere2IntegrationTest(unittest.TestCase):
             convert_and_export_with_cache,
         )
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            "CohereForAI/c4ai-command-r7b-12-2024", pad_token="<PAD>", padding_side="right"
-        )
+        model_id = "CohereForAI/c4ai-command-r7b-12-2024"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         EXPECTED_TEXT_COMPLETION = [
             "Hello I am doing a project on the effects of social media on mental health. I have a few questions. 1. What is the relationship",
         ]
