@@ -1179,7 +1179,7 @@ class EvollaPreTrainedModel(PreTrainedModel):
     config_class = EvollaConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["EvollaDecoderLayer", "EvollaGatedCrossAttentionLayer"]
+    _no_split_modules = ["EvollaDecoderLayer", "CrossAttention"]
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
@@ -1265,7 +1265,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
-class EvollaLLM(PreTrainedModel):
+class EvollaLLM(EvollaPreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
 
