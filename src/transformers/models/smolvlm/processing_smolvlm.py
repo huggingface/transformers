@@ -274,8 +274,7 @@ class SmolVLMProcessor(ProcessorMixin):
                 
             self.process_images(inputs, text, images, image_seq_len, output_kwargs)
             
-        if video is not None:
-            ## TODO, fix this
+        elif video is not None:
             if is_str(video) or is_url(video):
                 # Single path/URL
                 frames, timestamps, duration_sec = load_video_from_disk_or_url(
