@@ -171,7 +171,9 @@ class Qwen2_5_VLVisionText2TextModelTester:
         input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         input_ids[:, self.num_image_tokens] = self.image_token_id
+        input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
         labels = torch.zeros(
             (self.batch_size, self.seq_length),
             dtype=torch.long,

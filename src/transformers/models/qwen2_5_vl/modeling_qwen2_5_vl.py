@@ -1457,7 +1457,7 @@ QWEN2_5_VL_INPUTS_DOCSTRING = r"""
 class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     config_class = Qwen2_5_VLConfig
-    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
+    _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1933,9 +1933,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
     def _get_image_nums_and_video_nums(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.LongTensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
@@ -1943,12 +1941,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+                Indices of input sequence tokens in the vocabulary.
 
         Returns:
             image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
@@ -1958,14 +1951,12 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         video_token_id = self.config.video_token_id
         vision_start_token_id = self.config.vision_start_token_id
 
-        image_nums, video_nums = None, None
-        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
-            vision_start_mask = input_ids == vision_start_token_id
-            vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
-            image_mask = input_ids == image_token_id
-            video_mask = input_ids == video_token_id
-            image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
-            video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
+        vision_start_mask = input_ids == vision_start_token_id
+        vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
+        image_mask = input_ids == image_token_id
+        video_mask = input_ids == video_token_id
+        image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
+        video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
 
         return image_nums, video_nums
 
@@ -1986,7 +1977,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         image_grid_thw = model_kwargs.get("image_grid_thw", None)
         video_grid_thw = model_kwargs.get("video_grid_thw", None)
-        image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids, image_grid_thw, video_grid_thw)
+        image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids)
 
         def _repeat_interleave_samples(x, lengths, repeat_times):
             samples = torch.split(x, lengths)
