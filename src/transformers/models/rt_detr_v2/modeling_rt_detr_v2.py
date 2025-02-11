@@ -22,7 +22,7 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
-from functools import lru_cache, partial, wraps
+from functools import partial
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -34,12 +34,14 @@ from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_ninja_available,
     is_torch_cuda_available,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -97,7 +99,7 @@ def multi_scale_deformable_attention_v2(
     value_list = (
         value.permute(0, 2, 3, 1)
         .flatten(0, 1)
-        .split([height.item() * width.item() for height, width in value_spatial_shapes], dim=-1)
+        .split([height * width for height, width in value_spatial_shapes], dim=-1)
     )
     # sampling_offsets [8, 480, 8, 12, 2]
     if method == "default":
@@ -226,9 +228,9 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
-        **kwargs,
     ):
         # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
@@ -236,7 +238,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
+        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
             )
@@ -272,7 +274,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         # V2-specific attention implementation choice
         output = multi_scale_deformable_attention_v2(
-            value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
+            value, spatial_shapes_list, sampling_locations, attention_weights, self.n_points_list, self.method
         )
 
         output = self.output_proj(output)
@@ -1329,27 +1331,6 @@ RTDetrV2_INPUTS_DOCSTRING = r"""
 """
 
 
-def compile_compatible_lru_cache(*lru_args, **lru_kwargs):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not torch.compiler.is_compiling():
-                # Cache the function only if the model is not being compiled
-                # check if the function is already cached, otherwise create it
-                if not hasattr(self, f"_cached_{func.__name__}"):
-                    self.__setattr__(
-                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
-                    )
-                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
-            else:
-                # Otherwise, just call the original function
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 def _get_clones(partial_module, N):
     return nn.ModuleList([partial_module() for i in range(N)])
 
@@ -1669,7 +1650,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
-    @compile_compatible_lru_cache(maxsize=32)
+    @compile_compatible_method_lru_cache(maxsize=32)
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
         if spatial_shapes is None:
             spatial_shapes = [
