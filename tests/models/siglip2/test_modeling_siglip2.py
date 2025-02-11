@@ -15,7 +15,6 @@
 """Testing suite for the PyTorch Siglip2 model."""
 
 import inspect
-import os
 import tempfile
 import unittest
 from typing import Tuple
@@ -45,7 +44,6 @@ from transformers.utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     is_flaky,
@@ -251,7 +249,8 @@ class Siglip2VisionModelTester:
         self,
         parent,
         batch_size=12,
-        image_size=30,
+        num_patches=16,
+        image_num_patches=24,
         patch_size=2,
         num_channels=3,
         is_training=True,
@@ -266,7 +265,7 @@ class Siglip2VisionModelTester:
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.image_size = image_size
+        self.num_patches = num_patches
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
@@ -278,20 +277,33 @@ class Siglip2VisionModelTester:
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.scope = scope
-
-        # in ViT, the seq length equals the number of patches
-        num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches
+        self.seq_length = image_num_patches
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.seq_length, self.num_channels * self.patch_size * self.patch_size]
+        )
+        pixel_attention_mask = torch.zeros(self.batch_size, self.seq_length, device=torch_device, dtype=torch.long)
+
+        spatial_shapes = [
+            (height, width)
+            for height in range(1, self.seq_length)
+            for width in range(1, self.seq_length)
+            if height * width <= self.seq_length
+        ] * self.batch_size
+        spatial_shapes = spatial_shapes[: self.batch_size]
+        spatial_shapes = torch.tensor(spatial_shapes, device=torch_device, dtype=torch.long)
+
+        for i, (height, width) in enumerate(spatial_shapes):
+            pixel_attention_mask[i, : height * width] = 1
+
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values, pixel_attention_mask, spatial_shapes
 
     def get_config(self):
         return Siglip2VisionConfig(
-            image_size=self.image_size,
+            num_patches=self.num_patches,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
@@ -303,23 +315,23 @@ class Siglip2VisionModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(self, config, pixel_values):
+    def create_and_check_model(self, config, pixel_values, pixel_attention_mask, spatial_shapes):
         model = Siglip2VisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
-        image_size = (self.image_size, self.image_size)
-        patch_size = (self.patch_size, self.patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches, self.hidden_size))
+            result = model(pixel_values, pixel_attention_mask, spatial_shapes)
+
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, pixel_values, pixel_attention_mask, spatial_shapes = self.prepare_config_and_inputs()
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+            "spatial_shapes": spatial_shapes,
+        }
         return config, inputs_dict
 
 
@@ -410,7 +422,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google/siglip2"
+        model_name = "s0225/siglip2-base-patch-16-naflex-256"
         model = Siglip2VisionModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -568,7 +580,7 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google/siglip2"
+        model_name = "s0225/siglip2-base-patch-16-naflex-256"
         model = Siglip2TextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -603,11 +615,13 @@ class Siglip2ModelTester:
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        vision_config, pixel_values, pixel_attention_mask, spatial_shapes = (
+            self.vision_model_tester.prepare_config_and_inputs()
+        )
 
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
+        return config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes
 
     def get_config(self):
         return Siglip2Config.from_text_vision_configs(
@@ -615,10 +629,12 @@ class Siglip2ModelTester:
             self.vision_model_tester.get_config(),
         )
 
-    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+    def create_and_check_model(
+        self, config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes
+    ):
         model = Siglip2Model(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
+            result = model(input_ids, pixel_values, pixel_attention_mask, spatial_shapes, attention_mask)
         self.parent.assertEqual(
             result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
         )
@@ -628,11 +644,14 @@ class Siglip2ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        config, input_ids, attention_mask, pixel_values, pixel_attention_mask, spatial_shapes = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "attention_mask": attention_mask,
             "pixel_values": pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+            "spatial_shapes": spatial_shapes,
+            "attention_mask": attention_mask,
+            "position_ids": None,
             "return_loss": False,
         }
         return config, inputs_dict
@@ -641,6 +660,7 @@ class Siglip2ModelTester:
 @require_torch
 class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Siglip2Model,) if is_torch_available() else ()
+    pipeline_model_mapping = {"feature-extraction": Siglip2Model} if is_torch_available() else {}
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -685,79 +705,8 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_initialization(self):
         pass
 
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # Siglip2 needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict.keys():
-                if key not in model_state_dict.keys():
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
-
     def test_load_vision_text_config(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         # Save Siglip2Config and check if we can load Siglip2VisionConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
@@ -773,7 +722,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google/siglip2"
+        model_name = "s0225/siglip2-base-patch-16-naflex-256"
         model = Siglip2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -885,15 +834,19 @@ class Siglip2ForImageClassificationModelTester(Siglip2ModelTester):
         self.seq_length = self.vision_model_tester.seq_length
 
     def prepare_config_and_inputs(self):
-        _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+        _, pixel_values, pixel_attention_mask, spatial_shapes = self.vision_model_tester.prepare_config_and_inputs()
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values, pixel_attention_mask, spatial_shapes
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, pixel_values, pixel_attention_mask, spatial_shapes = config_and_inputs
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "pixel_attention_mask": pixel_attention_mask,
+            "spatial_shapes": spatial_shapes,
+        }
         return config, inputs_dict
 
 
@@ -980,8 +933,7 @@ def prepare_images():
 class Siglip2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        # model_name = "s0225/siglip2-base-patch-16-naflex-256"
-        model_name = "./checkpoints/siglip2-hf/siglip2-base-patch-16-naflex-256/"
+        model_name = "s0225/siglip2-base-patch-16-naflex-256"
         model = Siglip2Model.from_pretrained(model_name).to(torch_device)
         processor = Siglip2Processor.from_pretrained(model_name)
 
