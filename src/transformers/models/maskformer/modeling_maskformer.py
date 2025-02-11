@@ -1424,7 +1424,7 @@ class MaskFormerTransformerModule(nn.Module):
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        inputs_embeds = torch.zeros_like(queries_embeddings)
+        inputs_embeds = torch.zeros_like(queries_embeddings, requires_grad=self.training)
 
         # torch.export.export does no support requires_grad
         if self.training:
