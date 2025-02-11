@@ -26,7 +26,7 @@ from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, Proces
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_flat_list_of_images
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -125,9 +125,7 @@ class InternVLProcessor(ProcessorMixin):
             text = [text]
 
         if images is not None:
-            if not isinstance(images, (list, tuple)):
-                images = [images]
-
+            images = make_flat_list_of_images(images)
             for index, image_group in enumerate(images):
                 image_group = self.image_processor.crop_image_to_patches(
                     image_group,

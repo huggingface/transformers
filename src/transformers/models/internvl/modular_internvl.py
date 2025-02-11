@@ -54,7 +54,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -450,9 +450,7 @@ class InternVLProcessor(ProcessorMixin):
             text = [text]
 
         if images is not None:
-            if not isinstance(images, (list, tuple)):
-                images = [images]
-
+            images = make_flat_list_of_images(images)
             for index, image_group in enumerate(images):
                 image_group = self.image_processor.crop_image_to_patches(
                     image_group,
