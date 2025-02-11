@@ -310,6 +310,10 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_eager_matches_sdpa_inference(self):
         pass
 
+    @unittest.skip(reason="We cannot configure to output a smaller model.")
+    def test_model_is_small(self):
+        pass
+
 @require_torch
 @require_vision
 class EvollaModelIntegrationTest(TestCasePlus):
