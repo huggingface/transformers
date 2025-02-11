@@ -4887,8 +4887,7 @@ class ModelTesterMixin:
         def recursively_check(eager_outputs, exported_outputs):
             is_tested = False
             if isinstance(eager_outputs, torch.Tensor):
-                self.assertEqual(eager_outputs.shape, exported_outputs.shape)
-                self.assertTrue(torch.allclose(eager_outputs, exported_outputs, atol=tolerance))
+                torch.testing.assert_close(eager_outputs, exported_outputs, atol=tolerance, rtol=tolerance)
                 return True
             elif isinstance(eager_outputs, (tuple, list)):
                 for eager_output, exported_output in zip(eager_outputs, exported_outputs):
