@@ -769,11 +769,13 @@ def _load_state_dict_into_meta_model(
             full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
     for param_name, param in state_dict.items():
-        if param_name not in expected_keys:
-            continue
 
+        # Start by removing the prefix if needed
         if param_name.startswith(start_prefix):
             param_name = param_name[len(start_prefix) :]
+
+        if param_name not in expected_keys:
+            continue
 
         module_name = param_name
         set_module_kwargs = {}
@@ -1394,7 +1396,7 @@ def _find_missing_and_unexpected_keys(
     loading_base_model_from_task_state_dict: bool,
     loading_task_model_from_base_state_dict: bool,
     hf_quantizer: Optional[HfQuantizer],
-    low_cpu_mem_usage: bool,
+    device_map: Dict,
 ) -> Tuple[List[str], List[str]]:
     """Find missing keys (keys that are part of the model parameters but were NOT found in the loaded state dict keys) and unexpected keys
     (keys found in the loaded state dict keys, but that are NOT part of the model parameters)
@@ -1432,7 +1434,7 @@ def _find_missing_and_unexpected_keys(
     if has_inv_freq_buffers:
         unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
 
-    if not low_cpu_mem_usage and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+    if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
         ptrs = collections.defaultdict(list)
         for name, tensor in model.state_dict().items():
             id_tensor = id_tensor_storage(tensor)
@@ -4583,7 +4585,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Finalize model weight initialization
         if from_tf:
-            model = cls._load_from_tf(model, config, checkpoint_files)
+            model, loading_info = cls._load_from_tf(model, config, checkpoint_files)
         elif from_flax:
             model = cls._load_from_flax(model, checkpoint_files)
         elif from_pt:
@@ -4692,12 +4694,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if output_loading_info:
-            loading_info = {
-                "missing_keys": missing_keys,
-                "unexpected_keys": unexpected_keys,
-                "mismatched_keys": mismatched_keys,
-                "error_msgs": error_msgs,
-            }
+            if from_pt:
+                loading_info = {
+                    "missing_keys": missing_keys,
+                    "unexpected_keys": unexpected_keys,
+                    "mismatched_keys": mismatched_keys,
+                    "error_msgs": error_msgs,
+                }
+            elif from_flax:
+                loading_info = None
             return model, loading_info
 
         return model
@@ -4867,7 +4872,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             loading_base_model_from_task_state_dict,
             loading_task_model_from_base_state_dict,
             hf_quantizer,
-            low_cpu_mem_usage,
+            device_map,
         )
 
         # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
@@ -5139,12 +5144,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if checkpoint_files[0].endswith(".index"):
             # Load from a TensorFlow 1.X checkpoint - provided by original authors
             model = cls.load_tf_weights(model, config, checkpoint_files[0][:-6])  # Remove the '.index'
+            loading_info = None
         else:
             # Load from our TensorFlow 2.0 checkpoints
             try:
                 from .modeling_tf_pytorch_utils import load_tf2_checkpoint_in_pytorch_model
 
-                model, _ = load_tf2_checkpoint_in_pytorch_model(
+                model, loading_info = load_tf2_checkpoint_in_pytorch_model(
                     model, checkpoint_files[0], allow_missing_keys=True, output_loading_info=True
                 )
             except ImportError:
@@ -5154,7 +5160,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " instructions."
                 )
                 raise
-        return model
+        return model, loading_info
 
     @classmethod
     def _load_from_flax(cls, model, checkpoint_files):
