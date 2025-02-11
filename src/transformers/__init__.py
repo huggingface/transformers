@@ -702,7 +702,6 @@ _import_structure = {
     "models.phi3": ["Phi3Config"],
     "models.phi3_5": [
         "Phi3VConfig",
-        "Phi3VProcessor",
     ],
     "models.phi4_multimodal": [
         "Phi4MultimodalAudioConfig",
@@ -1310,7 +1309,7 @@ else:
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
     _import_structure["models.owlvit"].extend(["OwlViTFeatureExtractor", "OwlViTImageProcessor"])
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
-    _import_structure["models.phi3_5"].extend(["Phi3VImageProcessor"])
+    _import_structure["models.phi3_5"].extend(["Phi3VImageProcessor", "Phi3VProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
@@ -5984,7 +5983,6 @@ if TYPE_CHECKING:
     from .models.phi3 import Phi3Config
     from .models.phi3_5 import (
         Phi3VConfig,
-        Phi3VProcessor,
     )
     from .models.phi4_multimodal import (
         Phi4MultimodalAudioConfig,
@@ -6617,7 +6615,7 @@ if TYPE_CHECKING:
         from .models.owlv2 import Owlv2ImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor, OwlViTImageProcessor
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
-        from .models.phi3_5 import Phi3VImageProcessor
+        from .models.phi3_5 import Phi3VImageProcessor, Phi3VProcessor
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.pixtral import PixtralImageProcessor
         from .models.poolformer import (
