@@ -1385,10 +1385,6 @@ class GenerationMixin:
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
-            # allow assistant_encoder_outputs to be passed if we're doing assisted generating
-            if "assistant_encoder_outputs" in model_kwargs:
-                model_args |= {"assistant_encoder_outputs"}
-
         for key, value in model_kwargs.items():
             if value is not None and key not in model_args:
                 unused_model_args.append(key)
