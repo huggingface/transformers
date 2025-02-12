@@ -92,7 +92,7 @@ class EvollaModelTester:
 
     @property
     def is_encoder_decoder(self):
-        return True
+        return False
     
     def prepare_config_and_inputs(self):
         text_input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.text_vocab_size)
