@@ -689,7 +689,6 @@ class Siglip2VisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -1182,7 +1181,6 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -1215,7 +1213,6 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
 
@@ -1313,7 +1310,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1353,7 +1349,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooled_output = vision_outputs[1]
@@ -1374,7 +1369,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, Siglip2Output]:
         r"""
         Returns:
@@ -1419,7 +1413,6 @@ class Siglip2Model(Siglip2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         text_outputs = self.text_model(
@@ -1508,7 +1501,6 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1556,7 +1548,6 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         sequence_output = outputs[0]

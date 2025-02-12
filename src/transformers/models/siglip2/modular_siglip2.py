@@ -255,7 +255,6 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -314,7 +313,6 @@ class Siglip2VisionModel(SiglipVisionModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -325,7 +323,6 @@ class Siglip2VisionModel(SiglipVisionModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
 
@@ -339,7 +336,6 @@ class Siglip2Model(SiglipModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> torch.FloatTensor:
         # Use Siglip2Model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -355,7 +351,6 @@ class Siglip2Model(SiglipModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         pooled_output = vision_outputs[1]
@@ -375,7 +370,6 @@ class Siglip2Model(SiglipModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> Union[Tuple, Siglip2Output]:
         # Use Siglip2 model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -391,7 +385,6 @@ class Siglip2Model(SiglipModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         text_outputs = self.text_model(
@@ -452,7 +445,6 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interpolate_pos_encoding: bool = False,
     ) -> Union[tuple, ImageClassifierOutput]:
         r"""
         ```python
@@ -492,7 +484,6 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            interpolate_pos_encoding=interpolate_pos_encoding,
         )
 
         sequence_output = outputs[0]
