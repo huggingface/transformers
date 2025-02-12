@@ -32,27 +32,85 @@ DEFAULT_VIDEO_INTRO = (
 DEFAULT_MEDIA_OUTTRO = "\n\n"
 FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
 
-# Some backends produce BGR (OpenCV), others produce RGB (Decord, PyAV, etc.)
-BACKEND_CHANNEL_ORDERS = {
-    "opencv": "bgr",
-    "decord": "rgb",
-    "pyav": "rgb",
-    "torchvision": "rgb",
-}
+
+def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
+    """
+    Example sampling function which:
+      - Uses `max_frames` (if provided) or calculates it from `fps` and metadata.
+      - Applies a basic center-skip if fewer frames than available, otherwise
+        optionally skips `skip_secs` from both the start and end.
+      - Uniformly samples the desired number of frames between the start and end indices.
+
+    Args:
+        max_frames (`int`):
+            Maximum number of frames to sample.
+        target_fps (`int`):
+            Target frames to sample per second.
+        metadata (`dict`):
+            Contains video metadata such as "n_frames" and "video_fps".
+        skip_secs (`float`, *optional*, defaults to 1.0):
+            Number of seconds to skip from the start and end if the video is long enough.
+
+    Returns:
+        numpy.ndarray:
+            An array of unique frame indices to sample.
+    """
+
+    total_num_frames = metadata.get("total_num_frames", 0)
+    if total_num_frames <= 0:
+        raise ValueError("Invalid total_num_frames in metadata.")
+
+    native_fps = metadata.get("fps", 30.0) or 30.0
+    duration_seconds = metadata.get("duration", 0)
+    
+    if duration_seconds <= 0:
+        raise ValueError("Invalid duration_seconds in metadata.")
+        
+    # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
+    estimated_frames = int(round(target_fps * duration_seconds))
+    
+    # Step 2) desired_frames
+    desired_frames = min(estimated_frames, max_frames)
+    if desired_frames < 1:
+        desired_frames = 1
+        
+    # Step 3) center skip logic
+    start_idx = 0
+    end_idx = total_num_frames - 1
+    
+    if skip_secs > 0 and (duration_seconds - 2 * skip_secs) > (max_frames * target_fps):
+        start_idx = int(skip_secs * native_fps)
+        end_idx = int(total_num_frames - skip_secs * native_fps)
+
+    start_idx = max(0, start_idx)
+    end_idx = min(end_idx, total_num_frames - 1)
+    if start_idx >= end_idx:
+        start_idx, end_idx = 0, total_num_frames - 1
+
+    indices = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
+    indices = np.unique(indices)
+        
+    return indices
+
 
 
 def load_smolvlm_video(
     path: str,
     max_frames: int = 64,
-    sampling_fps: float = 1.0,
+    target_fps: float = 1.0,
     skip_secs: float = 1.0,
-    backend: str = "decord",
+    backend: str = "decord"
 ) -> Tuple[List[Image.Image], List[str], float]:
     """
-    Loads a video from `path` by first gathering metadata via `get_video_details`
-    and then computing frame indices based on the old skip-secs logic.
-    Finally, it calls the updated `load_video` (which returns a numpy array)
-    and converts that array into a list of PIL images (RGB).
+    Loads a video from `path`, replicating the old skip-secs logic by
+    using the new `load_video` + a custom `sample_indices_fn`.
+    
+    1) We gather metadata with `get_video_details`
+       (this is optional here, but often useful for logs or verifying fps).
+    2) We call `load_video` with `sample_indices_fn` that
+       implements skipping logic + uniform sampling.
+    3) Convert the returned array (N, C, H, W) to a list of PIL images in RGB.
+    4) Build timestamps (MM:SS) based on the final sampled indices.
 
     Returns:
         frames (List[Image.Image]): Decoded frames in RGB format.
@@ -63,57 +121,29 @@ def load_smolvlm_video(
         logger.info("Decord not available, defaulting to OpenCV.")
         backend = "opencv"
 
-    # 1) Gather metadata
-    n_frames, fps, duration_seconds = 0, 0, 0  # get_video_details(path, backend=backend)
-    if fps <= 0:
-        fps = 30.0  # fallback if needed
-
-    # 2) Estimate how many frames we'd sample at `sampling_fps`
-    estimated_frames = int(round(sampling_fps * duration_seconds)) if sampling_fps > 0 else max_frames
-    desired_frames = min(estimated_frames, max_frames)
-    if desired_frames < 1:
-        desired_frames = 1
-
-    # 3) Compute skip logic
-    start_idx = 0
-    end_idx = n_frames - 1
-
-    if desired_frames < max_frames:
-        leftover = n_frames - desired_frames
-        start_idx = leftover // 2
-        end_idx = n_frames - (leftover - start_idx)
-    elif skip_secs > 0 and (duration_seconds - 2 * skip_secs) > (max_frames * sampling_fps):
-        start_idx = int(skip_secs * fps)
-        end_idx = int(n_frames - skip_secs * fps)
-
-    start_idx = max(0, start_idx)
-    end_idx = min(end_idx, n_frames - 1)
-    if start_idx >= end_idx:
-        start_idx, end_idx = 0, n_frames - 1
-
-    frames_idx = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
-    frames_idx = np.unique(frames_idx).tolist()
-
-    # 4) Decode frames with the updated load_video (returns a numpy array: (N, H, W, C))
-    frames_array = load_video(
+    # Wrap our skip-logic sampler in a partial, so we can pass skip_secs, etc.
+    # We'll let load_video fill in (num_frames, fps, metadata, ...) automatically.
+    sample_indices_fn = lambda metadata, **fn_kwargs: smolvlm_sample_indices_fn(
+        metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs, **fn_kwargs
+    )
+    video_array, metadata = load_video(
         video=path,
-        num_frames=None,
-        fps=None,
-        frame_indicies=frames_idx,
         backend=backend,
+        sample_indices_fn=sample_indices_fn
     )
 
-    # 5) Convert frames to PIL (RGB) + build timestamps
-    channel_order = BACKEND_CHANNEL_ORDERS.get(backend, "rgb")
+    # Construct final frames & timestamps
+    # Decide if we need to do color conversion
+    sampled_indices = metadata.get("frame_indices", list(range(video_array.shape[0])))
+
     frames, timestamps = [], []
-    for idx, frame_np in zip(frames_idx, frames_array):
-        if channel_order == "bgr":
-            # Convert BGR -> RGB if needed
-            frame_np = frame_np[..., ::-1]
-        pil_frame = Image.fromarray(frame_np, mode="RGB")
+    for i, frame_idx in enumerate(sampled_indices):
+        # Convert to PIL.Image (RGB)
+        pil_frame = Image.fromarray(frame, mode="RGB")
         frames.append(pil_frame)
 
-        sec = idx / fps
+        # Build timestamps
+        sec = frame_idx / fps
         mm = int(sec // 60)
         ss = int(sec % 60)
         timestamps.append(f"{mm:02d}:{ss:02d}")

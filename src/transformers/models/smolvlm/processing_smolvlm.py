@@ -108,41 +108,6 @@ def get_image_prompt_string(
     )
 
 
-def sample_indices_fn(num_frames, fps, skip_secs, metadata):
-    # 1) Gather metadata
-    video_fps = metadata["fps"]
-    duration = metadata["duration"]
-    total_num_frames = metadata["total_num_frames"]
-    if video_fps <= 0:
-        video_fps = 30.0  # fallback if needed
-
-    # 2) Estimate how many frames we'd sample at `sampling_fps`
-    estimated_frames = int(round(fps * duration)) if fps > 0 else num_frames
-    desired_frames = min(estimated_frames, num_frames)
-    desired_frames = max(desired_frames, 1)
-
-    # 3) Compute skip logic
-    start_idx = 0
-    end_idx = total_num_frames - 1
-
-    if desired_frames < num_frames:
-        leftover = total_num_frames - desired_frames
-        start_idx = leftover // 2
-        end_idx = total_num_frames - (leftover - start_idx)
-    elif skip_secs > 0 and (duration - 2 * skip_secs) > (num_frames * fps):
-        start_idx = int(skip_secs * video_fps)
-        end_idx = int(total_num_frames - skip_secs * video_fps)
-
-    start_idx = max(0, start_idx)
-    end_idx = min(end_idx, total_num_frames - 1)
-    if start_idx >= end_idx:
-        start_idx, end_idx = 0, total_num_frames - 1
-
-    frames_idx = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
-    frames_idx = np.unique(frames_idx).tolist()
-    return frames_idx
-
-
 class SmolVLMImagesKwargs(ImagesKwargs, total=False):
     return_row_col_info: Optional[bool]
     max_image_size: Optional[Dict[str, int]]
@@ -459,8 +424,8 @@ class SmolVLMProcessor(ProcessorMixin):
         return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
     # Add model-specific video sampling method when applying the template
-    def apply_chat_template(self, conversation, **kwargs):
-        return super().apply_chat_template(conversation, sample_indices_fn=sample_indices_fn, **kwargs)
+    #def apply_chat_template(self, conversation, **kwargs):
+    #    return super().apply_chat_template(conversation, sample_indices_fn=sample_indices_fn, **kwargs)
 
 
 __all__ = ["SmolVLMProcessor"]
