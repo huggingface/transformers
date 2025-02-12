@@ -195,6 +195,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] LlavaImageProcessor
     - preprocess
 
+## LlavaImageProcessorFast
+
+[[autodoc]] LlavaImageProcessorFast
+    - preprocess
+
 ## LlavaProcessor
 
 [[autodoc]] LlavaProcessor

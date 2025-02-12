@@ -26,7 +26,7 @@ ms_deform_attn_forward(
     const at::Tensor &attn_weight,
     const int im2col_step)
 {
-    if (value.type().is_cuda())
+    if (value.is_cuda())
     {
 #ifdef WITH_CUDA
         return ms_deform_attn_cuda_forward(
@@ -48,7 +48,7 @@ ms_deform_attn_backward(
     const at::Tensor &grad_output,
     const int im2col_step)
 {
-    if (value.type().is_cuda())
+    if (value.is_cuda())
     {
 #ifdef WITH_CUDA
         return ms_deform_attn_cuda_backward(

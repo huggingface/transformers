@@ -30,7 +30,7 @@ DeepSpeed compiles CUDA C++ code and it can be a potential source of errors when
 
 <Tip>
 
-For any other installation issues, please [open an issue](https://github.com/microsoft/DeepSpeed/issues) with the DeepSpeed team.
+For any other installation issues, please [open an issue](https://github.com/deepspeedai/DeepSpeed/issues) with the DeepSpeed team.
 
 </Tip>
 
@@ -89,7 +89,7 @@ sudo ln -s /usr/bin/g++-7  /usr/local/cuda-10.2/bin/g++
 If you're still having issues with installing DeepSpeed or if you're building DeepSpeed at run time, you can try to prebuild the DeepSpeed modules before installing them. To make a local build for DeepSpeed:
 
 ```bash
-git clone https://github.com/microsoft/DeepSpeed/
+git clone https://github.com/deepspeedai/DeepSpeed/
 cd DeepSpeed
 rm -rf build
 TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
@@ -141,7 +141,7 @@ It is also possible to not specify `TORCH_CUDA_ARCH_LIST` and the build program 
 For training on multiple machines with the same setup, you'll need to make a binary wheel:
 
 ```bash
-git clone https://github.com/microsoft/DeepSpeed/
+git clone https://github.com/deepspeedai/DeepSpeed/
 cd DeepSpeed
 rm -rf build
 TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 \

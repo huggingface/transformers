@@ -221,7 +221,7 @@ class Idefics2Processor(ProcessorMixin):
         if images is not None:
             if is_image_or_image_url(images):
                 images = [[images]]
-            elif isinstance(images, list) and is_image_or_image_url(images[0]):
+            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
                 if text is not None:
                     if sum(n_images_in_text) != len(images):
                         raise ValueError(
@@ -238,8 +238,8 @@ class Idefics2Processor(ProcessorMixin):
                     images = [images]
 
             elif (
-                not isinstance(images, list)
-                and not isinstance(images[0], list)
+                not isinstance(images, (list, tuple))
+                and not isinstance(images[0], (list, tuple))
                 and not is_image_or_image_url(images[0][0])
             ):
                 raise ValueError(

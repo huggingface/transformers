@@ -396,7 +396,7 @@ class FlaxGenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-        else:  # by default let's always generate 10 new tokens
+        else:  # by default let's always generate 20 new tokens
             if generation_config.max_length == GenerationConfig().max_length:
                 generation_config.max_length = generation_config.max_length + input_ids_seq_length
                 max_position_embeddings = getattr(self.config, "max_position_embeddings", None)

@@ -481,4 +481,4 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
 
         expected_slice = torch.tensor([3130.6763, 4056.5293, 7053.0786], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1)
+        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1)

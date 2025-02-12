@@ -121,7 +121,7 @@ def _upad_input(
     else:
         # The -q_len: slice assumes left padding.
         attention_mask = attention_mask[:, -query_length:]
-        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, attention_mask)
+        query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q, *_ = unpad_input(query_layer, attention_mask)
 
     return (
         query_layer,
@@ -209,7 +209,7 @@ def fa_peft_integration_check(
     if target_dtype is None:
         return query, key, value
 
-    input_dtype = value.dtype
+    input_dtype = query.dtype
     if input_dtype == torch.float32:
         logger.warning_once(
             f"The input hidden states seems to be silently casted in float32, this might be related to"

@@ -366,7 +366,7 @@ jobs:
         run: |
           python3 -m pip uninstall -y deepspeed
           rm -rf DeepSpeed
-          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
+          git clone https://github.com/deepspeedai/DeepSpeed && cd DeepSpeed && rm -rf build
           DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI

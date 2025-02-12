@@ -420,7 +420,7 @@ class LlavaImageProcessor(BaseImageProcessor):
                 image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
 
             if do_rescale:
-                images = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_normalize:
                 image = self.normalize(

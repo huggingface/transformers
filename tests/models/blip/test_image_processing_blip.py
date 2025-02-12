@@ -17,7 +17,7 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
@@ -25,8 +25,11 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from transformers import BlipImageProcessor
 
+    if is_torchvision_available():
+        from transformers import BlipImageProcessorFast
 
-class BlipImageProcessingTester(unittest.TestCase):
+
+class BlipImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -43,7 +46,6 @@ class BlipImageProcessingTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size
@@ -89,6 +91,7 @@ class BlipImageProcessingTester(unittest.TestCase):
 @require_vision
 class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BlipImageProcessor if is_vision_available() else None
+    fast_image_processing_class = BlipImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -99,50 +102,36 @@ class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processor, "do_resize"))
-        self.assertTrue(hasattr(image_processor, "size"))
-        self.assertTrue(hasattr(image_processor, "do_normalize"))
-        self.assertTrue(hasattr(image_processor, "image_mean"))
-        self.assertTrue(hasattr(image_processor, "image_std"))
-        self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processor, "do_resize"))
+            self.assertTrue(hasattr(image_processor, "size"))
+            self.assertTrue(hasattr(image_processor, "do_normalize"))
+            self.assertTrue(hasattr(image_processor, "image_mean"))
+            self.assertTrue(hasattr(image_processor, "image_std"))
+            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
 
 @require_torch
 @require_vision
 class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BlipImageProcessor if is_vision_available() else None
+    fast_image_processing_class = BlipImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = BlipImageProcessingTester(self, num_channels=4)
-        self.expected_encoded_image_num_channels = 3
+        self.image_processor_tester = BlipImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processor = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processor, "do_resize"))
-        self.assertTrue(hasattr(image_processor, "size"))
-        self.assertTrue(hasattr(image_processor, "do_normalize"))
-        self.assertTrue(hasattr(image_processor, "image_mean"))
-        self.assertTrue(hasattr(image_processor, "image_std"))
-        self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
-
-    @unittest.skip(reason="BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
-    def test_call_numpy(self):
-        return super().test_call_numpy()
-
-    @unittest.skip(reason="BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
-    def test_call_pytorch(self):
-        return super().test_call_torch()
-
-    @unittest.skip(reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
-    def test_call_pil(self):
-        pass
-
-    @unittest.skip(reason="BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
-    def test_call_numpy_4_channels(self):
-        pass
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processor, "do_resize"))
+            self.assertTrue(hasattr(image_processor, "size"))
+            self.assertTrue(hasattr(image_processor, "do_normalize"))
+            self.assertTrue(hasattr(image_processor, "image_mean"))
+            self.assertTrue(hasattr(image_processor, "image_std"))
+            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))

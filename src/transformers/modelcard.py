@@ -489,7 +489,7 @@ class TrainingSummary:
                 f" [{self.finetuned_from}](https://huggingface.co/{self.finetuned_from}) on "
             )
 
-        if self.dataset is None:
+        if self.dataset is None or (isinstance(self.dataset, list) and len(self.dataset) == 0):
             model_card += "an unknown dataset."
         else:
             if isinstance(self.dataset, str):

@@ -31,7 +31,7 @@ if is_vision_available():
     from transformers import BridgeTowerImageProcessor
 
 
-class BridgeTowerImageProcessingTester(unittest.TestCase):
+class BridgeTowerImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -50,7 +50,6 @@ class BridgeTowerImageProcessingTester(unittest.TestCase):
         max_resolution=400,
         num_channels=3,
     ):
-        super().__init__()
         self.parent = parent
         self.do_resize = do_resize
         self.size = size if size is not None else {"shortest_edge": 288}

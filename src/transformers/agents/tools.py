@@ -479,7 +479,7 @@ class Tool:
                 if api_name is None:
                     api_name = list(space_description.keys())[0]
                     logger.warning(
-                        f"Since `api_name` was not defined, it was automatically set to the first avilable API: `{api_name}`."
+                        f"Since `api_name` was not defined, it was automatically set to the first available API: `{api_name}`."
                     )
                 self.api_name = api_name
 

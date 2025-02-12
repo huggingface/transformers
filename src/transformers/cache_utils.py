@@ -29,6 +29,8 @@ class Cache(torch.nn.Module):
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
 
+    is_compileable = False
+
     def __init__(self):
         super().__init__()
 
@@ -1098,6 +1100,8 @@ class StaticCache(Cache):
         ```
     """
 
+    is_compileable = True
+
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
     def __init__(
@@ -1297,6 +1301,7 @@ class SlidingWindowCache(StaticCache):
     """
 
     is_sliding = True
+    is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
@@ -1421,6 +1426,7 @@ class EncoderDecoderCache(Cache):
         super().__init__()
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
+        self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
         for layer_idx in range(len(cross_attention_cache.key_cache)):
@@ -1611,6 +1617,8 @@ class HybridCache(Cache):
         HybridCache()
         ```
     """
+
+    is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
@@ -1832,6 +1840,8 @@ class MambaCache:
         ```
     """
 
+    is_compileable = True
+
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
         self,
@@ -1974,6 +1984,8 @@ class OffloadedStaticCache(StaticCache):
         >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
+
+    is_compileable = True
 
     @deprecate_kwarg("layer_device_map", version="4.52.0")
     def __init__(

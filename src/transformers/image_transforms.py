@@ -15,7 +15,7 @@
 
 import warnings
 from math import ceil
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -31,8 +31,6 @@ from .utils.import_utils import (
     is_flax_available,
     is_tf_available,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     is_vision_available,
     requires_backends,
 )
@@ -51,11 +49,6 @@ if is_tf_available():
 
 if is_flax_available():
     import jax.numpy as jnp
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 def to_channel_dimension_format(
@@ -214,6 +207,45 @@ def to_pil_image(
 
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image, mode=image_mode)
+
+
+def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image size and the desired output size.
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The input image size.
+        size (`int`):
+            The desired output size.
+        max_size (`int`, *optional*):
+            The maximum allowed output size.
+    """
+    height, width = image_size
+    raw_size = None
+    if max_size is not None:
+        min_original_size = float(min((height, width)))
+        max_original_size = float(max((height, width)))
+        if max_original_size / min_original_size * size > max_size:
+            raw_size = max_size * min_original_size / max_original_size
+            size = int(round(raw_size))
+
+    if (height <= width and height == size) or (width <= height and width == size):
+        oh, ow = height, width
+    elif width < height:
+        ow = size
+        if max_size is not None and raw_size is not None:
+            oh = int(raw_size * height / width)
+        else:
+            oh = int(size * height / width)
+    else:
+        oh = size
+        if max_size is not None and raw_size is not None:
+            ow = int(raw_size * width / height)
+        else:
+            ow = int(size * width / height)
+
+    return (oh, ow)
 
 
 # Logic adapted from torchvision resizing logic: https://github.com/pytorch/vision/blob/511924c1ced4ce0461197e5caa64ce5b9e558aab/torchvision/transforms/functional.py#L366
@@ -821,32 +853,37 @@ def _cast_tensor_to_float(x):
     return x.float()
 
 
-class FusedRescaleNormalize:
+def group_images_by_shape(
+    images: List["torch.Tensor"],
+) -> Tuple[Dict[Tuple[int, int], List["torch.Tensor"]], Dict[int, Tuple[Tuple[int, int], int]]]:
     """
-    Rescale and normalize the input image in one step.
+    Groups images by shape.
+    Returns a dictionary with the shape as key and a list of images with that shape as value,
+    and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
     """
+    grouped_images = {}
+    grouped_images_index = {}
+    for i, image in enumerate(images):
+        shape = image.shape[1:]
+        if shape not in grouped_images:
+            grouped_images[shape] = []
+        grouped_images[shape].append(image)
+        grouped_images_index[i] = (shape, len(grouped_images[shape]) - 1)
+    # stack images with the same shape
+    grouped_images = {shape: torch.stack(images, dim=0) for shape, images in grouped_images.items()}
+    return grouped_images, grouped_images_index
 
-    def __init__(self, mean, std, rescale_factor: float = 1.0, inplace: bool = False):
-        self.mean = torch.tensor(mean) * (1.0 / rescale_factor)
-        self.std = torch.tensor(std) * (1.0 / rescale_factor)
-        self.inplace = inplace
 
-    def __call__(self, image: "torch.Tensor"):
-        image = _cast_tensor_to_float(image)
-        return F.normalize(image, self.mean, self.std, inplace=self.inplace)
-
-
-class Rescale:
+def reorder_images(
+    processed_images: Dict[Tuple[int, int], "torch.Tensor"], grouped_images_index: Dict[int, Tuple[int, int]]
+) -> List["torch.Tensor"]:
     """
-    Rescale the input image by rescale factor: image *= rescale_factor.
+    Reconstructs a list of images in the original order.
     """
-
-    def __init__(self, rescale_factor: float = 1.0):
-        self.rescale_factor = rescale_factor
-
-    def __call__(self, image: "torch.Tensor"):
-        image = image * self.rescale_factor
-        return image
+    return [
+        processed_images[grouped_images_index[i][0]][grouped_images_index[i][1]]
+        for i in range(len(grouped_images_index))
+    ]
 
 
 class NumpyToTensor:

@@ -18,7 +18,7 @@ Utility that checks the big table in the file docs/source/en/index.md and potent
 Use from the root of the repo with:
 
 ```bash
-python utils/check_inits.py
+python utils/check_table.py
 ```
 
 for a check that will error in case of inconsistencies (used by `make repo-consistency`).
@@ -26,7 +26,7 @@ for a check that will error in case of inconsistencies (used by `make repo-consi
 To auto-fix issues run:
 
 ```bash
-python utils/check_inits.py --fix_and_overwrite
+python utils/check_table.py --fix_and_overwrite
 ```
 
 which is used by `make fix-copies`.

@@ -586,15 +586,13 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
-    @unittest.skip(reason="Granite multimodal [vision] models are not yet released")
     @slow
     def test_granite_vision(self):
         """
         Check the expected output of a granite vision model, which leverages
         multiple vision feature layers and a visual encoder with no CLS (siglip).
         """
-        # TODO @alex-jw-brooks - update the path and enable this test once the 2b model is released
-        granite_model_path = "llava-granite-2b"
+        granite_model_path = "ibm-granite/granite-vision-3.1-2b-preview"
         model = LlavaNextForConditionalGeneration.from_pretrained(granite_model_path)
         self.processor = AutoProcessor.from_pretrained(granite_model_path)
         prompt = "<|user|>\n<image>\nWhat is shown in this image?\n<|assistant|>\n"
@@ -602,7 +600,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = "<|user|>\n\nWhat is shown in this image?\n<|assistant|>\nThe image depicts a diagram."
+        EXPECTED_DECODED_TEXT = "<|user|>\n\nWhat is shown in this image?\n<|assistant|>\nThe image displays a radar chart comparing the performance of various machine learning models."  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

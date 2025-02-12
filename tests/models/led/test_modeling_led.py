@@ -468,12 +468,12 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
                 ],
             )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         # overwrite because LED does not have (bs, num_heads, seq_len, seq_len) shape
         encoder_expected_shape = (
             batch_size,
             config.num_attention_heads,
-            seq_length,
+            prompt_length,
             self.model_tester.attention_window // 2 * 2 + 1,
         )
         self.assertIsInstance(attentions, tuple)
