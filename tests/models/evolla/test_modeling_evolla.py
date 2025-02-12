@@ -70,22 +70,38 @@ class EvollaModelTester:
         text_vocab_size=100,
         protein_seq_length=10,
         protein_vocab_size=20,
-        hidden_size=4096, # llama hidden size
-        num_hidden_layers=32, # llama hidden layers
-        num_attention_heads=32, # llama attention heads
+        hidden_size=4, # llama hidden size
+        num_hidden_layers=1, # llama hidden layers
+        num_attention_heads=2, # llama attention heads
+        protein_hidden_size=8, # protein encoder hidden size
+        protein_num_hidden_layers=1, # protein encoder hidden layers
+        protein_num_attention_heads=4, # protein encoder attention heads
+        sequence_compressor_num_latents=7, # sequence compressor num latents
+        sequence_compressor_ff_mult=1, # sequence compressor ff mult
+        sequence_compressor_depth=2, # sequence compressor depth
+        sequence_aligner_num_add_layers=1, # sequence aligner num add layers
         use_input_mask=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.hidden_size = hidden_size
         self.protein_seq_length = protein_seq_length
         self.protein_vocab_size = protein_vocab_size
         self.text_seq_length = text_seq_length
         self.text_vocab_size = text_vocab_size
         self.seq_length = text_seq_length
         
+        self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.protein_hidden_size = protein_hidden_size
+        self.protein_num_hidden_layers = protein_num_hidden_layers
+        self.protein_num_attention_heads = protein_num_attention_heads
+
+        self.sequence_compressor_num_latents = sequence_compressor_num_latents
+        self.sequence_compressor_ff_mult = sequence_compressor_ff_mult
+        self.sequence_compressor_depth = sequence_compressor_depth
+
+        self.sequence_aligner_num_add_layers = sequence_aligner_num_add_layers
 
         self.use_input_mask = use_input_mask
         self.is_training = is_training
@@ -108,7 +124,30 @@ class EvollaModelTester:
 
 
     def get_config(self):
-        return EvollaConfig()
+        return EvollaConfig(
+            llm_config={
+                "llama_config": {
+                    "num_hidden_layers": self.num_hidden_layers,
+                    "hidden_size": self.hidden_size,
+                    "num_attention_heads": self.num_attention_heads,
+                },
+                "sequence_aligner_config": {
+                    "num_add_layers": self.sequence_aligner_num_add_layers,
+                }
+            },
+            protein_config={
+                "protein_encoder_config": {
+                    "num_hidden_layers": self.protein_num_hidden_layers,
+                    "hidden_size": self.protein_hidden_size,
+                    "num_attention_heads": self.protein_num_attention_heads,
+                },
+                "resampler_config": {
+                    "num_latents": self.sequence_compressor_num_latents,
+                    "ff_mult": self.sequence_compressor_ff_mult,
+                    "depth": self.sequence_compressor_depth,
+                }
+            }
+        )
 
     def create_and_check_model(
         self,
@@ -326,9 +365,9 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_eager_matches_sdpa_inference(self):
         pass
 
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
+    # @unittest.skip(reason="We cannot configure to output a smaller model.")
+    # def test_model_is_small(self):
+    #     pass
 
 @require_torch
 @require_vision
