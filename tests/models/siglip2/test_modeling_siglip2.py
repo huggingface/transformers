@@ -198,8 +198,8 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                     processed_inputs["pixel_values"] = processed_inputs["pixel_values"].to(torch_dtype)
 
                 # slice for different batch sizes
-                for key in ["pixel_values", "input_ids", "attention_mask"]:
-                    if key in processed_inputs:
+                for key in processed_inputs.keys():
+                    if isinstance(processed_inputs[key], (torch.Tensor, list, tuple)):
                         processed_inputs[key] = processed_inputs[key][:batch_size]
 
                 # set attention mask with left padding
@@ -242,6 +242,70 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                         fail_cases.append(get_mean_reldiff(key, current_case, sdpa_logits, eager_logits, atol, rtol))
 
             self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_equivalence(self):
+        dtype = torch.bfloat16
+
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            # Prepare inputs
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if "pixel_values" in inputs_dict:
+                inputs_dict["pixel_values"] = inputs_dict["pixel_values"].to(dtype)
+
+            # Separate masks
+            attention_masks = {}
+            if "attention_mask" in inputs_dict:
+                attention_masks["attention_mask"] = inputs_dict.pop("attention_mask")
+                inputs_dict["attention_mask"] = None
+            if "pixel_attention_mask" in inputs_dict:
+                attention_masks["pixel_attention_mask"] = inputs_dict.pop("pixel_attention_mask")
+                inputs_dict["pixel_attention_mask"] = None
+
+            # Save and load model with flash attention 2 and eager attentions
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model = model_class(config)
+                model.save_pretrained(tmp_dir)
+
+                model_fa = model_class.from_pretrained(
+                    tmp_dir, torch_dtype=dtype, attn_implementation="flash_attention_2"
+                )
+                model = model_class.from_pretrained(tmp_dir, torch_dtype=dtype, attn_implementation="sdpa")
+
+            model_fa.to(torch_device)
+            model.to(torch_device)
+
+            # Run forward pass without attention masks
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+                outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
+
+            # Choose which key to compare
+            key = [k for k in ["last_hidden_state", "logits", "logits_per_image"] if k in outputs][0]
+
+            torch.testing.assert_close(outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2)
+
+            # Run forward pass with attention masks
+            inputs_dict.update(attention_masks)
+            with torch.no_grad():
+                outputs = model(**inputs_dict, output_hidden_states=True)
+                outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
+
+            torch.testing.assert_close(outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2)
+
+            # Check with inference + dropout
+            model.train()
+            _ = model_fa(**inputs_dict, output_hidden_states=True)
+
+    @unittest.skip(reason="Siglip2 has default right padding (tested in test_flash_attn_2_inference_equivalence)")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
 
 
 class Siglip2VisionModelTester:
@@ -725,83 +789,6 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         model_name = "s0225/siglip2-base-patch-16-naflex-256"
         model = Siglip2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence(self):
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model_fa = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2"
-                )
-                model_fa.to(torch_device)
-
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.bfloat16)
-                model.to(torch_device)
-
-                dummy_pixel_values = inputs_dict["pixel_values"].to(torch.bfloat16)
-                dummy_input_ids = inputs_dict["input_ids"]
-
-                outputs = model(pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True)
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values, input_ids=dummy_input_ids, output_hidden_states=True
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Image logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Text logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-                # Test with attention mask
-                dummy_attention_mask = inputs_dict["attention_mask"]
-
-                if dummy_attention_mask is not None:
-                    dummy_attention_mask[:, 1:] = 1
-                    dummy_attention_mask[:, :1] = 0
-
-                outputs = model(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-                outputs_fa = model_fa(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
-
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_image, outputs_fa.logits_per_image, atol=4e-2, rtol=4e-2),
-                    f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_image - outputs_fa.logits_per_image))}",
-                )
-                self.assertTrue(
-                    torch.allclose(outputs.logits_per_text, outputs_fa.logits_per_text, atol=4e-2, rtol=4e-2),
-                    f"Logits max diff: {torch.max(torch.abs(outputs.logits_per_text - outputs_fa.logits_per_text))}",
-                )
-
-                # check with inference + dropout
-                model.train()
-                _ = model_fa(
-                    pixel_values=dummy_pixel_values,
-                    input_ids=dummy_input_ids,
-                    attention_mask=dummy_attention_mask,
-                    output_hidden_states=True,
-                )
 
     @require_flash_attn
     @require_torch_gpu
