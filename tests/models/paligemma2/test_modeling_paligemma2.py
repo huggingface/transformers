@@ -16,6 +16,8 @@
 
 import unittest
 
+from parameterized import parameterized
+
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
@@ -346,4 +348,41 @@ class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
 
     @unittest.skip("Low memory will be removed soon so no need to fix it")
     def test_beam_search_low_memory(self):
+        pass
+
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache which is not compatible with assisted decoding")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache which is not compatible with dola decoding")
+    def test_dola_decoding_sample(self):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache and doesn't support continue from past kv")
+    def test_generate_continue_from_past_key_values(self):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")
+    def test_contrastive_generate(self):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache and doesn't support contrastive generation")
+    def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache")
+    def test_generate_with_static_cache(self):
         pass
