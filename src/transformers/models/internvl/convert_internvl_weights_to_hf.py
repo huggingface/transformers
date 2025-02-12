@@ -177,6 +177,8 @@ def get_internvl_config(input_base_path):
         text_config=language_config_class(**llm_config),
         vision_config=InternVLVisionConfig(**vision_config),
         image_token_index=image_token_index,
+        # force default attention implementation to eager as the original model doesn't sdpa
+        attn_implementation="eager",
     )
 
 

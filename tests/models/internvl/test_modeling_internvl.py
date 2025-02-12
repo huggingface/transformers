@@ -296,8 +296,6 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     @require_torch_gpu
     def test_small_model_integration_generate_text_only(self):
         model_id = "../InternVLTest-1B"
-        self.processor = AutoProcessor.from_pretrained("../InternVLTest-1B")
-
         model = InternVLForConditionalGeneration.from_pretrained(
             model_id, device_map=torch_device, torch_dtype=torch.bfloat16
         )
@@ -338,6 +336,46 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             )
         expected_output = "The image shows two cats lying on a pink couch. One cat is on the left side of the"
         self.assertEqual(decoded_output, expected_output)
+
+    @slow
+    @require_torch_gpu
+    def test_small_model_integration_batched_generate(self):
+        model_id = "../InternVLTest-1B"
+        model = InternVLForConditionalGeneration.from_pretrained(
+            model_id, device_map=torch_device, torch_dtype=torch.bfloat16
+        )
+        # Prepare inputs
+        prompt = [
+            "<|im_start|>user\n<image>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<image>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+
+        inputs = self.processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        # Check first output
+        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn misty mountains, nature's still,\nPeace awaits beneath the sky."  # fmt: skip
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+        # Check second output
+        decoded_output = self.processor.decode(output[1], skip_special_tokens=True)
+        expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, featuring red pillars and ornate decorations. There is'  # fmt: skip
+
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
 
 
 #     @slow
