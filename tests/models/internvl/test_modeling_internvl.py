@@ -15,16 +15,25 @@
 """Testing suite for the PyTorch GotOcr2 model."""
 
 import unittest
+from io import BytesIO
 
 import requests
 
 from transformers import (
     AutoProcessor,
+    BitsAndBytesConfig,
     InternVLConfig,
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_bitsandbytes,
+    require_torch,
+    require_torch_gpu,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -267,7 +276,8 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @require_torch
 class InternVLQwen2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("../InternVLTest-1B")
+        self.small_model_checkpoint = "../InternVLTest-1B"
+        self.medium_model_checkpoint = "../InternVLTest-4B"
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -275,18 +285,18 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_small_model_integration_generate(self):
-        model_id = "../InternVLTest-1B"
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            model_id, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
         )
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
         prompt = "<|im_start|>user\n<image>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
-        inputs = self.processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-            decoded_output = self.processor.decode(
+            decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = "The image shows two cats lying on a pink couch. One cat is on the left side of the"
@@ -295,15 +305,15 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_small_model_integration_generate_text_only(self):
-        model_id = "../InternVLTest-1B"
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            model_id, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
         )
         prompt = "<|im_start|>user\nWrite a haiku<|im_end|>\n<|im_start|>assistant\n"
-        inputs = self.processor(text=prompt, return_tensors="pt").to(torch_device)
+        inputs = processor(text=prompt, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=200, do_sample=False)
-            decoded_output = self.processor.decode(
+            decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = "Whispers of dawn,\nLeaves rustle in the breeze,\nNew day begins."
@@ -312,9 +322,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_small_model_integration_generate_chat_template(self):
-        model_id = "../InternVLTest-1B"
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            model_id, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
         )
         messages = [
             {
@@ -326,12 +336,12 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             }
         ]
 
-        inputs = self.processor.apply_chat_template(
+        inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
         with torch.no_grad():
             generate_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-            decoded_output = self.processor.decode(
+            decoded_output = processor.decode(
                 generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True
             )
         expected_output = "The image shows two cats lying on a pink couch. One cat is on the left side of the"
@@ -340,9 +350,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     def test_small_model_integration_batched_generate(self):
-        model_id = "../InternVLTest-1B"
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
-            model_id, device_map=torch_device, torch_dtype=torch.bfloat16
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
         )
         # Prepare inputs
         prompt = [
@@ -352,14 +362,14 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
 
-        inputs = self.processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
+        inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
             torch_device
         )
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
 
         # Check first output
-        decoded_output = self.processor.decode(output[0], skip_special_tokens=True)
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_output = "user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn misty mountains, nature's still,\nPeace awaits beneath the sky."  # fmt: skip
         self.assertEqual(
             decoded_output,
@@ -368,9 +378,194 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         )
 
         # Check second output
-        decoded_output = self.processor.decode(output[1], skip_special_tokens=True)
+        decoded_output = processor.decode(output[1], skip_special_tokens=True)
         expected_output = 'user\n\nDescribe this image\nassistant\nThe image shows a street scene with a traditional Chinese gate in the background, featuring red pillars and ornate decorations. There is'  # fmt: skip
 
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+    @slow
+    @require_torch_gpu
+    def test_small_model_integration_batched_generate_multi_image(self):
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
+        model = InternVLForConditionalGeneration.from_pretrained(
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+        )
+        # Prepare inputs
+        prompt = [
+            "<|im_start|>user\n<image>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
+            "<|im_start|>user\n<image><image>\nWhat are the difference between these two images?<|im_end|>\n<|im_start|>assistant\n",
+        ]
+        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image2 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                ).content
+            )
+        )
+        image3 = Image.open(
+            BytesIO(
+                requests.get(
+                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                ).content
+            )
+        )
+
+        inputs = processor(text=prompt, images=[[image1], [image2, image3]], padding=True, return_tensors="pt").to(
+            torch_device
+        )
+
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        # Check first output
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
+        # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
+        expected_output = 'user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nWhere mountains meet a tranquil lake,\nDreams of the unknown begin.'  # fmt: skip
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+        # Check second output
+        decoded_output = processor.decode(output[1], skip_special_tokens=True)
+        expected_output = 'user\n\nWhat are the difference between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge. Here are the differences:\n\n1. **Location**:\n  '  # fmt: skip
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+    @slow
+    @require_torch_gpu
+    @require_bitsandbytes
+    def test_medium_model_integration_video(self):
+        processor = AutoProcessor.from_pretrained(self.medium_model_checkpoint)
+        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        model = InternVLForConditionalGeneration.from_pretrained(
+            self.medium_model_checkpoint, quantization_config=quantization_config
+        )
+        # Prepare inputs
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "video",
+                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                    },
+                    {"type": "text", "text": "What type of shot is the man performing?"},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            num_frames=8,
+            initial_shift=True,
+        ).to(torch_device)
+
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        expected_output = 'The man is performing a forehand stroke. This is evident from his stance and the position of his body relative to the net'  # fmt: skip
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+    @slow
+    @require_torch_gpu
+    @require_bitsandbytes
+    def test_medium_model_integration_intelaced_images_videos(self):
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
+        model = InternVLForConditionalGeneration.from_pretrained(
+            self.small_model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
+        )
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                        },
+                        {
+                            "type": "image",
+                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                        },
+                        {"type": "text", "text": "What are the difference between these two images?"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        },
+                        {"type": "text", "text": "What type of shot is the man performing?"},
+                    ],
+                },
+            ],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                        },
+                        {"type": "text", "text": "Write a haiku for this image"},
+                    ],
+                }
+            ],
+        ]
+        inputs = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
+            num_frames=8,
+            initial_shift=True,
+        ).to(torch_device)
+
+        output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
+
+        decoded_output = processor.decode(output[0], skip_special_tokens=True)
+        # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
+        expected_output = "user\n\n\nWhat are the difference between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge. Here are the differences:\n\n1. **Location**:\n  "  # fmt: skip
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+        # Check second output
+        decoded_output = processor.decode(output[1], skip_special_tokens=True)
+        expected_output = "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot."  # fmt: skip
+        self.assertEqual(
+            decoded_output,
+            expected_output,
+            f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
+        )
+
+        # Check third output
+        decoded_output = processor.decode(output[2], skip_special_tokens=True)
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nA pier stretches to the horizon,\nIn the stillness of the lake, a quiet dream,\nNature's peace unfolds."  # fmt: skip
         self.assertEqual(
             decoded_output,
             expected_output,
