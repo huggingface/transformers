@@ -3556,6 +3556,7 @@ else:
             "SmolVLMModel",
             "SmolVLMProcessor",
             "SmolVLMVisionConfig",
+            "SmolVLMVisionTransformer",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
