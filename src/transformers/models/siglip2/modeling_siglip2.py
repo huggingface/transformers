@@ -625,37 +625,6 @@ class Siglip2Encoder(nn.Module):
         )
 
 
-class Siglip2MultiheadAttentionPoolingHead(nn.Module):
-    """Multihead Attention Pooling."""
-
-    def __init__(self, config: Siglip2VisionConfig):
-        super().__init__()
-
-        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = Siglip2MLP(config)
-        self.num_heads = config.num_attention_heads
-
-    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
-        batch_size = hidden_state.shape[0]
-        probe = self.probe.repeat(batch_size, 1, 1)
-
-        if attention_mask is not None:
-            target_len, source_len = probe.shape[1], hidden_state.shape[1]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
-            attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
-            attention_mask = attention_mask.reshape(-1, target_len, source_len)
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
-
-        residual = hidden_state
-        hidden_state = self.layernorm(hidden_state)
-        hidden_state = residual + self.mlp(hidden_state)
-
-        return hidden_state[:, 0]
-
-
 SIGLIP2_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -1161,6 +1130,37 @@ class Siglip2TextModel(Siglip2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+
+class Siglip2MultiheadAttentionPoolingHead(nn.Module):
+    """Multihead Attention Pooling."""
+
+    def __init__(self, config: Siglip2VisionConfig):
+        super().__init__()
+
+        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = Siglip2MLP(config)
+        self.num_heads = config.num_attention_heads
+
+    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+        batch_size = hidden_state.shape[0]
+        probe = self.probe.repeat(batch_size, 1, 1)
+
+        if attention_mask is not None:
+            target_len, source_len = probe.shape[1], hidden_state.shape[1]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
+            attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
+            attention_mask = attention_mask.reshape(-1, target_len, source_len)
+
+        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
+
+        residual = hidden_state
+        hidden_state = self.layernorm(hidden_state)
+        hidden_state = residual + self.mlp(hidden_state)
+
+        return hidden_state[:, 0]
 
 
 @add_start_docstrings(
