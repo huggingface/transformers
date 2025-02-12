@@ -89,6 +89,7 @@ FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
 ACCELERATE_MIN_VERSION = "0.26.0"
+SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
@@ -98,6 +99,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_apollo_torch_available = _is_package_available("apollo_torch")
 _aqlm_available = _is_package_available("aqlm")
 _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
 _av_available = importlib.util.find_spec("av") is not None
@@ -108,7 +110,7 @@ _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
-_schedulefree_available = _is_package_available("schedulefree")
+_schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -402,6 +404,10 @@ def is_galore_torch_available():
     return _galore_torch_available
 
 
+def is_apollo_torch_available():
+    return _apollo_torch_available
+
+
 def is_lomo_available():
     return _lomo_available
 
@@ -410,8 +416,8 @@ def is_grokadamw_available():
     return _grokadamw_available
 
 
-def is_schedulefree_available():
-    return _schedulefree_available
+def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION):
+    return _schedulefree_available and version.parse(_schedulefree_version) >= version.parse(min_version)
 
 
 def is_pyctcdecode_available():
@@ -2270,3 +2276,28 @@ def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
     """
     import_structure = create_import_structure_from_path(module_path)
     return spread_import_structure(import_structure)
+
+
+def clear_import_cache():
+    """
+    Clear cached Transformers modules to allow reloading modified code.
+
+    This is useful when actively developing/modifying Transformers code.
+    """
+    # Get all transformers modules
+    transformers_modules = [mod_name for mod_name in sys.modules if mod_name.startswith("transformers.")]
+
+    # Remove them from sys.modules
+    for mod_name in transformers_modules:
+        module = sys.modules[mod_name]
+        # Clear _LazyModule caches if applicable
+        if isinstance(module, _LazyModule):
+            module._objects = {}  # Clear cached objects
+        del sys.modules[mod_name]
+
+    # Force reload main transformers module
+    if "transformers" in sys.modules:
+        main_module = sys.modules["transformers"]
+        if isinstance(main_module, _LazyModule):
+            main_module._objects = {}  # Clear cached objects
+        importlib.reload(main_module)
