@@ -25,13 +25,14 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
-from ...utils import logging, is_num2words_available
+from ...utils import is_num2words_available, logging
 from .video_processing_smolvlm import (
     DEFAULT_MEDIA_OUTTRO,
     DEFAULT_VIDEO_INTRO,
     FRAME_TIMESTAMP_MESSAGE,
     load_smolvlm_video,
 )
+
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
@@ -42,9 +43,8 @@ logger = logging.get_logger(__name__)
 if is_num2words_available():
     from num2words import num2words
 else:
-    logger.warn("Please install `num2words` to use smolvlm. For example:\n\n"
-                "  pip install num2words\n")
-    
+    logger.warn("Please install `num2words` to use smolvlm. For example:\n\n" "  pip install num2words\n")
+
 
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")

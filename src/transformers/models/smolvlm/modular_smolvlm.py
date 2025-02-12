@@ -40,8 +40,10 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     model_type = "smolvlm_vision"
     pass
 
+
 class SmolVLMVisionTransformer(Idefics3VisionTransformer):
     pass
+
 
 class SmolVLMConfig(Idefics3Config):
     model_type = "smolvlm"
