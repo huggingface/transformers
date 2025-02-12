@@ -19,7 +19,7 @@ import numpy as np
 from PIL import Image
 
 # Make sure these are imported from your library
-from ...image_utils import get_video_details, load_video
+from ...image_utils import load_video
 from ...utils import is_decord_available, logging
 
 
@@ -64,7 +64,7 @@ def load_smolvlm_video(
         backend = "opencv"
 
     # 1) Gather metadata
-    n_frames, fps, duration_seconds = get_video_details(path, backend=backend)
+    n_frames, fps, duration_seconds = 0, 0, 0  # get_video_details(path, backend=backend)
     if fps <= 0:
         fps = 30.0  # fallback if needed
 
