@@ -175,15 +175,20 @@ class Siglip2VisionEmbeddings(nn.Module):
         """
         batch_size = spatial_shapes.shape[0]
         embed_dim = positional_embeddings.shape[-1]
+        source_dtype = positional_embeddings.dtype
 
         resulted_positional_embeddings = torch.empty(
             (batch_size, max_length, embed_dim),
             device=positional_embeddings.device,
-            dtype=positional_embeddings.dtype,
+            dtype=source_dtype,
         )
 
         # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+
+        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU
+        if positional_embeddings.device.type == "cpu":
+            positional_embeddings = positional_embeddings.to(torch.float32)
 
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
@@ -198,6 +203,9 @@ class Siglip2VisionEmbeddings(nn.Module):
 
             # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
             resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
+
+            # Cast to original dtype
+            resized_embeddings = resized_embeddings.to(source_dtype)
 
             resulted_positional_embeddings[i, : height * width] = resized_embeddings
             resulted_positional_embeddings[i, height * width :] = resized_embeddings[0]
@@ -340,15 +348,9 @@ class Siglip2FlashAttention2(Siglip2Attention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim)
 
         dropout_rate = self.dropout if self.training else 0.0
 
@@ -633,12 +635,19 @@ class Siglip2MultiheadAttentionPoolingHead(nn.Module):
         self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Siglip2MLP(config)
+        self.num_heads = config.num_attention_heads
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
-        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
+        if attention_mask is not None:
+            target_len, source_len = probe.shape[1], hidden_state.shape[1]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_state.dtype, target_len)
+            attention_mask = attention_mask.repeat(1, self.num_heads, target_len, 1)
+            attention_mask = attention_mask.reshape(-1, target_len, source_len)
+
+        hidden_state = self.attention(probe, hidden_state, hidden_state, attn_mask=attention_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)
@@ -704,11 +713,13 @@ class Siglip2VisionTransformer(nn.Module):
 
         if attention_mask is not None and not self._use_flash_attention_2:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+            encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+        else:
+            encoder_attention_mask = attention_mask
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
+            attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -717,7 +728,7 @@ class Siglip2VisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooler_output = self.head(last_hidden_state) if self.use_head else None
+        pooler_output = self.head(last_hidden_state, attention_mask) if self.use_head else None
         if not return_dict:
             return (last_hidden_state, pooler_output) + encoder_outputs[1:]
 
