@@ -329,10 +329,11 @@ class Kosmos2_5ForConditionalGenerationModelOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    # past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    width: Optional[torch.FloatTensor] = None
+    height: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
     projection_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_model_output: BaseModelOutputWithPooling = None
@@ -1760,6 +1761,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         self,
         input_ids: Optional[torch.Tensor] = None,
         flattened_patches: Optional[torch.Tensor] = None,
+        width: Optional[torch.Tensor] = None,
+        height: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1846,7 +1849,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         )
 
         if not return_dict:
-            outputs = lm_outputs + (image_embeds, projection_attentions, vision_model_output)
+            outputs = lm_outputs + (width, height, image_embeds, projection_attentions, vision_model_output)
             return tuple(output for output in outputs if output is not None)
 
         return Kosmos2_5ForConditionalGenerationModelOutput(
@@ -1855,6 +1858,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             past_key_values=lm_outputs.past_key_values,
             hidden_states=lm_outputs.hidden_states,
             attentions=lm_outputs.attentions,
+            width=width,
+            height=height,
             image_embeds=image_embeds,
             projection_attentions=projection_attentions,
             vision_model_output=vision_model_output,
@@ -1864,6 +1869,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         self,
         input_ids,
         flattened_patches=None,
+        width=None,
+        height=None,
         image_embeds=None,
         image_embeds_position_mask=None,
         past_key_values=None,
@@ -1887,8 +1894,11 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             **model_kwargs,
         )
 
+        model_inputs["width"] = width
+        model_inputs["height"] = height
+
         if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # If we're in cached decoding stage, `flattened_patches` should be `None` because `input_ids` do not contain special image token anymore
             # Otherwise we need `flattened_patches` to be passed to model
             model_inputs["flattened_patches"] = flattened_patches
 
