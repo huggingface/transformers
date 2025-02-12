@@ -101,6 +101,8 @@ dict_keys(["input_ids", "attention_mask", "pixel_values", "image_sizes"])
 
 Some vision models support videos as inputs as well as images. The message format is very similar to the image-only models with tiny differences to handle loading videos from a URL. We can continue using the same model as before since it supports videos.
 
+### Sampling with fixed number of frames
+
 Here's an example of how to set up a conversation with video inputs. Notice the extra `kwargs` passed to `processor.apply_chat_template()`. The key parameter here is `num_frames`, which controls how many frames to sample uniformly from the video. Each model checkpoint has a maximum frame count it was trained with, and exceeding this limit can significantly impact generation quality. So, it’s important to choose a frame count that fits both the model's capacity and your computational resources. If you don't specify `num_frames`, the entire video will be loaded without any frame sampling.
 
 You also have the option to choose a specific framework to load the video, depending on your preferences or needs. Currently, we support `decord`, `pyav` (the default), `opencv`, and `torchvision`. For this example, we’ll use `decord`, as it's a bit faster than `pyav`.
@@ -146,12 +148,66 @@ processed_chat = processor.apply_chat_template(
 print(processed_chat.keys())
 ```
 
+### Sampling with FPS
+
+When working with long videos, you might want to sample more frames for better representation. Instead of a fixed number of frames, you can specify `video_fps`, which determines how many frames per second to extract. For example, if a video is **10 seconds long** and you set `video_fps=2`, the model will sample **20 frames** (2 per second, uniformly spaced). 
+
+Using the above model, we need to apply chat template as follows to sample 2 frames per second.
+
+```python
+processed_chat = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    video_fps=32,
+    video_load_backend="decord",
+)
+print(processed_chat.keys())
+```
+
+
+## Custom Frame Sampling with a Function  
+
+Not all models sample frames **uniformly** — some require more complex logic to determine which frames to use. If your model follows a different sampling strategy, you can **customize** frame selection by providing a function:  
+
+🔹 Use the `sample_indices_fn` argument to pass a **callable function** for sampling.  
+🔹 If provided, this function **overrides** standard `num_frames` and `fps` methods.  
+🔹 It receives all the arguments passed to `load_video` and must return **valid frame indices** to sample.  
+
+When to Use `sample_indices_fn`?  
+
+- If you need a custom sampling strategy (e.g., **adaptive frame selection** instead of uniform sampling).  
+- If your model prioritizes **key moments** in a video rather than evenly spaced frames.  
+
+Here’s an example of how to implement it:  
+
+
+```python
+
+def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+    # samples only the first and the second frame
+    return [0, 1]
+
+processed_chat = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    sample_indices_fn=sample_indices_fn,
+    video_load_backend="decord",
+)
+print(processed_chat.keys())
+```
+
+By using `sample_indices_fn`, you gain **full control** over frame selection, making your model **more adaptable** to different video scenarios. 🚀  
+
+
 
 
 ## How to use chat templates with audio inputs
 
 To be supported soon. Stay tuned! 🤗 
-
 
 
 ## Is there also a pipeline for multimodal conversations?
