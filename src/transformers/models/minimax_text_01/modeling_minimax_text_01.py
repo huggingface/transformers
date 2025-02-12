@@ -20,9 +20,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: remove these
-# from pack_minimax import show_tensor
-
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -566,23 +563,23 @@ class MiniMaxText01DecoderLayer(nn.Module):
         self.post_attention_layernorm = MiniMaxText01RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.layer_idx = layer_idx
-        self.residual_post_norm = config.residual_post_norm
-        self.layernorm_attention_alpha = config.layernorm_attention_alpha
-        self.layernorm_attention_beta = config.layernorm_attention_beta
-        self.layernorm_lightning_attention_alpha = config.layernorm_lightning_attention_alpha
-        self.layernorm_lightning_attention_beta = config.layernorm_lightning_attention_beta
+        self.postnorm = config.postnorm
+        self.layernorm_full_attention_alpha = config.layernorm_full_attention_alpha
+        self.layernorm_full_attention_beta = config.layernorm_full_attention_beta
+        self.layernorm_linear_attention_alpha = config.layernorm_linear_attention_alpha
+        self.layernorm_linear_attention_beta = config.layernorm_linear_attention_beta
         self.layernorm_mlp_alpha = config.layernorm_mlp_alpha
         self.layernorm_mlp_beta = config.layernorm_mlp_beta
         self.attn_type = config.attn_type_list[layer_idx]
 
         if self.attn_type == 0:
             self.self_attn = MiniMaxText01LightningAttention(config, layer_idx)
-            self.layernorm_alpha = self.layernorm_lightning_attention_alpha
-            self.layernorm_beta = self.layernorm_lightning_attention_beta
+            self.layernorm_alpha = self.layernorm_linear_attention_alpha
+            self.layernorm_beta = self.layernorm_linear_attention_beta
         else:
             self.self_attn = MiniMaxText01Attention(config, layer_idx)
-            self.layernorm_alpha = self.layernorm_attention_alpha
-            self.layernorm_beta = self.layernorm_attention_beta
+            self.layernorm_alpha = self.layernorm_full_attention_alpha
+            self.layernorm_beta = self.layernorm_full_attention_beta
 
     def forward(
         self,
@@ -622,7 +619,7 @@ class MiniMaxText01DecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-        if self.residual_post_norm:
+        if self.postnorm:
             residual = hidden_states
 
         # Self Attention
@@ -642,7 +639,7 @@ class MiniMaxText01DecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.residual_post_norm:
+        if self.postnorm:
             residual = hidden_states
         hidden_states, router_logits = self.block_sparse_moe(hidden_states)
         hidden_states = residual * self.layernorm_mlp_alpha + hidden_states * self.layernorm_mlp_beta

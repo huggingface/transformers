@@ -15,9 +15,6 @@
 # limitations under the License.
 """PyTorch MiniMax-Text-01 model."""
 
-# TODO: remove these
-# from pack_minimax import show_tensor
-
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -76,7 +73,7 @@ class MiniMaxText01Config(PretrainedConfig):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -87,7 +84,8 @@ class MiniMaxText01Config(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
-        head_dim (`<fill_type>`, *optional*): <fill_docstring>
+        head_dim (`int`, *optional*, defaults to `hidden_size // num_attention_heads`):
+            The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
@@ -126,15 +124,26 @@ class MiniMaxText01Config(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        attn_type_list (`<fill_type>`, *optional*): <fill_docstring>
-        block_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
-        residual_post_norm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
-        layernorm_attention_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        layernorm_attention_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        layernorm_lightning_attention_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        layernorm_lightning_attention_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        layernorm_mlp_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
-        layernorm_mlp_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        attn_type_list (`List[int]`, *optional*, defaults to `[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]`):
+            List of attention types for each layer. `0` for linear (lightning) attention
+            and `1` for full (normal) attention.
+        block_size (`int`, *optional*, defaults to 256):
+            The length of each attention block, determining how queries, keys, and values
+            are grouped and processed for intra- and inter-block attention.
+        postnorm (`bool`, *optional*, defaults to `False`):
+            Use residual connections post-normalization.
+        layernorm_full_attention_alpha (`float`, *optional*, defaults to 1):
+            Weight for residual value in residual connection after normal attention.
+        layernorm_full_attention_beta (`float`, *optional*, defaults to 1):
+            Weight for hidden state value in residual connection after normal attention.
+        layernorm_linear_attention_alpha (`float`, *optional*, defaults to 1):
+            Weight for residual value in residual connection after lightning attention.
+        layernorm_linear_attention_beta (`float`, *optional*, defaults to 1):
+            Weight for hidden state value in residual connection after lightning attention.
+        layernorm_mlp_alpha (`float`, *optional*, defaults to 1):
+            Weight for residual value in residual connection after MLP.
+        layernorm_mlp_beta (`float`, *optional*, defaults to 1):
+            Weight for hidden state value in residual connection after MLP.
 
     ```python
     >>> from transformers import MiniMaxText01Model, MiniMaxText01Config
@@ -180,11 +189,11 @@ class MiniMaxText01Config(PretrainedConfig):
         router_jitter_noise=0.0,
         attn_type_list=[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
         block_size=256,
-        residual_post_norm=False,
-        layernorm_attention_alpha=1,
-        layernorm_attention_beta=1,
-        layernorm_lightning_attention_alpha=1,
-        layernorm_lightning_attention_beta=1,
+        postnorm=False,
+        layernorm_full_attention_alpha=1,
+        layernorm_full_attention_beta=1,
+        layernorm_linear_attention_alpha=1,
+        layernorm_linear_attention_beta=1,
         layernorm_mlp_alpha=1,
         layernorm_mlp_beta=1,
         **kwargs,
@@ -204,7 +213,6 @@ class MiniMaxText01Config(PretrainedConfig):
         self.rope_theta = rope_theta
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
         self.output_router_logits = output_router_logits
@@ -212,22 +220,13 @@ class MiniMaxText01Config(PretrainedConfig):
         self.router_jitter_noise = router_jitter_noise
         self.attn_type_list = attn_type_list
         self.block_size = block_size
-        self.residual_post_norm = residual_post_norm
-        self.layernorm_attention_alpha = layernorm_attention_alpha
-        self.layernorm_attention_beta = layernorm_attention_beta
-        self.layernorm_lightning_attention_alpha = layernorm_lightning_attention_alpha
-        self.layernorm_lightning_attention_beta = layernorm_lightning_attention_beta
+        self.postnorm = postnorm
+        self.layernorm_full_attention_alpha = layernorm_full_attention_alpha
+        self.layernorm_full_attention_beta = layernorm_full_attention_beta
+        self.layernorm_linear_attention_alpha = layernorm_linear_attention_alpha
+        self.layernorm_linear_attention_beta = layernorm_linear_attention_beta
         self.layernorm_mlp_alpha = layernorm_mlp_alpha
         self.layernorm_mlp_beta = layernorm_mlp_beta
-
-        # TODO: move these to saved config
-        self.residual_post_norm = True
-        self.layernorm_attention_alpha = 3.5565588200778455
-        self.layernorm_attention_beta = 1.0
-        self.layernorm_lightning_attention_alpha = 3.5565588200778455
-        self.layernorm_lightning_attention_beta = 1.0
-        self.layernorm_mlp_alpha = 3.5565588200778455
-        self.layernorm_mlp_beta = 1.0
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -494,23 +493,23 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         super().__init__(config, layer_idx)
 
         self.layer_idx = layer_idx
-        self.residual_post_norm = config.residual_post_norm
-        self.layernorm_attention_alpha = config.layernorm_attention_alpha
-        self.layernorm_attention_beta = config.layernorm_attention_beta
-        self.layernorm_lightning_attention_alpha = config.layernorm_lightning_attention_alpha
-        self.layernorm_lightning_attention_beta = config.layernorm_lightning_attention_beta
+        self.postnorm = config.postnorm
+        self.layernorm_full_attention_alpha = config.layernorm_full_attention_alpha
+        self.layernorm_full_attention_beta = config.layernorm_full_attention_beta
+        self.layernorm_linear_attention_alpha = config.layernorm_linear_attention_alpha
+        self.layernorm_linear_attention_beta = config.layernorm_linear_attention_beta
         self.layernorm_mlp_alpha = config.layernorm_mlp_alpha
         self.layernorm_mlp_beta = config.layernorm_mlp_beta
         self.attn_type = config.attn_type_list[layer_idx]
 
         if self.attn_type == 0:
             self.self_attn = MiniMaxText01LightningAttention(config, layer_idx)
-            self.layernorm_alpha = self.layernorm_lightning_attention_alpha
-            self.layernorm_beta = self.layernorm_lightning_attention_beta
+            self.layernorm_alpha = self.layernorm_linear_attention_alpha
+            self.layernorm_beta = self.layernorm_linear_attention_beta
         else:
             self.self_attn = MiniMaxText01Attention(config, layer_idx)
-            self.layernorm_alpha = self.layernorm_attention_alpha
-            self.layernorm_beta = self.layernorm_attention_beta
+            self.layernorm_alpha = self.layernorm_full_attention_alpha
+            self.layernorm_beta = self.layernorm_full_attention_beta
 
     def forward(
         self,
@@ -550,7 +549,7 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-        if self.residual_post_norm:
+        if self.postnorm:
             residual = hidden_states
 
         # Self Attention
@@ -570,7 +569,7 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        if self.residual_post_norm:
+        if self.postnorm:
             residual = hidden_states
         hidden_states, router_logits = self.block_sparse_moe(hidden_states)
         hidden_states = residual * self.layernorm_mlp_alpha + hidden_states * self.layernorm_mlp_beta
