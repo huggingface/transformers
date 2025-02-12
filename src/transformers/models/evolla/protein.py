@@ -1108,63 +1108,6 @@ class SaProtProteinEncoder(nn.Module):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-class EvollaProteinEncoder(nn.Module):
-    def __init__(self, config: EvollaProteinConfig):
-        super().__init__()
-        self.config = config
-        self.model = SaProtProteinEncoder(config.protein_encoder_config)
-        self.sequence_compressor_resampler = SequenceCompressorResampler(config.resampler_config) # TODO
-    
-    def sequence_encode(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.FloatTensor,
-        return_dict: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-    ):
-        sequence_repr = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            return_dict=return_dict,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        return sequence_repr
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor,
-        attention_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs
-    ):
-        protein_output = self.sequence_encode(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            return_dict=True,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-
-        # TODO: could be replaced by last hidden state
-        protein_embeds = protein_output.last_hidden_state
-
-        sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
-
-        if not return_dict:
-            return sequence_repr, protein_embeds, attention_mask
-
-        return ProteinEncoderModelOutput(
-            sequence_compressor_output=sequence_repr,
-            last_hidden_state=protein_output.last_hidden_state,
-            hidden_states=protein_output.hidden_states,
-            attentions=protein_output.attentions,
-        )
-
 # Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer
 class EvollaVisionTransformer(nn.Module):
     def __init__(self, config):

@@ -191,11 +191,13 @@ class EvollaProteinConfig(PretrainedConfig):
     
     def __init__(
         self,
+        initializer_range=0.02,
         protein_encoder_config=None,
         resampler_config=None,
         llm_repr_dim=None,
         **kwargs
     ):
+        self.initializer_range = initializer_range
         if protein_encoder_config is None:
             self.protein_encoder_config = EvollaProteinEncoderConfig()
         elif isinstance(protein_encoder_config, dict):
