@@ -18,7 +18,22 @@ rendered properly in your Markdown viewer.
 [Tensor parallelism](./perf_train_gpu_many#tensor-parallelism) shards a model onto multiple GPUs and parallelizes computations such as matrix multiplication. It enables fitting larger model sizes into memory and is faster because each GPU can process a tensor slice.
 
 > [!TIP]
-> Tensor parallelism is currently only supported for [Llama](./model_doc/llama). Open a GitHub issue or pull request to add tensor parallelism support for another model.
+> Expand the list below to see which models support tensor parallelism. Open a GitHub issue or pull request to add support for a model not currently below.
+> <details>
+> <summary>Supported models</summary>
+>
+> * [Cohere](./model_doc/cohere) and [Cohere 2](./model_doc/cohere2)
+> * [Gemma](./model_doc/gemma) and [Gemma 2](./model_doc/gemma2)
+> * [GLM](./model_doc/glm)
+> * [Granite](./model_doc/granite)
+> * [Llama](./model_doc/llama)
+> * [Mistral](./model_doc/mistral)
+> * [Mixtral](./model_doc/mixtral)
+> * [OLMo](./model_doc/olmo) and [OLMo2](./model_doc/olmo2)
+> * [Phi](./model_doc/phi) and [Phi-3](./model_doc/phi3)
+> * [Qwen2](./model_doc/qwen2), [Qwen2Moe](./model_doc/qwen2_moe), and [Qwen2-VL](./model_doc/qwen2_5_vl)
+> * [Starcoder2](./model_doc/starcoder2)
+> </details>
 
 Set `tp_plan="auto"` in [`~AutoModel.from_pretrained`] to enable tensor parallelism for inference.
 

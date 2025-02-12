@@ -19,6 +19,21 @@ Another way to customize a model is to modify their components, rather than writ
 
 This guide will show you how to customize a models attention mechanism in order to apply [Low-Rank Adaptation (LoRA)](https://huggingface.co/docs/peft/conceptual_guides/adapter#low-rank-adaptation-lora) to it.
 
+> [!TIP]
+> The [clear_import_cache](https://github.com/huggingface/transformers/blob/9985d06add07a4cc691dc54a7e34f54205c04d40/src/transformers/utils/import_utils.py#L2286) utility is very useful when you're iteratively modifying and developing model code. It removes all cached Transformers modules and allows Python to reload the modified code without constantly restarting your environment.
+>
+> ```py
+> from transformers import AutoModel
+> from transformers.utils.import_utils import clear_import_cache
+>
+> model = AutoModel.from_pretrained("bert-base-uncased")
+> # modifications to model code
+> # clear cache to reload modified code
+> clear_import_cache()
+> # re-import to use updated code
+> model = AutoModel.from_pretrained("bert-base-uncased")
+> ```
+
 ## Attention class
 
 [Segment Anything](./model_doc/sam) is an image segmentation model, and it combines the query-key-value (`qkv`) projection in its attention mechanims. To reduce the number of trainable parameters and computational overhead, you can apply LoRA to the `qkv` projection. This requires splitting the `qkv` projection so that you can separately target the `q` and `v` with LoRA.
