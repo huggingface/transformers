@@ -443,6 +443,97 @@ trainer.train()
 
 Note layerwise optimization is a bit experimental and does not support DDP (Distributed Data Parallel), thus you can run the training script only on a single GPU. Please see [this appropriate section](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory) for more details. Other features such as gradient clipping, DeepSpeed, etc might not be supported out of the box. Please [raise an issue on GitHub](https://github.com/huggingface/transformers/issues) if you encounter such issue.
 
+### APOLLO
+
+Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO) is a memory-efficient training strategy that allows full-parameter learning for both pre-training and fine-tuning, while maintaining AdamW-level performance with SGD-like memory efficiency.
+
+* **Ultra-low rank efficiency** → Requires much lower rank than GaLore—even rank 1 (APOLLO-Mini) suffices.
+* **No expensive SVD computations** → Unlike GaLore, APOLLO leverages random projection, avoiding training stalls.
+
+You can read more about the method in the [original repository](https://github.com/zhuhanqing/APOLLO) or the [APOLLO: SGD-like Memory, AdamW-level Performance](https://arxiv.org/abs/2412.05270).
+
+First, make sure to install APOLLO from its official repository:
+
+```bash
+pip install apollo-torch
+```
+
+Then, APOLLO optimizers can be used simply by setting `optim="apollo_adamw"` and specifying `optim_target_modules`.
+`optim_target_modules` can be a list of strings, regex or full path corresponding to the target module names you want to adapt. 
+Currently, only Linear layers are considered to use the APOLLO optimizers, i.e., included in `optim_target_modules,` while the remaining models are still using AdamW. 
+
+
+You can also enable layer-wise APOLLO by appending "layerwise" to the optimizer name (optim="apollo_adamw_layerwise"), the same as layer-wise GaLore. This saves additional memory for gradient by performing weight updates layer by layer.
+
+Below is an end-to-end example script (make sure to `pip install trl datasets`):
+
+```python
+import torch
+import datasets
+import trl
+
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
+
+train_dataset = datasets.load_dataset('imdb', split='train')
+
+args = TrainingArguments(
+    output_dir="./test-apollo",
+    max_steps=100,
+    per_device_train_batch_size=2,
+    optim="apollo_adamw",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
+)
+
+model_id = "google/gemma-2b"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+
+trainer = trl.SFTTrainer(
+    model=model,
+    args=args,
+    train_dataset=train_dataset,
+    dataset_text_field='text',
+    max_seq_length=512,
+)
+
+trainer.train()
+```
+
+
+You can further customize APOLLO’s behavior by passing hyperparameters using `optim_args`.
+
+| Parameter         | Description |
+|------------------|-------------|
+| `rank` | Rank of the auxiliary sub-space used for gradient scaling. <br> **APOLLO (default=256)** → Works well for 1B and 7B models. <br> **APOLLO-Mini (default=1)** |
+| `scale_type` | How scaling factors are applied. <br> **`channel`** → Per-channel scaling (used in APOLLO). <br> **`tensor`** → Per-tensor scaling (used in APOLLO-Mini). |
+| `scale` | Adjusts gradient updates to stabilize training. <br> **APOLLO (default=1.0)** <br> **APOLLO-Mini (default=128)** |
+| `update_proj_gap` | Steps before updating projection matrices. Default: **200**. |
+| `proj` | Type of projection. Default: **`random`**. |
+
+
+<Tip>
+
+The `scale` parameter can be set to `n/r`, where `n` is the original space dimension and `r` is the low-rank space dimension.
+Alternatively, you can achieve a similar effect by adjusting the learning rate, while keeping scale at its default value.
+
+</Tip>
+
+For example, you can enable APOLLO-Mini (rank=1 for extreme memory efficiency) by passing `optim_args`:
+
+```python
+
+args = TrainingArguments(
+    output_dir="./test-galore",
+    max_steps=100,
+    per_device_train_batch_size=2,
+    optim="apollo_adamw",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    optim_args="proj=random,rank=1,scale=128.0,scale_type=tensor,update_proj_gap=200",
+
+)
+```
+
 ### LOMO optimizer
 
 The LOMO optimizers have been introduced in [Full Parameter Fine-Tuning for Large Language Models with Limited Resources](https://hf.co/papers/2306.09782) and [AdaLomo: Low-memory Optimization with Adaptive Learning Rate](https://hf.co/papers/2310.10195).

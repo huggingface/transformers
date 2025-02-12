@@ -117,6 +117,7 @@ from .import_utils import (
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
