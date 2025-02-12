@@ -1286,10 +1286,8 @@ class ProcessorMixin(PushToHubMixin):
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
             conversations = conversation
-            is_batched = True
         else:
             conversations = [conversation]
-            is_batched = False
 
         num_frames = chat_template_kwargs.get("num_frames")
         video_fps = chat_template_kwargs.get("video_fps")
@@ -1369,7 +1367,7 @@ class ProcessorMixin(PushToHubMixin):
             # everything internally. The below line is to keep BC for that and be able to work with model that have
             # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood command line
             # without actionable solution for users
-            single_prompt = prompt[0] if is_batched else prompt
+            single_prompt = prompt[0]  # conversation is always batched before applying template
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 kwargs["add_special_tokens"] = False
 
