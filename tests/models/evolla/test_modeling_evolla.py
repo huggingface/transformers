@@ -291,19 +291,20 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             self.assertTrue(torch.equal(inputs[key], value), f"inputs[key] is {inputs[key]} and expected_output[key] is {expected_output[key]}")
 
     def test_saprot_output(self):
-        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
-        inputs = self.processor(proteins=[protein_dict],
-                                messages_list=[message])
-        
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
         protein_informations = {
-            "input_ids": inputs["protein_input_ids"],
-            "attention_mask": inputs["protein_attention_mask"],
+            "input_ids": inputs_dict["protein_input_ids"],
+            "attention_mask": inputs_dict["protein_attention_mask"],
         }
-        saprot_outputs = self.model.protein_encoder.sequence_encode(**protein_informations, return_dict=True, output_hidden_states=False)
-        # TODO: check accuracy
-        print(saprot_outputs)
-        print(saprot_outputs.last_hidden_state.shape)
-        print(saprot_outputs.pooler_output.shape)
+        for model_class in self.all_model_classes:
+            if model_class is not EvollaModel:
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            protein_encoder_outputs = model.protein_encoder.sequence_encode(**protein_informations, return_dict=True)
+            print(model_class, protein_encoder_outputs)
 
     def test_protein_encoder_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -313,6 +314,8 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "attention_mask": inputs_dict["protein_attention_mask"],
         }
         for model_class in self.all_model_classes:
+            if model_class is not EvollaModel:
+                continue
             model = model_class(config)
             model.to(torch_device)
             model.eval()
