@@ -554,6 +554,8 @@
         title: PhoBERT
       - local: model_doc/plbart
         title: PLBart
+      - local: model_doc/principle
+        title: principle
       - local: model_doc/prophetnet
         title: ProphetNet
       - local: model_doc/qdqbert

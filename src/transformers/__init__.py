@@ -715,6 +715,10 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.principle": [
+        "PrincipleConfig",
+        "PrincipleTokenizer",
+    ],
     "models.qwen2_5_vl": [
         "Qwen2_5_VLConfig",
         "Qwen2_5_VLProcessor",
@@ -1147,6 +1151,7 @@ else:
     _import_structure["models.openai"].append("OpenAIGPTTokenizerFast")
     _import_structure["models.pegasus"].append("PegasusTokenizerFast")
     _import_structure["models.qwen2"].append("Qwen2TokenizerFast")
+    _import_structure["models.principle"].append("PrincipleTokenizerFast")
     _import_structure["models.reformer"].append("ReformerTokenizerFast")
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
@@ -3319,6 +3324,16 @@ else:
             "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.principle"].extend(
+        [
+            "PrincipleForCausalLM",
+            "PrincipleForQuestionAnswering",
+            "PrincipleForSequenceClassification",
+            "PrincipleForTokenClassification",
+            "PrincipleModel",
+            "PrinciplePreTrainedModel",
         ]
     )
     _import_structure["models.qwen2_5_vl"].extend(
@@ -5851,6 +5866,7 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.principle import PrincipleConfig, PrincipleTokenizer
     from .models.qwen2_5_vl import (
         Qwen2_5_VLConfig,
         Qwen2_5_VLProcessor,
@@ -6305,6 +6321,7 @@ if TYPE_CHECKING:
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.qwen2 import Qwen2TokenizerFast
+        from .models.principle import PrincipleTokenizerFast
         from .models.reformer import ReformerTokenizerFast
         from .models.rembert import RemBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
@@ -8079,6 +8096,14 @@ if TYPE_CHECKING:
             Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
+        )
+        from .models.principle import (
+            PrincipleForCausalLM,
+            PrincipleForQuestionAnswering,
+            PrincipleForSequenceClassification,
+            PrincipleForTokenClassification,
+            PrincipleModel,
+            PrinciplePreTrainedModel,
         )
         from .models.qwen2_5_vl import (
             Qwen2_5_VLForConditionalGeneration,
