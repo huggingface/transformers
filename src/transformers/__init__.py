@@ -2612,7 +2612,7 @@ else:
     )
     _import_structure["models.evolla"].extend(
         [
-            "EvollaForVisionText2Text",
+            "EvollaForProteinText2Text",
             "EvollaModel",
             "EvollaPreTrainedModel",
             "EvollaProcessor",

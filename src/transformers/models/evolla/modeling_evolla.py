@@ -96,7 +96,7 @@ class EvollaBaseModelOutputWithPast(ModelOutput):
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    protein_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    # protein_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -1276,7 +1276,7 @@ class EvollaModel(EvollaPreTrainedModel):
             last_hidden_state=last_hidden_state,
             hidden_states=decoder_hidden_states,
             attentions=decoder_attentions,
-            protein_hidden_states=encoder_hidden_states,
+            # protein_hidden_states=encoder_hidden_states,
         )
         return output if return_dict else output.to_tuple()
     
@@ -1290,7 +1290,66 @@ class EvollaModel(EvollaPreTrainedModel):
         self.llm.set_input_embeddings(value)
 
 # Copied from transformers.models.idefics.modeling_idefics.IdeficsForVisionText2Text with Idefics->Evolla,HuggingFaceM4/idefics-9b->westlake-repl/Evolla-10B
-class EvollaForVisionText2Text(EvollaPreTrainedModel, GenerationMixin):
+class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = EvollaModel(config)
+        self.vocab_size = config.llm_config.llama_config.vocab_size
+        self.lm_head = nn.Linear(config.llm_config.llama_config.hidden_size, self.vocab_size, bias=False)
+
+        self.post_init()
+    
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+    
+    def set_input_embeddings(self, value):
+        return self.model.set_input_embeddings(value)
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None, # text input ids
+        attention_mask: Optional[torch.Tensor] = None, # text attention mask
+        inputs_embeds: Optional[torch.FloatTensor] = None, # text input embeddings
+        labels: Optional[torch.LongTensor] = None,
+        protein_input_ids: torch.LongTensor = None,
+        protein_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            protein_input_ids=protein_input_ids,
+            protein_attention_mask=protein_attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            return_dict=True,
+            **kwargs
+        )
+        hidden_states = outputs[0]
+        logits = self.lm_head(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
+        
+        lm_outputs = CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+        return lm_outputs if return_dict else lm_outputs.to_tuple()
+
+class EvollaForVisionText2TextOld(EvollaPreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
@@ -1563,4 +1622,4 @@ class EvollaForVisionText2Text(EvollaPreTrainedModel, GenerationMixin):
         return reordered_past
 
 
-__all__ = ["EvollaForVisionText2Text", "EvollaModel", "EvollaPreTrainedModel"]
+__all__ = ["EvollaForProteinText2Text", "EvollaModel", "EvollaPreTrainedModel"]

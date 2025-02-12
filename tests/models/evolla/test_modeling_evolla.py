@@ -54,7 +54,7 @@ if is_accelerate_available():
 if is_torch_available():
     import torch
 
-    from transformers import EvollaForVisionText2Text, EvollaModel, EvollaProcessor
+    from transformers import EvollaForProteinText2Text, EvollaModel, EvollaProcessor
 
 if is_vision_available():
     from PIL import Image
@@ -133,6 +133,7 @@ class EvollaModelTester:
                     "hidden_size": self.hidden_size,
                     "num_attention_heads": self.num_attention_heads,
                     "num_key_value_heads": self.num_key_value_heads,
+                    "vocab_size": self.text_vocab_size,
                 },
                 "sequence_aligner_config": {
                     "num_add_layers": self.sequence_aligner_num_add_layers,
@@ -215,7 +216,7 @@ class EvollaModelTester:
         return config, inputs_dict
 @require_torch
 class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (EvollaModel,) if is_torch_available() else ()
+    all_model_classes = (EvollaModel, EvollaForProteinText2Text) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": EvollaModel}
         if is_torch_available()
@@ -235,6 +236,26 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         # self.processor = EvollaProcessor(protein_tokenizer, tokenizer)
         self.processor = EvollaProcessor.from_pretrained("/zhouxibin/workspaces/transformers/src/transformers/models/evolla/evolla-base")
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        # XXX: IdeficsForVisionText2TextTest has no MODEL_FOR group yet, but it should be the same
+        # as MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, so for now manually changing to do the right thing
+        # as super won't do it
+        if return_labels:
+            inputs_dict["labels"] = torch.zeros(
+                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+            )
+
+        return inputs_dict
+
+    def test_model_outputs_equivalence(self):
+        try:
+            orig = self.all_model_classes
+            # EvollaModel.forward doesn't have labels input arg - only EvollaForProteinText2Text does
+            self.all_model_classes = (EvollaForProteinText2Text,) if is_torch_available() else ()
+            super().test_model_outputs_equivalence()
+        finally:
+            self.all_model_classes = orig
 
     def prepare_input_and_expected_output(self):
         amino_acid_sequence = "AAAA"
@@ -314,60 +335,60 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             print(outputs)
 
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-        seq_len = getattr(self.model_tester, "seq_length", None)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+    # def test_attention_outputs(self):
+    #     config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    #     config.return_dict = True
+    #     seq_len = getattr(self.model_tester, "seq_length", None)
+    #     encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+    #     encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
+    #     for model_class in self.all_model_classes:
+    #         inputs_dict["output_attentions"] = True
+    #         inputs_dict["output_hidden_states"] = False
+    #         config.return_dict = True
+    #         model = model_class(config)
+    #         model.to(torch_device)
+    #         model.eval()
+    #         with torch.no_grad():
+    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+    #         attentions = outputs.attentions
 
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+    #         self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
-            out_len = len(outputs)
+    #         # check that output_attentions also work using config
+    #         del inputs_dict["output_attentions"]
+    #         config.output_attentions = True
+    #         model = model_class(config)
+    #         model.to(torch_device)
+    #         model.eval()
+    #         with torch.no_grad():
+    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+    #         attentions = outputs.attentions
+    #         self.assertListEqual(
+    #                 list(attentions[0].shape[-3:]),
+    #                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+    #             )
+    #         out_len = len(outputs)
 
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+    #         # Check attention is always last and order is fine
+    #         inputs_dict["output_attentions"] = True
+    #         inputs_dict["output_hidden_states"] = True
+    #         model = model_class(config)
+    #         model.to(torch_device)
+    #         model.eval()
+    #         with torch.no_grad():
+    #             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            self.assertEqual(out_len + 2, len(outputs))
+    #         self.assertEqual(out_len + 2, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+    #         self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+    #         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
+    #         self.assertListEqual(
+    #             list(self_attentions[0].shape[-3:]),
+    #             [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+    #         )
 
     def test_initialization(self):
         # we skip the latents initialization test
