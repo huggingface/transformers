@@ -20,11 +20,10 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
 )
-
-from ...configuration_utils import PretrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetConvLayer, RTDetrResNetPreTrainedModel
 

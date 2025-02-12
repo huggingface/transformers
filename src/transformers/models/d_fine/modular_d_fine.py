@@ -20,13 +20,14 @@ import torch
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch import nn
+
+from ...activations import ACT2CLS
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
 from ..auto import CONFIG_MAPPING
-from ...activations import ACT2CLS
 from ..rt_detr.modeling_rt_detr import (
     RTDetrConvEncoder,
     RTDetrConvNormLayer,
