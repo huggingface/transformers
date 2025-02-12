@@ -673,7 +673,7 @@ def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Opti
         indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
     else:
         indices = frame_indicies
-        
+
     frames = []
     container.seek(0)
     end_index = indices[-1]
@@ -722,7 +722,7 @@ def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fp
         indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
     else:
         indices = frame_indicies
-    
+
     return video[indices]
 
 
@@ -753,7 +753,7 @@ def load_video(
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
         frame_indicies (List[int]):
-            A list of integers that represent the frame idx that one wants to sample. 
+            A list of integers that represent the frame idx that one wants to sample.
         backend (`str`, *optional*, defaults to `"opencv"`):
             The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
 

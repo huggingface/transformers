@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...utils import logging, is_cv2_available, is_decord_available
 from typing import List, Tuple
-from PIL import Image
+
 import numpy as np
+from PIL import Image
 
 # Make sure these are imported from your library
-from ...image_utils import load_video, get_video_details
+from ...image_utils import get_video_details, load_video
+from ...utils import is_decord_available, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -48,7 +50,7 @@ def load_smolvlm_video(
 ) -> Tuple[List[Image.Image], List[str], float]:
     """
     Loads a video from `path` by first gathering metadata via `get_video_details`
-    and then computing frame indices based on the old skip-secs logic. 
+    and then computing frame indices based on the old skip-secs logic.
     Finally, it calls the updated `load_video` (which returns a numpy array)
     and converts that array into a list of PIL images (RGB).
 

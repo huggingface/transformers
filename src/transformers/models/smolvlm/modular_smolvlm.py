@@ -13,25 +13,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import torch
-from torch import nn
-import torch.utils.checkpoint
+from typing import List, Optional, Tuple, Union
 
-from typing import Dict, Any, List, Optional, Union, Tuple
-from ...cache_utils import Cache, DynamicCache
+import torch
+import torch.utils.checkpoint
+from torch import nn
+
+from ...cache_utils import DynamicCache
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
 )
-
-from ..idefics3.modeling_idefics3 import (
-    Idefics3BaseModelOutputWithPast, 
-    Idefics3Model, 
-    Idefics3ForConditionalGeneration
-)
-from ..idefics3.configuration_idefics3 import Idefics3VisionConfig, Idefics3Config
+from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
+from ..idefics3.modeling_idefics3 import (
+    Idefics3BaseModelOutputWithPast,
+    Idefics3ForConditionalGeneration,
+    Idefics3Model,
+)
+
 
 logger = logging.get_logger(__name__)
 
@@ -62,13 +61,11 @@ class SmolVLMModel(Idefics3Model):
     ) -> torch.Tensor:
         """
         Merge text embeddings with image embeddings out-of-place (no in-place indexing).
-    
         The shapes are something like:
           - input_ids:          (B, T)
           - inputs_embeds:      (B, T, D)
           - image_hidden_states:(N, S, D) where N is total images across the batch,
             S is #patches (or #slots) per image, D is embedding dim.
-    
         Logic:
           1) For each sample in the batch, find <image> tokens in the text.
           2) If zero <image> tokens => text-only. Concatenate a zero-length slice
@@ -79,11 +76,10 @@ class SmolVLMModel(Idefics3Model):
              (because each image is S embeddings). We chunk those positions into groups
              of S. For each chunk => we consume one block from image_hidden_states[offset]
              (which is shape (S, D)), and place each row into the text in place of a token.
-    
         Returns:
           A tensor of (B, T, D).
         """
-    
+
         ##############################################
         # 1) Basic shape checks
         ##############################################
@@ -94,15 +90,15 @@ class SmolVLMModel(Idefics3Model):
             raise ValueError(
                 f"Text embedding dim {D_text} != image embedding dim {D_img}"
             )
-    
+
         ##############################################
         # 2) We'll track how many images we've used so far across the entire batch
         ##############################################
         image_offset = 0
-    
+
         # We'll store one merged tensor per batch sample
         merged_outputs: List[torch.Tensor] = []
-    
+
         ##############################################
         # 3) Iterate through each sample
         ##############################################
@@ -110,10 +106,10 @@ class SmolVLMModel(Idefics3Model):
             # Find positions of <image> tokens in the text
             image_positions = (cur_ids == self.image_token_id).nonzero(as_tuple=True)[0]
             num_image_tokens = len(image_positions)
-    
+
             # If no <image> => text-only
             if num_image_tokens == 0:
-                # We do not consume any row from image_hidden_states; 
+                # We do not consume any row from image_hidden_states;
                 # but we do a zero-length slice so the image encoder is in the graph.
                 empty_slice = image_hidden_states[0][:0, :]  # shape (0, D)
                 # Concatenate text plus that empty slice.
@@ -121,7 +117,7 @@ class SmolVLMModel(Idefics3Model):
                 merged_text_only = torch.cat([cur_embeds, empty_slice], dim=0)
                 merged_outputs.append(merged_text_only)
                 continue
-    
+
             # Otherwise, we have at least one <image> token.
             # Typically, if each image is S embeddings, we expect the total # of <image> tokens
             # in this sample to be multiple of S => each group of S tokens = 1 image
@@ -130,7 +126,7 @@ class SmolVLMModel(Idefics3Model):
                     f"Sample {b_idx} has {num_image_tokens} <image> tokens, not a multiple of S={S}. "
                     "Cannot map them to blocks of shape (S, D)."
                 )
-    
+
             # We'll chunk image_positions into groups of size S
             positions_list = image_positions.tolist()
             # Example: if num_image_tokens=162 and S=81 => we have 2 images => 2 chunks each of length 81
@@ -138,17 +134,17 @@ class SmolVLMModel(Idefics3Model):
                 positions_list[i : i + S]
                 for i in range(0, num_image_tokens, S)
             ]
-    
+
             # We'll build a list of segments: text, then image row(s), text, etc.
             segments = []
             text_start = 0
-    
+
             # For each chunk (each chunk => 1 image)
             for chunk in chunks:
                 # image_hidden_states[image_offset] => shape (S, D)
                 cur_block = image_hidden_states[image_offset]
                 image_offset += 1
-    
+
                 # We'll iterate over the S positions in ascending order
                 for i_s, pos in enumerate(chunk):
                     # Add text from [text_start..pos)
@@ -159,19 +155,19 @@ class SmolVLMModel(Idefics3Model):
                     segments.append(row_of_block)
                     # skip the <image> token
                     text_start = pos + 1
-    
+
             # leftover text after the final <image> token
             if text_start < T:
                 segments.append(cur_embeds[text_start:])
-    
+
             # cat them into a single (T_b, D) tensor
             merged_sample = torch.cat(segments, dim=0)
             merged_outputs.append(merged_sample)
-            
+
         merged_outputs = torch.stack(merged_outputs)
         #assert (old_merger_outputs==merged_outputs).all()
         return merged_outputs
-        
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -231,13 +227,13 @@ class SmolVLMModel(Idefics3Model):
             # Remove padding images - padding images are full 0.
             nb_values_per_image = pixel_values.shape[1:].numel()
             real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-            
+
             if not any(real_images_inds):
                 # no images, leave one empty image.
                 real_images_inds[0] = True
-                
+
             pixel_values = pixel_values[real_images_inds].contiguous()
-            
+
             # Handle the vision attention mask
             if pixel_attention_mask is None:
                 pixel_attention_mask = torch.ones(
@@ -262,7 +258,7 @@ class SmolVLMModel(Idefics3Model):
                 pixel_values=pixel_values,
                 patch_attention_mask=patch_attention_mask,
             ).last_hidden_state
-            
+
             # Modality projection & resampling
             image_hidden_states = self.connector(image_hidden_states)
 

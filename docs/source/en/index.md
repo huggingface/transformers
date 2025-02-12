@@ -316,6 +316,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [SEW](model_doc/sew)                           |       ✅        |         ❌         |      ❌      |
 |                         [SEW-D](model_doc/sew-d)                         |       ✅        |         ❌         |      ❌      |
 |                        [SigLIP](model_doc/siglip)                        |       ✅        |         ❌         |      ❌      |
+|                       [SmolVLM](model_doc/smolvlm)                       |       ✅        |         ❌         |      ❌      |
+|           [SmolVLMVisionTransformer](model_doc/smolvlm_vision)           |       ❌        |         ❌         |      ❌      |
 |        [Speech Encoder decoder](model_doc/speech-encoder-decoder)        |       ✅        |         ❌         |      ✅      |
 |                 [Speech2Text](model_doc/speech_to_text)                  |       ✅        |         ✅         |      ❌      |
 |                      [SpeechT5](model_doc/speecht5)                      |       ✅        |         ❌         |      ❌      |

@@ -813,13 +813,11 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
 
         Merge text embeddings with image embeddings out-of-place (no in-place indexing).
-
         The shapes are something like:
           - input_ids:          (B, T)
           - inputs_embeds:      (B, T, D)
           - image_hidden_states:(N, S, D) where N is total images across the batch,
             S is #patches (or #slots) per image, D is embedding dim.
-
         Logic:
           1) For each sample in the batch, find <image> tokens in the text.
           2) If zero <image> tokens => text-only. Concatenate a zero-length slice
@@ -830,7 +828,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
              (because each image is S embeddings). We chunk those positions into groups
              of S. For each chunk => we consume one block from image_hidden_states[offset]
              (which is shape (S, D)), and place each row into the text in place of a token.
-
         Returns:
           A tensor of (B, T, D).
         """
