@@ -212,7 +212,8 @@ class InternLM3DecoderLayer(nn.Module):
         self.mlp = InternLM3MLP(config)
         self.input_layernorm = InternLM3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = InternLM3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.register_buffer("hidden_factor", torch.tensor(config.hidden_factor), persistent=True)
+        self.config = config
+        self.register_buffer("hidden_factor", torch.tensor(config.hidden_factor), persistent=False)
 
     def forward(
         self,

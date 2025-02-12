@@ -220,9 +220,10 @@ class InternLM3Attention(LlamaAttention):
 class InternLM3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: InternLM3Config, layer_idx: int):
         super().__init__()
+        self.config = config
         self.self_attn = InternLM3Attention(config=config, layer_idx=layer_idx)
         self.mlp = InternLM3MLP(config)
-        self.register_buffer("hidden_factor", torch.tensor(config.hidden_factor), persistent=True)
+        self.register_buffer("hidden_factor", torch.tensor(config.hidden_factor), persistent=False)
     
     def forward(
         self,
