@@ -21,16 +21,16 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property
-
 from transformers import (
-    is_torch_available,
-    is_vision_available,
     DFineConfig,
     DFineResNetConfig,
     DFineResNetStageConfig,
+    is_torch_available,
+    is_vision_available,
 )
+from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.utils import cached_property
+
 
 if is_torch_available():
     import torch
