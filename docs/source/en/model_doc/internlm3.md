@@ -16,26 +16,26 @@ rendered properly in your Markdown viewer.
 
 # InternLM3
 
-## Introduction
+## Overview
 
-InternLM3 has open-sourced an 8-billion parameter instruction model, InternLM3-8B-Instruct, designed for general-purpose usage and advanced reasoning. This model has the following characteristics:
+InternLM3 is an 8-billion parameter instruction model designed for general-purpose usage and advanced reasoning. This model has the following characteristics:
 
-- Enhanced performance at reduced cost: State-of-the-art performance on reasoning and knowledge-intensive tasks surpass models like Llama3.1-8B and Qwen2.5-7B. Remarkably, InternLM3 is trained on only 4 trillion high-quality tokens, saving more than 75% of the training cost compared to other LLMs of similar scale.
+- Enhanced performance at reduced cost: State-of-the-art performance on reasoning and knowledge-intensive tasks that surpass models like Llama3.1-8B and Qwen2.5-7B. Remarkably, InternLM3 is trained on only 4 trillion high-quality tokens, saving more than 75% of the training cost compared to other LLMs of similar scale.
 
-- Deep thinking capability: InternLM3 supports both the deep thinking mode for solving complicated reasoning tasks via the long chain-of-thought and the normal response mode for fluent user interactions.
+- Deep thinking capability: InternLM3 supports both deep thinking mode for solving complicated reasoning tasks with the long chain-of-thought technique and normal response mode for fluent user interactions.
 
 ## Usage tips
 
 Model weights can be requested [here](https://huggingface.co/internlm/internlm3-8b-instruct).
 
-In the following, we demonstrate how to use `InternLM3-8B-Instruct` for the inference.
+In the following, we demonstrate how to use `InternLM3-8B-Instruct` for inference.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> tokenizer = transformers.InternLM3Tokenizer.from_pretrained("internlm/internlm3-8b-instruct")
->>> model = transformers.InternLM3ForCausalLM.from_pretrained("internlm/internlm3-8b-instruct", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("internlm/internlm3-8b-instruct")
+>>> model = AutoModelForCausalLM.from_pretrained("internlm/internlm3-8b-instruct", device_map="auto")
 >>> model = model.eval()
 
 >>> system_prompt = """You are an AI assistant whose name is InternLM (书生·浦语).
