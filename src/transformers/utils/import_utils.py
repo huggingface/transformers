@@ -89,6 +89,7 @@ FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
 TORCH_FX_REQUIRED_VERSION = version.parse("1.10")
 
 ACCELERATE_MIN_VERSION = "0.26.0"
+SCHEDULEFREE_MIN_VERSION = "1.2.6"
 FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
@@ -108,7 +109,7 @@ _fbgemm_gpu_available = _is_package_available("fbgemm_gpu")
 _galore_torch_available = _is_package_available("galore_torch")
 _lomo_available = _is_package_available("lomo_optim")
 _grokadamw_available = _is_package_available("grokadamw")
-_schedulefree_available = _is_package_available("schedulefree")
+_schedulefree_available, _schedulefree_version = _is_package_available("schedulefree", return_version=True)
 # `importlib.metadata.version` doesn't work with `bs4` but `beautifulsoup4`. For `importlib.util.find_spec`, reversed.
 _bs4_available = importlib.util.find_spec("bs4") is not None
 _coloredlogs_available = _is_package_available("coloredlogs")
@@ -144,6 +145,7 @@ _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
 _auto_gptq_available = _is_package_available("auto_gptq")
+_gptqmodel_available = _is_package_available("gptqmodel")
 # `importlib.metadata.version` doesn't work with `awq`
 _auto_awq_available = importlib.util.find_spec("awq") is not None
 _quanto_available = _is_package_available("quanto")
@@ -409,8 +411,8 @@ def is_grokadamw_available():
     return _grokadamw_available
 
 
-def is_schedulefree_available():
-    return _schedulefree_available
+def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION):
+    return _schedulefree_available and version.parse(_schedulefree_version) >= version.parse(min_version)
 
 
 def is_pyctcdecode_available():
@@ -864,7 +866,7 @@ def is_ninja_available():
         return True
 
 
-def is_ipex_available():
+def is_ipex_available(min_version: str = ""):
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
@@ -879,6 +881,8 @@ def is_ipex_available():
             f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
         )
         return False
+    if min_version:
+        return version.parse(_ipex_version) >= version.parse(min_version)
     return True
 
 
@@ -1039,6 +1043,10 @@ def is_compressed_tensors_available():
 
 def is_auto_gptq_available():
     return _auto_gptq_available
+
+
+def is_gptqmodel_available():
+    return _gptqmodel_available
 
 
 def is_eetq_available():

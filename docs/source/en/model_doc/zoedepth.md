@@ -70,7 +70,7 @@ Alternatively, one can also perform inference using the classes:
 >>> inputs = image_processor(images=image, return_tensors="pt")
 
 >>> with torch.no_grad():   
-...     outputs = model(pixel_values)
+...     outputs = model(inputs)
 
 >>> # interpolate to original size and visualize the prediction
 >>> ## ZoeDepth dynamically pads the input image. Thus we pass the original image size as argument

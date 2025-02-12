@@ -300,6 +300,11 @@ model = AutoModelForImageTextToText.from_pretrained(
 [[autodoc]] LlavaNextImageProcessor
     - preprocess
 
+## LlavaNextImageProcessorFast
+
+[[autodoc]] LlavaNextImageProcessorFast
+    - preprocess
+
 ## LlavaNextProcessor
 
 [[autodoc]] LlavaNextProcessor
