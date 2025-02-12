@@ -82,7 +82,6 @@ class SmolVLMVisionConfig(PretrainedConfig):
 
     model_type = "smolvlm_vision"
     base_config_key = "vision_config"
-    model_type = "smolvlm_vision"
 
     def __init__(
         self,
@@ -154,7 +153,6 @@ class SmolVLMConfig(PretrainedConfig):
 
     model_type = "smolvlm"
     sub_configs = {"text_config": AutoConfig, "vision_config": SmolVLMVisionConfig}
-    model_type = "smolvlm"
 
     def __init__(
         self,
