@@ -285,24 +285,22 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         print(saprot_outputs.pooler_output.shape)
 
     def test_protein_encoder_output(self):
-        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
-        inputs = self.processor(proteins=[protein_dict],
-                                messages_list=[message])
-        
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
         protein_informations = {
-            "input_ids": inputs["protein_input_ids"],
-            "attention_mask": inputs["protein_attention_mask"],
+            "input_ids": inputs_dict["protein_input_ids"],
+            "attention_mask": inputs_dict["protein_attention_mask"],
         }
-        protein_encoder_outputs = self.model.protein_encoder(**protein_informations, return_dict=True)
-        # TODO: check accuracy
-        print(protein_encoder_outputs)
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            protein_encoder_outputs = model.protein_encoder(**protein_informations, return_dict=True)
+            print(model_class, protein_encoder_outputs)
     
     def test_single_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-        seq_len = getattr(self.model_tester, "seq_length", None)
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
