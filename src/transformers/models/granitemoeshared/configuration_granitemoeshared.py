@@ -31,7 +31,7 @@ class GraniteMoeSharedConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GraniteMoeSharedModel`]. It is used to instantiate an GraniteMoeShared
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [GraniteMoeShared-7b](https://huggingface.co/ibm-research/moe-7b-1b-active-shared-experts).
+    defaults will yield a similar configuration to that of the [ibm-research/moe-7b-1b-active-shared-experts](https://huggingface.co/ibm-research/moe-7b-1b-active-shared-experts).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
