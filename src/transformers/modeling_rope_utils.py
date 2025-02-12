@@ -425,6 +425,44 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
+def _compute_2d_rope_parameters(
+    config: Optional[PretrainedConfig] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: Optional[int] = None,
+    **rope_kwargs,
+) -> Tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies according to the original RoPE implementation
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+        rope_kwargs (`Dict`, *optional*):
+            BC compatibility with the previous RoPE class instantiation, will be removed in v4.45.
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    # No need to keep BC with 2d rope, unreleased when this new pattern was created.
+    if len(rope_kwargs) > 0:
+        raise ValueError(
+            "Unexpected arguments: `**rope_kwargs` should be unset in `_compute_longrope_parameters`, got "
+            f"{rope_kwargs}"
+        )
+    base = config.rope_theta
+    # For 2D RoPE generation, frequencies are not generated for each head but for the whole hidden_size.
+    dim = config.rope_scaling.get("dim") or config.hidden_size // 4
+
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    # Compute the inverse frequencies
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, dtype=torch.int64).float().to(device) / dim))
+    return inv_freq, attention_factor
+
+
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
@@ -435,6 +473,7 @@ ROPE_INIT_FUNCTIONS = {
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
+    "2d": _compute_2d_rope_parameters,
 }
 
 
@@ -625,6 +664,14 @@ def _validate_llama3_parameters(config: PretrainedConfig, ignore_keys: Optional[
         )
 
 
+def _validate_2d_rope_parameters(config: PretrainedConfig, ignore_keys: Optional[set] = None):
+    rope_scaling = config.rope_scaling
+    rope_type = rope_scaling.get("rope_type", rope_scaling.get("type", None))  # BC: "rope_type" was originally "type"
+    required_keys = {"rope_type", "dim"}
+    received_keys = set(rope_scaling.keys())
+    _check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+
+
 # Like `ROPE_INIT_FUNCTIONS`, this validation function mapping can be dynamically updated for custom RoPE types.
 ROPE_VALIDATION_FUNCTIONS = {
     "default": _validate_default_rope_parameters,
@@ -633,6 +680,7 @@ ROPE_VALIDATION_FUNCTIONS = {
     "yarn": _validate_yarn_parameters,
     "longrope": _validate_longrope_parameters,
     "llama3": _validate_llama3_parameters,
+    "2d": _validate_2d_rope_parameters,
 }
 
 

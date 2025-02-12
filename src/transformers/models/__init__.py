@@ -99,6 +99,7 @@ if TYPE_CHECKING:
     from .donut import *
     from .dots1 import *
     from .dpr import *
+    from .efficientloftr import *
     from .dpt import *
     from .efficientnet import *
     from .electra import *
