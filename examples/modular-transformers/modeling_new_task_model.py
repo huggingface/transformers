@@ -452,10 +452,7 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         return model_inputs
 
     def resize_token_embeddings(
-        self,
-        new_num_tokens: Optional[int] = None,
-        pad_to_multiple_of=None,
-        mean_resizing=True
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None, mean_resizing=True
     ) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 
