@@ -632,6 +632,7 @@ def read_video_opencv(
             break
 
     video.release()
+    metadata["frames_indices"] = indices
     return np.stack(frames), metadata
 
 
@@ -693,6 +694,7 @@ def read_video_decord(
         indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     frames = vr.get_batch(indices).asnumpy()
+    metadata["frames_indices"] = indices
     return frames, metadata
 
 
@@ -764,6 +766,7 @@ def read_video_pyav(
             frames.append(frame)
 
     video = np.stack([x.to_ndarray(format="rgb24") for x in frames])
+    metadata["frames_indices"] = indices
     return video, metadata
 
 
@@ -830,6 +833,7 @@ def read_video_torchvision(
         indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     video = video[indices]
+    metadata["frames_indices"] = indices
     return video, metadata
 
 
