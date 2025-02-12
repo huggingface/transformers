@@ -29,6 +29,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.cache_utils import Cache
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
     cleanup,
@@ -446,17 +447,17 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                     )
 
     # overriden because mllama has special cache for self and cross attentions
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
-        self.assertIsInstance(past_key_values, tuple)
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, Cache)
         self.assertListEqual(
-            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
-            [True] * len(past_key_values),
+            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
+            [True] * len(decoder_past_key_values),
         )
 
-        for layer_idx, layer_past_key_values in enumerate(past_key_values):
+        for layer_idx, layer_past_key_values in enumerate(decoder_past_key_values):
             if layer_idx in self.model_tester.text_config["cross_attention_layers"]:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_key_value_heads
                     if hasattr(config, "num_key_value_heads")
                     else config.num_attention_heads,
@@ -464,13 +465,13 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
                     config.hidden_size // config.num_attention_heads,
                 )
             else:
-                # (batch, head, seq_length, head_features)
+                # (batch, head, cache_length, head_features)
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_key_value_heads
                     if hasattr(config, "num_key_value_heads")
                     else config.num_attention_heads,
-                    seq_length,
+                    cache_length,
                     config.hidden_size // config.num_attention_heads,
                 )
             # check shape key, value
