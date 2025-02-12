@@ -461,8 +461,8 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
 
     # Quantize
     codes = torch.empty(weight.shape[:-1], device=device, dtype=torch.uint8)
-    for i in range(0, weight.shape[0], 64):
-        codes[i : i + 64] = torch.argmax(2 * weight[i : i + 64] @ grid.T - grid_norm_2, dim=-1).to(torch.uint8)
+    for i in range(0, weight.shape[0], 16):
+        codes[i : i + 16] = torch.argmax(2 * weight[i : i + 16] @ grid.T - grid_norm_2, dim=-1).to(torch.uint8)
     del weight
 
     codes = codes.reshape(codes.shape[0], -1)
