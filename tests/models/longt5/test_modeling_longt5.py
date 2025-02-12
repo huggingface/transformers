@@ -785,7 +785,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
         encoder_expected_shape = (batch_size, 2, config.num_attention_heads, block_len, 3 * block_len)
         self.assertIsInstance(attentions, tuple)
@@ -920,10 +920,10 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len + global_seq_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
         global_block_size = getattr(self.model_tester, "global_block_size", None)
-        global_seq_length = seq_length // global_block_size
+        global_seq_length = prompt_length // global_block_size
         encoder_expected_shape = (
             batch_size,
             2,
@@ -1362,8 +1362,10 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
 
         # check if encoder_outputs match
         expected_output_slice = torch.tensor([0.0629, -0.1294, -0.0089, 0.0772, 0.0663], device=torch_device)
-        self.assertTrue(torch.allclose(output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, atol=1e-4))
+        torch.testing.assert_close(
+            output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, rtol=1e-4, atol=1e-4
+        )
 
         # check if logits match
         expected_output_slice = torch.tensor([5.5231, 6.1058, 3.1766, 8.2391, -5.9453], device=torch_device)
-        self.assertTrue(torch.allclose(output.logits[0, 0, :5], expected_output_slice, atol=1e-4))
+        torch.testing.assert_close(output.logits[0, 0, :5], expected_output_slice, rtol=1e-4, atol=1e-4)

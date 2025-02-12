@@ -175,6 +175,7 @@ class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VivitModelTester(self)
@@ -357,7 +358,7 @@ class VivitModelIntegrationTest(unittest.TestCase):
         # taken from original model
         expected_slice = torch.tensor([-0.9498, 2.7971, -1.4049, 0.1024, -1.8353]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):

@@ -61,7 +61,7 @@ ct_model = AutoModelForCausalLM.from_pretrained("nm-testing/Meta-Llama-3.1-8B-In
 
 # Measure memory usage
 mem_params = sum([param.nelement()*param.element_size() for param in ct_model.parameters()])
-print(f"{mem/2**30:.4f} GB")
+print(f"{mem_params/2**30:.4f} GB")
 # 8.4575 GB
 ```
 
