@@ -42,12 +42,13 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
 
+
 def is_str(val) -> bool:
     return isinstance(val, str)
+
 
 def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
@@ -164,9 +165,9 @@ class SmolVLMProcessor(ProcessorMixin):
         self.global_image_tag = "<global-img>"  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
 
-        self.video_sampling_fps = image_processor.video_sampling['fps']
-        self.video_frame_size = image_processor.video_sampling['video_size']
-        self.max_frames = image_processor.video_sampling['max_frames']
+        self.video_sampling_fps = image_processor.video_sampling["fps"]
+        self.video_frame_size = image_processor.video_sampling["video_size"]
+        self.max_frames = image_processor.video_sampling["max_frames"]
 
         # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
         # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
@@ -257,7 +258,7 @@ class SmolVLMProcessor(ProcessorMixin):
         )
         video_sampling_fps = output_kwargs["videos_kwargs"]["sampling_fps"]
         max_frames = output_kwargs["videos_kwargs"]["max_frames"]
-        add_generation_prompt = kwargs['add_generation_prompt'] if 'add_generation_prompt' in kwargs else False
+        add_generation_prompt = kwargs["add_generation_prompt"] if "add_generation_prompt" in kwargs else False
 
         video_sampling_fps = video_sampling_fps if video_sampling_fps is not None else self.video_sampling_fps
         max_frames = max_frames if max_frames is not None else self.max_frames
@@ -313,7 +314,14 @@ class SmolVLMProcessor(ProcessorMixin):
                 )
                 text = self.apply_chat_template(messages, add_generation_prompt=add_generation_prompt)
 
-            self.process_images(inputs, text, images, output_kwargs, do_image_splitting=False, image_processor_size=self.video_frame_size)
+            self.process_images(
+                inputs,
+                text,
+                images,
+                output_kwargs,
+                do_image_splitting=False,
+                image_processor_size=self.video_frame_size,
+            )
 
         elif text is not None:
             text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
@@ -360,7 +368,9 @@ class SmolVLMProcessor(ProcessorMixin):
         # Load images if they are URLs
         images = [[load_image(im) if is_url(im) else im for im in sample] for sample in images]
 
-        image_inputs = self.image_processor(images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs["images_kwargs"])
+        image_inputs = self.image_processor(
+            images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs["images_kwargs"]
+        )
         inputs.update(image_inputs)
 
         if text is not None:
@@ -415,9 +425,7 @@ class SmolVLMProcessor(ProcessorMixin):
             duration_sec (float): The total video duration in seconds.
         """
         if not num_frames or not timestamps or duration_sec is None:
-            raise ValueError(
-                "process_video_token requires valid frames, timestamps, and duration_sec."
-            )
+            raise ValueError("process_video_token requires valid frames, timestamps, and duration_sec.")
 
         # For each message, scan content for {"type": "video"}
         for msg in messages:
@@ -431,11 +439,20 @@ class SmolVLMProcessor(ProcessorMixin):
                     # (Alternatively, you could dynamically load them here.)
                     if num_frames is None or timestamps is None or duration_sec is None:
                         # If user didn't pass these, raise or skip
-                        raise ValueError("Must provide num_frames, timestamps, and duration_sec to insert 'video' blocks.")
+                        raise ValueError(
+                            "Must provide num_frames, timestamps, and duration_sec to insert 'video' blocks."
+                        )
 
                     # Build the video intro texts
                     td = timedelta(seconds=duration_sec)
-                    new_content.append({"type": "text", "text": DEFAULT_VIDEO_INTRO.format(frame_count=num2words(num_frames), video_duration=str(td))})
+                    new_content.append(
+                        {
+                            "type": "text",
+                            "text": DEFAULT_VIDEO_INTRO.format(
+                                frame_count=num2words(num_frames), video_duration=str(td)
+                            ),
+                        }
+                    )
 
                     # 2) Insert per-frame lines: "Frame from {timestamp}:", then an "image" block
                     for i, ts in enumerate(timestamps):

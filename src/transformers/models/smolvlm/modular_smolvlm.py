@@ -34,30 +34,33 @@ from ..idefics3.modeling_idefics3 import (
 
 logger = logging.get_logger(__name__)
 
+
 class SmolVLMVisionConfig(Idefics3VisionConfig):
-    model_type="smolvlm_vision"
+    model_type = "smolvlm_vision"
     pass
 
+
 class SmolVLMConfig(Idefics3Config):
-    model_type="smolvlm"
+    model_type = "smolvlm"
     pass
+
 
 class SmolVLMImageProcessor(Idefics3ImageProcessor):
     pass
 
+
 class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
     pass
+
 
 class SmolVLMModel(Idefics3Model):
     """
     A subclass of Idefics3Model. We do *not* remove or block the call to inputs_merger
     in forward. Instead, we override inputs_merger here with custom logic.
     """
+
     def inputs_merger(
-        self,
-        input_ids: torch.LongTensor,
-        inputs_embeds: torch.Tensor,
-        image_hidden_states: torch.Tensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
     ) -> torch.Tensor:
         """
         Merge text embeddings with image embeddings out-of-place (no in-place indexing).
@@ -83,13 +86,11 @@ class SmolVLMModel(Idefics3Model):
         ##############################################
         # 1) Basic shape checks
         ##############################################
-        #old_merger_outputs = self.inputs_merger_old(input_ids, inputs_embeds, image_hidden_states)
+        # old_merger_outputs = self.inputs_merger_old(input_ids, inputs_embeds, image_hidden_states)
         B, T, D_text = inputs_embeds.shape
-        N, S, D_img  = image_hidden_states.shape
+        N, S, D_img = image_hidden_states.shape
         if D_text != D_img:
-            raise ValueError(
-                f"Text embedding dim {D_text} != image embedding dim {D_img}"
-            )
+            raise ValueError(f"Text embedding dim {D_text} != image embedding dim {D_img}")
 
         ##############################################
         # 2) We'll track how many images we've used so far across the entire batch
@@ -130,10 +131,7 @@ class SmolVLMModel(Idefics3Model):
             # We'll chunk image_positions into groups of size S
             positions_list = image_positions.tolist()
             # Example: if num_image_tokens=162 and S=81 => we have 2 images => 2 chunks each of length 81
-            chunks = [
-                positions_list[i : i + S]
-                for i in range(0, num_image_tokens, S)
-            ]
+            chunks = [positions_list[i : i + S] for i in range(0, num_image_tokens, S)]
 
             # We'll build a list of segments: text, then image row(s), text, etc.
             segments = []
@@ -165,7 +163,7 @@ class SmolVLMModel(Idefics3Model):
             merged_outputs.append(merged_sample)
 
         merged_outputs = torch.stack(merged_outputs)
-        #assert (old_merger_outputs==merged_outputs).all()
+        # assert (old_merger_outputs==merged_outputs).all()
         return merged_outputs
 
     def forward(
@@ -310,12 +308,16 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         self.model = SmolVLMModel(config)
 
         # We *keep* the same lm_head from the parent, or re-init if you prefer:
-        self.lm_head = nn.Linear(
-            config.text_config.hidden_size, config.text_config.vocab_size, bias=False
-        )
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         # If parent sets up any post_init() logic:
         self.post_init()
 
 
-__all__ = ["SmolVLMVisionConfig", "SmolVLMConfig", "SmolVLMImageProcessor", "SmolVLMForConditionalGeneration", "SmolVLMModel"]
+__all__ = [
+    "SmolVLMVisionConfig",
+    "SmolVLMConfig",
+    "SmolVLMImageProcessor",
+    "SmolVLMForConditionalGeneration",
+    "SmolVLMModel",
+]

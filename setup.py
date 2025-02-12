@@ -194,6 +194,7 @@ _deps = [
     "pytest-rich",
     "libcst",
     "rich",
+    "num2words",
 ]
 
 

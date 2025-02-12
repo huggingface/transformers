@@ -562,7 +562,12 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] =
     return indices
 
 
-def read_video_opencv(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None, frame_indicies: Optional[List[int]] = None):
+def read_video_opencv(
+    video_path: str,
+    num_frames: Optional[int] = None,
+    fps: Optional[int] = None,
+    frame_indicies: Optional[List[int]] = None,
+):
     """
     Decode the video with open-cv decoder.
 
@@ -609,7 +614,12 @@ def read_video_opencv(video_path: str, num_frames: Optional[int] = None, fps: Op
     return np.stack(frames)
 
 
-def read_video_decord(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None, frame_indicies: Optional[List[int]] = None):
+def read_video_decord(
+    video_path: str,
+    num_frames: Optional[int] = None,
+    fps: Optional[int] = None,
+    frame_indicies: Optional[List[int]] = None,
+):
     """
     Decode the video with Decord decoder.
 
@@ -641,7 +651,12 @@ def read_video_decord(video_path: str, num_frames: Optional[int] = None, fps: Op
     return frames
 
 
-def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None, frame_indicies: Optional[List[int]] = None):
+def read_video_pyav(
+    video_path: str,
+    num_frames: Optional[int] = None,
+    fps: Optional[int] = None,
+    frame_indicies: Optional[List[int]] = None,
+):
     """
     Decode the video with PyAV decoder.
 
@@ -685,7 +700,12 @@ def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Opti
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None, frame_indicies: Optional[List[int]] = None):
+def read_video_torchvision(
+    video_path: str,
+    num_frames: Optional[int] = None,
+    fps: Optional[int] = None,
+    frame_indicies: Optional[List[int]] = None,
+):
     """
     Decode the video with torchvision decoder.
 
@@ -762,7 +782,9 @@ def load_video(
     """
 
     if sum(arg is not None for arg in (num_frames, fps, frame_indicies)) > 1:
-        raise ValueError("`num_frames`, `fps`, and `frame_indicies` are mutually exclusive arguments, please use only one!")
+        raise ValueError(
+            "`num_frames`, `fps`, and `frame_indicies` are mutually exclusive arguments, please use only one!"
+        )
 
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
         if not is_yt_dlp_available():
@@ -807,6 +829,7 @@ def load_video(
     video = video_decoder(file_obj, num_frames=num_frames, fps=fps, frame_indicies=frame_indicies)
     return video
 
+
 def get_video_details_opencv(video_path: str):
     cap = cv2.VideoCapture(video_path)
     n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -817,6 +840,7 @@ def get_video_details_opencv(video_path: str):
     duration = n_frames / fps if fps else 0
     return n_frames, fps, duration
 
+
 def get_video_details_decord(video_path: str):
     vr = VideoReader(uri=video_path, ctx=cpu(0))
     n_frames = len(vr)
@@ -826,6 +850,7 @@ def get_video_details_decord(video_path: str):
     duration = n_frames / fps if fps else 0
     return n_frames, fps, duration
 
+
 def get_video_details_pyav(video_path: str):
     with av.open(video_path) as container:
         stream = container.streams.video[0]
@@ -834,6 +859,7 @@ def get_video_details_pyav(video_path: str):
     duration = n_frames / fps if fps else 0
     return n_frames, fps, duration
 
+
 def get_video_details_torchvision(video_path: str):
     video, _, info = torchvision_io.read_video(video_path, pts_unit="sec", output_format="TCHW")
     n_frames = video.size(0) - 1  # according to your read_video_torchvision snippet
@@ -841,12 +867,14 @@ def get_video_details_torchvision(video_path: str):
     duration = n_frames / fps if fps else 0
     return n_frames, fps, duration
 
+
 VIDEO_DETAILS_FETCHERS = {
     "opencv": get_video_details_opencv,
     "decord": get_video_details_decord,
     "pyav": get_video_details_pyav,
     "torchvision": get_video_details_torchvision,
 }
+
 
 def get_video_details(video_path: str, backend: str = "opencv"):
     if backend not in VIDEO_DETAILS_FETCHERS:

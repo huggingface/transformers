@@ -27,8 +27,7 @@ logger = logging.get_logger(__name__)
 
 DEFAULT_SYSTEM_MESSAGE = "You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language."
 DEFAULT_VIDEO_INTRO = (
-    "You are provided the following series of {frame_count} frames "
-    "from a {video_duration} [H:MM:SS] video.\n"
+    "You are provided the following series of {frame_count} frames " "from a {video_duration} [H:MM:SS] video.\n"
 )
 DEFAULT_MEDIA_OUTTRO = "\n\n"
 FRAME_TIMESTAMP_MESSAGE = "\nFrame from {timestamp}:"
@@ -40,6 +39,7 @@ BACKEND_CHANNEL_ORDERS = {
     "pyav": "rgb",
     "torchvision": "rgb",
 }
+
 
 def load_smolvlm_video(
     path: str,
