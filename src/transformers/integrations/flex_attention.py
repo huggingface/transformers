@@ -19,8 +19,7 @@ if is_torch_flex_attn_available():
 
 class wrapped_flex_attention:
     """
-    We are doing a singleton class so that flex attention is compiled once and only once
-    and only when called.
+    We are doing a singleton class so that flex attention is compiled once when it's first called.
     """
 
     _instance = None
