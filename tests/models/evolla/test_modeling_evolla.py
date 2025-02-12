@@ -298,13 +298,22 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         print(protein_encoder_outputs)
     
     def test_single_forward(self):
-        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
-        inputs = self.processor(proteins=[protein_dict],
-                                messages_list=[message])
-        
-        outputs = self.model(**inputs)
-        # TODO: check accuracy
-        print(outputs)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            print(outputs)
 
 
     def test_attention_outputs(self):
