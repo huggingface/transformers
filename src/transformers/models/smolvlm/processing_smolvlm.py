@@ -21,8 +21,6 @@ from datetime import timedelta
 from itertools import accumulate
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from num2words import num2words
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin
@@ -35,6 +33,13 @@ from .video_processing_smolvlm import (
     load_smolvlm_video,
 )
 
+try:
+    from num2words import num2words
+except ImportError as e:
+    raise ImportError(
+        "Please install `num2words` to use smolvlm. For example:\n\n"
+        "  pip install num2words\n"
+    ) from e
 
 if TYPE_CHECKING:
     from ...tokenization_utils_base import PreTokenizedInput
