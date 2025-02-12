@@ -3916,6 +3916,20 @@ class DPTPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class EfficientLoFTRForKeypointMatching(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class EfficientLoFTRPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class EfficientNetForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
