@@ -2036,15 +2036,15 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
         # input_ids is required for expanding visual inputs
         # If input_ids is unavailable, visual inputs will not be used; therefore, there is no need to expand visual inputs.
         if input_ids is not None and input_ids.numel() != 0:
             model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
+
+        if input_ids is not None:
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
+
+        model_kwargs = _expand_dict_for_generation(model_kwargs)
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
