@@ -306,7 +306,10 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
     @unittest.skip(reason="Siglip2 has default right padding (tested in test_flash_attn_2_inference_equivalence)")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
-
+    
+    @unittest.skip(reason="SDPA can't dispatch on flash with not None `attention_mask`")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 class Siglip2VisionModelTester:
     def __init__(
