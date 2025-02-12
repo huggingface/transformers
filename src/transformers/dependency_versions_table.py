@@ -38,7 +38,6 @@ deps = {
     "librosa": "librosa",
     "nltk": "nltk<=3.8.1",
     "natten": "natten>=0.14.6,<0.15.0",
-    "num2words": "num2words>=0.5.0",
     "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",

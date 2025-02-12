@@ -194,6 +194,7 @@ _torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
+_num2words_available = _is_package_available("num2words")
 _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
@@ -1268,6 +1269,8 @@ def is_jinja_available():
 def is_mlx_available():
     return _mlx_available
 
+def is_num2words_available():
+    return _num2words_available
 
 def is_tiktoken_available():
     return _tiktoken_available and _blobfile_available
