@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
-from ...test_processing_common import prepare_image_inputs
+from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
 
 
 if is_vision_available():
@@ -37,13 +37,19 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
+    from transformers.models.sam.image_processing_sam import _mask_to_rle_pytorch
+
 if is_tf_available():
     import tensorflow as tf
+
+    from transformers.models.sam.image_processing_sam import _mask_to_rle_tf
 
 
 @require_vision
 @require_torchvision
-class SamProcessorTest(unittest.TestCase):
+class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = SamProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = SamImageProcessor()
@@ -56,11 +62,6 @@ class SamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    # Processor tester class can't use ProcessorTesterMixin atm because the processor is atypical e.g. only contains an image processor
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images."""
-        return prepare_image_inputs()
-
     def prepare_mask_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
@@ -68,6 +69,21 @@ class SamProcessorTest(unittest.TestCase):
         mask_inputs = [np.random.randint(255, size=(30, 400), dtype=np.uint8)]
         mask_inputs = [Image.fromarray(x) for x in mask_inputs]
         return mask_inputs
+
+    def test_chat_template_save_loading(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_image_processor_defaults_preserved_by_image_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
 
     def test_save_load_pretrained_additional_features(self):
         processor = SamProcessor(image_processor=self.get_image_processor())
@@ -149,6 +165,42 @@ class SamProcessorTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
 
+    def test_rle_encoding(self):
+        """
+        Test the run-length encoding function.
+        """
+        # Test that a mask of all zeros returns a single run [height * width].
+        input_mask = torch.zeros((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_pytorch(input_mask)
+
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-zero mask, we expect a single run of length 4:
+        self.assertEqual(rle[0]["counts"], [4])
+
+        # Test that a mask of all ones returns [0, height * width].
+        input_mask = torch.ones((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_pytorch(input_mask)
+
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-one mask, we expect two runs: [0, 4].
+        self.assertEqual(rle[0]["counts"], [0, 4])
+
+        # Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
+        # Example mask:
+        # Row 0: [0, 1]
+        # Row 1: [1, 1]
+        # This is shape (1, 2, 2).
+        # Flattened in Fortran order -> [0, 1, 1, 1].
+        # The RLE for [0,1,1,1] is [1, 3].
+        input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
+        rle = _mask_to_rle_pytorch(input_mask)
+
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
+
 
 @require_vision
 @require_tf
@@ -165,7 +217,7 @@ class TFSamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    # Processor tester class can't use ProcessorTesterMixin as processor is atypical e.g. only contains an image processor and it assumes torch
+    # This is to avoid repeating the skipping of the common tests
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images."""
         return prepare_image_inputs()
@@ -232,6 +284,42 @@ class TFSamProcessorTest(unittest.TestCase):
                 dummy_masks, np.array(original_sizes), np.array(reshaped_input_size), return_tensors="tf"
             )
 
+    def test_rle_encoding(self):
+        """
+        Test the run-length encoding function.
+        """
+        # Test that a mask of all zeros returns a single run [height * width].
+        input_mask = tf.zeros((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_tf(input_mask)
+
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-zero mask, we expect a single run of length 4:
+        self.assertEqual(rle[0]["counts"], [4])
+
+        # Test that a mask of all ones returns [0, height * width].
+        input_mask = tf.ones((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_tf(input_mask)
+
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-one mask, we expect two runs: [0, 4].
+        self.assertEqual(rle[0]["counts"], [0, 4])
+
+        # Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
+        # Example mask:
+        # Row 0: [0, 1]
+        # Row 1: [1, 1]
+        # This is shape (1, 2, 2).
+        # Flattened in Fortran order -> [0, 1, 1, 1].
+        # The RLE for [0,1,1,1] is [1, 3].
+        input_mask = tf.tensor([[[0, 1], [1, 1]]], dtype=tf.int64)
+        rle = _mask_to_rle_tf(input_mask)
+
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
+
 
 @require_vision
 @require_torchvision
@@ -248,7 +336,7 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    # Processor tester class can't use ProcessorTesterMixin atm because the processor is atypical e.g. only contains an image processor
+    # This is to avoid repeating the skipping of the common tests
     def prepare_image_inputs(self):
         """This function prepares a list of PIL images."""
         return prepare_image_inputs()

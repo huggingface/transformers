@@ -91,14 +91,13 @@ class VideoClassificationPipelineTests(unittest.TestCase):
         )
 
         video_file_path = hf_hub_download(repo_id="nateraw/video-demo", filename="archery.mp4", repo_type="dataset")
-        outputs = video_classifier(video_file_path, top_k=2)
+        output = video_classifier(video_file_path, top_k=2)
         self.assertEqual(
-            nested_simplify(outputs, decimals=4),
+            nested_simplify(output, decimals=4),
             [{"score": 0.5199, "label": "LABEL_0"}, {"score": 0.4801, "label": "LABEL_1"}],
         )
-        for output in outputs:
-            for element in output:
-                compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
+        for element in output:
+            compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
 
         outputs = video_classifier(
             [
