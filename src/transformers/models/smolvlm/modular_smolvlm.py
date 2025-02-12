@@ -29,6 +29,7 @@ from ..idefics3.modeling_idefics3 import (
     Idefics3BaseModelOutputWithPast,
     Idefics3ForConditionalGeneration,
     Idefics3Model,
+    Idefics3PreTrainedModel,
     Idefics3VisionTransformer,
 )
 
@@ -57,6 +58,8 @@ class SmolVLMImageProcessor(Idefics3ImageProcessor):
 class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
     pass
 
+class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
+    pass
 
 class SmolVLMModel(Idefics3Model):
     """
