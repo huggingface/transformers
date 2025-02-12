@@ -113,8 +113,10 @@ class JanusVisionEncoderEmbeddings(nn.Module):
         super().__init__()
 
         self.use_special_tokens = use_special_tokens
-        self.cls_token = nn.Parameter(torch.rand(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+        if use_special_tokens:
+            self.cls_token = nn.Parameter(torch.rand(1, 1, config.hidden_size))
+            self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+
         # Currently using hidden_drop_rate instead of positional_dropout_rate, is it necessary?
         self.dropout = nn.Dropout(config.hidden_dropout_rate)
         self.patch_embeddings = JanusVisionEncoderPatchEmbeddings(config)
@@ -134,17 +136,15 @@ class JanusVisionEncoderEmbeddings(nn.Module):
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        # Add CLS tokens
+        # Add CLS and Register token embeddings.
         special_token_embeddings = []
-        cls_token_embeddings = self.cls_token.expand((batch_size, -1, -1))
-        special_token_embeddings.append(cls_token_embeddings)
+        if self.use_special_tokens:
+            cls_token_embeddings = self.cls_token.expand((batch_size, -1, -1))
+            special_token_embeddings.append(cls_token_embeddings)
 
-        if self.register_tokens.shape[1]:
-            register_token_embeddings = self.register_tokens.expand((batch_size, -1, -1))
-            special_token_embeddings.append(register_token_embeddings)
-
-        if self.use_special_tokens and not self.cls_token and not self.register_tokens:
-            raise ValueError("You have passed to use special tokens but the CLS and Register Tokens are None.")
+            if self.register_tokens.shape[1]:
+                register_token_embeddings = self.register_tokens.expand((batch_size, -1, -1))
+                special_token_embeddings.append(register_token_embeddings)
 
         if self.use_special_tokens:
             embeddings = embeddings + self.position_embeddings
@@ -196,12 +196,12 @@ class JanusVisionEncoderAttention(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.size()
 
-        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
-        query_states, key_states, value_states = qkv.unbind(2)
-        # batch numhead, seq len, head dim
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        qkv = (
+            self.qkv(hidden_states)
+            .reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+            .permute(2, 0, 3, 1, 4)
+        )
+        query_states, key_states, value_states = qkv.unbind(0)
 
         query_states = self.query_norm(query_states)
         key_states = self.key_norm(key_states)
@@ -309,8 +309,8 @@ class JanusVisionEncoderLayer(nn.Module):
         self.config = config
         self.embed_dim = config.hidden_size
         self.self_attn = JanusVisionEncoderAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=1e-6)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=1e-6)
 
         self.layer_scale1 = JanusVisionEncoderLayerScale(config) if config.layerscale_value else nn.Identity()
         self.layer_scale2 = JanusVisionEncoderLayerScale(config) if config.layerscale_value else nn.Identity()
@@ -339,20 +339,23 @@ class JanusVisionEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-
-        # Pre-Norm before applying attention.
+        # Pre-Norm before attention .
         norm_hidden_states = self.layer_norm1(hidden_states)
         attn_output, attn_weights = self.self_attn(
             norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
 
-        # Apply DropPath & LayerScale to Attention Output and then residual connection.
-        hidden_states = hidden_states + self.drop_path1(self.layer_scale1(attn_output))
+        scaled_attn_output = self.layer_scale1(attn_output)
+        dropped_attn_output = self.drop_path1(scaled_attn_output)
+        hidden_states = hidden_states + dropped_attn_output
 
-        hidden_states = self.layer_norm2(hidden_states)
-        mlp_output = self.mlp(hidden_states)
+        norm_hidden_states = self.layer_norm2(hidden_states)
 
-        hidden_states = hidden_states + self.drop_path2(self.layer_scale2(mlp_output))
+        mlp_output = self.mlp(norm_hidden_states)
+
+        scaled_mlp_output = self.layer_scale2(mlp_output)
+        dropped_mlp_output = self.drop_path2(scaled_mlp_output)
+        hidden_states = hidden_states + dropped_mlp_output
 
         return (hidden_states, attn_weights if output_attentions else None)
 
@@ -425,7 +428,7 @@ class JanusAttentionPoolLatent(nn.Module):
         x = self.norm(x)
         x = residual + self.mlp(x)
 
-        return x[:, 0]  # Return first latent token (like CLS token)
+        return x[:, 0]
 
 
 # Copied from siglip encoder
@@ -522,6 +525,7 @@ class JanusVisionEncoderTransformer(nn.Module):
         self.config = config
         self.embeddings = JanusVisionEncoderEmbeddings(config, use_special_tokens=False)
         self.encoder = JanusVisionEncoder(config)
+        self.layenorm = nn.LayerNorm(config.hidden_size)
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
             self.head = JanusAttentionPoolLatent(config)
@@ -550,6 +554,7 @@ class JanusVisionEncoderTransformer(nn.Module):
         )
 
         last_hidden_state = encoder_outputs[0]
+        last_hidden_state = self.layenorm(last_hidden_state)
         pooler_output = self.head(hidden_states)
 
         if not return_dict:
