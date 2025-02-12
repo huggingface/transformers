@@ -1050,7 +1050,7 @@ def get_extended_attention_mask(attention_mask: torch.Tensor, input_shape: Tuple
 
 # Adapted from transformers.models.esm.modeling_esm.EsmModel
 class SaProtProteinEncoder(nn.Module):
-    def __init__(self, config: EvollaProteinEncoderConfig, add_pooling_layer=True):
+    def __init__(self, config: EvollaProteinEncoderConfig, add_pooling_layer=False):
         super().__init__()
         self.config = config
 
