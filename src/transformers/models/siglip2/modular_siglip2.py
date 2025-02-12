@@ -171,19 +171,18 @@ class Siglip2VisionEmbeddings(nn.Module):
         max_length: int,
     ) -> torch.Tensor:
         """
-        Sample the positional embeddings with provided position ids (loop over batch elements, not optimized).
+        Resize positional embeddings to image-specific size and pad to a fixed size.
 
         Args:
             positional_embeddings (`torch.Tensor`):
                 Position embeddings of shape (height, width, embed_dim)
-            spatial_shapes (`List[Tuple[int, int]]`):
+            spatial_shapes (`torch.LongTensor`):
                 Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
             max_length (`int`):
                 Maximum length of the positional embeddings to pad resized positional embeddings to
 
         Returns:
-            `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim)
-            corresponding to the input pixel position ids.
+            `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
         """
         batch_size = spatial_shapes.shape[0]
         embed_dim = positional_embeddings.shape[-1]
