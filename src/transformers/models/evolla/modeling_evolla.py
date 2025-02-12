@@ -806,6 +806,7 @@ class EvollaAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        assert self.num_key_value_groups > 0, f"In {self._get_name()} num_attention_heads ({config.num_attention_heads}) must be larger than num_key_value_heads ({config.num_key_value_heads})"
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True

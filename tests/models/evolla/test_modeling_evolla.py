@@ -73,6 +73,7 @@ class EvollaModelTester:
         hidden_size=4, # llama hidden size
         num_hidden_layers=1, # llama hidden layers
         num_attention_heads=2, # llama attention heads
+        num_key_value_heads=2, # llama key value heads
         protein_hidden_size=8, # protein encoder hidden size
         protein_num_hidden_layers=1, # protein encoder hidden layers
         protein_num_attention_heads=4, # protein encoder attention heads
@@ -93,6 +94,7 @@ class EvollaModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
         self.protein_hidden_size = protein_hidden_size
         self.protein_num_hidden_layers = protein_num_hidden_layers
         self.protein_num_attention_heads = protein_num_attention_heads
@@ -130,6 +132,7 @@ class EvollaModelTester:
                     "num_hidden_layers": self.num_hidden_layers,
                     "hidden_size": self.hidden_size,
                     "num_attention_heads": self.num_attention_heads,
+                    "num_key_value_heads": self.num_key_value_heads,
                 },
                 "sequence_aligner_config": {
                     "num_add_layers": self.sequence_aligner_num_add_layers,
