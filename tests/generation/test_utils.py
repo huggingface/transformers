@@ -61,7 +61,6 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
-        BartForCausalLM,
         BartForConditionalGeneration,
         BartTokenizer,
         GPT2LMHeadModel,
