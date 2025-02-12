@@ -25,13 +25,13 @@ import huggingface_hub
 from .. import __version__ as version
 from ..utils import (
     is_accelerate_available,
-    is_deepspeed_available,
     is_flax_available,
     is_safetensors_available,
     is_tf_available,
     is_torch_available,
     is_torch_npu_available,
 )
+from ..integrations.deepspeed import is_deepspeed_available
 from . import BaseTransformersCLICommand
 
 
