@@ -471,42 +471,46 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
     # Ignore copy
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (output_length - prompt_length))
+        use_cache = decoder_past_key_values is not None
 
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            src_len = min_length + idx
+        for generated_length, iter_attentions in enumerate(attentions):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
 
+            expected_shape = (
+                batch_size,
+                config.num_attention_heads,
+                model_input_length,
+                prompt_length + generated_length,
+            )
             for layer_idx, layer_attention in enumerate(iter_attentions):
-                if config.attn_type_list[layer_idx] == 0:
-                    continue
-                expected_shape = (
-                    batch_size * num_beam_groups,
-                    config.num_attention_heads,
-                    tgt_len,
-                    src_len,
-                )
-                self.assertEqual(layer_attention.shape, expected_shape)
+                if config.attn_type_list[layer_idx] == 1:
+                    self.assertEqual(layer_attention.shape, expected_shape)
 
     # Ignore copy
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
-        self.assertIsInstance(past_key_values, (tuple, Cache))
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
+        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
 
         # (batch, head, seq_length, head_features)
         key_value_cache_expected_shape = (
-            batch_size * num_beam_groups,
+            batch_size,
             config.num_key_value_heads,
-            seq_length,
+            cache_length,
             config.head_dim,
         )
+        # (batch, head, head_features, head_features)
         kv_cache_expected_shape = (
-            batch_size * num_beam_groups,
+            batch_size,
             config.num_attention_heads,
             config.head_dim,
             config.head_dim,
@@ -514,10 +518,10 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
         for layer_idx in range(config.num_hidden_layers):
             if config.attn_type_list[layer_idx] == 0:
-                self.assertEqual(past_key_values.kv_cache[layer_idx].shape, kv_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values.kv_cache[layer_idx].shape, kv_cache_expected_shape)
             else:
-                self.assertEqual(past_key_values.key_cache[layer_idx].shape, key_value_cache_expected_shape)
-                self.assertEqual(past_key_values.value_cache[layer_idx].shape, key_value_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values.key_cache[layer_idx].shape, key_value_cache_expected_shape)
+                self.assertEqual(decoder_past_key_values.value_cache[layer_idx].shape, key_value_cache_expected_shape)
 
 
 @require_torch
