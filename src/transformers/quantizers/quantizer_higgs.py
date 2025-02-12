@@ -116,7 +116,6 @@ class HiggsHfQuantizer(HfQuantizer):
             self.quantization_config.group_size,
             self.quantization_config.hadamard_size,
         )
-
         del param_value
 
         module, _ = get_module_from_name(model, param_name)
@@ -134,11 +133,6 @@ class HiggsHfQuantizer(HfQuantizer):
 
         if unexpected_keys is not None and param_name in unexpected_keys:
             unexpected_keys.remove(param_name)
-
-        module.num_sms_packed = torch.nn.Parameter(
-            torch.tensor(get_num_sms_from_device(target_device), device=target_device, dtype=torch.int32),
-            requires_grad=False,
-        )
 
     def _process_model_before_weight_loading(
         self,
