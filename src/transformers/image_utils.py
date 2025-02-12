@@ -604,7 +604,14 @@ def read_video_opencv(video_path: str, num_frames: Optional[int] = None, fps: Op
             break
 
     video.release()
-    return np.stack(frames)
+
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+    return np.stack(frames), metadata
 
 
 def read_video_decord(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
@@ -636,7 +643,14 @@ def read_video_decord(video_path: str, num_frames: Optional[int] = None, fps: Op
             )
     indices = get_uniform_frame_indices(total_num_frames=total_num_frames, num_frames=num_frames)
     frames = vr.get_batch(indices).asnumpy()
-    return frames
+
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+    return frames, metadata
 
 
 def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
@@ -677,7 +691,15 @@ def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Opti
             break
         if i >= 0 and i in indices:
             frames.append(frame)
-    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+    video = np.stack([x.to_ndarray(format="rgb24") for x in frames])
+    return video, metadata
 
 
 def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
@@ -718,7 +740,14 @@ def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fp
         idx = torch.linspace(0, video.size(0) - 1, num_frames, dtype=torch.int64)
         return video[idx]
 
-    return video
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+
+    return video, metadata
 
 
 VIDEO_DECODERS = {
@@ -750,7 +779,8 @@ def load_video(
             The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
 
     Returns:
-        `np.array`: A numpy array of shape (num_frames, channels, height, width).
+        Tuple[`np.array`, Dict]: A tuple where first element is a numpy array of shape (num_frames, channels, height, width),
+            and the second element is a dict holding video metadata.
     """
 
     if fps is not None and num_frames is not None:
@@ -796,8 +826,8 @@ def load_video(
         )
 
     video_decoder = VIDEO_DECODERS[backend]
-    video = video_decoder(file_obj, num_frames=num_frames, fps=fps)
-    return video
+    video, metadata = video_decoder(file_obj, num_frames=num_frames, fps=fps)
+    return video, metadata
 
 
 def load_images(
