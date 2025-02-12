@@ -38,7 +38,7 @@ from .configuration_principle import PrincipleConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "NeuroSabi/principle"
+_CHECKPOINT_FOR_DOC = "meta-principle/Principle-2-7b-hf"
 _CONFIG_FOR_DOC = "PrincipleConfig"
 
 
@@ -803,8 +803,8 @@ class PrincipleForCausalLM(PrinciplePreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, PrincipleForCausalLM
 
-        >>> model = PrincipleForCausalLM.from_pretrained("NeuroSabi/principle")
-        >>> tokenizer = AutoTokenizer.from_pretrained("NeuroSabi/principle")
+        >>> model = PrincipleForCausalLM.from_pretrained("meta-principle/Principle-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-principle/Principle-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
