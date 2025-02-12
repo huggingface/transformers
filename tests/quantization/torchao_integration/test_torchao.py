@@ -249,7 +249,7 @@ class TorchAoSerializationTest(unittest.TestCase):
     # TODO: investigate why we don't have the same output as the original model for this test
     SERIALIZED_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32}
+    quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32, "layout": Int4CPULayout}
     device = "cpu"
 
     # called only once for all test in this class
@@ -307,6 +307,7 @@ class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
 
 @require_torch_gpu
 class TorchAoSerializationGPTTest(TorchAoSerializationTest):
+    quant_scheme, quant_scheme_kwargs = "int4_weight_only", {"group_size": 32}
     device = "cuda:0"
 
 
