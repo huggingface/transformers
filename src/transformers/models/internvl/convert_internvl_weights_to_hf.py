@@ -357,12 +357,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="OpenGVLab/InternVL2_5-2B-MPO",
+        default="OpenGVLab/InternVL2_5-8B-MPO",
         help="Location of original InternVL model",
     )
     parser.add_argument(
         "--output_dir",
-        default="InternVLTest-2B",
+        default="InternVLTest-8B",
         help="Location to write HF model and processors",
     )
 
