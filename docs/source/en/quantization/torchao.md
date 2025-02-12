@@ -22,6 +22,8 @@ pip install --upgrade torch torchao transformers
 
 By default, the weights are loaded in full precision (torch.float32) regardless of the actual data type the weights are stored in such as torch.float16. Set `torch_dtype="auto"` to load the weights in the data type defined in a model's `config.json` file to automatically load the most memory-optimal data type.
 
+If you want to run the following codes on CPU even with GPU available, just change `device_map="cpu"` and `quantization_config = TorchAoConfig("int4_weight_only", group_size=128, layout=Int4CPULayout())` where `layout` comes from `from torchao.dtypes import Int4CPULayout`
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -34,7 +36,7 @@ quantized_model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 input_text = "What are we having for dinner?"
-input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+input_ids = tokenizer(input_text, return_tensors="pt").to(quantized_model.device)
 
 # auto-compile the quantized model with `cache_implementation="static"` to get speedup
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
@@ -58,7 +60,7 @@ def benchmark_fn(f, *args, **kwargs):
 MAX_NEW_TOKENS = 1000
 print("int4wo-128 model:", benchmark_fn(quantized_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
 
-bf16_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype=torch.bfloat16)
+bf16_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.bfloat16)
 output = bf16_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static") # auto-compile
 print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
 
@@ -80,7 +82,7 @@ quantized_model.save_pretrained(output_dir, safe_serialization=False)
 
 # load quantized model
 ckpt_id = "llama3-8b-int4wo-128"  # or huggingface hub model id
-loaded_quantized_model = AutoModelForCausalLM.from_pretrained(ckpt_id, device_map="cuda")
+loaded_quantized_model = AutoModelForCausalLM.from_pretrained(ckpt_id, device_map="auto")
 
 
 # confirm the speedup
