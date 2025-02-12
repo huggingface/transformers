@@ -425,6 +425,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
         image_sizes: torch.Tensor = None,
+        **lm_kwargs,
     ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
         r"""
         Args:
@@ -498,7 +499,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
                 image_sizes=image_sizes,
             )
 
-            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+            n_image_tokens = (input_ids == self.config.image_token_index).sum()
             n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(
@@ -520,6 +521,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **lm_kwargs,
         )
 
         logits = outputs[0]
