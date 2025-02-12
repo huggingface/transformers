@@ -18,7 +18,7 @@ import os
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -86,8 +86,9 @@ if is_cv2_available():
 if is_yt_dlp_available():
     from yt_dlp import YoutubeDL
 
-if is_torch_available():
-    import torch
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
 
 
 logger = logging.get_logger(__name__)
@@ -540,9 +541,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
-def get_uniform_frame_indices(
-    total_num_frames: int, num_frames: Optional[int] = None, initial_shift: Union[bool, float, int] = 0
-):
+def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] = None):
     """
     Creates a numpy array for uniform sampling of `num_frame` frames from `total_num_frames`
     when loading a video.
@@ -552,27 +551,18 @@ def get_uniform_frame_indices(
             Total number of frames that a video has.
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly. If not specified, all frames are sampled.
-        initial_shift (`bool`, `float` or `int`, defaults to `0`):
-            The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
     Returns:
         np.ndarray: np array of frame indices that will be sampled.
     """
-    if initial_shift is True:
-        initial_shift = total_num_frames / num_frames / 2
     if num_frames is not None:
-        indices = np.arange(initial_shift, total_num_frames, total_num_frames / num_frames).astype(int)
+        indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
     else:
-        indices = np.arange(initial_shift, total_num_frames).astype(int)
+        indices = np.arange(0, total_num_frames).astype(int)
     return indices
 
 
-def read_video_opencv(
-    video_path: str,
-    num_frames: Optional[int] = None,
-    fps: Optional[int] = None,
-    initial_shift: Union[bool, float, int] = 0,
-):
+def read_video_opencv(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with open-cv decoder.
 
@@ -585,8 +575,6 @@ def read_video_opencv(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        initial_shift (`bool`, `float` or `int`, defaults to `0`):
-            The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -601,7 +589,7 @@ def read_video_opencv(
                 f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
-    indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames, initial_shift=initial_shift)
+    indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     index = 0
     frames = []
@@ -619,12 +607,7 @@ def read_video_opencv(
     return np.stack(frames)
 
 
-def read_video_decord(
-    video_path: str,
-    num_frames: Optional[int] = None,
-    fps: Optional[int] = None,
-    initial_shift: Union[bool, float, int] = 0,
-):
+def read_video_decord(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with Decord decoder.
 
@@ -637,8 +620,6 @@ def read_video_decord(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        initial_shift (`bool`, `float` or `int`, defaults to `0`):
-            The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -653,19 +634,12 @@ def read_video_decord(
                 f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
-    indices = get_uniform_frame_indices(
-        total_num_frames=total_num_frames, num_frames=num_frames, initial_shift=initial_shift
-    )
+    indices = get_uniform_frame_indices(total_num_frames=total_num_frames, num_frames=num_frames)
     frames = vr.get_batch(indices).asnumpy()
     return frames
 
 
-def read_video_pyav(
-    video_path: str,
-    num_frames: Optional[int] = None,
-    fps: Optional[int] = None,
-    initial_shift: Union[bool, float, int] = 0,
-):
+def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with PyAV decoder.
 
@@ -678,8 +652,6 @@ def read_video_pyav(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        initial_shift (`bool`, `float` or `int`, defaults to `0`):
-            The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -695,7 +667,7 @@ def read_video_pyav(
                 f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
-    indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames, initial_shift=initial_shift)
+    indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     frames = []
     container.seek(0)
@@ -708,12 +680,7 @@ def read_video_pyav(
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-def read_video_torchvision(
-    video_path: str,
-    num_frames: Optional[int] = None,
-    fps: Optional[int] = None,
-    initial_shift: Union[bool, float, int] = 0,
-):
+def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with torchvision decoder.
 
@@ -726,8 +693,6 @@ def read_video_torchvision(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        initial_shift (`bool`, `float` or `int`, defaults to `0`):
-            The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -740,7 +705,7 @@ def read_video_torchvision(
         output_format="TCHW",
     )
     video_fps = info["video_fps"]
-    total_num_frames = video.size(0)
+    total_num_frames = video.size(0) - 1
     if num_frames is None and fps is not None:
         num_frames = int(total_num_frames / video_fps * fps)
         if num_frames > total_num_frames:
@@ -750,9 +715,7 @@ def read_video_torchvision(
             )
 
     if num_frames is not None:
-        if initial_shift is True:
-            initial_shift = total_num_frames / num_frames / 2
-        idx = torch.arange(initial_shift, total_num_frames, total_num_frames / num_frames).to(torch.int)
+        idx = torch.linspace(0, video.size(0) - 1, num_frames, dtype=torch.int64)
         return video[idx]
 
     return video
@@ -770,7 +733,6 @@ def load_video(
     video: Union[str, "VideoInput"],
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    initial_shift: Union[bool, float, int] = 0,
     backend: str = "opencv",
 ) -> np.array:
     """
@@ -784,8 +746,6 @@ def load_video(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        initial_shift (`bool`, `float` or `int`, defaults to `0`):
-            The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
         backend (`str`, *optional*, defaults to `"opencv"`):
             The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
 
@@ -836,7 +796,7 @@ def load_video(
         )
 
     video_decoder = VIDEO_DECODERS[backend]
-    video = video_decoder(file_obj, num_frames=num_frames, fps=fps, initial_shift=initial_shift)
+    video = video_decoder(file_obj, num_frames=num_frames, fps=fps)
     return video
 
 

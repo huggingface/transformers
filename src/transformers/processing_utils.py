@@ -375,8 +375,6 @@ class ChatTemplateKwargs(TypedDict, total=False):
         This functionality is only available for chat templates that support it via the `{% generation %}` keyword.
     num_frames (`int`, *optional*):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
-    initial_shift (`bool`, `float` or `int`, defaults to `0`):
-        The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
     video_load_backend (`str`, *optional*, defaults to `"pyav"`):
         The backend to use when loading the video which will be used only when there are videos in the conversation.
         Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
@@ -394,7 +392,6 @@ class ChatTemplateKwargs(TypedDict, total=False):
     continue_final_message: Optional[bool] = False
     return_assistant_tokens_mask: Optional[bool] = False
     num_frames: Optional[int] = None
-    initial_shift: Optional[Union[bool, float, int]] = 0
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
 
@@ -1219,7 +1216,6 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = chat_template_kwargs.pop("tokenize")
         return_dict = chat_template_kwargs.pop("return_dict")
         num_frames = chat_template_kwargs.pop("num_frames")
-        initial_shift = chat_template_kwargs.pop("initial_shift")
         video_fps = chat_template_kwargs.pop("video_fps")
         video_load_backend = chat_template_kwargs.pop("video_load_backend")
 
@@ -1266,13 +1262,7 @@ class ProcessorMixin(PushToHubMixin):
                             # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
                         else:
-                            video = load_video(
-                                fname,
-                                num_frames=num_frames,
-                                fps=video_fps,
-                                initial_shift=initial_shift,
-                                backend=video_load_backend,
-                            )
+                            video = load_video(fname, num_frames=num_frames, fps=video_fps, backend=video_load_backend)
                         videos.append(video)
 
                 # Currently all processors can accept accept nested list of batches, but not flat list of visuals
