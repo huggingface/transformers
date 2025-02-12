@@ -550,7 +550,8 @@ class OlmoModel(OlmoPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for idx in range(self.config.num_hidden_layers):
+            decoder_layer = self.layers[idx]
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
