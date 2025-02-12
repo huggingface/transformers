@@ -1929,10 +1929,15 @@ def fetch__all__(file_content):
     if "__all__" not in file_content:
         return []
 
+    start_index = None
     lines = file_content.splitlines()
     for index, line in enumerate(lines):
         if line.startswith("__all__"):
             start_index = index
+
+    # There is no line starting with `__all__`
+    if start_index is None:
+        return []
 
     lines = lines[start_index:]
 
