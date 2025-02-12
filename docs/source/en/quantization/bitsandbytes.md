@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [bitsandbytes](https://github.com/bitsandbytes-foundation/bitsandbytes) features the LLM.int8 and QLoRA quantization to enable accessible large language model inference and training.
 
-LLM.int8 matrix multiplication, or 8-bit quantization, is based on vector-wise quantization to quantize most of the weights to 8-bits and treating outliers with 16-bit matrix multiplication to reduce their degradative effect on model accuracy.
+[LLM.int8()](https://hf.co/papers/2208.07339) is a quantization method that aims to make large language model inference more accessible without significant degradation. Unlike naive 8-bit quantization, which can result in loss of critical information and accuracy, LLM.int8() dynamically adapts to ensure sensitive components of the computation retain higher precision when needed.
 
 QLoRA, or 4-bit quantization, compresses a model even further to 4-bits and inserts a small set of trainable low-rank adaptation (LoRA) weights to allowing training.
 
@@ -28,7 +28,7 @@ Run the command below to install bitsandbytes.
 pip install --upgrade transformers accelerate bitsandbytes
 ```
 
-Quantize a model by passing a [`BitsAndBytesConfig`] to [`~PreTrainedModel.from_pretrained`]. This works for any model in any modality, as long as it supports [Accelerate]https://huggingface.co/docs/accelerate/index() and contains [torch.nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) layers.
+Quantize a model by passing a [`BitsAndBytesConfig`] to [`~PreTrainedModel.from_pretrained`]. This works for any model in any modality, as long as it supports [Accelerate](https://huggingface.co/docs/accelerate/index) and contains [torch.nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) layers.
 
 <hfoptions id="bnb">
 <hfoption id="8-bit">
@@ -46,7 +46,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter.. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
+By default, all other modules such as [torch.nn.LayerNorm](https://pytorch.org/docs/stable/generated/torch.nn.LayerNorm.html) are set to the default torch dtype. You can change the data type of these modules with the `torch_dtype` parameter. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -173,7 +173,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 
 An "outlier" is a hidden state value greater than a certain threshold, and these values are computed in fp16. While the values are usually normally distributed ([-3.5, 3.5]), this distribution can be very different for large models ([-60, 6] or [6, 60]). 8-bit quantization works well for values ~5, but beyond that, there is a significant performance penalty. A good default threshold value is 6, but a lower threshold may be needed for more unstable models (small models or finetuning).
 
-To find the best threshold for your model, experiment with the `llm_int8_threshold` parameter in [`BitsAndBytesConfig`].
+To find the best threshold for your model, experiment with the `llm_int8_threshold` parameter in [`BitsAndBytesConfig`]. For example, setting the threshold to `0.0` significantly speeds up inference at the potential cost of some accuracy loss.
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
@@ -181,7 +181,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 model_id = "bigscience/bloom-1b7"
 
 quantization_config = BitsAndBytesConfig(
-    llm_int8_threshold=10.0,
+    llm_int8_threshold=0.0,
     llm_int8_enable_fp32_cpu_offload=True
 )
 
