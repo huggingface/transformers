@@ -29,6 +29,7 @@ from ..idefics3.modeling_idefics3 import (
     Idefics3BaseModelOutputWithPast,
     Idefics3ForConditionalGeneration,
     Idefics3Model,
+    Idefics3VisionTransformer,
 )
 
 
