@@ -1167,10 +1167,3 @@ class PushInProgress:
             # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
             if not (job.cancel() or job.done())
         ]
-
-
-@_deprecate_method(
-    version="4.52.0", message="No need to use this method anymore. Cache should have been correctly moved by now."
-)
-def move_cache(*args, **kwargs):
-    pass
