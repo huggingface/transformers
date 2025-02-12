@@ -428,6 +428,7 @@ else:
                     "PrincipleTokenizer",
                     "PrincipleTokenizerFast" if is_tokenizers_available() else None,
                 ),
+            ),
             ("qwen2_5_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
             ("qwen2_audio", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
             (
