@@ -3550,11 +3550,11 @@ else:
     )
     _import_structure["models.smolvlm"].extend(
         [
+            "SmolVLMConfig",
             "SmolVLMForConditionalGeneration",
             "SmolVLMModel",
             "SmolVLMProcessor",
             "SmolVLMVisionConfig",
-            "SmolVLMConfig",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
