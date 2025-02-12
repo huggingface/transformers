@@ -188,9 +188,10 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = EvollaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=EvollaConfig, hidden_size=37)
         self.is_encoder_decoder = self.model_tester.is_encoder_decoder
-        protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
-        tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
-        self.processor = EvollaProcessor(protein_tokenizer, tokenizer)
+        # protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
+        # tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
+        # self.processor = EvollaProcessor(protein_tokenizer, tokenizer)
+        self.processor = EvollaProcessor.from_pretrained("/zhouxibin/workspaces/transformers/src/transformers/models/evolla/evolla-base")
 
 
     def prepare_input_and_expected_output(self):
@@ -224,7 +225,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         
         # check if the input is correct
         for key, value in expected_output.items():
-            self.assertTrue(torch.equal(inputs[key], value))
+            self.assertTrue(torch.equal(inputs[key], value), f"inputs[key] is {inputs[key]} and expected_output[key] is {expected_output[key]}")
 
     def test_saprot_output(self):
         protein_dict, message, expected_output = self.prepare_input_and_expected_output()

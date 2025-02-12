@@ -33,6 +33,8 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
 from ...utils.deprecation import deprecate_kwarg
 
+from transformers import EsmTokenizer, LlamaTokenizerFast
+import os
 
 if is_torch_available():
     import torch
@@ -210,7 +212,7 @@ class EvollaProcessor(ProcessorMixin):
         text_max_length (`int`, *optional*, defaults to 512):
             The maximum length of the text to be generated.
     """
-    attributes = ["protein_tokenizer", "tokenizer"]
+    attributes = []
     valid_kwargs = ["sequence_max_length"]
     protein_tokenizer_class = "EsmTokenizer"
     tokenizer_class = "LlamaTokenizerFast"
@@ -227,8 +229,10 @@ class EvollaProcessor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
         
-        super().__init__(protein_tokenizer, tokenizer)
+        super().__init__(**kwargs)
 
+        self.protein_tokenizer = protein_tokenizer
+        self.tokenizer = tokenizer
         self.tokenizer.pad_token = "<|reserved_special_token_0|>"
         self.protein_max_length = protein_max_length
         self.text_max_length = text_max_length
@@ -372,6 +376,17 @@ class EvollaProcessor(ProcessorMixin):
     def protein_decode(self, *args, **kwargs):
         return self.protein_tokenizer.decode(*args, **kwargs)
     
+    def save_pretrained(self, save_directory, push_to_hub = False, **kwargs):
+        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, "protein_tokenizer"))
+        self.tokenizer.save_pretrained(os.path.join(save_directory, "text_tokenizer"))
+        return super().save_pretrained(save_directory, push_to_hub, **kwargs)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        protein_tokenizer = EsmTokenizer.from_pretrained(os.path.join(pretrained_model_name_or_path, "protein_tokenizer"), **kwargs)
+        tokenizer = LlamaTokenizerFast.from_pretrained(os.path.join(pretrained_model_name_or_path, "text_tokenizer"), **kwargs)
+        self = cls(protein_tokenizer, tokenizer, **kwargs)
+        return self
 
 class EvollaProcessor2(ProcessorMixin):
     r"""
