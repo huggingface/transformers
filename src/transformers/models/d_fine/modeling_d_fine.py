@@ -1716,6 +1716,7 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         super().__init__(config)
 
         # D-FINE encoder-decoder model
+        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
         self.model = DFineModel(config)
         scaled_dim = round(config.layer_scale * config.hidden_size)
         num_pred = config.decoder_layers
@@ -1724,11 +1725,11 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         self.bbox_embed = nn.ModuleList(
             [
                 DFineMLP(config.hidden_size, config.hidden_size, 4 * (config.reg_max + 1), 3)
-                for _ in range(config.eval_idx + 1)
+                for _ in range(self.eval_idx + 1)
             ]
             + [
                 DFineMLP(scaled_dim, scaled_dim, 4 * (config.reg_max + 1), 3)
-                for _ in range(config.decoder_layers - config.eval_idx - 1)
+                for _ in range(config.decoder_layers - self.eval_idx - 1)
             ]
         )
 
