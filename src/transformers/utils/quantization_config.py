@@ -1525,7 +1525,7 @@ class TorchAoConfig(QuantizationConfigMixin):
 
     def get_apply_tensor_subclass(self):
         _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
-        if not torch.cuda.is_available() and is_torchao_available():
+        if not torch.cuda.is_available() and is_torchao_available() and self.quant_type == "int4_weight_only":
             from torchao.dtypes import Int4CPULayout
             self.quant_type_kwargs["layout"] = Int4CPULayout()
         return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
