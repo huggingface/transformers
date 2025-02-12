@@ -956,16 +956,18 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
         )
 
         # verify the logits values
+        # fmt: off
         expected_logits_per_text = torch.tensor(
             [
-                [1.0775, 0.0974, -1.7726],
-                [-4.3421, -6.1043, -2.1243],
-                [4.1455, 4.8611, 3.1851],
-                [9.3390, 10.0336, 6.0143],
-                [2.3163, 2.9762, 4.0904],
-                [-12.1292, -13.6398, -14.2740],
-                [1.0461, 1.0337, -2.6771],
+                [  1.0775,   0.0974,  -1.0477],
+                [ -4.3421,  -6.1043,  -1.5466],
+                [  4.1455,   4.8611,   3.3769],
+                [  9.3391,  10.0336,   6.2321],
+                [  2.3164,   2.9763,   4.3108],
+                [-12.1292, -13.6398, -13.3479],
+                [  1.0461,   1.0337,  -2.0506],
             ]
         ).to(torch_device)
+        # fmt: on
 
         torch.testing.assert_close(outputs.logits_per_text, expected_logits_per_text, rtol=1e-3, atol=1e-3)
