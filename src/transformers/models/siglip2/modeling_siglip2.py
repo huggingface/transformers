@@ -1524,8 +1524,8 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
 
         >>> # note: we are loading a `Siglip2Model` from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random if seed is not set above.
-        >>> image_processor = AutoImageProcessor.from_pretrained("google/siglip2")
-        >>> model = Siglip2ForImageClassification.from_pretrained("google/siglip2")
+        >>> image_processor = AutoImageProcessor.from_pretrained("google/siglip2-base-patch16-224")
+        >>> model = Siglip2ForImageClassification.from_pretrained("google/siglip2-base-patch16-224")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -130,7 +130,7 @@ class Siglip2Processor(SiglipProcessor):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **pixel_attention_mask** -- Attention mask for the pixel values. Returned when `images` is not `None`.
-            - **spatial_shapes** -- List[Tuple[int, int]], the number of horizontal and vertical patches per image.
+            - **spatial_shapes** -- The number of horizontal and vertical patches per image.
               Returned when `images` is not `None`.
         """
         return super().__call__(text, images, padding, truncation, max_length, return_tensors)
@@ -446,31 +446,6 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, ImageClassifierOutput]:
-        r"""
-        ```python
-        >>> from transformers import AutoImageProcessor, Siglip2ForImageClassification
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> # note: we are loading a `Siglip2Model` from the hub here,
-        >>> # so the head will be randomly initialized, hence the predictions will be random if seed is not set above.
-        >>> image_processor = AutoImageProcessor.from_pretrained("google/siglip2")
-        >>> model = Siglip2ForImageClassification.from_pretrained("google/siglip2")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
-        >>> # model predicts one of the two classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: LABEL_1
-        ```
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
