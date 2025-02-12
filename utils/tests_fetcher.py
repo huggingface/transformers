@@ -739,7 +739,7 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
                 # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
                 from transformers.utils.import_utils import define_import_structure
 
-                new_imported_modules_2 = define_import_structure(module)
+                new_imported_modules_2 = define_import_structure(PATH_TO_REPO / module)
 
                 for mapping in new_imported_modules_2.values():
                     for _module, _imports in mapping.items():
