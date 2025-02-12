@@ -3552,6 +3552,7 @@ else:
         [
             "SmolVLMConfig",
             "SmolVLMForConditionalGeneration",
+            "SmolVLMPreTrainedModel",
             "SmolVLMModel",
             "SmolVLMProcessor",
             "SmolVLMVisionConfig",

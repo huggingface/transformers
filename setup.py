@@ -132,6 +132,7 @@ _deps = [
     "librosa",
     "nltk<=3.8.1",
     "natten>=0.14.6,<0.15.0",
+    "num2words>=0.5.0",
     "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
