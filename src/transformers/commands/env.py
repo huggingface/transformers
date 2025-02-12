@@ -23,6 +23,7 @@ from argparse import ArgumentParser
 import huggingface_hub
 
 from .. import __version__ as version
+from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
     is_accelerate_available,
     is_flax_available,
@@ -31,7 +32,6 @@ from ..utils import (
     is_torch_available,
     is_torch_npu_available,
 )
-from ..integrations.deepspeed import is_deepspeed_available
 from . import BaseTransformersCLICommand
 
 
