@@ -1989,6 +1989,11 @@ class TrainingArguments:
                 warnings.warn("`--xla_fsdp_grad_ckpt` is useful only when `--xla` is set to true.")
 
         if self.tp_size > 1:
+            if not is_accelerate_available("1.3.1"):
+                raise NotImplementedError(
+                    "TP using PyTorch requires Accelerate version `accelerate` >= 1.3.1. "
+                    "This is not supported and we recommend you to update your version."
+                )
             os.environ["ACCELERATE_USE_TP"] = "true"
             os.environ["TP_SIZE"] = str(self.tp_size)
         # accelerate integration for FSDP
