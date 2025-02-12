@@ -868,7 +868,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         set_seed(42)
         import datasets
 
-        model_name = "nickypro/tinyllama-15M"
+        model_name = "roneneldan/TinyStories-33M"
         dataset_name = "wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
