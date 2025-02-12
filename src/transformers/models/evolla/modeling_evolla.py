@@ -1200,12 +1200,12 @@ class EvollaPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-class EvollaProteinEncoder(EvollaPreTrainedModel):
+class EvollaProteinEncoder(nn.Module):
     def __init__(self, config: EvollaProteinConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
         self.model = SaProtProteinEncoder(config.protein_encoder_config)
         self.sequence_compressor_resampler = SequenceCompressorResampler(config.resampler_config) # TODO
-        self.post_init()
     
     def sequence_encode(
         self,
@@ -1779,6 +1779,8 @@ class EvollaModel(EvollaPreTrainedModel):
     ):
         super().__init__(config)
         self.config = config
+        self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
+        self.config.llm_config.gradient_checkpointing = self.gradient_checkpointing
         self.generation_config = kwargs.pop("generation_config", {})
 
         if len(self.generation_config) == 0:
@@ -1792,6 +1794,8 @@ class EvollaModel(EvollaPreTrainedModel):
         self.protein_encoder = EvollaProteinEncoder(self.config.protein_config)
 
         self.llm = EvollaLLM(self.config.llm_config)
+        
+        self.post_init()
         
     def forward(
         self,
