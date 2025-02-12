@@ -471,15 +471,9 @@ class SiglipFlashAttention2(SiglipAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim)
 
         dropout_rate = self.dropout if self.training else 0.0
 
