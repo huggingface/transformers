@@ -850,10 +850,11 @@ def is_aqlm_available():
 def is_vptq_available(min_version: str = VPTQ_MIN_VERSION):
     return _vptq_available and version.parse(_vptq_version) >= version.parse(min_version)
 
-
 def is_av_available():
     return _av_available
 
+def is_deepspeed_available():
+    return _deepspeed_available
 
 def is_decord_available():
     return _decord_available
