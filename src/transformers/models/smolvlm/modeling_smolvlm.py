@@ -1360,4 +1360,4 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         return model_kwargs
 
 
-__all__ = ["SmolVLMForConditionalGeneration", "SmolVLMModel"]
+__all__ = ["SmolVLMForConditionalGeneration", "SmolVLMModel", "SmolVLMVisionTransformer"]

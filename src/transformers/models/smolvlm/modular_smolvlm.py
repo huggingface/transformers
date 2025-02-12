@@ -320,4 +320,5 @@ __all__ = [
     "SmolVLMImageProcessor",
     "SmolVLMForConditionalGeneration",
     "SmolVLMModel",
+    "SmolVLMVisionTransformer",
 ]
