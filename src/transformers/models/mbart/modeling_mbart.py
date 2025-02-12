@@ -743,7 +743,7 @@ class MBartPreTrainedModel(PreTrainedModel):
     config_class = MBartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["MBartDecoderLayer", "MBartAttention"]
+    _no_split_modules = ["MBartDecoderLayer", "MBartEncoderLayer", "MBartAttention"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
