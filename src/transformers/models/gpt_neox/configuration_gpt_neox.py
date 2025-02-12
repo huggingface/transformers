@@ -131,6 +131,12 @@ class GPTNeoXConfig(PretrainedConfig):
 
     model_type = "gpt_neox"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.attention.query_key_value": "colwise",
+        "layers.*.attention.dense": "rowwise",
+        "layers.*.mlp.dense_h_to_4h": "colwise",
+        "layers.*.mlp.dense_4h_to_h": "rowwise",
+    }
 
     def __init__(
         self,
@@ -189,3 +195,6 @@ class GPTNeoXConfig(PretrainedConfig):
             raise ValueError(
                 "The hidden size is not divisble by the number of attention heads! Make sure to update them!"
             )
+
+
+__all__ = ["GPTNeoXConfig"]

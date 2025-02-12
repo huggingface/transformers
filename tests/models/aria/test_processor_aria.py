@@ -237,6 +237,55 @@ And who is that?<|im_end|>
 """
         self.assertEqual(rendered, expected_rendered)
 
+    # Override as AriaImageProcessor doesn't accept `do_rescale`
+    def test_chat_template_accepts_processing_kwargs(self):
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is shown in this image?"},
+                    ],
+                },
+            ]
+        ]
+
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            padding="max_length",
+            max_length=50,
+        )
+        self.assertEqual(len(formatted_prompt_tokenized[0]), 50)
+
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            truncation=True,
+            max_length=5,
+        )
+        self.assertEqual(len(formatted_prompt_tokenized[0]), 5)
+
+        # Now test the ability to return dict
+        messages[0][0]["content"].append(
+            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"}
+        )
+        out_dict = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            max_image_size=980,
+            return_tensors="np",
+        )
+        self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
+
     # Override as AriaProcessor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:

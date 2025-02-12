@@ -34,16 +34,17 @@ def ForCausalLMLoss(
 ):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
+    labels = labels.to(logits.device)
     # Shift so that tokens < n predict n
-    shift_logits = logits[..., :-1, :].contiguous()
+    labels = nn.functional.pad(labels, (0, 1), value=ignore_index)
     shift_labels = labels[..., 1:].contiguous()
 
     # Flatten the tokens
-    shift_logits = shift_logits.view(-1, vocab_size)
+    logits = logits.view(-1, vocab_size)
     shift_labels = shift_labels.view(-1)
     # Enable model parallelism
-    shift_labels = shift_labels.to(shift_logits.device)
-    loss = fixed_cross_entropy(shift_logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
+    shift_labels = shift_labels.to(logits.device)
+    loss = fixed_cross_entropy(logits, shift_labels, num_items_in_batch, ignore_index, **kwargs)
     return loss
 
 
@@ -52,6 +53,7 @@ def ForMaskedLMLoss(
 ):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
+    labels = labels.to(logits.device)
 
     # Flatten the tokens
     logits = logits.view(-1, vocab_size)
@@ -73,6 +75,7 @@ def ForSequenceClassificationLoss(labels, pooled_logits, config, **kwargs):
         else:
             config.problem_type = "multi_label_classification"
 
+    labels = labels.to(pooled_logits.device)
     if config.problem_type == "regression":
         loss_fct = MSELoss()
         if num_labels == 1:
@@ -109,7 +112,7 @@ def ForQuestionAnsweringLoss(start_logits, end_logits, start_positions, end_posi
 def ForTokenClassification(logits, labels, config, **kwargs):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.view(-1, config.num_labels)
-    labels = labels.view(-1)
+    labels = labels.view(-1).to(logits.device)
     logits = logits.float()
     # Flatten the tokens
     return fixed_cross_entropy(logits, labels, **kwargs)
@@ -125,7 +128,9 @@ LOSS_MAPPING = {
     "ForObjectDetection": ForObjectDetectionLoss,
     "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
+    "DabDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "GroundingDinoForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
+    "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
 }
