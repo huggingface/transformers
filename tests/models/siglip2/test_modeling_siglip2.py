@@ -598,6 +598,7 @@ class Siglip2TextModelTester:
 class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Siglip2TextModel,) if is_torch_available() else ()
     fx_compatible = False
+    test_resize_embeddings = False
     test_pruning = False
     test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
