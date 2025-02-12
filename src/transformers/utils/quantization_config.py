@@ -1402,6 +1402,8 @@ class HiggsConfig(QuantizationConfigMixin):
             Hadamard size for the HIGGS method. Default is 512. Input dimension of matrices is padded to this value. Decreasing this below 512 will reduce the quality of the quantization.
         group_size (int, *optional*, defaults to 256):
             Group size for the HIGGS method. Can be 64, 128 or 256. Decreasing it barely affects the performance. Default is 256. Must be a divisor of hadamard_size.
+        tune_metadata ('dict', *optional*, defaults to {}):
+            Module-wise metadata (gemm block shapes, GPU metadata, etc.) for saving the kernel tuning results. Default is an empty dictionary. Is set automatically during tuning.
     """
 
     def __init__(
