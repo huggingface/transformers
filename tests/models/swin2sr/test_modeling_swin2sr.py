@@ -172,6 +172,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Swin2SRModelTester(self)
@@ -332,7 +333,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.5458, 0.5546, 0.5638], [0.5526, 0.5565, 0.5651], [0.5396, 0.5426, 0.5621]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_fp16(self):
         processor = Swin2SRImageProcessor()
@@ -353,4 +354,4 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]], dtype=model.dtype
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

@@ -400,8 +400,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
     # tie_word_embeddings is true otherwise false
-    parsed_parameters["config"]["tie_word_embeddings"] = all(
-        "output.weight" != tensor.name for tensor in reader.tensors
+    exceptions = ["falcon", "bloom"]
+    parsed_parameters["config"]["tie_word_embeddings"] = (
+        all("output.weight" != tensor.name for tensor in reader.tensors) or architecture in exceptions
     )
 
     # List all key-value pairs in a columnized format

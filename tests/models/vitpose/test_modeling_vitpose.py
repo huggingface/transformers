@@ -154,6 +154,7 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = VitPoseModelTester(self)
@@ -239,9 +240,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_pose_estimation(self):
         image_processor = self.default_image_processor
-        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
-        model.to(torch_device)
-        model.eval()
+        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map=torch_device)
 
         image = prepare_img()
         boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
@@ -277,16 +276,14 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
         expected_scores = torch.tensor([8.7529e-01, 8.4315e-01, 9.2678e-01])
 
         self.assertEqual(len(pose_results), 2)
-        self.assertTrue(torch.allclose(pose_results[1]["bbox"].cpu(), expected_bbox, atol=1e-4))
-        self.assertTrue(torch.allclose(pose_results[1]["keypoints"][:3].cpu(), expected_keypoints, atol=1e-2))
-        self.assertTrue(torch.allclose(pose_results[1]["scores"][:3].cpu(), expected_scores, atol=1e-4))
+        torch.testing.assert_close(pose_results[1]["bbox"].cpu(), expected_bbox, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(pose_results[1]["keypoints"][:3].cpu(), expected_keypoints, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(pose_results[1]["scores"][:3].cpu(), expected_scores, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_batched_inference(self):
         image_processor = self.default_image_processor
-        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
-        model.to(torch_device)
-        model.eval()
+        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map=torch_device)
 
         image = prepare_img()
         boxes = [
@@ -327,6 +324,6 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
 
         self.assertEqual(len(pose_results), 2)
         self.assertEqual(len(pose_results[0]), 2)
-        self.assertTrue(torch.allclose(pose_results[0][1]["bbox"].cpu(), expected_bbox, atol=1e-4))
-        self.assertTrue(torch.allclose(pose_results[0][1]["keypoints"][:3].cpu(), expected_keypoints, atol=1e-2))
-        self.assertTrue(torch.allclose(pose_results[0][1]["scores"][:3].cpu(), expected_scores, atol=1e-4))
+        torch.testing.assert_close(pose_results[0][1]["bbox"].cpu(), expected_bbox, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(pose_results[0][1]["keypoints"][:3].cpu(), expected_keypoints, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(pose_results[0][1]["scores"][:3].cpu(), expected_scores, rtol=1e-4, atol=1e-4)
