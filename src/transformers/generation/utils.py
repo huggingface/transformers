@@ -116,6 +116,16 @@ if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 
+# Variable names used to hold the cache at generation time
+ALL_CACHE_NAMES = [
+    "past_key_values",  # default
+    "cache_params",  # mamba-based models
+    "state",  # rwkv
+    "mems",  # xlnet
+    "past_buckets_states",  # reformer
+]
+
+
 @dataclass
 class GenerateDecoderOnlyOutput(ModelOutput):
     """
@@ -381,9 +391,13 @@ class GenerationMixin:
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
         #              (we can't check exception 3 while compiling)
+        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if (
+            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            elif (
                 inputs_embeds is not None  # Exception 1
                 or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
             ):
@@ -393,9 +407,9 @@ class GenerationMixin:
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder:
-            if inputs_embeds is not None and cache_position[0] == 0:
+            if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
                 model_inputs[input_ids_key] = None
                 model_inputs["inputs_embeds"] = inputs_embeds
             else:
@@ -406,23 +420,28 @@ class GenerationMixin:
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
 
         # 4. Create missing `position_ids` on the fly
+        attention_mask = (
+            kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
+        )
+        attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+        position_ids_key = "decoder_position_ids" if self.config.is_encoder_decoder else "position_ids"
         if (
             attention_mask is not None
-            and kwargs.get("position_ids") is None
-            and "position_ids" in set(inspect.signature(self.forward).parameters.keys())
+            and kwargs.get(position_ids_key) is None
+            and position_ids_key in set(inspect.signature(self.forward).parameters.keys())
         ):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            kwargs["position_ids"] = position_ids  # placed in kwargs for further processing (see below)
+            kwargs[position_ids_key] = position_ids  # placed in kwargs for further processing (see below)
 
         # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in ["position_ids", "token_type_ids"]:
+        for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
                 if past_key_values is not None:
                     current_input_length = (
                         model_inputs["inputs_embeds"].shape[1]
-                        if model_inputs["inputs_embeds"] is not None
+                        if model_inputs.get("inputs_embeds") is not None
                         else model_inputs[input_ids_key].shape[1]
                     )
                     model_input = model_input[:, -current_input_length:]
@@ -469,7 +488,7 @@ class GenerationMixin:
                     past_key_values=past_key_values,
                 )
         if attention_mask is not None:
-            model_inputs["attention_mask"] = attention_mask
+            model_inputs[attention_mask_key] = attention_mask
 
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
@@ -747,21 +766,6 @@ class GenerationMixin:
 
         return input_ids, model_kwargs
 
-    def _extract_past_from_model_output(self, outputs: ModelOutput):
-        past_key_values = None
-        cache_name = "past_key_values"
-        if "past_key_values" in outputs:
-            past_key_values = outputs.past_key_values
-        elif "mems" in outputs:
-            past_key_values = outputs.mems
-        elif "past_buckets_states" in outputs:
-            past_key_values = outputs.past_buckets_states
-        elif "cache_params" in outputs:
-            past_key_values = outputs.cache_params
-            cache_name = "cache_params"
-
-        return cache_name, past_key_values
-
     def _update_model_kwargs_for_generation(
         self,
         outputs: ModelOutput,
@@ -770,10 +774,15 @@ class GenerationMixin:
         num_new_tokens: int = 1,
     ) -> Dict[str, Any]:
         # update past_key_values keeping its naming used in model code
-        cache_name, cache = self._extract_past_from_model_output(outputs)
-        model_kwargs[cache_name] = cache
-        if getattr(outputs, "state", None) is not None:
-            model_kwargs["state"] = outputs.state
+        for possible_cache_name in ALL_CACHE_NAMES:
+            if possible_cache_name in outputs:
+                # TODO (joao): remove output/input mismatch when these old models (xlnet, reformer) are deprecated
+                if possible_cache_name in ("past_buckets_states", "mems"):
+                    cache_name = "past_key_values"
+                else:
+                    cache_name = possible_cache_name
+                model_kwargs[cache_name] = getattr(outputs, possible_cache_name)
+                break
 
         # update token_type_ids with last value
         if "token_type_ids" in model_kwargs:
@@ -1633,45 +1642,12 @@ class GenerationMixin:
                     # models. May cause trobles with non-text modalities.
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
-            def get_layer_device_map(execution_device_map: Optional[dict] = None):
-                num_hidden_layers = self.config.get_text_config().num_hidden_layers
-                if execution_device_map is None:
-                    return None
-                elif len(execution_device_map) == 1 and "" in execution_device_map:
-                    return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
-                layer_device_map = {}
-                for layer in execution_device_map:
-                    for idx in range(num_hidden_layers):
-                        if f".{idx}." in f"{layer}.":
-                            layer_device_map[idx] = execution_device_map[layer]
-                            break
-                for idx in range(num_hidden_layers):
-                    if idx not in layer_device_map:
-                        raise RuntimeError(f"layer {idx} has not been mapped to a device.")
-                return layer_device_map
-
-            execution_device_map = None
-            # Taken from dispatch_model from accelerate.
-            # This is needed here if we don't want to make changes in accelerate in order to save execution_device
-            # For offloaded case, we need to get the execution device, not just the device where it is offloaded
-            if hasattr(self, "hf_device_map"):
-                if set(self.hf_device_map.values()) == {"cpu"} or set(self.hf_device_map.values()) == {"cpu", "disk"}:
-                    main_device = "cpu"
-                else:
-                    main_device = [d for d in self.hf_device_map.values() if d not in ["cpu", "disk"]][0]
-                execution_device_map = {
-                    name: main_device if device in ["cpu", "disk"] else device
-                    for name, device in self.hf_device_map.items()
-                }
-            layer_device_map = get_layer_device_map(execution_device_map)
-
             cache_kwargs = {
                 "config": self.config.get_text_config(),
                 "max_batch_size": batch_size,
                 "max_cache_len": max_cache_len,
-                "device": device,
                 "dtype": cache_dtype,
-                "layer_device_map": layer_device_map,
+                "device": device if cache_implementation == "offloaded_static" else None,
             }
             self._cache = cache_cls(**cache_kwargs)
             if requires_cross_attention_cache:
@@ -1813,12 +1789,12 @@ class GenerationMixin:
                 else EncoderDecoderCache(DynamicCache(), DynamicCache())
             )
 
-    def _supports_num_logits_to_keep(self) -> bool:
+    def _supports_logits_to_keep(self) -> bool:
         """
-        Return True if the current model supports the keyword argument `num_logits_to_keep` in forward()
+        Return True if the current model supports the keyword argument `logits_to_keep` in forward()
         to save memory. Checking it in this way allows to avoid using a new model attribute.
         """
-        return "num_logits_to_keep" in set(inspect.signature(self.forward).parameters.keys())
+        return "logits_to_keep" in set(inspect.signature(self.forward).parameters.keys())
 
     def _prepare_special_tokens(
         self,
@@ -2099,11 +2075,11 @@ class GenerationMixin:
             input_ids_length=input_ids_length,
         )
 
-        # If the model supports `num_logits_to_keep` in forward(), set it to 1 to avoid computing the whole
+        # If the model supports `logits_to_keep` in forward(), set it to 1 to avoid computing the whole
         # logit matrix. This can save a lot of memory during the first forward pass. Note that assisted decoding
         # dynamically overrides this value as it can need more than the last token logits
-        if self._supports_num_logits_to_keep() and "num_logits_to_keep" not in model_kwargs:
-            model_kwargs["num_logits_to_keep"] = 1
+        if self._supports_logits_to_keep() and "logits_to_keep" not in model_kwargs:
+            model_kwargs["logits_to_keep"] = 1
 
         self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
@@ -2111,7 +2087,7 @@ class GenerationMixin:
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
         # - different models have a different cache name expected by the model (default = "past_key_values")
         # - `max_length`, prepared above, is used to determine the maximum cache length
-        max_cache_length = generation_config.max_length
+        max_cache_length = generation_config.max_length - 1
         if (
             inputs_tensor.shape[1] != input_ids_length
             and model_input_name == "inputs_embeds"
@@ -3018,7 +2994,9 @@ class GenerationMixin:
                 next_past_key_values = selected_outputs["past_key_values"]
 
             else:
-                _, next_past_key_values = self._extract_past_from_model_output(outputs)
+                next_past_key_values = None
+                for possible_cache_name in ALL_CACHE_NAMES:
+                    next_past_key_values = next_past_key_values or getattr(outputs, possible_cache_name, None)
                 # Do it in-place layer per layer to save memory
                 if isinstance(next_past_key_values, DynamicCache) or (
                     isinstance(next_past_key_values, EncoderDecoderCache)
@@ -3210,9 +3188,11 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         model_forward = self.__call__
-        if isinstance(model_kwargs.get("past_key_values"), StaticCache):
-            if self.device.type == "cuda":
-                logger.warning_once("Using `torch.compile`.")
+        if isinstance(model_kwargs.get("past_key_values"), Cache):
+            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
+            if is_compileable and (
+                self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
+            ):
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
                 model_forward = self.get_compiled_call(generation_config.compile_config)
 
@@ -4269,8 +4249,8 @@ class GenerationMixin:
                 )
 
             model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
-            if "num_logits_to_keep" in model_inputs:
-                model_inputs["num_logits_to_keep"] = candidate_length + 1
+            if "logits_to_keep" in model_inputs:
+                model_inputs["logits_to_keep"] = candidate_length + 1
 
             # 2.2. Run a forward pass on the candidate sequence
             # prepare variable output controls (note: some models won't accept all output controls)
@@ -4608,7 +4588,7 @@ def _split_model_inputs(
     # ModelOutput object.
     # bool should not be split but replicated for each split
     bool_keys = [k for k in keys if isinstance(model_input[k], bool) or k == "cache_position"]
-    keys_to_ignore = ["cache_position", "encoder_outputs", "num_logits_to_keep"]
+    keys_to_ignore = ["cache_position", "encoder_outputs", "logits_to_keep"]
     non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
 
     num_hidden_layers = config.get_text_config().num_hidden_layers
@@ -4628,10 +4608,10 @@ def _split_model_inputs(
         data_split_list = [
             {**data_split, "encoder_outputs": encoder_outputs_split[i]} for i, data_split in enumerate(data_split_list)
         ]
-    # num_logits_to_keep should be replicated for each split, similar to bool values
-    if "num_logits_to_keep" in model_input:
+    # logits_to_keep should be replicated for each split, similar to bool values
+    if "logits_to_keep" in model_input:
         data_split_list = [
-            {**data_split, "num_logits_to_keep": model_input["num_logits_to_keep"]} for data_split in data_split_list
+            {**data_split, "logits_to_keep": model_input["logits_to_keep"]} for data_split in data_split_list
         ]
 
     # Convert each dictionary in the list to an object of the inferred class

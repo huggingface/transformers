@@ -426,7 +426,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise ValueError("bnb_4bit_quant_storage must be a string or a torch.dtype")
 
         if kwargs:
-            logger.warning(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
+            logger.info(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
 
         self.post_init()
 
