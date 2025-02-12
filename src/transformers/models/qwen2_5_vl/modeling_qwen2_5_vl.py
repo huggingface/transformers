@@ -1975,17 +1975,19 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         if expand_size == 1:
             return input_ids, model_kwargs
 
-        image_grid_thw = model_kwargs.get("image_grid_thw", None)
-        video_grid_thw = model_kwargs.get("video_grid_thw", None)
-        image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids)
+        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
 
-        def _repeat_interleave_samples(x, lengths, repeat_times):
-            samples = torch.split(x, lengths)
-            repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-            result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-            return result
+        def _expand_dict_for_generation_visual(dict_to_expand):
+            image_grid_thw = model_kwargs.get("image_grid_thw", None)
+            video_grid_thw = model_kwargs.get("video_grid_thw", None)
+            image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids)
 
-        def _expand_dict_for_generation(dict_to_expand):
+            def _repeat_interleave_samples(x, lengths, repeat_times):
+                samples = torch.split(x, lengths)
+                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
+                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+                return result
+
             for key in dict_to_expand:
                 if key == "pixel_values":
                     # split images into samples
@@ -2021,10 +2023,15 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                     lengths = list(video_nums)
                     tensor = _repeat_interleave_samples(tensor, lengths=lengths, repeat_times=expand_size)
                     dict_to_expand[key] = tensor.tolist()
-                elif (
+            return dict_to_expand
+
+        def _expand_dict_for_generation(dict_to_expand):
+            for key in dict_to_expand:
+                if (
                     key != "cache_position"
                     and dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
+                    and key not in visual_keys
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
@@ -2033,6 +2040,11 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
         model_kwargs = _expand_dict_for_generation(model_kwargs)
+
+        # input_ids is required for expanding visual inputs
+        # If input_ids is unavailable, visual inputs will not be used; therefore, there is no need to expand visual inputs.
+        if input_ids is not None and input_ids.numel() != 0:
+            model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
 
         if is_encoder_decoder:
             if model_kwargs.get("encoder_outputs") is None:
