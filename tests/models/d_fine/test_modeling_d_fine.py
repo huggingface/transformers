@@ -29,7 +29,7 @@ from transformers import (
     is_vision_available,
     DFineConfig,
     DFineResNetConfig,
-    DFineResNetStageConfig
+    DFineResNetStageConfig,
 )
 
 if is_torch_available():
@@ -47,7 +47,8 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-CHECKPOINT = "vladislavbro/dfine_x_coco"
+CHECKPOINT = "vladislavbro/dfine_s_coco"
+
 
 class DFineModelTester:
     def __init__(
@@ -57,18 +58,18 @@ class DFineModelTester:
         is_training=True,
         use_labels=True,
         n_targets=3,
-        num_labels=80,
+        num_labels=10,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
         # backbone
         backbone_config=None,
         # encoder HybridEncoder
-        encoder_hidden_dim=384,
-        encoder_in_channels=[512, 1024, 2048],
+        encoder_hidden_dim=32,
+        encoder_in_channels=[128, 256, 512],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
-        encoder_ffn_dim=2048,
+        encoder_ffn_dim=64,
         encoder_attention_heads=2,
         dropout=0.0,
         activation_dropout=0.0,
@@ -79,14 +80,14 @@ class DFineModelTester:
         eval_size=None,
         normalize_before=False,
         # decoder DFineTransformer
-        d_model=256,
+        d_model=32,
         num_queries=30,
-        decoder_in_channels=[384, 384, 384],
-        decoder_ffn_dim=2048,
+        decoder_in_channels=[32, 32, 32],
+        decoder_ffn_dim=64,
         num_feature_levels=3,
-        decoder_n_points=[3, 6, 3],
+        decoder_n_points=4,
         decoder_n_levels=3,
-        decoder_layers=6,
+        decoder_layers=2,
         decoder_attention_heads=2,
         decoder_activation_function="relu",
         attention_dropout=0.0,
@@ -103,7 +104,8 @@ class DFineModelTester:
         layer_scale=1,
         reg_max=32,
         reg_scale=4.0,
-        depth_mult=1.0,
+        depth_mult=0.34,
+        hidden_expansion=0.5,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -155,9 +157,10 @@ class DFineModelTester:
         self.image_size = image_size
         self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
+        self.hidden_expansion = hidden_expansion
 
         self.encoder_seq_length = math.ceil(self.image_size / 32) * math.ceil(self.image_size / 32)
-    
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -180,21 +183,22 @@ class DFineModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
-        hidden_sizes = [64, 128, 256, 512]
+        hidden_sizes = [10, 20, 30, 40]
         backbone_config = DFineResNetConfig(
-            stage_config = DFineResNetStageConfig(
-            stage1=[64, 64, 128, 1, False, False, 3, 6],
-            stage2=[128, 128, 512, 2, True, False, 3, 6],
-            stage3=[512, 256, 1024, 5, True, True, 5, 6],
-            stage4=[1024, 512, 2048, 2, True, True, 5, 6],
+            stage_config=DFineResNetStageConfig(
+                stage1=[16, 16, 64, 1, False, False, 3, 3],
+                stage2=[64, 32, 128, 1, True, False, 3, 3],
+                stage3=[128, 64, 256, 2, True, True, 5, 3],
+                stage4=[256, 128, 512, 1, True, True, 5, 3],
             ),
+            embeddings_size=10,
             hidden_sizes=hidden_sizes,
-            depths=[3, 4, 6, 3],
+            depths=[1, 1, 2, 1],
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
-            stem_channels=[3, 32, 64],
-            layer_type = "basic",
-            embedding_size = 32
+            stem_channels=[3, 16, 16],
+            layer_type="basic",
+            use_lab=True,
         )
         return DFineConfig.from_backbone_configs(
             backbone_config=backbone_config,
@@ -222,12 +226,12 @@ class DFineModelTester:
             decoder_layers=self.decoder_layers,
             decoder_attention_heads=self.decoder_attention_heads,
             decoder_activation_function=self.decoder_activation_function,
-            decoder_offset_scale = self.decoder_offset_scale,
-            eval_idx = self.eval_idx,
-            layer_scale = self.layer_scale,
-            reg_max = self.reg_max,
-            reg_scale = self.reg_scale,
-            depth_mult = self.depth_mult,
+            decoder_offset_scale=self.decoder_offset_scale,
+            eval_idx=self.eval_idx,
+            layer_scale=self.layer_scale,
+            reg_max=self.reg_max,
+            reg_scale=self.reg_scale,
+            depth_mult=self.depth_mult,
             attention_dropout=self.attention_dropout,
             num_denoising=self.num_denoising,
             label_noise_ratio=self.label_noise_ratio,
@@ -420,8 +424,9 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 [
                     self.model_tester.num_queries,
                     self.model_tester.decoder_attention_heads,
-                    self.model_tester.decoder_n_levels * self.model_tester.decoder_n_points 
-                    if isinstance(self.model_tester.decoder_n_points, int) else sum(self.model_tester.decoder_n_points),
+                    self.model_tester.decoder_n_levels * self.model_tester.decoder_n_points
+                    if isinstance(self.model_tester.decoder_n_points, int)
+                    else sum(self.model_tester.decoder_n_points),
                 ],
             )
 
@@ -454,56 +459,56 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
 
     def test_hidden_states_output(self):
-            def check_hidden_states_output(inputs_dict, config, model_class):
-                model = model_class(config)
-                model.to(torch_device)
-                model.eval()
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
 
-                with torch.no_grad():
-                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-                hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", len(self.model_tester.encoder_in_channels) - 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            self.assertListEqual(
+                list(hidden_states[1].shape[-2:]),
+                [
+                    self.model_tester.image_size // self.model_tester.feat_strides[-1],
+                    self.model_tester.image_size // self.model_tester.feat_strides[-1],
+                ],
+            )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
 
                 expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", len(self.model_tester.encoder_in_channels) - 1
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.decoder_layers + 1
                 )
+
+                self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
 
                 self.assertListEqual(
-                    list(hidden_states[1].shape[-2:]),
-                    [
-                        self.model_tester.image_size // self.model_tester.feat_strides[-1],
-                        self.model_tester.image_size // self.model_tester.feat_strides[-1],
-                    ],
+                    list(hidden_states[0].shape[-2:]),
+                    [self.model_tester.num_queries, self.model_tester.d_model],
                 )
 
-                if config.is_encoder_decoder:
-                    hidden_states = outputs.decoder_hidden_states
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-                    expected_num_layers = getattr(
-                        self.model_tester, "expected_num_hidden_layers", self.model_tester.decoder_layers + 1
-                    )
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
 
-                    self.assertIsInstance(hidden_states, (list, tuple))
-                    self.assertEqual(len(hidden_states), expected_num_layers)
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
 
-                    self.assertListEqual(
-                        list(hidden_states[0].shape[-2:]),
-                        [self.model_tester.num_queries, self.model_tester.d_model],
-                    )
+            check_hidden_states_output(inputs_dict, config, model_class)
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            for model_class in self.all_model_classes:
-                inputs_dict["output_hidden_states"] = True
-                check_hidden_states_output(inputs_dict, config, model_class)
-
-                # check that output_hidden_states also work using config
-                del inputs_dict["output_hidden_states"]
-                config.output_hidden_states = True
-
-                check_hidden_states_output(inputs_dict, config, model_class)
-    
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -537,7 +542,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(encoder_attentions.grad)
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
-    
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -547,11 +552,12 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
-    
+
     def test_different_timm_backbone(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # let's pick a random timm backbone
+        config.encoder_in_channels = [24, 40, 432]
         config.backbone = "tf_mobilenetv3_small_075"
         config.backbone_config = None
         config.use_timm_backbone = True
@@ -578,7 +584,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
-    
+
     def test_hf_backbone(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -610,7 +616,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
 
             self.assertTrue(outputs)
-    
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -632,7 +638,9 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
-                        if not torch.testing.assert_close(param.data, bias_tensor, atol=1e-4):
+                        try:
+                            torch.testing.assert_close(param.data, bias_tensor, atol=1e-4, rtol=1e-4)
+                        except AssertionError:
                             failed_cases.append(
                                 f"Parameter {name} of model {model_class} seems not properly initialized. "
                                 f"Biases should be initialized to {bias_value}, got {param.data}"
@@ -718,7 +726,10 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 outputs_static = model_static(**self._prepare_for_class(inputs_dict, model_class))
                 outputs_dynamic = model_dynamic(**self._prepare_for_class(inputs_dict, model_class))
 
-            torch.testing.assert_close(outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4
+            )
+
 
 TOLERANCE = 1e-4
 
@@ -727,6 +738,7 @@ TOLERANCE = 1e-4
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
+
 
 @require_torch
 @require_vision
@@ -750,16 +762,16 @@ class DFineModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-4.84472, -4.72931, -4.59713],
-                [-4.55426, -4.61722, -4.62792],
-                [-4.39344, -4.60641, -4.13995],
+                [-3.319429, -4.463451, -5.628054],
+                [-4.910080, -9.160397, -5.950480],
+                [-4.046249, -4.022937, -6.300149],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.256524, 0.54776, 0.476448],
-                [0.76900, 0.41423, 0.46148],
-                [0.16880, 0.19923, 0.21118],
+                [0.765489, 0.415563, 0.46872],
+                [0.168150, 0.198066, 0.21442],
+                [0.258652, 0.547807, 0.47930],
             ]
         ).to(torch_device)
 
@@ -773,17 +785,17 @@ class DFineModelIntegrationTest(unittest.TestCase):
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor([0.9582, 0.9559, 0.9470, 0.9180], device=torch_device)
+        expected_scores = torch.tensor([0.9577, 0.9524, 0.9333, 0.8163], device=torch_device)
         expected_labels = [15, 15, 65, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [3.4449e02, 2.3405e01, 6.3984e02, 3.7427e02],
-                [1.1712e01, 5.3518e01, 3.1664e02, 4.7233e02],
-                [4.0461e01, 7.3700e01, 1.7562e02, 1.1757e02],
-                [5.8968e-01, 1.8841e00, 6.4025e02, 4.7474e02],
+                [1.2160e01, 5.5606e01, 3.1891e02, 4.7029e02],
+                [3.3992e02, 2.4693e01, 6.3990e02, 3.7425e02],
+                [3.9000e01, 7.2414e01, 1.7623e02, 1.1773e02],
+                [-1.5553e00, 1.7200e00, 6.3773e02, 4.7459e02],
             ],
             device=torch_device,
         )
         torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=1e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes[:4], atol=1e-3, rtol=1e-4)

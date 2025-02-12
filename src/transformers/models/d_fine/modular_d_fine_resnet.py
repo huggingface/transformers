@@ -23,7 +23,9 @@ from torch import Tensor, nn
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
 )
-from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
+
+from ...configuration_utils import PretrainedConfig
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetConvLayer, RTDetrResNetPreTrainedModel
 
 
@@ -65,41 +67,91 @@ class DFineResNetStageConfig(NamedTuple):
         return iter([self.stage1, self.stage2, self.stage3, self.stage4])
 
 
-class DFineResNetConfig(RTDetrResNetConfig):
+class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
     """
     Configuration class for D-FINE ResNet backbone.
     Extends RTDetrResNetConfig with D-FINE specific parameters.
 
     Args:
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        embedding_size (`int`, *optional*, defaults to 64):
+            Dimensionality (hidden size) for the embedding layer.
+        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
+            Dimensionality (hidden size) at each stage.
+        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+            Depth (number of layers) for each stage.
+        layer_type (`str`, *optional*, defaults to `"bottleneck"`):
+            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
+            `"bottleneck"` (used for larger models like resnet-50 and above).
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
+            are supported.
+        downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
+            If `True`, the first stage will downsample the inputs using a `stride` of 2.
+        downsample_in_bottleneck (`bool`, *optional*, defaults to `False`):
+            If `True`, the first conv 1x1 in ResNetBottleNeckLayer will downsample the inputs using a `stride` of 2.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         stem_channels (`List[int]`, *optional*, defaults to [3, 32, 48]):
             Channel dimensions for the stem layers:
             - First number (3) is input image channels
             - Second number (32) is intermediate stem channels
             - Third number (48) is output stem channels
-
         stage_config (`DFineResNetStageConfig`, *optional*):
             Configuration for the four stages of the backbone.
             See DFineResNetStageConfig for details.
-
         use_lab (`bool`, *optional*, defaults to False):
             Whether to use Learnable Affine Blocks (LAB) in the network.
             LAB adds learnable scale and bias parameters after certain operations.
-
         **super_kwargs:
             Additional arguments from RTDetrResNetConfig, including standard
             ResNet parameters like hidden_act, layer_norm_eps, etc.
     """
 
     model_type = "d_fine_resnet"
+    layer_types = ["basic", "bottleneck"]
 
     def __init__(
         self,
+        num_channels=3,
+        embedding_size=64,
+        hidden_sizes=[256, 512, 1024, 2048],
+        depths=[3, 4, 6, 3],
+        layer_type="bottleneck",
+        hidden_act="relu",
+        downsample_in_first_stage=False,
+        downsample_in_bottleneck=False,
+        out_features=None,
+        out_indices=None,
         stem_channels=[3, 32, 48],
         stage_config=DFineResNetStageConfig(),
         use_lab=False,
-        **super_kwargs,
+        **kwargs,
     ):
-        super().__init__(**super_kwargs)
+        super().__init__(**kwargs)
+        if layer_type not in self.layer_types:
+            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
+        self.num_channels = num_channels
+        self.embedding_size = embedding_size
+        self.hidden_sizes = hidden_sizes
+        self.depths = depths
+        self.layer_type = layer_type
+        self.hidden_act = hidden_act
+        self.downsample_in_first_stage = downsample_in_first_stage
+        self.downsample_in_bottleneck = downsample_in_bottleneck
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
         self.stem_channels = stem_channels
         self.stage_config = stage_config
         self.use_lab = use_lab
