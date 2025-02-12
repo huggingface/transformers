@@ -99,5 +99,5 @@ deps = {
     "pytest-rich": "pytest-rich",
     "libcst": "libcst",
     "rich": "rich",
-    "num2words": "num2words",
+    "num2words": "num2words>=0.5.0",
 }
