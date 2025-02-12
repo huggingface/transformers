@@ -566,7 +566,7 @@ def read_video_opencv(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    sample_indices_fn: Callable = None,
+    sample_indices_fn: Optional[Callable] = None,
     **kwargs,
 ):
     """
@@ -639,7 +639,7 @@ def read_video_decord(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    sample_indices_fn: Callable = None,
+    sample_indices_fn: Optional[Callable] = None,
     **kwargs,
 ):
     """
@@ -700,7 +700,7 @@ def read_video_pyav(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    sample_indices_fn: Callable = None,
+    sample_indices_fn: Optional[Callable] = None,
     **kwargs,
 ):
     """
@@ -771,7 +771,7 @@ def read_video_torchvision(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    sample_indices_fn: Callable = None,
+    sample_indices_fn: Optional[Callable] = None,
     **kwargs,
 ):
     """
@@ -846,7 +846,7 @@ def load_video(
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
     backend: str = "opencv",
-    sample_indices_fn: Callable = None,
+    sample_indices_fn: Optional[Callable] = None,
     **kwargs,
 ) -> np.array:
     """

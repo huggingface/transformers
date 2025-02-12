@@ -24,7 +24,7 @@ import sys
 import typing
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
 import typing_extensions
@@ -403,6 +403,16 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     video_fps (`int`, *optional*):
         Number of frames to sample per second. Should be passed only when `num_frames=None`.
         If not specified and `num_frames==None`, all frames are sampled.
+    sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            The function expects at input the all args along with all kwargs passed to `load_video` and should output valid
+            indices at which the video should be sampled. For example:
+
+            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+                # add you sampling logic here ...
+                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
     """
 
     tokenize: Optional[bool] = False
@@ -410,6 +420,7 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
+    sample_indices_fn: Optional[Callable] = None
 
 
 class AllKwargsForChatTemplate(
@@ -1257,9 +1268,18 @@ class ProcessorMixin(PushToHubMixin):
                     "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
                 )
 
+        # Fill two sets of kwargs that should be used by tokenizer's `apply_chat_template`
+        # and for multimodal chat template
+        tokenizer_template_kwargs = {}
+        for tokenizer_key in TokenizerChatTemplateKwargs.__annotations__.keys():
+            tokenizer_value = getattr(TokenizerChatTemplateKwargs, tokenizer_key, None)
+            value = kwargs.pop(tokenizer_key, tokenizer_value)
+            tokenizer_template_kwargs[tokenizer_key] = value
+
         chat_template_kwargs = {}
         for key in ProcessorChatTemplateKwargs.__annotations__.keys():
-            value = kwargs.pop(key, getattr(ProcessorChatTemplateKwargs, key))
+            processor_value = getattr(ProcessorChatTemplateKwargs, key, None)
+            value = kwargs.pop(key, processor_value)
             chat_template_kwargs[key] = value
 
         if isinstance(conversation, (list, tuple)) and (
@@ -1276,6 +1296,7 @@ class ProcessorMixin(PushToHubMixin):
         video_load_backend = chat_template_kwargs.get("video_load_backend")
         tokenize = chat_template_kwargs.get("tokenize")
         return_dict = chat_template_kwargs.get("return_dict")
+        sample_indices_fn = chat_template_kwargs.get("sample_indices_fn")
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1304,10 +1325,14 @@ class ProcessorMixin(PushToHubMixin):
                             video = [np.array(load_image(image_fname)).T for image_fname in fname]
                             # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
-                            metadata = None
+                            metadata = None  # TODO: infer metadata from loaded video
                         else:
                             video, metadata = load_video(
-                                fname, num_frames=num_frames, fps=video_fps, backend=video_load_backend
+                                fname,
+                                num_frames=num_frames,
+                                fps=video_fps,
+                                backend=video_load_backend,
+                                sample_indices_fn=sample_indices_fn,
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
@@ -1321,28 +1346,23 @@ class ProcessorMixin(PushToHubMixin):
                     batch_video_metadata.append(video_metadata)
 
             # Process conversation with video/image information if needed. Then convert into a prompt using Jinja template
-            conversation = self._process_messaged_for_chat_template(
-                conversation,
+            conversations = self._process_messaged_for_chat_template(
+                conversations,
                 batch_images=batch_images,
                 batch_videos=batch_videos,
                 batch_video_metadata=batch_video_metadata,
                 **chat_template_kwargs,
             )
 
-            # Pop kwargs that should not be used by tokenizer's `apply_chat_template`
-            tokenizer_kwargs = {}
-            for tokenizer_key in TokenizerChatTemplateKwargs.__annotations__.keys():
-                value = chat_template_kwargs.pop(tokenizer_key)
-                tokenizer_kwargs[tokenizer_key] = value
+        prompt = self.tokenizer.apply_chat_template(
+            conversations,
+            chat_template=chat_template,
+            tokenize=False,
+            return_dict=False,
+            **tokenizer_template_kwargs,
+        )
 
-            prompt = self.tokenizer.apply_chat_template(
-                conversation,
-                chat_template=chat_template,
-                tokenize=False,
-                return_dict=False,
-                **tokenizer_kwargs,
-            )
-
+        if tokenize:
             # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
             # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
             # and pass it to the processor. Users thus never worried about special tokens relying on processor hadnling

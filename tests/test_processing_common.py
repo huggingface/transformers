@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+from huggingface_hub import hf_hub_download
 
 from transformers.models.auto.processing_auto import processor_class_from_name
 from transformers.processing_utils import Unpack
@@ -854,6 +855,56 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 2)
+
+    @require_av
+    def test_chat_template_video_special_processing(self):
+        """
+        Tests that models can pass their own callables to preprocess conversations
+        and to sample video indices.
+        """
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        signature = inspect.signature(processor.__call__)
+        if "videos" not in {*signature.parameters.keys()} or (
+            signature.parameters.get("videos") is not None
+            and signature.parameters["videos"].annotation == inspect._empty
+        ):
+            self.skipTest("Processor doesn't accept videos at input")
+
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "path": video_file_path,
+                        },
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        def dummmy_sample_indices_fn(num_frames, fps, metadata):
+            # sample only the first two frame
+            return [0, 1]
+
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            sample_indices_fn=dummmy_sample_indices_fn,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
