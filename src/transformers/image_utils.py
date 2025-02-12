@@ -18,7 +18,7 @@ import os
 from contextlib import redirect_stdout
 from dataclasses import dataclass
 from io import BytesIO
-from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -556,9 +556,9 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] =
         np.ndarray: np array of frame indices that will be sampled.
     """
     if num_frames is not None:
-        indices = np.arange(0, total_num_frames, total_num_frames / num_frames).astype(int)
+        indices = np.arange(0, total_num_frames, total_num_frames / num_frames, dtype=int)
     else:
-        indices = np.arange(0, total_num_frames).astype(int)
+        indices = np.arange(0, total_num_frames, dtype=int)
     return indices
 
 
@@ -566,7 +566,8 @@ def read_video_opencv(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    frame_indicies: Optional[List[int]] = None,
+    sample_indices_fn: Optional[Callable] = None,
+    **kwargs,
 ):
     """
     Decode the video with open-cv decoder.
@@ -580,6 +581,17 @@ def read_video_opencv(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
+        sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            The function expects at input the all args along with all kwargs passed to `read_video_opencv` and should output valid
+            indices at which the video should be sampled. For example:
+
+            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+                # add you sampling logic here ...
+                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
+
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -594,10 +606,19 @@ def read_video_opencv(
                 f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
-    if frame_indicies is not None:
-        indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
+
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+
+    if sample_indices_fn is not None:
+        indices = sample_indices_fn(num_frames=num_frames, fps=fps, metadata=metadata, **kwargs)
     else:
-        indices = frame_indicies
+        indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
+
     index = 0
     frames = []
     while video.isOpened():
@@ -611,14 +632,16 @@ def read_video_opencv(
             break
 
     video.release()
-    return np.stack(frames)
+    metadata["frames_indices"] = indices
+    return np.stack(frames), metadata
 
 
 def read_video_decord(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    frame_indicies: Optional[List[int]] = None,
+    sample_indices_fn: Optional[Callable] = None,
+    **kwargs,
 ):
     """
     Decode the video with Decord decoder.
@@ -632,6 +655,17 @@ def read_video_decord(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
+        sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            The function expects at input the all args along with all kwargs passed to `read_video_decord` and should output valid
+            indices at which the video should be sampled. For example:
+
+            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+                # add you sampling logic here ...
+                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
+
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -646,16 +680,30 @@ def read_video_decord(
                 f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
-    indices = get_uniform_frame_indices(total_num_frames=total_num_frames, num_frames=num_frames)
+
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+
+    if sample_indices_fn is not None:
+        indices = sample_indices_fn(num_frames=num_frames, fps=fps, metadata=metadata, **kwargs)
+    else:
+        indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
+
     frames = vr.get_batch(indices).asnumpy()
-    return frames
+    metadata["frames_indices"] = indices
+    return frames, metadata
 
 
 def read_video_pyav(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    frame_indicies: Optional[List[int]] = None,
+    sample_indices_fn: Optional[Callable] = None,
+    **kwargs,
 ):
     """
     Decode the video with PyAV decoder.
@@ -669,6 +717,17 @@ def read_video_pyav(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
+        sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            The function expects at input the all args along with all kwargs passed to `read_video_pyav` and should output valid
+            indices at which the video should be sampled. For example:
+
+            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+                # add you sampling logic here ...
+                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
+
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -684,10 +743,18 @@ def read_video_pyav(
                 f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
-    if frame_indicies is not None:
-        indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
+
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+
+    if sample_indices_fn is not None:
+        indices = sample_indices_fn(num_frames=num_frames, fps=fps, metadata=metadata, **kwargs)
     else:
-        indices = frame_indicies
+        indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     frames = []
     container.seek(0)
@@ -697,14 +764,18 @@ def read_video_pyav(
             break
         if i >= 0 and i in indices:
             frames.append(frame)
-    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
+
+    video = np.stack([x.to_ndarray(format="rgb24") for x in frames])
+    metadata["frames_indices"] = indices
+    return video, metadata
 
 
 def read_video_torchvision(
     video_path: str,
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    frame_indicies: Optional[List[int]] = None,
+    sample_indices_fn: Optional[Callable] = None,
+    **kwargs,
 ):
     """
     Decode the video with torchvision decoder.
@@ -718,6 +789,16 @@ def read_video_torchvision(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
+        sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            The function expects at input the all args along with all kwargs passed to `read_video_torchvision` and should output valid
+            indices at which the video should be sampled. For example:
+
+            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+                # add you sampling logic here ...
+                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -738,12 +819,22 @@ def read_video_torchvision(
                 f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
-    if frame_indicies is not None:
-        indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
-    else:
-        indices = frame_indicies
 
-    return video[indices]
+    duration = total_num_frames / video_fps if video_fps else 0
+    metadata = {
+        "total_num_frames": total_num_frames,
+        "fps": video_fps,
+        "duration": duration,
+    }
+
+    if sample_indices_fn is not None:
+        indices = sample_indices_fn(num_frames=video.size(0), fps=fps, metadata=metadata, **kwargs)
+    else:
+        indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
+
+    video = video[indices]
+    metadata["frames_indices"] = indices
+    return video, metadata
 
 
 VIDEO_DECODERS = {
@@ -758,8 +849,9 @@ def load_video(
     video: Union[str, "VideoInput"],
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    frame_indicies: Optional[List[int]] = None,
     backend: str = "opencv",
+    sample_indices_fn: Optional[Callable] = None,
+    **kwargs,
 ) -> np.array:
     """
     Loads `video` to a numpy array.
@@ -772,19 +864,27 @@ def load_video(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        frame_indicies (List[int]):
-            A list of integers that represent the frame idx that one wants to sample.
         backend (`str`, *optional*, defaults to `"opencv"`):
             The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
+        sample_indices_fn (`Callable`, *optional*):
+            A callable function that will return indices at which the video should be sampled. If the video has to be loaded using
+            by a different sampling technique than provided by `num_frames` or `fps` arguments, one should provide their own `sample_indices_fn`.
+            If not provided, simple uniformt sampling with fps is performed, otherwise `sample_indices_fn` has priority over other args.
+            The function expects at input the all args along with all kwargs passed to `load_video` and should output valid
+            indices at which the video should be sampled. For example:
+
+            def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+                # add you sampling logic here ...
+                return np.linspace(start_idx, end_idx, num_frames, dtype=int)
 
     Returns:
-        `np.array`: A numpy array of shape (num_frames, channels, height, width).
+        Tuple[`np.array`, Dict]: A tuple where first element is a numpy array of shape (num_frames, channels, height, width),
+            and the second element is a dict holding video metadata.
     """
 
-    if sum(arg is not None for arg in (num_frames, fps, frame_indicies)) > 1:
-        raise ValueError(
-            "`num_frames`, `fps`, and `frame_indicies` are mutually exclusive arguments, please use only one!"
-        )
+    # If `sample_indices_fn` is given, we can accept any args as those might be needed by custom `sample_indices_fn`
+    if fps is not None and num_frames is not None and sample_indices_fn is None:
+        raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
 
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
         if not is_yt_dlp_available():
@@ -826,60 +926,10 @@ def load_video(
         )
 
     video_decoder = VIDEO_DECODERS[backend]
-    video = video_decoder(file_obj, num_frames=num_frames, fps=fps, frame_indicies=frame_indicies)
-    return video
-
-
-def get_video_details_opencv(video_path: str):
-    cap = cv2.VideoCapture(video_path)
-    n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    cap.release()
-    if fps <= 0:
-        fps = 0
-    duration = n_frames / fps if fps else 0
-    return n_frames, fps, duration
-
-
-def get_video_details_decord(video_path: str):
-    vr = VideoReader(uri=video_path, ctx=cpu(0))
-    n_frames = len(vr)
-    fps = vr.get_avg_fps()
-    if fps <= 0:
-        fps = 0
-    duration = n_frames / fps if fps else 0
-    return n_frames, fps, duration
-
-
-def get_video_details_pyav(video_path: str):
-    with av.open(video_path) as container:
-        stream = container.streams.video[0]
-        n_frames = stream.frames
-        fps = float(stream.average_rate) if stream.average_rate is not None else 0
-    duration = n_frames / fps if fps else 0
-    return n_frames, fps, duration
-
-
-def get_video_details_torchvision(video_path: str):
-    video, _, info = torchvision_io.read_video(video_path, pts_unit="sec", output_format="TCHW")
-    n_frames = video.size(0) - 1  # according to your read_video_torchvision snippet
-    fps = float(info["video_fps"]) if "video_fps" in info else 0
-    duration = n_frames / fps if fps else 0
-    return n_frames, fps, duration
-
-
-VIDEO_DETAILS_FETCHERS = {
-    "opencv": get_video_details_opencv,
-    "decord": get_video_details_decord,
-    "pyav": get_video_details_pyav,
-    "torchvision": get_video_details_torchvision,
-}
-
-
-def get_video_details(video_path: str, backend: str = "opencv"):
-    if backend not in VIDEO_DETAILS_FETCHERS:
-        raise ValueError(f"Unsupported backend: {backend}")
-    return VIDEO_DETAILS_FETCHERS[backend](video_path)
+    video, metadata = video_decoder(
+        file_obj, num_frames=num_frames, fps=fps, sample_indices_fn=sample_indices_fn, **kwargs
+    )
+    return video, metadata
 
 
 def load_images(
