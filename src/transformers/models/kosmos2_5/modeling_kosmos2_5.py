@@ -104,8 +104,8 @@ KOSMOS2_5_START_DOCSTRING = r"""
 
 KOSMOS2_5_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, height, width)`):
+            Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
             [`Kosmos2_5ImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
@@ -181,8 +181,8 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, height, width)`):
+            Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
             [`Kosmos2_5ImageProcessor.__call__`] for details.
         width (`torch.FloatTensor` of shape `(batch_size,)`):
             The original width (before resizing) of each image in the batch. This can be obtained using
