@@ -16,7 +16,7 @@
 
 import math
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -24,6 +24,7 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     convert_to_rgb,
     resize,
+    to_channel_dimension_format,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -124,14 +125,12 @@ def pad_along_first_dim(array: np.ndarray, target_length: int, pad_value: int = 
 
 class Siglip2ImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a SigLIP image processor.
+    Constructs a SigLIP2 image processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
-            `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
-            Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
+            Whether to resize the image's dimensions to fit `max_num_patches` according to given `patch_size`.
+            Can be overridden by `do_resize` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -153,7 +152,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
         patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch in the image.
+            The size (resolution) of each patch the image will be split to.
         max_num_patches (`int`, *optional*, defaults to 256):
             The image will be resized to have at most this number of patches,
             and then padded in "patch" dimension to match this number exactly.
@@ -164,7 +163,6 @@ class Siglip2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -172,20 +170,18 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
+        do_patchify: bool = True,
         patch_size: int = 16,
+        do_pad: bool = True,
         max_num_patches: int = 256,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        # TODO: remove this one
-        size = size if size is not None else {"height": 256, "width": 256}
-
         image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
         image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
 
         self.do_resize = do_resize
-        self.size = size
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
@@ -201,7 +197,6 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -209,7 +204,6 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: Optional[bool] = None,
         patch_size: Optional[int] = None,
@@ -247,11 +241,6 @@ class Siglip2ImageProcessor(BaseImageProcessor):
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the input image. If unset, the channel dimension format is inferred
                 from the input image. Can be one of:
@@ -266,7 +255,6 @@ class Siglip2ImageProcessor(BaseImageProcessor):
                 Maximum number of patches per image, the image will be resized to have at most this number of patches.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
@@ -276,6 +264,10 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         patch_size = patch_size if patch_size is not None else self.patch_size
         max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
+
+        # Explicitly specify data format to be channels last for image preprocessing.
+        # Image processor does not support different output formats, because it returns patches.
+        data_format = ChannelDimension.LAST
 
         images = make_flat_list_of_images(images)
 
@@ -290,9 +282,6 @@ class Siglip2ImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
         )
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
@@ -315,24 +304,22 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         spatial_shapes = []
 
         for image in images:
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+
             if do_resize:
                 height, width = get_image_size_for_max_num_patches(
-                    image_height=image.shape[0],
-                    image_width=image.shape[1],
+                    image_height=image.shape[1],
+                    image_width=image.shape[2],
                     patch_size=patch_size,
                     max_num_patches=max_num_patches,
                 )
-                image = resize(
-                    image=image, size=(height, width), resample=resample, input_data_format=input_data_format
-                )
+                image = resize(image=image, size=(height, width), resample=resample, input_data_format=data_format)
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=data_format)
 
             if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
+                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=data_format)
 
             patches = convert_image_to_patches(image, patch_size)
             patches, mask = pad_along_first_dim(patches, max_num_patches)
@@ -343,13 +330,10 @@ class Siglip2ImageProcessor(BaseImageProcessor):
             pixel_values.append(patches)
             pixel_masks.append(mask)
 
-        pixel_values = np.stack(pixel_values, axis=0)
-        pixel_mask = np.stack(pixel_masks, axis=0)
-
         batch_feature = BatchFeature(
             data={
                 "pixel_values": pixel_values,
-                "pixel_attention_mask": pixel_mask,
+                "pixel_attention_mask": pixel_masks,
                 "spatial_shapes": spatial_shapes,
             },
             tensor_type=return_tensors,
