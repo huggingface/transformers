@@ -107,7 +107,7 @@ Tips:
   
 ## Usage tips
 
-`Helium` can be found on the [Huggingface Hub](https://huggingface.co/collections/kyutai/helium-1-preview)
+`Helium` can be found on the [Huggingface Hub](https://huggingface.co/models?other=helium)
 
 In the following, we demonstrate how to use `helium-1-preview` for the inference. 
 
@@ -115,8 +115,8 @@ In the following, we demonstrate how to use `helium-1-preview` for the inference
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("helium-1-preview", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("helium-1-preview")
+>>> model = AutoModelForCausalLM.from_pretrained("kyutai/helium-1-preview-2b", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("kyutai/helium-1-preview-2b")
 
 >>> prompt = "Give me a short introduction to large language model."
 
