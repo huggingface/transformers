@@ -155,8 +155,7 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
 
         # TODO: check how to not hard code this
-        target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
-        target_sizes = [(300, 400)]
+        target_sizes = [(image.height, image.width)]
         threshold = 0.88
         final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="rect")
 

@@ -255,9 +255,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
     # test the logits  
     torch.testing.assert_close(output.last_hidden_state[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
     
-    # TODO: remove hardcoding target size
-    target_sizes = [(image.shape[1], image.shape[2]) for image in pixel_values]
-    target_sizes = [(300, 400)]
+    target_sizes = [(image.height, image.width)]
     threshold = 0.88
     text_locations = fast_image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="rect")
     
