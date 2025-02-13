@@ -99,6 +99,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_apollo_torch_available = _is_package_available("apollo_torch")
 _aqlm_available = _is_package_available("aqlm")
 _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
 _av_available = importlib.util.find_spec("av") is not None
@@ -401,6 +402,10 @@ def is_torchvision_v2_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_apollo_torch_available():
+    return _apollo_torch_available
 
 
 def is_lomo_available():
@@ -1922,10 +1927,15 @@ def fetch__all__(file_content):
     if "__all__" not in file_content:
         return []
 
+    start_index = None
     lines = file_content.splitlines()
     for index, line in enumerate(lines):
         if line.startswith("__all__"):
             start_index = index
+
+    # There is no line starting with `__all__`
+    if start_index is None:
+        return []
 
     lines = lines[start_index:]
 
@@ -2271,3 +2281,28 @@ def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
     """
     import_structure = create_import_structure_from_path(module_path)
     return spread_import_structure(import_structure)
+
+
+def clear_import_cache():
+    """
+    Clear cached Transformers modules to allow reloading modified code.
+
+    This is useful when actively developing/modifying Transformers code.
+    """
+    # Get all transformers modules
+    transformers_modules = [mod_name for mod_name in sys.modules if mod_name.startswith("transformers.")]
+
+    # Remove them from sys.modules
+    for mod_name in transformers_modules:
+        module = sys.modules[mod_name]
+        # Clear _LazyModule caches if applicable
+        if isinstance(module, _LazyModule):
+            module._objects = {}  # Clear cached objects
+        del sys.modules[mod_name]
+
+    # Force reload main transformers module
+    if "transformers" in sys.modules:
+        main_module = sys.modules["transformers"]
+        if isinstance(main_module, _LazyModule):
+            main_module._objects = {}  # Clear cached objects
+        importlib.reload(main_module)

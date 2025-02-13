@@ -883,7 +883,7 @@ class OPTDecoder(OPTPreTrainedModel):
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
 
-        hidden_states = inputs_embeds + pos_embeds
+        hidden_states = inputs_embeds + pos_embeds.to(inputs_embeds.device)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
