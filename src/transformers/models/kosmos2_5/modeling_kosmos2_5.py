@@ -189,7 +189,7 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
             [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
         height (`torch.FloatTensor` of shape `(batch_size,)`):
             The original height (before resizing) of each image in the batch. This can be obtained using
-            [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.         
+            [`AutoImageProcessor`]. See [`Kosmos2_5ImageProcessor.__call__`] for details.
         image_embeds_position_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the location in a sequence to insert the image features . Mask values selected in `[0,
             1]`:
