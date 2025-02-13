@@ -192,6 +192,14 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
         (original_config, inputs_dict) = self.model_tester.prepare_config_and_inputs_for_common()
@@ -394,6 +402,14 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
 
     @unittest.skip(reason="Unsupported")
     def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @pytest.mark.generate
