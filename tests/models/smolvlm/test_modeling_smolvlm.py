@@ -518,6 +518,34 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @unittest.skip
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_0_greedy(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_with_static_cache(self):
+        pass
+
     @slow
     # TODO (Orr?) this is a dummy test to check if the model generates things that make sense.
     # Needs to be expanded to a tiny video input

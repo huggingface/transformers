@@ -62,22 +62,22 @@ def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
 
     native_fps = metadata.get("fps", 30.0) or 30.0
     duration_seconds = metadata.get("duration", 0)
-    
+
     if duration_seconds <= 0:
         raise ValueError("fInvalid duration_seconds={duration_seconds} in metadata.")
-        
+
     # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
     estimated_frames = int(round(target_fps * duration_seconds))
-    
+
     # Step 2) desired_frames
     desired_frames = min(estimated_frames, max_frames)
     if desired_frames < 1:
         desired_frames = 1
-        
+
     # Step 3) center skip logic
     start_idx = 0
     end_idx = total_num_frames - 1
-    
+
     if skip_secs > 0 and (duration_seconds - 2 * skip_secs) > (max_frames * target_fps):
         start_idx = int(skip_secs * native_fps)
         end_idx = int(total_num_frames - skip_secs * native_fps)
@@ -89,7 +89,7 @@ def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
 
     indices = np.linspace(start_idx, end_idx, desired_frames, dtype=int)
     indices = np.unique(indices)
-        
+
     return indices
 
 
@@ -150,4 +150,3 @@ def load_smolvlm_video(
         timestamps.append(f"{mm:02d}:{ss:02d}")
 
     return frames, timestamps, duration_seconds
-    

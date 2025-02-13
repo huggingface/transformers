@@ -20,8 +20,6 @@ import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     ImageInput,

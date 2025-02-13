@@ -824,7 +824,7 @@ def load_video(
         def sample_indices_fn_func(metadata, **fn_kwargs):
             return default_sample_indices_fn(metadata, num_frames=num_frames, fps=fps, **fn_kwargs)
         sample_indices_fn = sample_indices_fn_func
-    
+
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")

@@ -44,7 +44,7 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
 
 class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
     pass
-    
+
 
 class SmolVLMVisionTransformer(Idefics3VisionTransformer):
     pass
@@ -61,7 +61,7 @@ class SmolVLMImageProcessor(Idefics3ImageProcessor):
 
 class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
     pass
-    
+
 
 
 
@@ -88,7 +88,7 @@ class SmolVLMModel(Idefics3Model):
 
         B, T, D_text = inputs_embeds.shape
         N, S, D_img = image_hidden_states.shape
-        
+
         image_offset = 0
         merged_outputs: List[torch.Tensor] = []
 
@@ -97,7 +97,7 @@ class SmolVLMModel(Idefics3Model):
             # Find positions of <image> tokens in the text
             image_positions = (cur_ids == self.image_token_id).nonzero(as_tuple=True)[0]
             num_image_tokens = len(image_positions)
-            
+
             # If no <image> => text-only
             if num_image_tokens == 0:
                 # NOTE: this is important for DeepSpeed.
@@ -105,7 +105,7 @@ class SmolVLMModel(Idefics3Model):
                 merged_text_only = torch.cat([cur_embeds, empty_slice], dim=0)
                 merged_outputs.append(merged_text_only)
                 continue
-                
+
             # Typically, if each image is S embeddings, we expect the total # of <image> tokens
             # in this sample to be multiple of S => each group of S tokens = 1 image
             if num_image_tokens % S != 0:
@@ -113,10 +113,10 @@ class SmolVLMModel(Idefics3Model):
                     f"Sample {b_idx} has {num_image_tokens} <image> tokens, not a multiple of S={S}. "
                     "Cannot map them to blocks of shape (S, D)."
                 )
-                
+
             positions_list = image_positions.tolist()
             chunks = [positions_list[i : i + S] for i in range(0, num_image_tokens, S)]
-            
+
             segments = []
             text_start = 0
 
@@ -124,7 +124,7 @@ class SmolVLMModel(Idefics3Model):
             for chunk in chunks:
                 cur_block = image_hidden_states[image_offset]
                 image_offset += 1
-                
+
                 # We'll iterate over the S positions in ascending order
                 for i_s, pos in enumerate(chunk):
                     if pos > text_start:
