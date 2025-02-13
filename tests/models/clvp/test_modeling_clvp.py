@@ -281,7 +281,6 @@ class ClvpDecoderTester:
 @require_torch
 class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (ClvpForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClvpModelForConditionalGeneration} if is_torch_available() else {}
 
     test_pruning = False

@@ -1470,7 +1470,6 @@ class GenerationMixin:
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
-            and input_ids_length != 0
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
@@ -3190,6 +3189,7 @@ class GenerationMixin:
         model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), Cache):
             is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
+            is_compileable = is_compileable and not self.generation_config.disable_compile
             if is_compileable and (
                 self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
             ):

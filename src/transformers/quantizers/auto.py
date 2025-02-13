@@ -31,6 +31,7 @@ from ..utils.quantization_config import (
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
+    SpQRConfig,
     TorchAoConfig,
     VptqConfig,
 )
@@ -47,6 +48,7 @@ from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
+from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
 
@@ -66,6 +68,7 @@ AUTO_QUANTIZER_MAPPING = {
     "torchao": TorchAoHfQuantizer,
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
+    "spqr": SpQRHfQuantizer,
     "fp8": FineGrainedFP8HfQuantizer,
 }
 
@@ -84,6 +87,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "torchao": TorchAoConfig,
     "bitnet": BitNetConfig,
     "vptq": VptqConfig,
+    "spqr": SpQRConfig,
     "fp8": FineGrainedFP8Config,
 }
 
