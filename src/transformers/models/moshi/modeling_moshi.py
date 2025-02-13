@@ -2098,7 +2098,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             depth_hidden_states=None if decoder_outputs is None else decoder_outputs.hidden_states,
             depth_attentions=None if decoder_outputs is None else decoder_outputs.attentions,
         )
-    
+
     def _prepare_attention_mask_for_generation(
         self,
         input_ids: torch.LongTensor,
@@ -2111,9 +2111,11 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         default_attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=input_ids.device)
         if pad_token_id is None:
             return default_attention_mask
-        
+
         is_pad_token_in_inputs = (pad_token_id is not None) and torch.isin(input_ids, pad_token_id).any()
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~torch.isin(eos_token_id, pad_token_id).any()
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or ~torch.isin(
+            eos_token_id, pad_token_id
+        ).any()
         can_infer_attention_mask = is_pad_token_in_inputs * is_pad_token_not_equal_to_eos_token_id
         attention_mask_from_padding = input_ids.ne(pad_token_id).long()
 
