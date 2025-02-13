@@ -198,6 +198,12 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
                 f"Expected tokenizer type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
             )
 
+            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+            )
+
 
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):
