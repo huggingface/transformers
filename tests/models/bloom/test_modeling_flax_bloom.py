@@ -171,7 +171,6 @@ class FlaxBloomModelTester:
 @require_flax
 class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     all_model_classes = (FlaxBloomModel, FlaxBloomForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = () if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxBloomModelTester(self)
@@ -199,7 +198,6 @@ class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
 @require_flax
 class FlaxBloomGenerationTest(unittest.TestCase):
     all_model_classes = (FlaxBloomForCausalLM,) if is_flax_available() else ()
-    all_generative_model_classes = () if is_flax_available() else ()
 
     def setUp(self):
         self.model_id = "bigscience/bloom-560m"
