@@ -31,20 +31,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-def get_num_sms_from_device(device):
-    target_device_cc = torch.cuda.get_device_capability(device=device)
-    if target_device_cc == (8, 6):
-        return 84
-    elif target_device_cc == (8, 0):
-        return 108
-    elif target_device_cc == (8, 9):
-        return 128
-    else:
-        raise NotImplementedError(
-            f"Device capability {target_device_cc} not supported for FLUTE (yet?) to verify your device capability check out https://developer.nvidia.com/cuda-gpus"
-        )
-
-
 class HiggsHfQuantizer(HfQuantizer):
     """
     Quantizer of the HIGGS method. Enables the loading of prequantized models and in-flight quantization of full-precision models.
@@ -178,13 +164,12 @@ class HiggsHfQuantizer(HfQuantizer):
         higgs_names = {name for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
 
         def should_update(key: str) -> bool:
-            if key.endswith('.weight') or key.endswith('.bias'):
+            if key.endswith(".weight") or key.endswith(".bias"):
                 return False
             full_key = f"{prefix}.{key}"
             return any(name in key or name in full_key for name in higgs_names)
 
         return [key for key in missing_keys if not should_update(key)]
-
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):
