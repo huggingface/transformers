@@ -1,3 +1,18 @@
+# coding=utf-8
+# Copyright 2024 Google AI and The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 import warnings
 from dataclasses import dataclass
@@ -25,90 +40,52 @@ from ...utils import (
     torch_int,
 )
 
-from .configuration_janus import JanusVisionEncoderConfig
+from .configuration_janus import JanusVisionConfig,JanusConfig,JanusTextConfig
 from ..vit.modeling_vit import ViTPatchEmbeddings
 from ..dinov2_with_registers.modeling_dinov2_with_registers  import Dinov2WithRegistersLayerScale, Dinov2WithRegistersDropPath
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionTransformer, SiglipVisionModel, SiglipMultiheadAttentionPoolingHead
+from ..llama.modeling_llama import LlamaForCausalLM
 
-class PatchDropout(nn.Module):
-    """
-    https://arxiv.org/abs/2212.00794 and https://arxiv.org/pdf/2208.07220
-    """
-    return_indices: torch.jit.Final[bool]
+if is_flash_attn_2_available():
+    from ...modeling_flash_attention_utils import _flash_attention_forward
 
-    def __init__(
-            self,
-            prob: float = 0.5,
-            num_prefix_tokens: int = 1,
-            ordered: bool = False,
-            return_indices: bool = False,
-    ):
-        super().__init__()
-        assert 0 <= prob < 1.
-        self.prob = prob
-        self.num_prefix_tokens = num_prefix_tokens  # exclude CLS token (or other prefix tokens)
-        self.ordered = ordered
-        self.return_indices = return_indices
 
-    def forward(self, x) -> Union[torch.Tensor, Tuple[torch.Tensor, Optional[torch.Tensor]]]:
-        if not self.training or self.prob == 0.:
-            if self.return_indices:
-                return x, None
-            return x
+logger = logging.get_logger(__name__)
 
-        if self.num_prefix_tokens:
-            prefix_tokens, x = x[:, :self.num_prefix_tokens], x[:, self.num_prefix_tokens:]
-        else:
-            prefix_tokens = None
+# General docstring
+_CONFIG_FOR_DOC = "JanusConfig"
+_CHECKPOINT_FOR_DOC = ""
 
-        B = x.shape[0]
-        L = x.shape[1]
-        num_keep = max(1, int(L * (1. - self.prob)))
-        keep_indices = torch.argsort(torch.randn(B, L, device=x.device), dim=-1)[:, :num_keep]
-        if self.ordered:
-            # NOTE does not need to maintain patch order in typical transformer use,
-            # but possibly useful for debug / visualization
-            keep_indices = keep_indices.sort(dim=-1)[0]
-        x = x.gather(1, keep_indices.unsqueeze(-1).expand((-1, -1) + x.shape[2:]))
 
-        if prefix_tokens is not None:
-            x = torch.cat((prefix_tokens, x), dim=1)
-
-        if self.return_indices:
-            return x, keep_indices
-        return x
-
-class JanusVisionEncoderPatchEmbeddings(ViTPatchEmbeddings):
+class JanusVisionPatchEmbeddings(ViTPatchEmbeddings):
     pass
 
+# ToDO: Is interpolate pos embeddings required for this model?
 
-class JanusVisionEncoderEmbeddings(nn.Module):
-    def __init__(self, config:JanusVisionEncoderConfig, use_special_tokens: bool,):
+class JanusVisionEmbeddings(nn.Module):
+    def __init__(self, config:JanusVisionConfig):
         super().__init__()
 
-        self.use_special_tokens = use_special_tokens
-        if use_special_tokens:
+        self.use_special_tokens = config.use_special_tokens
+        if self.use_special_tokens:
             self.cls_token = nn.Parameter(torch.rand(1,1,config.hidden_size))
             self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
 
         # Currently using hidden_drop_rate instead of positional_dropout_rate, is it necessary?
         self.dropout = nn.Dropout(config.hidden_dropout_rate)
-        self.patch_embeddings = JanusVisionEncoderPatchEmbeddings(config)
+        self.patch_embeddings = JanusVisionPatchEmbeddings(config)
         self.num_patches = self.patch_embeddings.num_patches
 
         num_prefix_tokens = config.num_register_tokens + 1
-        pos_embed_len = self.num_patches + num_prefix_tokens if use_special_tokens else self.num_patches
+        pos_embed_len = self.num_patches + num_prefix_tokens if self.use_special_tokens else self.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, pos_embed_len, config.hidden_size) * 0.02)
-
-        # Used to reduce computationality.
-        self.patch_dropout = PatchDropout(config.drop_path_rate, num_prefix_tokens) if config.drop_path_rate else nn.Identity()
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        # Add CLS and Register token embeddings.
+        # Add CLS and Register token embeddings if .
         special_token_embeddings = []
         if self.use_special_tokens:
             cls_token_embeddings = self.cls_token.expand((batch_size, -1,-1))
@@ -126,16 +103,12 @@ class JanusVisionEncoderEmbeddings(nn.Module):
             embeddings = embeddings + self.position_embeddings
 
         embeddings = self.dropout(embeddings)
-
-
-        # Perform Patch dropout
-        embeddings = self.patch_dropout(embeddings)
         return embeddings
 
 # Todo: introduce compatiability for cache
-class JanusVisionEncoderAttention(nn.Module):
+class JanusVisionAttention(nn.Module):
     """Attention Class for Janus Vision Encoder """
-    def __init__(self, config: JanusVisionEncoderConfig):
+    def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -162,29 +135,24 @@ class JanusVisionEncoderAttention(nn.Module):
     def forward(self,hidden_states:torch.Tensor,attention_mask: Optional[torch.Tensor] = None, output_attentions: Optional[torch.Tensor] = None):
         batch_size , seq_len, _ = hidden_states.size()
 
-        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim).permute(2, 0, 3, 1, 4)
-        query_states, key_states, value_states = qkv.unbind(0)
+        # Batched computation of query, key, value states.
+        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
 
+        #  Permute the dims of qkv vector and unravel it into query, key, value states.
+        query_states, key_states, value_states = qkv.permute(2, 0, 3, 1, 4).unbind(0)
         query_states = self.query_norm(query_states)
         key_states = self.key_norm(key_states)
 
         # Is it a bug or deliberate change?
         query_states = query_states * self.scale
-
-        # batch, num head,seqlen,seqlen
+        # b,numhead,seqlen,hed dim -> b, num head, head dim, seq len
         attn_weights = torch.matmul(query_states, key_states.transpose(2,3))
 
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        # Only apply attention dropout during training.
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (batch_size, self.num_heads, seq_len, self.head_dim):
+        print(attn_weights.shape)
+        if attn_weights.size() != (batch_size, self.num_heads, seq_len, seq_len):
             raise ValueError(
                 f"`attn_output` should be of size {(batch_size, self.num_heads, seq_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
+                f" {attn_weights.size()}"
             )
         if attention_mask is not None:
             if attention_mask.size() != (batch_size,1, seq_len, self.head_dim):
@@ -193,8 +161,18 @@ class JanusVisionEncoderAttention(nn.Module):
                 )
             attn_weights = attn_weights + attention_mask
 
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1 ,dtype=torch.float32).to(query_states.dtype)
+        # Only apply attention dropout during training.
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        if attn_output.size() != (batch_size, self.num_heads, seq_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(batch_size, self.num_heads, seq_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
         attn_output = attn_output.transpose(1,2).contiguous()
-        attn_output = attn_output.reshape( batch_size, seq_len, self.embed_dim )
+        attn_output = attn_output.reshape( batch_size, seq_len, self.embed_dim)
 
         output = self.projection_layer(attn_output)
         output = self.projection_dropout(output)
@@ -202,13 +180,166 @@ class JanusVisionEncoderAttention(nn.Module):
         outputs = (output, attn_weights) if output_attentions else (output, None)
         return outputs
 
-class JanusVisionEncoderLayerScale(Dinov2WithRegistersLayerScale):
+class JanusVisionFlashAttention2(JanusVisionAttention):
+    """
+    JanusVision flash attention module. This module inherits from `JanusVisionAttention` as the weights of the module stays
+    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
+    flash attention and deal with padding tokens in case the input contains any of them.
+    """
+
+    is_causal = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
+        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
+        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+
+    # Adapted from transformers.models.llama.modeling_llama.LlamaFlashAttention2.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        output_attentions = False
+
+        batch_size , seq_len, _ = hidden_states.size()
+
+        # Batched computation of query, key, value states.
+        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dim x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states, key_states, value_states = qkv.permute.unbind(2)
+        query_states = self.query_norm(query_states)
+        key_states = self.key_norm(key_states)
+
+        dropout_rate = self.attention_dropout if self.training else 0.0
+
+        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+        # therefore the input hidden states gets silently casted in float32. Hence, we need
+        # cast them back in the correct dtype just to be sure everything works as expected.
+        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+        # in fp32. (Idefics2VisionRMSNorm handles it correctly)
+
+        input_dtype = query_states.dtype
+        if input_dtype == torch.float32:
+            if torch.is_autocast_enabled():
+                target_dtype = torch.get_autocast_gpu_dtype()
+            # Handle the case where the model is quantized
+            elif hasattr(self.config, "_pre_quantization_dtype"):
+                target_dtype = self.config._pre_quantization_dtype
+            else:
+                target_dtype = self.q_proj.weight.dtype
+
+            logger.warning_once(
+                f"The input hidden states seems to be silently casted in float32, this might be related to"
+                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
+                f" {target_dtype}."
+            )
+
+            query_states = query_states.to(target_dtype)
+            key_states = key_states.to(target_dtype)
+            value_states = value_states.to(target_dtype)
+
+        attn_output = _flash_attention_forward(
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            seq_len,
+            dropout=dropout_rate,
+            is_causal=self.is_causal,
+            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim).contiguous()
+        output = self.projection_layer(attn_output)
+        output = self.projection_dropout(output)
+
+        # In `Flash Attenition` we don't return Attention weights, hence return None.
+        return output, None
+
+class JanusVisionSdpaAttention(JanusVisionAttention):
+    """
+    Janusvision attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
+    `JanusVisionAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
+    SDPA API.
+    """
+
+    is_causal = False
+
+    # Adapted from transformers.models.llama.modeling_llama.LlamaSdpaAttention.forward
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        if output_attentions:
+            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "SiglipModel is using SiglipSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
+                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
+        
+        batch_size , seq_len, _ = hidden_states.size()
+
+        qkv = self.qkv(hidden_states).reshape(batch_size, seq_len, 3, self.num_heads, self.head_dim)
+
+        query_states, key_states, value_states = qkv.permute(2, 0, 3, 1, 4).unbind(0)
+        query_states = self.query_norm(query_states)
+        key_states = self.key_norm(key_states)
+
+        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
+        # Reference: https://github.com/pytorch/pytorch/issues/112577.
+        if query_states.device.type == "cuda" and attention_mask is not None:
+            query_states = query_states.contiguous()
+            key_states = key_states.contiguous()
+            value_states = value_states.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        is_causal = True if self.is_causal and seq_len > 1 else False
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.view(batch_size, seq_len, self.embed_dim)
+
+        output = self.projection_layer(attn_output)
+        output = self.projection_dropout(output)
+        return output, None
+    
+JANUS_VISION_ATTENTION_CLASSES = {
+    "eager": JanusVisionAttention,
+    "sdpa": JanusVisionSdpaAttention,
+    "flash_attention_2": JanusVisionFlashAttention2,
+}
+
+
+class JanusVisionLayerScale(Dinov2WithRegistersLayerScale):
     pass
-class JanusVisionEncoderDropPath(Dinov2WithRegistersDropPath):
+class JanusVisionDropPath(Dinov2WithRegistersDropPath):
     pass
 
-class JanusVisionEncoderMLP(nn.Module):
-    def __init__(self, config:JanusVisionEncoderConfig):
+class JanusVisionMLP(nn.Module):
+    def __init__(self, config:JanusVisionConfig):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act] # Gelu act
@@ -226,25 +357,24 @@ class JanusVisionEncoderMLP(nn.Module):
         return hidden_states
 
 class JanusVisionEncoderLayer(nn.Module):
-    def __init__(self,config: JanusVisionEncoderConfig):
+    def __init__(self,config: JanusVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.self_attn = JanusVisionEncoderAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=1e-6)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=1e-6)
+        self.self_attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-        self.layer_scale1 = JanusVisionEncoderLayerScale(config) if config.layerscale_value else nn.Identity()
-        self.layer_scale2 = JanusVisionEncoderLayerScale(config) if config.layerscale_value else nn.Identity()
+        self.layer_scale1 = JanusVisionLayerScale(config) if config.layerscale_value else nn.Identity()
+        self.layer_scale2 = JanusVisionLayerScale(config) if config.layerscale_value else nn.Identity()
         self.drop_path1 = (
-            JanusVisionEncoderDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+            JanusVisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         )
         self.drop_path2 = (
-            JanusVisionEncoderDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+            JanusVisionDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         )
-        self.mlp = JanusVisionEncoderMLP(config)
+        self.mlp = JanusVisionMLP(config)
 
-    # Ignore copy
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -281,14 +411,8 @@ class JanusVisionEncoderLayer(nn.Module):
 
         return (hidden_states, attn_weights if output_attentions else None)
 
-# copied from SiglipMultiheadAttentionPoolingHead
-# class JanusAttentionPoolLatent(SiglipMultiheadAttentionPoolingHead):
-#     pass
-
-class JanusAttentionPoolLatent(nn.Module):
-    """ Hugging Face-compatible Attention Pooling with Manual QKV """
-
-    def __init__(self, config: JanusVisionEncoderConfig):
+class JanusVisionAttentionPoolLatent(nn.Module):
+    def __init__(self, config: JanusVisionConfig):
         super().__init__()
 
         self.latent_len = getattr(config, "latent_len", 1)
@@ -296,7 +420,7 @@ class JanusAttentionPoolLatent(nn.Module):
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
         self.mlp_ratio = getattr(config, "mlp_ratio", 4.0)
-        self.scale = self.head_dim ** -0.5  # Scaling factor for attention
+        self.scale = self.head_dim ** -0.5
 
         # Learnable latent query (probe)
         self.latent = nn.Parameter(torch.zeros(1, self.latent_len, self.hidden_size))
@@ -308,51 +432,60 @@ class JanusAttentionPoolLatent(nn.Module):
 
         # Normalization & MLP
         self.norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = JanusVisionEncoderMLP(config)
+        self.mlp = JanusVisionMLP(config)
 
         self.proj_drop = nn.Dropout(getattr(config, "dropout", 0.0))
 
-    def forward(self, hidden_state):
-        batch_size, seq_len, _ = hidden_state.shape
+    def forward(self, hidden_states: torch.Tensor):
+        batch_size, seq_len, _ = hidden_states.shape
 
         # Expand learnable latent tokens for batch
         q_latent = self.latent.expand(batch_size, -1, -1)  # (B, latent_len, hidden_size)
 
         # Compute Q projection from latent tokens
-        q = self.q_proj(q_latent)  # (B, latent_len, hidden_size)
+        query_states = self.q_proj(q_latent)  # (B, latent_len, hidden_size)
 
         # Compute combined KV projection
-        kv = self.kv_proj(hidden_state)  # (B, seq_len, 2 * hidden_size)
-        k, v = kv.view(batch_size, seq_len, 2, self.num_heads, self.head_dim).unbind(2)
-        # Batch_sisxe, num_heads, seq_len, head_dim
-        k = k.transpose(1,2)
-        v = v.transpose(1,2)
+        kv = self.kv_proj(hidden_states)
+        key_states, value_states = kv.view(batch_size, seq_len, 2, self.num_heads, self.head_dim).unbind(2)
 
-        # Reshape Q for multi-head attention (B, N, H) → (B, num_heads, N, head_dim)
-        q = q.view(batch_size, self.latent_len, self.num_heads, self.head_dim).transpose(1, 2)  # (B, num_heads, latent_len, head_dim)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+        query_states = query_states.view(batch_size, self.latent_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # Scaled dot-product attention (without `torch.nn.MultiheadAttention`)
-        attn_weights = (q @ k.transpose(2,3)) * self.scale  # (B, num_heads, latent_len, seq_len)
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+        attn_weights = attn_weights * self.scale
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-        x = attn_weights @ v  # (B, num_heads, latent_len, head_dim)
+        attn_output = torch.matmul(attn_weights, value_states)  # (B, num_heads, latent_len, head_dim)
 
-        x = x.transpose(1, 2).reshape(batch_size, self.latent_len, self.hidden_size)
+        # Validate shape
+        if attn_output.size() != (batch_size, self.num_heads, self.latent_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(batch_size, self.num_heads, self.latent_len, self.head_dim)},"
+                f" but is {attn_output.size()}"
+            )
 
-        x = self.proj(x)
-        x = self.proj_drop(x)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, self.latent_len, self.hidden_size)
 
-        # Residual connection + MLP
-        residual = x
-        x = self.norm(x)
-        x = residual + self.mlp(x)
+        output = self.proj(attn_output)
+        output = self.proj_drop(output)
 
-        return x[:, 0]
+        output = output + self.mlp(self.norm(output))
+
+        return output[:, 0]
 
 
-# Copied from siglip encoder
+# class JanusVisionEncoder(SiglipEncoder):
+#     def __init__(self,config:JanusVisionConfig):
+#         nn.Module.__init__(config)
+#         self.config = config
+#         self.layers = nn.ModuleList([JanusVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+#         self.gradient_checkpointing = False
+
+
 class JanusVisionEncoder(nn.Module):
-
-    def __init__(self,config:JanusVisionEncoderConfig):
+    def __init__(self,config:JanusVisionConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([JanusVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -436,16 +569,28 @@ class JanusPreTrainedModel():
      pass
 
 # Copied from siglip vision transformer
-class JanusVisionEncoderTransformer(nn.Module):
-    def __init__(self, config: JanusVisionEncoderConfig):
+# class JanusVisionTransformer(SiglipVisionTransformer,nn.Module):
+#     def __init__(self, config: JanusVisionConfig):
+#         nn.Module.__init__(config)
+#         self.config = config
+#         self.post_layenorm = nn.LayerNorm(config.hidden_size)
+#         self.embeddings = JanusVisionEmbeddings(config,use_special_tokens=False)
+#         self.encoder = JanusVisionEncoder(config)
+#         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+#         if self.use_head:
+#             self.head = JanusVisionAttentionPoolLatent(config)
+
+
+class JanusVisionTransformer(nn.Module):
+    def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.config = config
-        self.embeddings = JanusVisionEncoderEmbeddings(config,use_special_tokens=False)
+        self.embeddings = JanusVisionEmbeddings(config)
         self.encoder = JanusVisionEncoder(config)
-        self.layenorm = nn.LayerNorm(config.hidden_size)
+        self.layernorm = nn.LayerNorm(config.hidden_size)
         self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
         if self.use_head:
-            self.head = JanusAttentionPoolLatent(config)
+            self.head = JanusVisionAttentionPoolLatent(config)
             # Won't be using as a standalone classifier head hence no num classes
 
     def forward(
@@ -472,7 +617,7 @@ class JanusVisionEncoderTransformer(nn.Module):
         )
 
         last_hidden_state = encoder_outputs[0]
-        last_hidden_state = self.layenorm(last_hidden_state)
+        last_hidden_state = self.layernorm(last_hidden_state)
         pooler_output = self.head(hidden_states)
 
 
@@ -485,3 +630,47 @@ class JanusVisionEncoderTransformer(nn.Module):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+class JanusVisionAlignerMLP(nn.Module):
+    def __init__(self, config:JanusVisionConfig):
+        super().__init__()
+
+        self.fc1 = nn.Linear(config.hidden_size, config.aligner_projection_size)
+        self.hidden_layers = nn.ModuleList([
+            nn.Linear(config.aligner_projection_size, config.aligner_projection_size) for _ in range(1, config.num_aligner_hidden_states)
+        ])
+        self.activation_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        for layer in self.hidden_layers:
+            hidden_states = self.activation_fn(hidden_states)
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+class JanusTextForCausalLM(LlamaForCausalLM):
+    pass
+
+# class JanusVLM(nn.Module):
+#     def __init__(self,config:JanusConfig):
+#         super().__init__()
+
+#         self.vision_model = JanusVisionTransformer(config.vision_config)
+#         self.aligner = JanusVisionAlignerMLP(config.vision_config)
+#         self.language_model = JanusTextForCausalLM(config.text_config)
+
+#     def forward(self,
+#         input_ids: torch.LongTensor,
+#         pixel_values: torch.FloatTensor,
+#         images_seq_mask: torch.LongTensor,
+#         **kwargs,
+#     ):
+#         image_embeds = self.vision_model(pixel_values)
+#         image_embeds = self.aligner(image_embeds.last_hidden_state)
+
+#         text_embeds = self.language_model.get_input_embeddings()(input_ids)
+#         text_embeds[images_seq_mask] = image_embeds
+
+#         return text_embeds
+
+
