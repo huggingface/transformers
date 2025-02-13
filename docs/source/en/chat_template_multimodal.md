@@ -167,7 +167,7 @@ print(processed_chat.keys())
 ```
 
 
-## Custom Frame Sampling with a Function  
+### Custom Frame Sampling with a Function  
 
 Not all models sample frames **uniformly** — some require more complex logic to determine which frames to use. If your model follows a different sampling strategy, you can **customize** frame selection by providing a function:  
 
@@ -185,7 +185,7 @@ Here’s an example of how to implement it:
 
 ```python
 
-def sample_indices_fn(num_frames, fps, metadata, **kwargs):
+def sample_indices_fn(metadata, **kwargs):
     # samples only the first and the second frame
     return [0, 1]
 
@@ -202,6 +202,39 @@ print(processed_chat.keys())
 
 By using `sample_indices_fn`, you gain **full control** over frame selection, making your model **more adaptable** to different video scenarios. 🚀  
 
+
+### Using a List of Image Frames as a Video
+
+Sometimes, instead of having a full video file, you might only have a set of sampled frames stored as images. No worries—we've got you covered!
+
+You can pass a list of image file paths, and the processor will automatically concatenate them into a video. Just make sure that all images have the same size, as they are assumed to be from the same video.
+
+
+```python
+
+frames_paths = ["/path/to/frame0.png", "/path/to/frame5.png", "/path/to/frame10.png"]
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+      "role": "user",
+      "content": [
+            {"type": "video", "path": frames_paths},
+            {"type": "text", "text": "What do you see in this video?"},
+        ],
+    },
+]
+
+processed_chat = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+)
+print(processed_chat.keys())
+```
 
 
 
