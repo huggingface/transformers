@@ -60,8 +60,8 @@ class Qwen2VLProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer", "video_processor"]
     valid_kwargs = ["chat_template"]
-    image_processor_class = "Qwen2VLImageProcessor"
-    video_processor_class = "Qwen2VLVideoProcessor"
+    image_processor_class = "AutoImageProcessor"
+    video_processor_class = "AutoVideoProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):

@@ -44,6 +44,13 @@ class DeiTImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
+class DepthProImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
 class DetrImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
