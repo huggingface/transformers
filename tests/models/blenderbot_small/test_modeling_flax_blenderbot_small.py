@@ -318,7 +318,6 @@ class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, Flax
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxBlenderbotSmallForConditionalGeneration,) if is_flax_available() else ()
 
     def is_pipeline_test_to_skip(
         self,

@@ -124,7 +124,6 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     """
 
     all_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
-    all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -264,7 +263,6 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     """
 
     all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
