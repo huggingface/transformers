@@ -1104,7 +1104,7 @@ class ProcessorMixin(PushToHubMixin):
                 mapping = getattr(transformers_module.models.auto.image_processing_auto, "IMAGE_PROCESSOR_MAPPING")
             else:
                 raise ValueError(
-                    f"Could not figure out reference for {attribute_name} {class_name}! "
+                    f"Could not figure out the relevant autoclass for {attribute_name} {class_name}! "
                     "This is probably an internal Transformers bug, so unless you're doing "
                     "something really weird, please open an issue at "
                     "https://github.com/huggingface/transformers/"
