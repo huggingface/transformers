@@ -126,6 +126,13 @@ class AnnotionFormat(ExplicitEnum):
     COCO_PANOPTIC = AnnotationFormat.COCO_PANOPTIC.value
 
 
+@dataclass
+class VideoMetadata:
+    total_num_frames: int
+    fps: float
+    duration: float
+    video_backend: str
+
 AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
@@ -541,7 +548,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
-def default_sample_indices_fn(metadata, num_frames=None, fps=None, **kwargs):
+def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None, **kwargs):
     """
     A default sampling function that replicates the logic used in get_uniform_frame_indices,
     while optionally handling `fps` if `num_frames` is not provided.
@@ -601,13 +608,12 @@ def read_video_opencv(
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = video.get(cv2.CAP_PROP_FPS)
     duration = total_num_frames / video_fps if video_fps else 0
-    metadata = {
-        "total_num_frames": int(total_num_frames),
-        "fps": float(video_fps),
-        "duration": float(duration),
-        "video_backend": "pyav",
-    }
-
+    metadata = VideoMetadata(
+        total_num_frames=int(total_num_frames),
+        fps=float(video_fps),
+        duration=float(duration),
+        video_backend="opencv"
+    )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
     index = 0
@@ -658,12 +664,12 @@ def read_video_decord(
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
     duration = total_num_frames / video_fps if video_fps else 0
-    metadata = {
-        "total_num_frames": int(total_num_frames),
-        "fps": float(video_fps),
-        "duration": float(duration),
-        "video_backend": "pyav",
-    }
+    metadata = VideoMetadata(
+        total_num_frames=int(total_num_frames),
+        fps=float(video_fps),
+        duration=float(duration),
+        video_backend="decord"
+    )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
@@ -700,12 +706,12 @@ def read_video_pyav(
     total_num_frames = container.streams.video[0].frames
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
     duration = total_num_frames / video_fps if video_fps else 0
-    metadata = {
-        "total_num_frames": int(total_num_frames),
-        "fps": float(video_fps),
-        "duration": float(duration),
-        "video_backend": "pyav",
-    }
+    metadata = VideoMetadata(
+        total_num_frames=int(total_num_frames),
+        fps=float(video_fps),
+        duration=float(duration),
+        video_backend="pyav"
+    )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
     frames = []
@@ -756,12 +762,12 @@ def read_video_torchvision(
     video_fps = info["video_fps"]
     total_num_frames = video.size(0)
     duration = total_num_frames / video_fps if video_fps else 0
-    metadata = {
-        "total_num_frames": int(total_num_frames),
-        "fps": float(video_fps),
-        "duration": float(duration),
-        "video_backend": "pyav",
-    }
+    metadata = VideoMetadata(
+        total_num_frames=int(total_num_frames),
+        fps=float(video_fps),
+        duration=float(duration),
+        video_backend="torchvision"
+    )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
