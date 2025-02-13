@@ -225,16 +225,14 @@ class TokenizerVersioningTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-            isFast = isinstance(tokenizer, LlamaTokenizerFast)
-            self.assertTrue(isFast, f"Expected tokenizer(use_fast=True) type: LlamaTokenizerFast, , actual={type(tokenizer)}")
+            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast), f"Expected tokenizer(use_fast=True) type: LlamaTokenizerFast, , actual={type(tokenizer)}")
 
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-            isFast = isinstance(tokenizer, LlamaTokenizerFast)
-            self.assertTrue(isFast, f"Expected tokenizer type(use_fast=False): LlamaTokenizerFast, , actual={type(tokenizer)}")
+            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast), f"Expected tokenizer type(use_fast=False): LlamaTokenizerFast, , actual={type(tokenizer)}")
 
             tokenizer.save_pretrained(temp_dir)
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
-            self.assertTrue(isFast, f"Expected tokenizer type: LlamaTokenizerFast, , actual={type(tokenizer)}")
+            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast), f"Expected tokenizer type: LlamaTokenizerFast, , actual={type(tokenizer)}")
 
 
 @require_tokenizers
