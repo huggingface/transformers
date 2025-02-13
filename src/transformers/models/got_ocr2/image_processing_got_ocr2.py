@@ -18,7 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"""Image processor class for Got-OCR-2."""
 
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
@@ -27,11 +27,9 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    _rescale_for_pil_conversion,
     convert_to_rgb,
     resize,
     to_channel_dimension_format,
-    to_pil_image,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -172,6 +170,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
+        crop_to_patches: bool = False,
+        min_patches: int = 1,
+        max_patches: int = 12,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -187,6 +188,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
+        self.crop_to_patches = crop_to_patches
+        self.min_patches = min_patches
+        self.max_patches = max_patches
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
@@ -249,6 +253,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         images: ImageInput,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
+        crop_to_patches: Optional[bool] = None,
+        min_patches: Optional[int] = None,
+        max_patches: Optional[int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -308,6 +315,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
+        crop_to_patches = crop_to_patches if crop_to_patches is not None else self.crop_to_patches
+        min_patches = min_patches if min_patches is not None else self.min_patches
+        max_patches = max_patches if max_patches is not None else self.max_patches
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
@@ -353,6 +363,22 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
+        if crop_to_patches and max_patches > 1:
+            images = [
+                self.crop_image_to_patches(
+                    image,
+                    min_patches=min_patches,
+                    max_patches=max_patches,
+                    patch_size=size,
+                    data_format=input_data_format,
+                )
+                for image in images
+            ]
+            num_patches = np.array([len(image) for image in images])
+            images = [image for images_list in images for image in images_list]
+        else:
+            num_patches = np.array([1] * len(images))
+
         if do_resize:
             images = [
                 self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
@@ -375,18 +401,19 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
         ]
 
-        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        encoded_outputs = BatchFeature(
+            data={"pixel_values": images, "num_patches": num_patches}, tensor_type=return_tensors
+        )
 
         return encoded_outputs
 
     def crop_image_to_patches(
         self,
-        image: ImageInput,
+        image: np.ndarray,
         min_patches: int,
         max_patches: int,
         use_thumbnail: bool = True,
         patch_size: Union[Tuple, int, dict] = None,
-        return_numpy: bool = False,
         data_format: ChannelDimension = None,
     ):
         """
@@ -396,8 +423,8 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
 
         Args:
-            image (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`):
-                The image to be cropped. The image can be a PIL image, NumPy array or PyTorch tensor.
+            image (`np.ndarray`):
+                The image to be cropped.
             min_patches (`int`):
                 The minimum number of patches to be extracted from the image.
             max_patches (`int`):
@@ -406,24 +433,17 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 Whether to add a thumbnail image to the list of cropped patches.
             patch_size (`int`, `Tuple[int, int]`, `dict`, *optional*):
                 The size of the output patches.
-            return_numpy (`bool`, *optional*, defaults to `False`):
-                Whether to return the cropped images as NumPy arrays.
             data_format (`ChannelDimension`, *optional*):
                 The format of the image data. If `None`, the format is inferred from the input image.
 
         Returns:
             List[`PIL.Image.Image`] or List[np.ndarray]: The list of cropped images.
         """
-        patch_size = patch_size if patch_size is not None else self.size
-        patch_size = get_size_dict(patch_size, default_to_square=True)
-        original_size = get_size_dict(image.size, height_width_order=False)
-        do_rescale = False
-        if not isinstance(image, PIL.Image.Image):
-            do_rescale = _rescale_for_pil_conversion(image)
-            image = to_pil_image(image, do_rescale=do_rescale)
-
+        if data_format is None:
+            data_format = infer_channel_dimension_format(image)
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST, data_format)
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
-        original_height, original_width = original_size["height"], original_size["width"]
+        original_height, original_width = image.shape[-2:]
         # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
             (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
@@ -435,8 +455,12 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         num_blocks = num_columns * num_rows
 
         # resize the image so that each patch is of patch_size
-        resized_image = image.resize((target_width, target_height))
-
+        resized_image = self.resize(
+            image,
+            {"height": target_height, "width": target_width},
+            data_format=ChannelDimension.FIRST,
+            input_data_format=ChannelDimension.FIRST,
+        )
         # split the image into patches
         processed_images = []
         for i in range(num_blocks):
@@ -449,32 +473,15 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 (row + 1) * patch_size_height,
             )
             # split the image
-            patch_image = resized_image.crop(box)
+            patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
+            patch_image = to_channel_dimension_format(patch_image, data_format, ChannelDimension.FIRST)
             processed_images.append(patch_image)
 
         if use_thumbnail and len(processed_images) != 1:
-            thumbnail_img = image.resize((patch_size_width, patch_size_height))
+            thumbnail_img = self.resize(
+                image, patch_size, data_format=data_format, input_data_format=ChannelDimension.FIRST
+            )
             processed_images.append(thumbnail_img)
-
-        if return_numpy:
-            processed_images_numpy = []
-            for processed_image in processed_images:
-                processed_image = np.array(processed_image)
-                # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
-                # so we need to add it back if necessary.
-                processed_image = (
-                    np.expand_dims(processed_image, axis=-1) if processed_image.ndim == 2 else processed_image
-                )
-                # The image is always in channels last format after converting from a PIL image
-                if data_format is not None:
-                    processed_image = to_channel_dimension_format(
-                        processed_image, data_format, input_channel_dim=ChannelDimension.LAST
-                    )
-                # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
-                # rescale it back to the original range.
-                processed_image = self.rescale(processed_image, 1 / 255) if do_rescale else processed_image
-                processed_images_numpy.append(processed_image)
-            processed_images = processed_images_numpy
 
         return processed_images
 
