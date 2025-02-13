@@ -851,7 +851,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
-        r"""
+        r"""REPLACES ORIGINAL DOCSRTING
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored

@@ -115,7 +115,7 @@ def guaranteed_no_diff(modular_file_path, dependencies, models_in_diff):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare modular_xxx.py files with modeling_xxx.py files.")
     parser.add_argument(
-        "--files", default=["all"], type=list, nargs="+", help="List of modular_xxx.py files to compare."
+        "--files", default=["all"], type=str, nargs="+", help="List of modular_xxx.py files to compare."
     )
     parser.add_argument(
         "--fix_and_overwrite", action="store_true", help="Overwrite the modeling_xxx.py file if differences are found."
