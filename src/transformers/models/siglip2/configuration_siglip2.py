@@ -105,7 +105,7 @@ class Siglip2VisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Siglip2VisionModel`]. It is used to instantiate a
     Siglip2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the Siglip2
-    [google/siglip2-base-patch16-224](https://huggingface.co/google/siglip2-base-patch16-224) architecture.
+    [google/siglip2-base-patch-16-naflex-224](https://huggingface.co/google/siglip2-base-patch-16-naflex-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -121,8 +121,11 @@ class Siglip2VisionConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_channels (`int`, *optional*, defaults to 3):
             Number of channels in the input images.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
+        num_patches (`int`, *optional*, defaults to 256):
+            The number of patches in the image with the size of (`patch_size`, `patch_size`).
+            The image is resized to fill maximum of this number of patches, and to preserve
+            the aspect ratio. In case the resulted number of patches is lower, the image is
+            padded in "patch" dimension.
         patch_size (`int`, *optional*, defaults to 16):
             The size (resolution) of each patch.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):

@@ -152,6 +152,11 @@ class Siglip2ImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch in the image.
+        max_num_patches (`int`, *optional*, defaults to 256):
+            The image will be resized to have at most this number of patches,
+            and then padded in "patch" dimension to match this number exactly.
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
