@@ -1869,8 +1869,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         self,
         input_ids,
         flattened_patches=None,
-        width=None,
-        height=None,
         image_embeds=None,
         image_embeds_position_mask=None,
         past_key_values=None,
@@ -1893,9 +1891,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             position_ids=position_ids,
             **model_kwargs,
         )
-
-        model_inputs["width"] = width
-        model_inputs["height"] = height
 
         if cache_position[0] == 0:
             # If we're in cached decoding stage, `flattened_patches` should be `None` because `input_ids` do not contain special image token anymore
