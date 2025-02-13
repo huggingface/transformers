@@ -943,7 +943,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             in a chat into a tokenizable string.
     """
 
-    image_processor_class = "Qwen2_5_VLImageProcessor"
+    image_processor_class = "AutoImageProcessor"
 
     def __call__(
         self,
@@ -1060,5 +1060,6 @@ __all__ = [
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
     "Qwen2_5_VLImageProcessor",
+    "Qwen2_5_VLImageProcessorFast",
     "Qwen2_5_VLProcessor",
 ]
