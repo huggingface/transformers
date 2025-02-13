@@ -13,14 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Tuple
 
 import numpy as np
-from PIL import Image
 
 # Make sure these are imported from your library
-from ...image_utils import load_video
-from ...utils import is_decord_available, logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

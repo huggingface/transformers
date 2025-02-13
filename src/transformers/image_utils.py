@@ -817,12 +817,16 @@ def load_video(
 
     # If `sample_indices_fn` is given, we can accept any args as those might be needed by custom `sample_indices_fn`
     if fps is not None and num_frames is not None and sample_indices_fn is None:
-        raise ValueError("`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!")
+        raise ValueError(
+            "`num_frames`, `fps`, and `sample_indices_fn` are mutually exclusive arguments, please use only one!"
+        )
 
     # If user didn't pass a sampling function, create one on the fly with default logic
     if sample_indices_fn is None:
+
         def sample_indices_fn_func(metadata, **fn_kwargs):
             return default_sample_indices_fn(metadata, num_frames=num_frames, fps=fps, **fn_kwargs)
+
         sample_indices_fn = sample_indices_fn_func
 
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):

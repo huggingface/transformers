@@ -63,9 +63,6 @@ class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
     pass
 
 
-
-
-
 class SmolVLMModel(Idefics3Model):
     """
     A subclass of Idefics3Model. We do *not* remove or block the call to inputs_merger
