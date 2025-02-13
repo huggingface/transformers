@@ -120,6 +120,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--fix_and_overwrite", action="store_true", help="Overwrite the modeling_xxx.py file if differences are found."
     )
+    parser.add_argument(
+        "--num_workers", default=1, type=int, help="The number of workers to run. No effect if `fix_and_overwrite` is specified."
+    )
     args = parser.parse_args()
     if args.files == ["all"]:
         args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
@@ -135,7 +138,7 @@ if __name__ == "__main__":
     skipped_models = set()
     non_matching_files = 0
     ordered_files, dependencies = find_priority_list(args.files)
-    if args.fix_and_overwrite:
+    if args.fix_and_overwrite or args.num_workers == 1:
         for modular_file_path in ordered_files:
             is_guaranteed_no_diff = guaranteed_no_diff(modular_file_path, dependencies, models_in_diff)
             if is_guaranteed_no_diff:
