@@ -324,7 +324,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
-        return F.resize(image, new_size, interpolation=interpolation)
+        return F.resize(image, new_size, interpolation=interpolation, **kwargs)
 
     def rescale(
         self,

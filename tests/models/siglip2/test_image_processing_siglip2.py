@@ -24,14 +24,15 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 
 if is_vision_available():
     from PIL import Image
+
     from transformers import Siglip2ImageProcessor
 
 
-# if is_torchvision_available():
-#     from transformers import Siglip2ImageProcessorFast
+if is_torchvision_available():
+    from transformers import Siglip2ImageProcessorFast
 
 
-class SiglipImageProcessingTester:
+class Siglip2ImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -101,13 +102,13 @@ class SiglipImageProcessingTester:
 @require_torch
 @require_vision
 # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest with CLIP->Siglip2
-class SiglipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Siglip2ImageProcessor if is_vision_available() else None
-    # fast_image_processing_class = Siglip2ImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = Siglip2ImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = SiglipImageProcessingTester(self)
+        self.image_processor_tester = Siglip2ImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):
