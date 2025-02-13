@@ -1385,10 +1385,6 @@ class GenerationMixin:
                 decoder_model_args = set(inspect.signature(decoder.forward).parameters)
                 model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
-            # allow assistant_encoder_outputs to be passed if we're doing assisted generating
-            if "assistant_encoder_outputs" in model_kwargs:
-                model_args |= {"assistant_encoder_outputs"}
-
         for key, value in model_kwargs.items():
             if value is not None and key not in model_args:
                 unused_model_args.append(key)
@@ -2828,8 +2824,12 @@ class GenerationMixin:
 
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
+                    # input_ids is required for expanding visual inputs in qwen2vl
                     _, model_kwargs = self._expand_inputs_for_generation(
-                        expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                        input_ids=input_ids,
+                        expand_size=top_k,
+                        is_encoder_decoder=self.config.is_encoder_decoder,
+                        **model_kwargs,
                     )
 
                 past_key_values = model_kwargs.get("past_key_values")
