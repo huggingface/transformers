@@ -1337,7 +1337,7 @@ class ProcessorMixin(PushToHubMixin):
                         videos.append(video)
                         video_metadata.append(metadata)
 
-                # Currently all processors can accept accept nested list of batches, but not flat list of visuals
+                # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
                 if images:
                     batch_images.append(images)
