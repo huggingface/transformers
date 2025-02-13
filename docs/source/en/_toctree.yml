@@ -138,8 +138,6 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
-  - local: chat_templating
-    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
