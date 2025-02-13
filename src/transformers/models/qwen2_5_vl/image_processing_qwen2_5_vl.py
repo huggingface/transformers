@@ -122,6 +122,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         "image_grid_thw",
         "pixel_values_videos",
         "video_grid_thw",
+        "second_per_grid_ts",
     ]
 
     def __init__(

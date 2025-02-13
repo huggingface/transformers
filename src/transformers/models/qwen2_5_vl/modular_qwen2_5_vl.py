@@ -833,7 +833,11 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
 
 class Qwen2_5_VLVideoProcessor(Qwen2VLVideoProcessor):
-    pass
+    model_input_names = [
+        "pixel_values_videos",
+        "video_grid_thw",
+        "second_per_grid_ts",
+    ]
 
 
 class Qwen2_5_VLImageProcessor(Qwen2VLImageProcessor):
@@ -874,6 +878,7 @@ class Qwen2_5_VLImageProcessor(Qwen2VLImageProcessor):
         "image_grid_thw",
         "pixel_values_videos",
         "video_grid_thw",
+        "second_per_grid_ts",
     ]
 
 
