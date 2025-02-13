@@ -176,21 +176,27 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast),
-                            f"Expected tokenizer(use_fast=True) type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`")
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer(use_fast=True) type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+            )
 
             # Fast tokenizer will ignore `use_fast=False`
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast),
-                            f"Expected tokenizer type(use_fast=False): `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`")
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type(use_fast=False): `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+            )
 
             # Save tokenizer
             tokenizer.save_pretrained(temp_dir)
 
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
             # Verify post save and reload the fast tokenizer class did not change
-            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast),
-                            f"Expected tokenizer type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`")
+            self.assertTrue(
+                isinstance(tokenizer, LlamaTokenizerFast),
+                f"Expected tokenizer type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+            )
 
 
 @require_tokenizers
@@ -240,6 +246,7 @@ class TokenizerVersioningTest(unittest.TestCase):
         self.assertEqual(len(old_tokenizer), 28996)
         json_tokenizer = json.loads(old_tokenizer._tokenizer.to_str())
         self.assertNotIn("huggingface", json_tokenizer["model"]["vocab"])
+
 
 @require_tokenizers
 class ReduceMutableBorrowTests(unittest.TestCase):
