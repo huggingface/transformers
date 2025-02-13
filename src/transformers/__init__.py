@@ -5732,6 +5732,7 @@ if TYPE_CHECKING:
     )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
+    from .models.mlcd import MLCDVisionConfig
     from .models.mllama import (
         MllamaConfig,
         MllamaProcessor,
@@ -7767,6 +7768,10 @@ if TYPE_CHECKING:
             MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
+        )
+        from .models.mlcd import (            
+            MLCDPreTrainedModel,
+            MLCDVisionModel,
         )
         from .models.mllama import (
             MllamaForCausalLM,
