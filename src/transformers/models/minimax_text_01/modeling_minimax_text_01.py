@@ -58,8 +58,8 @@ from .configuration_minimax_text_01 import MiniMaxText01Config
 logger = logging.get_logger(__name__)
 
 
-_CHECKPOINT_FOR_DOC = "mistralai/Mixtral-8x7B-v0.1"
-_CONFIG_FOR_DOC = "MixtralConfig"
+_CHECKPOINT_FOR_DOC = "MiniMaxAI/MiniMax-Text-01"
+_CONFIG_FOR_DOC = "MiniMaxText01Config"
 
 
 class MiniMaxText01RMSNorm(nn.Module):
