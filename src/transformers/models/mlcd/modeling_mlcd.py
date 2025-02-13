@@ -92,7 +92,7 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> to
 
 # Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->MLCD
 class MLCDMLP(nn.Module):
-    def __init__(self, config: MLCDVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
