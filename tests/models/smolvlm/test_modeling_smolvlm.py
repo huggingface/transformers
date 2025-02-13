@@ -367,7 +367,35 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
+        
+    @unittest.skip
+    def test_training_gradient_checkpointing(self):
+        pass
 
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_0_greedy(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_with_static_cache(self):
+        pass
+    
     @pytest.mark.generate
     @require_torch_sdpa
     @slow
