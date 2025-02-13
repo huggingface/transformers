@@ -74,6 +74,8 @@ class PretrainedConfig(PushToHubMixin):
       naming of attributes.
     - **base_model_tp_plan** (`Dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
+    - **base_model_pp_plan** (`Dict[str, Tuple[List[str]]]`) -- A dict that maps child-modules of a base model to a
+      pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
     Common attributes (present in all subclasses):
 
@@ -198,6 +200,7 @@ class PretrainedConfig(PushToHubMixin):
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
     base_model_tp_plan: Optional[Dict[str, Any]] = None
+    base_model_pp_plan: Optional[Dict[str, Tuple[List[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -748,7 +751,7 @@ class PretrainedConfig(PushToHubMixin):
             id2label = kwargs["id2label"] if kwargs["id2label"] is not None else []
             if len(id2label) != num_labels:
                 raise ValueError(
-                    f"You passed along `num_labels={num_labels }` with an incompatible id to label map: "
+                    f"You passed along `num_labels={num_labels}` with an incompatible id to label map: "
                     f"{kwargs['id2label']}. Since those arguments are inconsistent with each other, you should remove "
                     "one of them."
                 )
@@ -860,6 +863,9 @@ class PretrainedConfig(PushToHubMixin):
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in serializable_config_dict:
             del serializable_config_dict["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_pp_plan"]
 
         return serializable_config_dict
 
@@ -882,6 +888,9 @@ class PretrainedConfig(PushToHubMixin):
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in output:
             del output["base_model_tp_plan"]
+        # Do not serialize `base_model_pp_plan` for now
+        if "base_model_pp_plan" in output:
+            del output["base_model_pp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
@@ -994,8 +1003,11 @@ class PretrainedConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("torch_dtype", None) is not None:
+            if isinstance(d["torch_dtype"], dict):
+                d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
+            elif not isinstance(d["torch_dtype"], str):
+                d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
                 self.dict_torch_dtype_to_str(value)

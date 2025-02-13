@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -293,7 +294,6 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Starcoder2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Starcoder2Model,
@@ -412,7 +412,7 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Starcoder2IntegrationTest(unittest.TestCase):
     def test_starcoder2_batched_generation_sdpa(self):
         EXPECTED_TEXT = [

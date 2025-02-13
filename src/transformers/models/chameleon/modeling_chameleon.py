@@ -41,6 +41,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -967,62 +968,6 @@ class ChameleonVQVAEEncoder(nn.Module):
         return last_hidden_state
 
 
-CHAMELEON_VQ_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`ChameleonVQVAEConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    """The VQ-VAE model used in Chameleon for encoding/decoding images into discrete tokens.
-    This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
-    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
-    """,
-    CHAMELEON_VQ_START_DOCSTRING,
-)
-class ChameleonVQVAE(PreTrainedModel):
-    config_class = ChameleonVQVAEConfig
-    _no_split_modules = ["ChameleonVQVAEVectorQuantizer"]
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-        elif isinstance(module, nn.GroupNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
-    def __init__(self, config: ChameleonVQVAEConfig):
-        super().__init__(config)
-
-        self.encoder = ChameleonVQVAEEncoder(config)
-        self.quantize = ChameleonVQVAEVectorQuantizer(config)
-        self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
-        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
-        self.eval()  # Chameleon's VQ model is frozen
-
-    def encode(self, pixel_values: torch.LongTensor):
-        hidden_states = self.encoder(pixel_values)
-        hidden_states = self.quant_conv(hidden_states)
-        quant, emb_loss, indices = self.quantize(hidden_states)
-        return quant, emb_loss, indices
-
-
 class ChameleonImageVocabularyMapping:
     """
     A class for mapping discrete image tokens from VQGAN to BPE tokens.
@@ -1118,6 +1063,62 @@ class ChameleonPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+CHAMELEON_VQ_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`ChameleonVQVAEConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    """The VQ-VAE model used in Chameleon for encoding/decoding images into discrete tokens.
+    This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv Taigman](https://arxiv.org/abs/2203.13131).
+    """,
+    CHAMELEON_VQ_START_DOCSTRING,
+)
+class ChameleonVQVAE(ChameleonPreTrainedModel):
+    config_class = ChameleonVQVAEConfig
+    _no_split_modules = ["ChameleonVQVAEVectorQuantizer"]
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+        elif isinstance(module, nn.GroupNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    def __init__(self, config: ChameleonVQVAEConfig):
+        super().__init__(config)
+
+        self.encoder = ChameleonVQVAEEncoder(config)
+        self.quantize = ChameleonVQVAEVectorQuantizer(config)
+        self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
+        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
+        self.eval()  # Chameleon's VQ model is frozen
+
+    def encode(self, pixel_values: torch.LongTensor):
+        hidden_states = self.encoder(pixel_values)
+        hidden_states = self.quant_conv(hidden_states)
+        quant, emb_loss, indices = self.quantize(hidden_states)
+        return quant, emb_loss, indices
+
+
 CHAMELEON_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1211,7 +1212,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
             [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.vqmodel = ChameleonVQVAE(config.vq_config)
+        self.vqmodel = ChameleonVQVAE._from_config(config.vq_config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1430,7 +1431,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1490,7 +1491,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -1651,8 +1654,17 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
+        # Exception 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            elif (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -1662,10 +1674,13 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+                if inputs_embeds is not None and input_ids.shape[1] == 0:
+                    position_ids = position_ids[:, -inputs_embeds.shape[1] :]
+                else:
+                    position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
+        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases

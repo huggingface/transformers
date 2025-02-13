@@ -27,6 +27,7 @@ from parameterized import parameterized
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
@@ -471,7 +472,6 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 @require_torch
 class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -722,102 +722,11 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
         self.assertIsNotNone(model)
 
     # overwrite because BLIP internally calls LM.generate() with embeds thus it cannot operate in no cache format
-    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         use_cache = True  # force this to be True in case False is passed
-
-        input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
-        internal_batch_size = (
-            input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
+        super()._check_generate_outputs(
+            output, config, use_cache=use_cache, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
-
-        seq_length = getattr(self.model_tester, "seq_length", None)
-        seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
-        seq_length = getattr(self.model_tester, "text_seq_length", seq_length)
-
-        config = config.text_config if hasattr(config, "text_config") else config
-
-        gen_len = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
-        )
-
-        # in some models we subsample the sequence length in inner layers
-        if hasattr(self.model_tester, "get_subsampled_output_lengths"):
-            seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
-
-        # scores
-        self._check_scores(internal_batch_size, output.scores, length=gen_len, config=config)
-
-        # unprocessed logits
-        self._check_logits(internal_batch_size, output.logits, config=config)
-
-        # Attentions
-        if self.has_attentions:
-            if config.is_encoder_decoder:
-                # encoder
-                self._check_encoder_attention_for_generate(
-                    output.encoder_attentions, input_batch_size, config, seq_length
-                )
-                # decoder
-                self._check_attentions_for_generate(
-                    internal_batch_size,
-                    output.decoder_attentions,
-                    min_length=1,
-                    max_length=output.sequences.shape[-1],
-                    config=config,
-                    use_cache=use_cache,
-                )
-            else:
-                # if use_cache first input is equal to no use_cache, so skip here
-                attentions = output.attentions if not use_cache else output.attentions[1:]
-                min_length = seq_length if not use_cache else seq_length + 1
-                self._check_attentions_for_generate(
-                    internal_batch_size,
-                    attentions=attentions,
-                    min_length=min_length,
-                    max_length=output.sequences.shape[-1],
-                    config=config,
-                    use_cache=use_cache,
-                )
-
-        # Hidden States
-        if config.is_encoder_decoder:
-            # encoder
-            self._check_encoder_hidden_states_for_generate(
-                output.encoder_hidden_states, input_batch_size, config, seq_length
-            )
-
-            # decoder
-            self._check_hidden_states_for_generate(
-                internal_batch_size,
-                output.decoder_hidden_states,
-                min_length=1,
-                max_length=output.sequences.shape[-1],
-                config=config,
-                use_cache=use_cache,
-            )
-        else:
-            # if use_cache first input is equal to no use_cache, so skip here
-            hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
-            min_length = seq_length if not use_cache else seq_length + 1
-            self._check_hidden_states_for_generate(
-                internal_batch_size,
-                hidden_states,
-                min_length=min_length,
-                max_length=output.sequences.shape[-1],
-                config=config,
-                use_cache=use_cache,
-            )
-
-        # Past Key Value States
-        if use_cache:
-            past_key_values = output.past_key_values
-            past_sequence_length = output.sequences.shape[-1] - 1
-            self._check_past_key_values_for_generate(
-                internal_batch_size,
-                past_key_values,
-                seq_length=past_sequence_length,
-                config=config,
-            )
 
     # overwrite because BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present
     @pytest.mark.generate
@@ -900,7 +809,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             next_logits_with_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
@@ -1085,6 +994,8 @@ class Blip2ModelTester:
 @require_torch
 class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
+    # Doesn't run generation tests. TODO: fix generation tests for Blip2ForConditionalGeneration
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Blip2Model,
@@ -1122,6 +1033,13 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     def setUp(self):
         self.model_tester = Blip2ModelTester(self)
+        common_properties = ["image_token_index", "num_query_tokens", "image_text_hidden_size"]
+        self.config_tester = ConfigTester(
+            self, config_class=Blip2Config, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1565,7 +1483,7 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         model = Blip2TextModelWithProjection.from_pretrained(model_name)
@@ -2191,7 +2109,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(generated_text_expanded == generated_text)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_itm(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
@@ -2207,10 +2125,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # verify
         expected_scores = torch.Tensor([[0.0238, 0.9762]])
-        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
+        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch_fp16
     def test_inference_itm_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
@@ -2227,12 +2145,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # verify
         expected_scores = torch.Tensor([[0.0239, 0.9761]])
-        self.assertTrue(
-            torch.allclose(torch.nn.Softmax()(out_itm[0].cpu().float()), expected_scores, rtol=1e-3, atol=1e-3)
-        )
-        self.assertTrue(torch.allclose(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
+        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu().float()), expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch_fp16
     def test_inference_vision_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
@@ -2256,7 +2172,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertTrue(np.allclose(out.image_embeds[0][0][:6].tolist(), expected_image_embeds, atol=1e-3))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch_fp16
     def test_inference_text_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"

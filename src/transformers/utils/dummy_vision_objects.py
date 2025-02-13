@@ -184,6 +184,20 @@ class ViTHybridImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DepthProImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class DepthProImageProcessorFast(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DetrFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -297,6 +311,13 @@ class GLPNImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class GotOcr2ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class GroundingDinoImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -382,6 +403,13 @@ class LevitFeatureExtractor(metaclass=DummyObject):
 
 
 class LevitImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class LlavaImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -570,6 +598,13 @@ class PvtImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Qwen2_5_VLImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class Qwen2VLImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -613,6 +648,13 @@ class SegGptImageProcessor(metaclass=DummyObject):
 
 
 class SiglipImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class SuperGlueImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

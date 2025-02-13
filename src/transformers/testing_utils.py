@@ -62,6 +62,7 @@ from .utils import (
     GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
@@ -85,8 +86,10 @@ from .utils import (
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
     is_hadamard_available,
+    is_hqq_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -118,6 +121,7 @@ from .utils import (
     is_seqio_available,
     is_soundfile_available,
     is_spacy_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -133,6 +137,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
+    is_torch_greater_or_equal,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -401,6 +406,14 @@ def require_galore_torch(test_case):
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
 
 
+def require_apollo_torch(test_case):
+    """
+    Decorator marking a test that requires GaLore. These tests are skipped when APOLLO isn't installed.
+    https://github.com/zhuhanqing/APOLLO
+    """
+    return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
+
+
 def require_lomo(test_case):
     """
     Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
@@ -552,6 +565,21 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_torch_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PyTorch version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_flash_attn(test_case):
@@ -986,6 +1014,17 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_large_gpu(test_case, memory: float = 20):
+    """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
+    if torch_device != "cuda":
+        return unittest.skip(reason=f"test requires a CUDA GPU with more than {memory} GiB of memory")(test_case)
+
+    return unittest.skipUnless(
+        torch.cuda.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
@@ -1153,6 +1192,13 @@ def require_vptq(test_case):
     return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
 
 
+def require_spqr(test_case):
+    """
+    Decorator marking a test that requires spqr
+    """
+    return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
+
+
 def require_eetq(test_case):
     """
     Decorator marking a test that requires eetq
@@ -1206,11 +1252,20 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_auto_gptq(test_case):
+def require_gptq(test_case):
     """
     Decorator for auto_gptq dependency
     """
-    return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+    return unittest.skipUnless(
+        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
+    )(test_case)
+
+
+def require_hqq(test_case):
+    """
+    Decorator for hqq dependency
+    """
+    return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
 
 
 def require_auto_awq(test_case):
@@ -1413,6 +1468,7 @@ def set_model_tester_for_less_flaky_test(test_case):
     # TODO (if possible): Avoid exceptional cases
     exceptional_classes = [
         "ZambaModelTester",
+        "Zamba2ModelTester",
         "RwkvModelTester",
         "AriaVisionText2TextModelTester",
         "GPTNeoModelTester",
@@ -1476,7 +1532,16 @@ def set_config_for_less_flaky_test(config):
 
 def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-    target_names = ("LayerNorm", "GroupNorm", "BatchNorm", "RMSNorm", "BatchNorm2d", "BatchNorm1d")
+    target_names = (
+        "LayerNorm",
+        "GroupNorm",
+        "BatchNorm",
+        "RMSNorm",
+        "BatchNorm2d",
+        "BatchNorm1d",
+        "BitGroupNormActivation",
+        "WeightStandardizedConv2d",
+    )
     target_attrs = ["eps", "epsilon", "variance_epsilon"]
     if is_torch_available() and isinstance(model, torch.nn.Module):
         for module in model.modules():
@@ -2138,7 +2203,7 @@ def pytest_terminal_summary_main(tr, id):
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
                 if rep.duration < durations_min:
-                    f.write(f"{len(dlist)-i} durations < {durations_min} secs were omitted")
+                    f.write(f"{len(dlist) - i} durations < {durations_min} secs were omitted")
                     break
                 f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
@@ -2523,7 +2588,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     process.join(timeout=timeout)
 
     if results["error"] is not None:
-        test_case.fail(f'{results["error"]}')
+        test_case.fail(f"{results['error']}")
 
 
 def run_test_using_subprocess(func):

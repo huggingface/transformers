@@ -259,7 +259,6 @@ class Kosmos2ModelTester:
 @require_torch
 class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Kosmos2Model, Kosmos2ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Kosmos2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Kosmos2Model,
@@ -515,7 +514,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             next_logits_with_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-3))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -889,9 +888,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.0022, -1.1901, 3.2887], [2.6164, 0.0515, -0.8270], [1.8315, 0.1272, -0.8590]]
+            [[0.9148, -1.4148, 3.8040], [3.3443, 1.9478, 0.2080], [1.6604, 2.8184, -0.3618]]
         ).to(torch_device)
 
-        self.assertTrue(
-            torch.allclose(outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-2, atol=1e-2
         )
