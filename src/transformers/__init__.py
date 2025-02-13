@@ -3550,10 +3550,9 @@ else:
     )
     _import_structure["models.smolvlm"].extend(
         [
-            "SmolVLMConfig",
             "SmolVLMForConditionalGeneration",
-            "SmolVLMPreTrainedModel",
             "SmolVLMModel",
+            "SmolVLMPreTrainedModel",
             "SmolVLMProcessor",
             "SmolVLMVisionConfig",
             "SmolVLMVisionTransformer",
