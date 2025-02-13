@@ -19,8 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_qwen2_5_vl import *
-    from .image_processing_qwen2_5_vl import *
-    from .image_processing_qwen2_5_vl_fast import *
     from .modeling_qwen2_5_vl import *
     from .processing_qwen2_5_vl import *
 else:
