@@ -1192,7 +1192,7 @@ class ProcessorMixin(PushToHubMixin):
             )
         return {arg_name: arg_value for arg_value, arg_name in zip(args, self.optional_call_args)}
 
-    def _process_messaged_for_chat_template(
+    def _process_messages_for_chat_template(
         self,
         conversation: List[List[Dict[str, str]]],
         batch_images: List[ImageInput],
