@@ -111,6 +111,7 @@ def compile_friendly_flex_attention(
     **kwargs,
 ) -> torch.Tensor:
 
+    # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
     flex_attention_compiled = wrapped_flex_attention()()
     return flex_attention_compiled(
         query,
