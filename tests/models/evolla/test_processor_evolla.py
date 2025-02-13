@@ -60,6 +60,39 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.input_keys = ["protein_input_ids", "protein_attention_mask", "text_input_ids", "text_attention_mask"]
 
+    def prepare_input_and_expected_output(self):
+        amino_acid_sequence = "AAAA"
+        foldseek_sequence = "dddd"
+        question = "What is the function of this protein?"
+        answer = "I don't know"
+
+        expected_output = {
+            "protein_input_ids": torch.tensor([[0, 13, 13, 13, 13, 2]]),
+            "protein_attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1]]),
+            "text_input_ids": torch.tensor([[128000, 128006,   9125, 128007,    271,   2675,    527,    459,  15592,
+            6335,    430,    649,   4320,    904,   4860,    922,  13128,     13,
+          128009, 128006,    882, 128007,    271,   3923,    374,    279,    734,
+             315,    420,  13128,     30, 128009, 128006,  78191, 128007,    271]]),
+            "text_attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+        }
+        protein_dict = {
+            "aa_seq": amino_acid_sequence,
+            "foldseek": foldseek_sequence
+        }
+        message = [{"role": "system", "content": "You are an AI expert that can answer any questions about protein."},
+                   {"role": "user", "content": question}]
+        return protein_dict, message, expected_output
+
+    def test_processor(self):
+        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
+        inputs = self.processor(proteins=[protein_dict],
+                                messages_list=[message])
+        
+        # check if the input is correct
+        for key, value in expected_output.items():
+            self.assertTrue(torch.equal(inputs[key], value), f"inputs[key] is {inputs[key]} and expected_output[key] is {expected_output[key]}")
+
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
@@ -162,19 +195,6 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ]
             messages_list.append(messages)
         return proteins, messages_list
-
-    def test_processor(self):
-        protein_tokenizer = self.get_protein_tokenizer()
-        tokenizer = self.get_tokenizer()
-
-        processor = EvollaProcessor(tokenizer=tokenizer, protein_tokenizer=protein_tokenizer)
-
-        proteins, messages_list = self.prepare_inputs()
-
-        # test that all prompts succeeded
-        input_processor = processor(messages_list=messages_list, proteins=proteins, return_tensors="pt", padding="longest")
-        for key in self.input_keys:
-            assert torch.is_tensor(input_processor[key])
 
     def test_tokenizer_decode(self):
         protein_tokenizer = self.get_protein_tokenizer()
