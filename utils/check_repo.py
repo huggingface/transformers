@@ -984,7 +984,7 @@ DEPRECATED_OBJECTS = [
 # Exceptionally, some objects should not be documented after all rules passed.
 # ONLY PUT SOMETHING IN THIS LIST AS A LAST RESORT!
 UNDOCUMENTED_OBJECTS = [
-    "AdamW", # We don't have AdamW code anymore, but we import torch.optim.AdamW for backward compatibility
+    "AdamW",  # We don't have AdamW code anymore, but we import torch.optim.AdamW for backward compatibility
     "AddedToken",  # This is a tokenizers class.
     "BasicTokenizer",  # Internal, should never have been in the main init.
     "CharacterTokenizer",  # Internal, should never have been in the main init.
