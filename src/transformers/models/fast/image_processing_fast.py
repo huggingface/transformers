@@ -415,6 +415,7 @@ class FastImageProcessor(BaseImageProcessor):
         for i in range(batch_size):
             org_img_size = target_sizes[i]
             scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
+            
 
             bboxes, scores = self.generate_bbox(
                 keys[i], labels[i], score_maps[i], scales, threshold, bbox_type=bbox_type
