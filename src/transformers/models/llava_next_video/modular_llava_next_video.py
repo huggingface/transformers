@@ -362,7 +362,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         logits_to_keep: Union[int, torch.Tensor] = 0,
         **lm_kwargs,
     ) -> Union[Tuple, LlavaNextVideoCausalLMOutputWithPast]:
-        r"""
+        r"""REPLACES ORIGINAL DOCSTRING
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_frames, num_channels, image_size, image_size)):
             The tensors corresponding to the input videos. Pixel values can be obtained using
             [`AutoImageProcessor`]. See [`LlavaNextVideoVideoProcessor.__call__`] for details. [`LlavaProcessor`] uses
