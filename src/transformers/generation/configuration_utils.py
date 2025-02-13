@@ -20,7 +20,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Final, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import BaseModel, ConfigDict, PrivateAttr, confloat, conint, model_validator
 
@@ -597,7 +597,7 @@ class GenerationConfig(BaseModel, PushToHubMixin):
             present in `generate`'s signature will be used in the model forward pass.
     """
 
-    extra_output_flags: ClassVar[Tuple[str]] = (
+    extra_output_flags: Final[Tuple[str]] = (
         "output_attentions",
         "output_hidden_states",
         "output_scores",
@@ -619,7 +619,7 @@ class GenerationConfig(BaseModel, PushToHubMixin):
     num_beams: Optional[conint(ge=1)] = 1
     num_beam_groups: Optional[conint(ge=1)] = 1
     penalty_alpha: Optional[confloat(ge=0.0)] = None
-    dola_layers: Optional[Union[str, List[int]]] = None
+    dola_layers: Optional[Union[Literal["low", "high"], List[int]]] = None
 
     # Parameters that control the cache
     use_cache: bool = True
