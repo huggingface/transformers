@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -281,7 +280,7 @@ class RecurrentGemmaModelTester:
 
 
 @require_torch
-class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
     # Doesn't run generation tests. TODO @gante not fully supported
     all_generative_model_classes = ()

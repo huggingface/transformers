@@ -34,7 +34,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_essentia_available, is_librosa_available, is_scipy_available, is_torch_available
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -505,7 +504,7 @@ class Pop2PianoModelTester:
 
 
 @require_torch
-class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Pop2PianoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. Has custom generation method with a different interface
     all_generative_model_classes = ()

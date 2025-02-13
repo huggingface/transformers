@@ -110,6 +110,8 @@ from transformers.utils import (
 )
 from transformers.utils.generic import ContextManagers, ModelOutput
 
+from .generation.test_utils import GenerationTesterMixin
+
 
 if is_accelerate_available():
     from accelerate.utils import compute_module_sizes
@@ -4948,6 +4950,31 @@ class ModelTesterMixin:
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(inputs_dict["input_ids"].to(torch_device))
+
+    def test_generation_tester_mixin_inheritance(self):
+        """
+        Ensures that we have the generation tester mixin if the model can generate. The test will fail otherwise,
+        forcing the mixin to be added -- and ensuring proper test coverage
+        """
+        if len(self.all_generative_model_classes) > 0:
+            self.assertTrue(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can call `generate`, so one of two things must happen: 1) the tester must inherit "
+                    "from `GenerationTesterMixin` to run `generate` tests, or 2) the model doesn't fully support the "
+                    "original `generate` or has a custom `generate`, the tester must set "
+                    "`all_generative_model_classes = ()`."
+                ),
+            )
+        else:
+            self.assertFalse(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can't call `generate`, so its tester can't inherit `GenerationTesterMixin`. (If you "
+                    "think the model should be able to `generate`, the model may be missing the `GenerationMixin` "
+                    "inheritance)"
+                ),
+            )
 
 
 global_rng = random.Random()

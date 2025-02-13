@@ -20,7 +20,6 @@ import unittest
 from transformers import MoonshineConfig, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -168,7 +167,7 @@ class MoonshineModelTester:
 
 
 @require_torch
-class MoonshineModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MoonshineModel, MoonshineForConditionalGeneration) if is_torch_available() else ()
     # Doesn't run generation tests. TODO (eustache): remove this line and then make CI green
     all_generative_model_classes = ()

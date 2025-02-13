@@ -49,7 +49,6 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_torch_bf16_available_on_device, is_torch_fp16_available_on_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -180,7 +179,7 @@ class MusicgenMelodyDecoderTester:
 
 
 @require_torch
-class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MusicgenMelodyDecoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenMelodyModel, MusicgenMelodyForCausalLM) if is_torch_available() else ()
     # Doesn't run generation tests. See `greedy_sample_model_classes` below
     all_generative_model_classes = ()
@@ -820,7 +819,7 @@ class MusicgenMelodyTester:
 
 @require_torch
 # Copied from tests.models.musicgen.test_modeling_musicgen.MusicgenTest with Musicgen->MusicgenMelody, musicgen->musicgen_melody, EncoderDecoder->DecoderOnly, input_values->input_features
-class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MusicgenMelodyTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenMelodyForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. See `greedy_sample_model_classes` below
     all_generative_model_classes = ()

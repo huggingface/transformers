@@ -23,7 +23,6 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -580,9 +579,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class SeamlessM4TModelWithTextInputTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
-):
+class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
