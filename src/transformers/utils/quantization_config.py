@@ -1537,6 +1537,14 @@ class TorchAoConfig(QuantizationConfigMixin):
             quant_type_kwargs["layout"] = Int4CPULayout()
         return _STR_TO_METHOD[self.quant_type](**quant_type_kwargs)
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        layout is not JSON serializable
+        """
+        config_dict = super().to_dict()
+        config_dict["quant_type_kwargs"].pop("layout", None)
+        return config_dict
+
     def __repr__(self):
         config_dict = self.to_dict()
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
