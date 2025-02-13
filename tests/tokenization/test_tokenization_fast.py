@@ -20,11 +20,10 @@ import shutil
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import AutoTokenizer, LlamaTokenizerFast, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
 
 from ..test_tokenization_common import TokenizerTesterMixin
-from transformers import LlamaTokenizerFast
 
 
 @require_tokenizers
@@ -187,7 +186,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
             # Save tokenizer
             tokenizer.save_pretrained(temp_dir)
-            
+
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
             # Verify post save and reload the fast tokenizer class did not change
             self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast),
