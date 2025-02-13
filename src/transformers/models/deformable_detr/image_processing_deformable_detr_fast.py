@@ -12,8 +12,7 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
-    DefaultFastImageProcessorInitKwargs,
-    DefaultFastImageProcessorPreprocessKwargs,
+    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -58,21 +57,12 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class DeformableDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+class DeformableDetrFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
     format: Optional[Union[str, AnnotationFormat]]
     do_convert_annotations: Optional[bool]
     do_pad: Optional[bool]
     pad_size: Optional[Dict[str, int]]
-
-
-class DeformableDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
-    format: Optional[AnnotationFormat]
-    annotations: Optional[Dict]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[Dict[str, int]]
     return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
 
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
@@ -294,6 +284,8 @@ def prepare_coco_panoptic_annotation(
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
+        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+            Whether to return segmentation masks.
     """,
 )
 class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
@@ -308,10 +300,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_init_kwargs = DeformableDetrFastImageProcessorInitKwargs
-    valid_preprocess_kwargs = DeformableDetrFastImageProcessorPreprocessKwargs
+    valid_kwargs = DeformableDetrFastImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -605,7 +596,11 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[DeformableDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
+        masks_path: Optional[Union[str, pathlib.Path]] = None,
+        **kwargs: Unpack[DeformableDetrFastImageProcessorKwargs],
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
@@ -621,7 +616,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             )
             kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(images, **kwargs)
+        return super().preprocess(images, annotations=annotations, masks_path=masks_path, **kwargs)
 
     def _preprocess(
         self,
