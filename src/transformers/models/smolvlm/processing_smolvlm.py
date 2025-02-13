@@ -164,8 +164,10 @@ class SmolVLMProcessor(ProcessorMixin):
         self.end_of_utterance_token = tokenizer.end_of_utterance_token
         self.global_image_token = tokenizer.global_image_token  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
+        
         self.video_frame_size = image_processor.video_sampling["video_size"]
-
+        self.default_max_frames = image_processor.video_sampling["max_frames"]
+        self.default_fps = image_processor.video_sampling["fps"]
         # Matches one or more occurrences of <row_x_col_y> tags (where x and y are digits, optionally surrounded by newline characters
         self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
 
@@ -428,15 +430,17 @@ class SmolVLMProcessor(ProcessorMixin):
         return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
     # Add model-specific video sampling method when applying the template
-    def apply_chat_template(self, conversation, max_frames=64, target_fps=1, skip_secs=1, **kwargs):
+    def apply_chat_template(self, conversation, max_frames=None, target_fps=None, skip_secs=1, video_load_backend="pyav", **kwargs):
+        max_frames = self.default_max_frames if max_frames is None else max_frames
+        target_fps = self.default_fps if target_fps is None else target_fps
         def sample_indices_fn_func(metadata, **fn_kwargs):
             return smolvlm_sample_indices_fn(
                 metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs, **fn_kwargs
             )
-
+            
         sample_indices_fn = sample_indices_fn_func
         return super().apply_chat_template(
-            conversation, sample_indices_fn=sample_indices_fn, video_load_backend="decord", **kwargs
+            conversation, sample_indices_fn=sample_indices_fn, video_load_backend=video_load_backend, **kwargs
         )
 
 
