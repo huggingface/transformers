@@ -42,7 +42,7 @@ By default, the weights are loaded in full precision (torch.float32) regardless 
 from transformers import FP8Config, AutoModelForCausalLM, AutoTokenizer
 
 model_name = "meta-llama/Meta-Llama-3-8B"
-quantization_config = FP8Config()
+quantization_config = FineGrainedFP8Config()
 quantized_model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto", quantization_config=quantization_config)
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
