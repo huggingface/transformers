@@ -2822,14 +2822,19 @@ if is_torch_available():
     # testing.
     BACKEND_MANUAL_SEED = {
         "cuda": torch.cuda.manual_seed,
-        "mlu": torch.mlu.manual_seed,
+        "mlu": torch.mlu.manual_seed if is_torch_mlu_available() else torch.manual_seed,
         "cpu": torch.manual_seed,
         "default": torch.manual_seed,
     }
-    BACKEND_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "mlu": torch.mlu.empty_cache, "cpu": None, "default": None}
+    BACKEND_EMPTY_CACHE = {
+        "cuda": torch.cuda.empty_cache,
+        "mlu": torch.mlu.empty_cache if is_torch_mlu_available() else None,
+        "cpu": None,
+        "default": None,
+    }
     BACKEND_DEVICE_COUNT = {
         "cuda": torch.cuda.device_count,
-        "mlu": torch.mlu.device_count,
+        "mlu": torch.mlu.device_count if is_torch_mlu_available() else lambda: 0,
         "cpu": lambda: 0,
         "default": lambda: 1,
     }
