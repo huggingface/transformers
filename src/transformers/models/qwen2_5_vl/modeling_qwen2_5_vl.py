@@ -46,8 +46,6 @@ from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torchdynamo_compiling,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
     replace_return_docstrings,
 )
@@ -61,11 +59,6 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 if is_flash_attn_2_available():
