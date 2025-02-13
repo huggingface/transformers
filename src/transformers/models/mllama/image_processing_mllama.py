@@ -695,8 +695,6 @@ class MllamaImageProcessor(BaseImageProcessor):
         if self.do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
 
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
-
         batch_images = []
         batch_aspect_ratios = []
 
@@ -707,10 +705,19 @@ class MllamaImageProcessor(BaseImageProcessor):
 
             # iterate over images in a batch sample
             for image in images:
+                # default PIL images to channels_last
+                if input_data_format is None and is_vision_available() and isinstance(image, PIL.Image.Image):
+                    image_input_data_format = ChannelDimension.LAST
+                else:
+                    image_input_data_format = input_data_format
+
+                # convert to numpy array for processing
+                image = to_numpy_array(image)
+
                 # convert images to channels first format for faster processing
                 # LAST is slower for `pad` and not supported by `split_to_tiles`
                 data_format = ChannelDimension.FIRST
-                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=image_input_data_format)
 
                 # do_resize=False is not supported, validated
                 image, aspect_ratio = self.resize(
