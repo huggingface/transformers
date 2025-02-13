@@ -274,6 +274,8 @@ class Kosmos2_5ModelOutput(ModelOutput):
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    width: Optional[torch.FloatTensor] = None
+    height: Optional[torch.FloatTensor] = None
     image_embeds: Optional[torch.FloatTensor] = None
     projection_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_model_output: BaseModelOutputWithPooling = None
@@ -1457,6 +1459,8 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         flattened_patches: Optional[torch.Tensor] = None,
+        width: Optional[torch.Tensor] = None,
+        height: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
@@ -1538,7 +1542,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         )
 
         if not return_dict:
-            outputs = outputs + (image_embeds, projection_attentions, vision_model_output)
+            outputs = outputs + (width, height, image_embeds, projection_attentions, vision_model_output)
             return tuple(output for output in outputs if output is not None)
 
         return Kosmos2_5ModelOutput(
@@ -1546,6 +1550,8 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            width=width,
+            height=height,
             image_embeds=image_embeds,
             projection_attentions=projection_attentions,
             vision_model_output=vision_model_output,
