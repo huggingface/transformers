@@ -243,7 +243,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
     model.load_state_dict(state_dict_changed)
     model.eval()
 
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
     original_pixel_values = torch.tensor(
