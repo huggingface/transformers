@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FAST model. """
+"""Testing suite for the PyTorch FAST model."""
+
 import inspect
 import unittest
 
@@ -336,6 +337,7 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip(reason="Fast does not support input and output embeddings")
     def test_generate_from_inputs_embeds(self):
         pass
+
 
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):

@@ -247,7 +247,6 @@ class EfficientNetImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-
 class FastImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

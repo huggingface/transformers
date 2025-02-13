@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch FAST model."""
+"""PyTorch FAST model."""
 
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
@@ -450,16 +450,16 @@ def dice_loss_with_masks(input, target, mask, reduce=True):
     input = input.contiguous().view(batch_size, -1)
     target = target.contiguous().view(batch_size, -1).float()
     mask = mask.contiguous().view(batch_size, -1).float()
-    
+
     # we add padding if input or mask size do not match the target size
     if input.size(1) < target.size(1):
         padding_size = target.size(1) - input.size(1)
-        input = F.pad(input, (0, padding_size), mode='constant', value=0)
-        
+        input = F.pad(input, (0, padding_size), mode="constant", value=0)
+
     if mask.size(1) < target.size(1):
         padding_size = target.size(1) - mask.size(1)
-        mask = F.pad(mask, (0, padding_size), mode='constant', value=0)
-        
+        mask = F.pad(mask, (0, padding_size), mode="constant", value=0)
+
     input = input * mask
     target = target * mask
 
@@ -590,7 +590,7 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
                 **kwargs,
             )
         else:
-            #TODO: check how to configure this backbone
+            # TODO: check how to configure this backbone
             backbone = AutoBackbone.from_config(config.backbone_config)
         self.backbone = backbone
         self.neck = FASTNeck(config=config)

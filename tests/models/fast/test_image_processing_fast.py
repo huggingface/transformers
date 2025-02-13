@@ -135,7 +135,7 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(
             self.image_processor_dict, size=42, crop_size=84, reduce_labels=True
         )
-        self.assertEqual(image_processor.size, {'shortest_edge': 42})
+        self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     @slow

@@ -149,6 +149,7 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, los
 
     return fast_config
 
+
 def get_small_model_config():
     pass
 
@@ -157,11 +158,15 @@ def get_base_model_config():
     pass
 
 
-def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path, save_backbone_separately):
+def convert_fast_checkpoint(
+    checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path, save_backbone_separately
+):
     config_filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
     # we download the json file for safety reasons
     checkpoint_config_filename_to_json = checkpoint_config_filename.replace(".py", ".json")
-    config_model_file_path = hf_hub_download(repo_id="jadechoghari/fast-configs", filename=checkpoint_config_filename_to_json)
+    config_model_file_path = hf_hub_download(
+        repo_id="jadechoghari/fast-configs", filename=checkpoint_config_filename_to_json
+    )
 
     with open(config_filepath) as f:
         content = json.loads(f.read())
@@ -171,7 +176,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
 
     size = content[checkpoint_config_filename]["short_size"]
 
-    #TODO: add logic for py/json files maybe both
+    # TODO: add logic for py/json files maybe both
     model_config = content_model["model"]
     test_config = content_model.get("test_cfg", None)
     data_config = content_model["data"]
@@ -186,18 +191,14 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
         config = prepare_config(
             tiny_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
-        expected_slice_logits = torch.tensor(
-            [ -9.9181, -13.0701, -12.5045, -12.6523]
-        )
+        expected_slice_logits = torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523])
         expected_slice_boxes = [151, 151, 160, 56, 355, 74, 346, 169]
 
     elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(
             small_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
-        expected_slice_logits = torch.tensor(
-            [-13.1852, -17.2011, -16.9553, -16.8269]
-        )
+        expected_slice_logits = torch.tensor([-13.1852, -17.2011, -16.9553, -16.8269])
         expected_slice_boxes = [154, 151, 155, 61, 351, 63, 350, 153]
 
     elif "base" in content[checkpoint_config_filename]["config"]:
@@ -222,7 +223,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location=device, check_hash=True)["ema"]
     state_dict_changed = OrderedDict()
     for key in state_dict:
-        #TODO: see if we add more
+        # TODO: see if we add more
 
         if "backbone" or "textnet" in key:
             val = state_dict[key]
@@ -246,19 +247,21 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
 
     url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    
+
     pixel_values = fast_image_processor(image, return_tensors="pt").pixel_values
 
     with torch.no_grad():
         output = model(pixel_values)
-    
-    # test the logits  
+
+    # test the logits
     torch.testing.assert_close(output.last_hidden_state[0][0][0][:4], expected_slice_logits, rtol=1e-4, atol=1e-4)
-    
+
     target_sizes = [(image.height, image.width)]
     threshold = 0.88
-    text_locations = fast_image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="rect")
-    
+    text_locations = fast_image_processor.post_process_text_detection(
+        output, target_sizes, threshold, bbox_type="rect"
+    )
+
     assert text_locations[0]["bboxes"][0] == expected_slice_boxes
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
@@ -289,7 +292,10 @@ if __name__ == "__main__":
         help="whether to assert logits outputs",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="/home/user/app/transformers/src/transformers/models/fast/output", type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default="/home/user/app/transformers/src/transformers/models/fast/output",
+        type=str,
+        help="Path to the folder to output PyTorch model.",
     )
     args = parser.parse_args()
 

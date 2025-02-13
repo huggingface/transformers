@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fast model configuration"""
+"""Fast model configuration"""
+
 from transformers import CONFIG_MAPPING, PretrainedConfig
 from transformers.utils import logging
 
@@ -102,6 +103,7 @@ class FastConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     r"""
     [Raghavan/fast_base_tt_800_finetune_ic17mlt](https://huggingface.co/Raghavan/fast_base_tt_800_finetune_ic17mlt)
     """

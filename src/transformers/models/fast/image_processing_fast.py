@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for FAST."""
+
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -205,7 +206,7 @@ class FastImageProcessor(BaseImageProcessor):
         if width % self.size_divisor != 0:
             width += self.size_divisor - (width % self.size_divisor)
 
-        #TODO: check if working
+        # TODO: check if working
         self.img_size = (height, width)
         return resize(
             image,
@@ -378,7 +379,7 @@ class FastImageProcessor(BaseImageProcessor):
 
     def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", img_size=None):
         scale = 2
-        #TODO: fix resizing bug
+        # TODO: fix resizing bug
         img_size = img_size if img_size is not None else self.img_size
         print("image size", img_size)
         out = output["last_hidden_state"]
@@ -397,6 +398,7 @@ class FastImageProcessor(BaseImageProcessor):
         labels_ = []
         for kernel in kernels.numpy():
             import cv2
+
             ret, label_ = cv2.connectedComponents(kernel)
             labels_.append(label_)
         labels_ = np.array(labels_)
@@ -418,7 +420,6 @@ class FastImageProcessor(BaseImageProcessor):
             org_img_size = target_sizes[i]
             scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
 
-
             bboxes, scores = self.generate_bbox(
                 keys[i], labels[i], score_maps[i], scales, threshold, bbox_type=bbox_type
             )
@@ -427,14 +428,14 @@ class FastImageProcessor(BaseImageProcessor):
 
         return results
 
-    #TODO: debug this function giving different scores
+    # TODO: debug this function giving different scores
     def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
         label_num = len(keys)
         bboxes = []
         scores = []
         for index in range(1, label_num):
             i = keys[index]
-            ind = (label == i)
+            ind = label == i
             ind_np = ind.data.cpu().numpy()
             points = np.array(np.where(ind_np)).transpose((1, 0))
             if points.shape[0] < self.min_area:
