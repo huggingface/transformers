@@ -178,14 +178,14 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
             self.assertTrue(
                 isinstance(tokenizer, LlamaTokenizerFast),
-                f"Expected tokenizer(use_fast=True) type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+                f"Expected tokenizer(use_fast=True) type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
             )
 
             # Fast tokenizer will ignore `use_fast=False`
             tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
             self.assertTrue(
                 isinstance(tokenizer, LlamaTokenizerFast),
-                f"Expected tokenizer type(use_fast=False): `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+                f"Expected tokenizer type(use_fast=False): `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
             )
 
             # Save tokenizer
@@ -195,13 +195,14 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             # Verify post save and reload the fast tokenizer class did not change
             self.assertTrue(
                 isinstance(tokenizer, LlamaTokenizerFast),
-                f"Expected tokenizer type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+                f"Expected tokenizer type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
             )
 
             tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=True)
+            # Verify post save and reload the fast tokenizer class did not change
             self.assertTrue(
                 isinstance(tokenizer, LlamaTokenizerFast),
-                f"Expected tokenizer type: `LlamaTokenizerFast`, , actual=`{type(tokenizer)}`",
+                f"Expected tokenizer type: `LlamaTokenizerFast`, actual=`{type(tokenizer)}`",
             )
 
 
