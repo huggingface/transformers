@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from typing import Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -30,6 +29,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    get_image_size_for_max_height_width,
     infer_channel_dimension_format,
     make_flat_list_of_images,
     to_numpy_array,
@@ -65,23 +65,6 @@ def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> Li
             patches.append(patch)
 
     return patches
-
-
-def _get_patch_output_size(image, target_resolution, input_data_format):
-    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
-    target_height, target_width = target_resolution
-
-    scale_w = target_width / original_width
-    scale_h = target_height / original_height
-
-    if scale_w < scale_h:
-        new_width = target_width
-        new_height = min(math.ceil(original_height * scale_w), target_height)
-    else:
-        new_height = target_height
-        new_width = min(math.ceil(original_width * scale_h), target_width)
-
-    return new_height, new_width
 
 
 class AriaImageProcessor(BaseImageProcessor):
@@ -340,7 +323,11 @@ class AriaImageProcessor(BaseImageProcessor):
         Returns:
             np.array: The resized and padded image.
         """
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        target_height, target_width = target_resolution
+        height, width = get_image_size(image)
+        new_height, new_width = get_image_size_for_max_height_width(
+            (height, width), max_height=target_height, max_width=target_width
+        )
 
         # Resize the image
         resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
@@ -354,7 +341,10 @@ class AriaImageProcessor(BaseImageProcessor):
         Pad an image to a target resolution while maintaining aspect ratio.
         """
         target_height, target_width = target_resolution
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        height, width = get_image_size(image)
+        new_height, new_width = get_image_size_for_max_height_width(
+            (height, width), max_height=target_height, max_width=target_width
+        )
 
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2
