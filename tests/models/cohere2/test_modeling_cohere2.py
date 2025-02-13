@@ -54,7 +54,6 @@ class Cohere2ModelTester(CohereModelTester):
 @require_torch
 class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     all_model_classes = (Cohere2Model, Cohere2ForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Cohere2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Cohere2Model,

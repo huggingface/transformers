@@ -1540,6 +1540,14 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
+    @classmethod
+    def can_generate(cls) -> bool:
+        """
+        Legacy correction: BertForMaskedLM can't call `generate()` from GenerationMixin.
+        Remove after v4.50, when we stop making `PreTrainedModel` inherit from `GenerationMixin`.
+        """
+        return False
+
 
 @add_start_docstrings(
     """Bert Model with a `next sentence prediction (classification)` head on top.""",
