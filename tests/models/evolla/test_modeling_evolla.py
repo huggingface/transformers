@@ -66,7 +66,7 @@ class EvollaModelTester:
         self,
         parent,
         batch_size=1,
-        is_training=True,
+        is_training=False,
         text_seq_length=20,
         text_vocab_size=100,
         protein_seq_length=10,

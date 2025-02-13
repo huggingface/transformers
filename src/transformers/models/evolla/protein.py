@@ -477,9 +477,9 @@ class SaProtEmbeddings(nn.Module):
         )
 
         self.padding_idx = config.pad_token_id
-        # self.position_embeddings = nn.Embedding(
-        #     config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
-        # )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+        )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
 
@@ -516,9 +516,9 @@ class SaProtEmbeddings(nn.Module):
                 embeddings.dtype
             )
 
-        # if self.position_embedding_type == "absolute":
-        #     position_embeddings = self.position_embeddings(position_ids)
-        #     embeddings = embeddings + position_embeddings
+        if self.position_embedding_type == "absolute":
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings = embeddings + position_embeddings
 
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
