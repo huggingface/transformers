@@ -132,7 +132,7 @@ class Emu3ImageProcessor(BaseImageProcessor):
             The spatial downsample factor the image will be downsampled in feature extracting phase
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "image_sizes"]
 
     def __init__(
         self,

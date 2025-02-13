@@ -71,3 +71,6 @@ Examples of use can be found in the [example scripts](../examples) or [example n
 
 [[autodoc]] data.data_collator.DataCollatorWithFlattening
 
+# DataCollatorForMultipleChoice
+
+[[autodoc]] data.data_collator.DataCollatorForMultipleChoice
