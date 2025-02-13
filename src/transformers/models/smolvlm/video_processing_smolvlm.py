@@ -64,7 +64,7 @@ def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
     duration_seconds = metadata.get("duration", 0)
 
     if duration_seconds <= 0:
-        raise ValueError("fInvalid duration_seconds={duration_seconds} in metadata.")
+        raise ValueError(f"Invalid duration_seconds={duration_seconds} in metadata.")
 
     # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
     estimated_frames = int(round(target_fps * duration_seconds))
@@ -91,63 +91,3 @@ def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
     indices = np.unique(indices)
 
     return indices
-
-
-
-def load_smolvlm_video(
-    path: str,
-    max_frames: int = 64,
-    target_fps: float = 1.0,
-    skip_secs: float = 1.0,
-    backend: str = "decord"
-) -> Tuple[List[Image.Image], List[str], float]:
-    """
-    Loads a video from `path`, replicating the old skip-secs logic by
-    using the new `load_video` + a custom `sample_indices_fn`.
-    
-    1) We gather metadata with `get_video_details`
-       (this is optional here, but often useful for logs or verifying fps).
-    2) We call `load_video` with `sample_indices_fn` that
-       implements skipping logic + uniform sampling.
-    3) Convert the returned array (N, C, H, W) to a list of PIL images in RGB.
-    4) Build timestamps (MM:SS) based on the final sampled indices.
-
-    Returns:
-        frames (List[Image.Image]): Decoded frames in RGB format.
-        timestamps (List[str]): Timestamps (MM:SS) for each frame.
-        duration_seconds (float): The total video duration in seconds.
-    """
-    if backend == "decord" and not is_decord_available():
-        logger.info("Decord not available, defaulting to OpenCV.")
-        backend = "opencv"
-
-    # Wrap our skip-logic sampler in a partial, so we can pass skip_secs, etc.
-    # We'll let load_video fill in (num_frames, fps, metadata, ...) automatically.
-    def sample_indices_fn_func(metadata, **fn_kwargs):
-        return smolvlm_sample_indices_fn(metadata, max_frames=max_frames, target_fps=target_fps,  skip_secs=skip_secs, **fn_kwargs)
-    sample_indices_fn = sample_indices_fn_func
-    
-    video_array, metadata = load_video(
-        video=path,
-        backend=backend,
-        sample_indices_fn=sample_indices_fn
-    )
-
-    # Construct final frames & timestamps
-    # Decide if we need to do color conversion
-    sampled_indices = metadata.get("frame_indices", list(range(video_array.shape[0])))
-    fps = metadata.get("fps")
-
-    frames, timestamps = [], []
-    for i, frame_idx in enumerate(sampled_indices):
-        # Convert to PIL.Image (RGB)
-        pil_frame = Image.fromarray(frame, mode="RGB")
-        frames.append(pil_frame)
-
-        # Build timestamps
-        sec = frame_idx / fps
-        mm = int(sec // 60)
-        ss = int(sec % 60)
-        timestamps.append(f"{mm:02d}:{ss:02d}")
-
-    return frames, timestamps, duration_seconds
