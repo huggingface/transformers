@@ -133,6 +133,7 @@ class VideoMetadata:
     duration: float
     video_backend: str
 
+
 AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 
 
@@ -609,10 +610,7 @@ def read_video_opencv(
     video_fps = video.get(cv2.CAP_PROP_FPS)
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
-        total_num_frames=int(total_num_frames),
-        fps=float(video_fps),
-        duration=float(duration),
-        video_backend="opencv"
+        total_num_frames=int(total_num_frames), fps=float(video_fps), duration=float(duration), video_backend="opencv"
     )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
@@ -665,10 +663,7 @@ def read_video_decord(
     total_num_frames = len(vr)
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
-        total_num_frames=int(total_num_frames),
-        fps=float(video_fps),
-        duration=float(duration),
-        video_backend="decord"
+        total_num_frames=int(total_num_frames), fps=float(video_fps), duration=float(duration), video_backend="decord"
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
@@ -707,10 +702,7 @@ def read_video_pyav(
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
     duration = total_num_frames / video_fps if video_fps else 0
     metadata = VideoMetadata(
-        total_num_frames=int(total_num_frames),
-        fps=float(video_fps),
-        duration=float(duration),
-        video_backend="pyav"
+        total_num_frames=int(total_num_frames), fps=float(video_fps), duration=float(duration), video_backend="pyav"
     )
     indices = sample_indices_fn(metadata=metadata, **kwargs)
 
@@ -766,7 +758,7 @@ def read_video_torchvision(
         total_num_frames=int(total_num_frames),
         fps=float(video_fps),
         duration=float(duration),
-        video_backend="torchvision"
+        video_backend="torchvision",
     )
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
