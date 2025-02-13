@@ -16,11 +16,12 @@
 import unittest
 
 import numpy as np
+import requests
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_5_vl.image_processing_qwen2_5_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import (
     ImageProcessingTestMixin,
@@ -35,6 +36,9 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import Qwen2_5_VLImageProcessor
+
+    if is_torchvision_available():
+        from transformers import Qwen2_5_VLImageProcessorFast
 
 
 class Qwen2_5_VLImageProcessingTester:
@@ -103,6 +107,7 @@ class Qwen2_5_VLImageProcessingTester:
 @require_vision
 class Qwen2_5_VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Qwen2_5_VLImageProcessor if is_vision_available() else None
+    fast_image_processing_class = Qwen2_5_VLImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -250,3 +255,26 @@ class Qwen2_5_VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         # Image processor should return same pixel values, independently of ipnut format
         self.assertTrue((encoded_images_nested == encoded_images).all())
         self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        dummy_image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
+
+        torch.testing.assert_close(
+            encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=100, atol=1e-2
+        )
