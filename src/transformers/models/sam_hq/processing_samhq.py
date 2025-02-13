@@ -156,13 +156,13 @@ class SamHQProcessor(ProcessorMixin):
                     for point,original_size in zip(input_points,original_sizes)
                 ]
 
-        if not all(point.shape == input_points[0].shape for point in input_points):
-            if input_labels is not None:
-                input_points,input_labels = self._pad_points_and_labels(
-                    input_points,input_labels,point_pad_value
-                )
+            if not all(point.shape == input_points[0].shape for point in input_points):
+                if input_labels is not None:
+                    input_points,input_labels = self._pad_points_and_labels(
+                        input_points,input_labels,point_pad_value
+                    )
 
-        input_points = np.array(input_points)
+            input_points = np.array(input_points)
 
         if input_labels is not None:
             input_labels = np.array(input_labels)   
