@@ -74,7 +74,7 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> to
 
     Args:
         tensor (torch.Tensor): The input tensor with shape (..., num_channels).
-        freqs (torch.Tensor): The frequency matrix computed from rotary embeddings, 
+        freqs (torch.Tensor): The frequency matrix computed from rotary embeddings,
                               typically obtained from MLCDRotaryEmbedding.
     Returns:
         torch.Tensor: The transformed tensor after applying rotary positional embeddings.
