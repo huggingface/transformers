@@ -1024,40 +1024,6 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
     return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
 
 
-def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tuple[str, int, int, List[str]]:
-    """
-    Find the text in a file between two prompts.
-
-    Args:
-        filename (`str`): The name of the file to look into.
-        start_prompt (`str`): The string to look for that introduces the content looked for.
-        end_prompt (`str`): The string to look for that ends the content looked for.
-
-    Returns:
-        Tuple[str, int, int, List[str]]: The content between the two prompts, the index of the start line in the
-        original file, the index of the end line in the original file and the list of lines of that file.
-    """
-    with open(filename, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-    # Find the start prompt.
-    start_index = 0
-    while not lines[start_index].startswith(start_prompt):
-        start_index += 1
-    start_index += 1
-
-    end_index = start_index
-    while not lines[end_index].startswith(end_prompt):
-        end_index += 1
-    end_index -= 1
-
-    while len(lines[start_index]) <= 1:
-        start_index += 1
-    while len(lines[end_index]) <= 1:
-        end_index -= 1
-    end_index += 1
-    return "".join(lines[start_index:end_index]), start_index, end_index, lines
-
-
 # Map a model name with the name it has in the README for the check_readme check
 SPECIAL_MODEL_NAMES = {
     "Bert Generation": "BERT For Sequence Generation",

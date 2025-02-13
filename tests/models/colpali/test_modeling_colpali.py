@@ -26,7 +26,6 @@ from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from transformers import (
     is_torch_available,
-    is_vision_available,
 )
 from transformers.models.colpali.configuration_colpali import ColPaliConfig
 from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput
@@ -42,9 +41,6 @@ from transformers.testing_utils import (
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class ColPaliForRetrievalModelTester:
@@ -238,7 +234,7 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     @slow
     @require_vision

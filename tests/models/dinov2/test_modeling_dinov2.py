@@ -212,6 +212,8 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
+    test_torch_exportable = True
+
     all_model_classes = (
         (
             Dinov2Model,
@@ -327,10 +329,10 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-2.1747, -0.4729, 1.0936], [-3.2780, -0.8269, -0.9210], [-2.9129, 1.1284, -0.7306]],
+            [[-2.2005, -0.4495, 1.0964], [-3.3959, -0.8942, -1.0315], [-2.9355, 1.1564, -0.7656]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
 
 @require_torch

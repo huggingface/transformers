@@ -65,6 +65,7 @@ if is_torch_available():
     import torch
     from torch.utils.data import DataLoader, Dataset
 
+    from ..modeling_utils import PreTrainedModel
     from ..models.auto.modeling_auto import AutoModel
 
     # Re-export for backward compatibility
@@ -383,7 +384,7 @@ def get_framework(model, revision: Optional[str] = None):
 
 def get_default_model_and_revision(
     targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]
-) -> Union[str, Tuple[str, str]]:
+) -> Tuple[str, str]:
     """
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
@@ -400,7 +401,9 @@ def get_default_model_and_revision(
 
     Returns
 
-        `str` The model string representing the default model for this pipeline
+        Tuple:
+            - `str` The model string representing the default model for this pipeline.
+            - `str` The revision of the model.
     """
     if is_torch_available() and not is_tf_available():
         framework = "pt"
@@ -447,7 +450,7 @@ def load_assistant_model(
     if not model.can_generate() or assistant_model is None:
         return None, None
 
-    if not isinstance(model, PreTrainedModel):
+    if getattr(model, "framework") != "pt" or not isinstance(model, PreTrainedModel):
         raise ValueError(
             "Assisted generation, triggered by the `assistant_model` argument, is only available for "
             "`PreTrainedModel` model instances. For instance, TF or JAX models are not supported."
@@ -1146,6 +1149,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                     yield
             elif self.device.type == "musa":
                 with torch.musa.device(self.device):
+                    yield
+            elif self.device.type == "xpu":
+                with torch.xpu.device(self.device):
                     yield
             else:
                 yield
