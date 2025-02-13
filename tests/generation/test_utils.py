@@ -1812,8 +1812,8 @@ class GenerationTesterMixin:
             inputs_embeds = model.get_input_embeddings()(input_ids)
             outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
 
-            # we should get `max_length - 1` in shape, not `max_length - embeds_length`. 
-	    # -1 because the last generated token isn't yet in the cache.
+            # we should get `max_length - 1` in shape, not `max_length - embeds_length`.
+            # -1 because the last generated token isn't yet in the cache.
             cache_shape = (batch_size, num_key_value_heads, max_length - 1, head_dim)
             self.assertTrue(isinstance(outputs.past_key_values, StaticCache))
             self.assertTrue(len(outputs.past_key_values.key_cache) == num_hidden_layers)
