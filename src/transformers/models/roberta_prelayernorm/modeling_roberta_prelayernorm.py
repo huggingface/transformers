@@ -53,6 +53,28 @@ _CHECKPOINT_FOR_DOC = "andreasmadsen/efficient_mlm_m0.40"
 _CONFIG_FOR_DOC = "RobertaPreLayerNormConfig"
 
 
+class RobertaPreLayerNormPooler(nn.Module):
+    """
+    PreLayerNorm version of the RoBERTa pooler, applying layer norm before pooling.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # Layer norm is applied first in the pre-layer norm architecture
+        pooled_output = self.LayerNorm(hidden_states)
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token
+        first_token_tensor = pooled_output[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
 # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->RobertaPreLayerNorm
 class RobertaPreLayerNormEmbeddings(nn.Module):
     """

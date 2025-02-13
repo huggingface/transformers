@@ -1491,7 +1491,7 @@ class TFData2VecVisionFCNHead(keras.layers.Layer):
                     kernel_size=kernel_size,
                     padding="same",
                     dilation=dilation,
-                    name=f"conv_module_{i+2}",
+                    name=f"conv_module_{i + 2}",
                 )
             )
         if self.num_convs == 0:

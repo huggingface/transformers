@@ -168,29 +168,29 @@ tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_dir)
 # Load dataset
 t_start = time.time()
 ds = load_dataset(args.dataset_name, split="train")
-print(f"Time to load dataset: {time.time()-t_start:.2f}")
+print(f"Time to load dataset: {time.time() - t_start:.2f}")
 
 # Run preprocessing
 t_start = time.time()
 ds = ds.map(preprocess, num_proc=args.num_workers)
-print(f"Time to preprocess dataset: {time.time()-t_start:.2f}")
+print(f"Time to preprocess dataset: {time.time() - t_start:.2f}")
 
 # Deduplicate hashes
 uniques = set(ds.unique("hash"))
 frac = len(uniques) / len(ds)
-print(f"Fraction of duplicates: {1-frac:.2%}")
+print(f"Fraction of duplicates: {1 - frac:.2%}")
 
 # Deduplicate data and apply heuristics
 t_start = time.time()
 ds_filter = ds.filter(filter, fn_kwargs={"uniques": uniques, "args": args})
-print(f"Time to filter dataset: {time.time()-t_start:.2f}")
+print(f"Time to filter dataset: {time.time() - t_start:.2f}")
 print(f"Size of filtered dataset: {len(ds_filter)}")
 
 # Deduplicate with minhash and jaccard similarity
 if args.near_deduplication:
     t_start = time.time()
     ds_filter, duplicate_clusters = deduplicate_dataset(ds_filter, args.jaccard_threshold)
-    print(f"Time to deduplicate dataset: {time.time()-t_start:.2f}")
+    print(f"Time to deduplicate dataset: {time.time() - t_start:.2f}")
     print(f"Size of deduplicate dataset: {len(ds_filter)}")
 
 # Save data in batches of samples_per_file
@@ -208,8 +208,8 @@ data_dir.mkdir(exist_ok=True)
 
 t_start = time.time()
 for file_number, index in enumerate(range(0, len(ds_filter), args.samples_per_file)):
-    file_path = str(data_dir / f"file-{file_number+1:012}.json")
+    file_path = str(data_dir / f"file-{file_number + 1:012}.json")
     end_index = min(len(ds_filter), index + args.samples_per_file)
     ds_filter.select(list(range(index, end_index))).to_json(file_path)
     compress_file(file_path)
-print(f"Time to save dataset: {time.time()-t_start:.2f}")
+print(f"Time to save dataset: {time.time() - t_start:.2f}")

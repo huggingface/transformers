@@ -460,6 +460,26 @@ class BertSelfOutput(nn.Module):
         return hidden_states
 
 
+class YosoSelfOutput(nn.Module):
+    """
+    The residual connection is defined in YosoLayer instead of here
+    (as is the case with other models), due to the layernorm applied before each
+    block.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
 class YosoAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()

@@ -110,7 +110,7 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
         raise ValueError(
             f"The JSON blob you used is invalid due to the following error: {e}.\n"
             f"JSON blob was: {json_blob}, decoding failed on that specific part of the blob:\n"
-            f"'{json_blob[place-4:place+5]}'."
+            f"'{json_blob[place - 4 : place + 5]}'."
         )
     except Exception as e:
         raise ValueError(f"Error in parsing the JSON blob: {e}")

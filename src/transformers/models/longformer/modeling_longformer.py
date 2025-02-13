@@ -43,6 +43,39 @@ _CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 
 
+class LongformerSelfOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
+class LongformerPooler(nn.Module):
+    """
+    Pool the output of Longformer into a pooled representation of the sequence.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
 @dataclass
 class LongformerBaseModelOutput(ModelOutput):
     """
@@ -510,12 +543,12 @@ class LongformerSelfAttention(nn.Module):
 
         self.layer_id = layer_id
         attention_window = config.attention_window[self.layer_id]
-        assert attention_window % 2 == 0, (
-            f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
-        )
-        assert attention_window > 0, (
-            f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
-        )
+        assert (
+            attention_window % 2 == 0
+        ), f"`attention_window` for layer {self.layer_id} has to be an even value. Given {attention_window}"
+        assert (
+            attention_window > 0
+        ), f"`attention_window` for layer {self.layer_id} has to be positive. Given {attention_window}"
 
         self.one_sided_attn_window_size = attention_window // 2
 
@@ -549,9 +582,9 @@ class LongformerSelfAttention(nn.Module):
         value_vectors = self.value(hidden_states)
 
         seq_len, batch_size, embed_dim = hidden_states.size()
-        assert embed_dim == self.embed_dim, (
-            f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
-        )
+        assert (
+            embed_dim == self.embed_dim
+        ), f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}"
 
         # normalize query
         query_vectors /= math.sqrt(self.head_dim)
@@ -619,9 +652,9 @@ class LongformerSelfAttention(nn.Module):
         )  # use fp32 for numerical stability
 
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (self.num_heads,), (
-                f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-            )
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
             attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
@@ -813,9 +846,9 @@ class LongformerSelfAttention(nn.Module):
         overlap of size window_overlap
         """
         batch_size, seq_len, num_heads, head_dim = query.size()
-        assert seq_len % (window_overlap * 2) == 0, (
-            f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
-        )
+        assert (
+            seq_len % (window_overlap * 2) == 0
+        ), f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}"
         assert query.size() == key.size()
 
         chunks_count = torch.div(seq_len, window_overlap, rounding_mode="trunc") - 1
@@ -1086,9 +1119,9 @@ class LongformerSelfAttention(nn.Module):
 
         # apply layer head masking
         if layer_head_mask is not None:
-            assert layer_head_mask.size() == (self.num_heads,), (
-                f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-            )
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
             global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
                 batch_size, self.num_heads, max_num_global_attn_indices, seq_len
             )
@@ -1298,9 +1331,9 @@ class LongformerEncoder(nn.Module):
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
-            assert head_mask.size()[0] == (len(self.layer)), (
-                f"The head_mask should be specified for {len(self.layer)} layers, but it is for {head_mask.size()[0]}."
-            )
+            assert head_mask.size()[0] == (
+                len(self.layer)
+            ), f"The head_mask should be specified for {len(self.layer)} layers, but it is for {head_mask.size()[0]}."
         for idx, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)

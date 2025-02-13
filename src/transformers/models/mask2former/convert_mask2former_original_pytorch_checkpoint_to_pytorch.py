@@ -523,11 +523,11 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 [
                     (
                         f"{src_prefix}.norm{layer_idx}.weight",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.weight",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.weight",
                     ),
                     (
                         f"{src_prefix}.norm{layer_idx}.bias",
-                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx+1}.bias",
+                        f"{dst_prefix}.hidden_states_norms.stage{layer_idx + 1}.bias",
                     ),
                 ]
             )

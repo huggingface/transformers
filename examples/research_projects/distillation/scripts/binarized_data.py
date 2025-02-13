@@ -76,7 +76,7 @@ def main():
         iter += 1
         if iter % interval == 0:
             end = time.time()
-            logger.info(f"{iter} examples processed. - {(end-start):.2f}s/{interval}expl")
+            logger.info(f"{iter} examples processed. - {(end - start):.2f}s/{interval}expl")
             start = time.time()
     logger.info("Finished binarization")
     logger.info(f"{len(data)} examples processed.")

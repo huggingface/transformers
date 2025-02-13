@@ -249,7 +249,7 @@ def print_model_summary(model, name_width=25, line_width=180, ignore=None):
             logger.info(s)
         else:
             logger.info(f"{name:{name_width}} {act_str}")
-            logger.info(f'{"  ":{name_width}} {wgt_str}')
+            logger.info(f"{'  ':{name_width}} {wgt_str}")
 
 
 def print_quant_summary(model):

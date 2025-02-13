@@ -151,7 +151,7 @@ def create_rename_keys(state_dict, base_model=False):
             k_new = k_new.replace("conv_1.", f"{model_prefix}conv_stem.")
         for i in [1, 2]:
             if f"layer_{i}." in k:
-                k_new = k_new.replace(f"layer_{i}.", f"{model_prefix}encoder.layer.{i-1}.layer.")
+                k_new = k_new.replace(f"layer_{i}.", f"{model_prefix}encoder.layer.{i - 1}.layer.")
         if ".exp_1x1." in k:
             k_new = k_new.replace(".exp_1x1.", ".expand_1x1.")
         if ".red_1x1." in k:
@@ -159,11 +159,11 @@ def create_rename_keys(state_dict, base_model=False):
 
         for i in [3, 4, 5]:
             if f"layer_{i}.0." in k:
-                k_new = k_new.replace(f"layer_{i}.0.", f"{model_prefix}encoder.layer.{i-1}.downsampling_layer.")
+                k_new = k_new.replace(f"layer_{i}.0.", f"{model_prefix}encoder.layer.{i - 1}.downsampling_layer.")
             if f"layer_{i}.1.local_rep.0." in k:
-                k_new = k_new.replace(f"layer_{i}.1.local_rep.0.", f"{model_prefix}encoder.layer.{i-1}.conv_kxk.")
+                k_new = k_new.replace(f"layer_{i}.1.local_rep.0.", f"{model_prefix}encoder.layer.{i - 1}.conv_kxk.")
             if f"layer_{i}.1.local_rep.1." in k:
-                k_new = k_new.replace(f"layer_{i}.1.local_rep.1.", f"{model_prefix}encoder.layer.{i-1}.conv_1x1.")
+                k_new = k_new.replace(f"layer_{i}.1.local_rep.1.", f"{model_prefix}encoder.layer.{i - 1}.conv_1x1.")
 
         for i in [3, 4, 5]:
             if i == 3:
@@ -176,15 +176,17 @@ def create_rename_keys(state_dict, base_model=False):
             for j in j_in:
                 if f"layer_{i}.1.global_rep.{j}." in k:
                     k_new = k_new.replace(
-                        f"layer_{i}.1.global_rep.{j}.", f"{model_prefix}encoder.layer.{i-1}.transformer.layer.{j}."
+                        f"layer_{i}.1.global_rep.{j}.", f"{model_prefix}encoder.layer.{i - 1}.transformer.layer.{j}."
                     )
-            if f"layer_{i}.1.global_rep.{j+1}." in k:
+            if f"layer_{i}.1.global_rep.{j + 1}." in k:
                 k_new = k_new.replace(
-                    f"layer_{i}.1.global_rep.{j+1}.", f"{model_prefix}encoder.layer.{i-1}.layernorm."
+                    f"layer_{i}.1.global_rep.{j + 1}.", f"{model_prefix}encoder.layer.{i - 1}.layernorm."
                 )
 
             if f"layer_{i}.1.conv_proj." in k:
-                k_new = k_new.replace(f"layer_{i}.1.conv_proj.", f"{model_prefix}encoder.layer.{i-1}.conv_projection.")
+                k_new = k_new.replace(
+                    f"layer_{i}.1.conv_proj.", f"{model_prefix}encoder.layer.{i - 1}.conv_projection."
+                )
 
         if "pre_norm_attn.0." in k:
             k_new = k_new.replace("pre_norm_attn.0.", "layernorm_before.")

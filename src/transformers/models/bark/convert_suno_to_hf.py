@@ -150,7 +150,7 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     model.load_state_dict(state_dict, strict=False)
     n_params = model.num_parameters(exclude_embeddings=True)
     val_loss = checkpoint["best_val_loss"].item()
-    logger.info(f"model loaded: {round(n_params/1e6,1)}M params, {round(val_loss,3)} loss")
+    logger.info(f"model loaded: {round(n_params / 1e6, 1)}M params, {round(val_loss, 3)} loss")
     model.eval()
     model.to(device)
     del checkpoint, state_dict

@@ -200,7 +200,7 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
         # handle missmatched shape
         elif value.shape != model_state_dict[f"{key_prefix}.{key}"].shape:
             val = model_state_dict[f"{key_prefix}.{key}"]
-            print(f"{original_key}-> {key} : \nshape {val.shape} and { value.shape}, do not match")
+            print(f"{original_key}-> {key} : \nshape {val.shape} and {value.shape}, do not match")
             key = original_key
 
         mapping[key] = original_key

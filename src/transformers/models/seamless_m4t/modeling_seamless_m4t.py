@@ -2869,7 +2869,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel, GenerationMixin):
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in
-                        {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
+                        {", ".join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
@@ -3140,7 +3140,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in
-                        {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
+                        {", ".join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
@@ -3407,7 +3407,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model.
-                    Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
+                    Please specify a `tgt_lang` in {",".join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
                     more languages for text translation than for speech synthesis."""
                     )
 
@@ -3736,7 +3736,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model.
-                    Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
+                    Please specify a `tgt_lang` in {",".join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
                     more languages for text translation than for speech synthesis."""
                     )
 
@@ -4151,7 +4151,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 elif tgt_lang not in lang_code_to_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model.
-                    Please specify a `tgt_lang` in {','.join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
+                    Please specify a `tgt_lang` in {",".join(lang_code_to_id.keys())}. Note that SeamlessM4T supports
                     more languages for text translation than for speech synthesis."""
                     )
 

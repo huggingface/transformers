@@ -53,6 +53,42 @@ EPSILON_ZERO_DIVISION = 1e-10
 CLOSE_ENOUGH_TO_LOG_ZERO = -10000.0
 
 
+class TapasPooler(nn.Module):
+    """
+    Pool the output of TAPAS into a pooled representation for the entire table + question.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token. This is compatible with TAPAS as it uses a
+        # [CLS] token at the start.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
+class TapasSelfOutput(nn.Module):
+    """Output layer for the TAPAS self attention mechanism."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
 @dataclass
 class TableQuestionAnsweringOutput(ModelOutput):
     """
@@ -1316,9 +1352,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert labels.shape[0] == float_answer.shape[0], (
-                        "Make sure the answers are a FloatTensor of shape (batch_size,)"
-                    )
+                    assert (
+                        labels.shape[0] == float_answer.shape[0]
+                    ), "Make sure the answers are a FloatTensor of shape (batch_size,)"
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1368,9 +1404,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert labels.shape[0] == aggregation_labels.shape[0], (
-                            "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
-                        )
+                        assert (
+                            labels.shape[0] == aggregation_labels.shape[0]
+                        ), "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation,
                             aggregate_mask,

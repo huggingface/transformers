@@ -377,7 +377,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                     tb_writer.add_scalar("lr", learning_rate_scalar[0], global_step)
                     if len(learning_rate_scalar) > 1:
                         for idx, lr in enumerate(learning_rate_scalar[1:]):
-                            tb_writer.add_scalar(f"lr/{idx+1}", lr, global_step)
+                            tb_writer.add_scalar(f"lr/{idx + 1}", lr, global_step)
                     tb_writer.add_scalar("loss", (tr_loss - logging_loss) / args.logging_steps, global_step)
                     if teacher is not None:
                         tb_writer.add_scalar("loss/distil", loss_logits.item(), global_step)

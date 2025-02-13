@@ -569,7 +569,7 @@ def main():
     # E.g. characters, such as `,` and `.` do not really have an acoustic characteristic
     # that could be easily picked up by the model
     chars_to_ignore_regex = (
-        f'[{"".join(data_args.chars_to_ignore)}]' if data_args.chars_to_ignore is not None else None
+        f"[{''.join(data_args.chars_to_ignore)}]" if data_args.chars_to_ignore is not None else None
     )
 
     def remove_special_characters(batch):

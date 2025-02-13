@@ -289,7 +289,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertTrue(
                     find,
                     f"'{special_token.__repr__()}' should appear as an `AddedToken` in the all_special_tokens_extended = "
-                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k)==new_special_token_str]} but it is missing"
+                    f"{[k for k in new_tokenizer.all_special_tokens_extended if str(k) == new_special_token_str]} but it is missing"
                     ", this means that the new tokenizers did not keep the `rstrip`, `lstrip`, `normalized` etc attributes.",
                 )
             elif special_token not in special_tokens_map:

@@ -131,7 +131,7 @@ class POS(TokenClassificationTask):
             s_p = preds_list[example_id]
             out = ""
             for token in sentence:
-                out += f'{token["form"]} ({token["upos"]}|{s_p.pop(0)}) '
+                out += f"{token['form']} ({token['upos']}|{s_p.pop(0)}) "
             out += "\n"
             writer.write(out)
             example_id += 1

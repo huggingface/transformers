@@ -400,8 +400,7 @@ class UdopPatchEmbeddings(nn.Module):
         batch_size, num_channels, height, width = pixel_values.shape
         if height != self.image_size[0] or width != self.image_size[1]:
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.proj(pixel_values)
         embeddings = embeddings.flatten(2).transpose(1, 2)

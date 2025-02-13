@@ -203,8 +203,7 @@ def convert_pvt_v2_checkpoint(pvt_v2_size, pvt_v2_checkpoint, pytorch_dump_folde
         config_path = "OpenGVLab/pvt_v2_b5"
     else:
         raise ValueError(
-            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but "
-            f"'{pvt_v2_size}' was given"
+            f"Available model sizes: 'b0', 'b1', 'b2', 'b2-linear', 'b3', 'b4', 'b5', but '{pvt_v2_size}' was given"
         )
     config = PvtV2Config.from_pretrained(config_path)
     # load original model from https://github.com/whai362/PVT
