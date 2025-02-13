@@ -496,7 +496,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 ):
     all_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
