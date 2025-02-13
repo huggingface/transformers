@@ -104,7 +104,7 @@ KOSMOS2_5_START_DOCSTRING = r"""
 
 KOSMOS2_5_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, height, width)`):
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
             Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
             [`Kosmos2_5ImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
@@ -181,7 +181,7 @@ KOSMOS2_5_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, height, width)`):
+        flattened_patches (`torch.FloatTensor` of shape `(batch_size, max_patches, 2 + patch_height * patch_width * image_channels)`):
             Flattened patches of the images. `flattened_patches` can be obtained using [`AutoImageProcessor`]. See
             [`Kosmos2_5ImageProcessor.__call__`] for details.
         width (`torch.FloatTensor` of shape `(batch_size,)`):
