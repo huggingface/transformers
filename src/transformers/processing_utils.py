@@ -1350,7 +1350,7 @@ class ProcessorMixin(PushToHubMixin):
                     batch_video_metadata.append(video_metadata)
 
             # Process conversation with video/image information if needed. Then convert into a prompt using Jinja template
-            conversations = self._process_messaged_for_chat_template(
+            conversations = self._process_messages_for_chat_template(
                 conversations,
                 batch_images=batch_images,
                 batch_videos=batch_videos,
