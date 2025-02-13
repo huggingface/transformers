@@ -113,14 +113,15 @@ class EvollaModelTester:
     def is_encoder_decoder(self):
         return False
     
-    def prepare_config_and_inputs(self):
-        text_input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.text_vocab_size)
+    def prepare_config_and_inputs(self, num_proteins=None):
+        batch_size = num_proteins if num_proteins is not None else self.batch_size
+        text_input_ids = ids_tensor([batch_size, self.text_seq_length], self.text_vocab_size)
 
-        protein_input_ids = ids_tensor([self.batch_size, self.protein_seq_length], self.protein_vocab_size)
+        protein_input_ids = ids_tensor([batch_size, self.protein_seq_length], self.protein_vocab_size)
 
         if self.use_input_mask:
-            text_input_mask = random_attention_mask([self.batch_size, self.text_seq_length])
-            protein_input_mask = random_attention_mask([self.batch_size, self.protein_seq_length])
+            text_input_mask = random_attention_mask([batch_size, self.text_seq_length])
+            protein_input_mask = random_attention_mask([batch_size, self.protein_seq_length])
 
         config = self.get_config()
         return (config, text_input_ids, text_input_mask, protein_input_ids, protein_input_mask)
@@ -159,22 +160,22 @@ class EvollaModelTester:
         config,
         input_ids,
         input_mask,
-        pixel_values,
-        image_attention_mask,
-        interpolate_pos_encoding,
+        protein_input_ids,
+        protein_input_mask,
+        batch_size=None,
     ):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         model = EvollaModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
             input_ids,
             attention_mask=input_mask,
-            pixel_values=pixel_values,
-            image_attention_mask=image_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
+            protein_input_ids=protein_input_ids,
+            protein_attention_mask=protein_input_mask,
         )
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
+            result.last_hidden_state.shape, (batch_size, input_ids.shape[1], self.hidden_size)
         )
 
     
@@ -183,9 +184,8 @@ class EvollaModelTester:
         config,
         input_ids,
         input_mask,
-        pixel_values,
-        image_attention_mask,
-        interpolate_pos_encoding,
+        protein_input_ids,
+        protein_input_mask,
     ):
         model = EvollaForProteinText2Text(config)
         model.to(torch_device)
@@ -193,9 +193,8 @@ class EvollaModelTester:
         model.generate(
             input_ids,
             attention_mask=input_mask,
-            pixel_values=pixel_values,
-            image_attention_mask=image_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
+            protein_input_ids=protein_input_ids,
+            protein_attention_mask=protein_input_mask,
             max_length=self.seq_length + 2,
         )
 
@@ -224,6 +223,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
     test_resize_embeddings = False
+    maxDiff = None
 
     def setUp(self):
         self.model_tester = EvollaModelTester(self)
@@ -253,6 +253,33 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             super().test_model_outputs_equivalence()
         finally:
             self.all_model_classes = orig
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model_single_protein(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_proteins=1
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs, batch_size=1)
+
+    def test_model_multiple_proteins(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_proteins=2
+        )
+        self.model_tester.create_and_check_model(*config_and_inputs, batch_size=2)
+
+    def test_generate_single_protein(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_proteins=1
+        )
+        self.model_tester.create_and_check_model_gen(*config_and_inputs)
+
+    def test_generate_multiple_proteins(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(
+            num_proteins=2
+        )
+        self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
     def test_saprot_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -331,41 +358,27 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     #     pass
 
 @require_torch
-@require_vision
 class EvollaModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
-        return (
-            EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B", revision="refs/pr/11")
-            if is_vision_available()
-            else None
-        )
+        return EvollaProcessor.from_pretrained("/zhouxibin/workspaces/transformers/evolla-base", revision="refs/pr/11")
 
     @require_bitsandbytes
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        cat_image_path = self.tests_dir / "fixtures/tests_samples/COCO/000000039769.png"
-        cats_image_obj = Image.open(cat_image_path)  # 2 cats
-        dogs_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
-
-        prompts = [
-            [
-                "User:",
-                dogs_image_url,
-                "Describe this image.\nAssistant: An image of two dogs.\n",
-                "User:",
-                cats_image_obj,
-                "Describe this image.\nAssistant:",
-            ],
-            [
-                "User:",
-                cats_image_obj,
-                "Describe this image.\nAssistant: An image of two kittens.\n",
-                "User:",
-                dogs_image_url,
-                "Describe this image.\nAssistant:",
-            ],
+        protein_information = {
+            "aa_seq": "AAAA",
+            "foldseek": "dddd"
+        }
+        proteins = [protein_information]
+        
+        message = [
+            {"role": "system", "content": "You are an AI expert that can answer any questions about protein."},
+            {"role": "user", "content": "What is the function of this protein?"}
         ]
+        messages_list = [message]
+        processor = self.default_processor
+        inputs = processor(messages_list=messages_list, proteins=proteins, return_tensors="pt", padding="longest").to(torch_device)
 
         # the CI gpu is small so using quantization to fit
         quantization_config = BitsAndBytesConfig(
@@ -373,10 +386,8 @@ class EvollaModelIntegrationTest(TestCasePlus):
             bnb_4bit_compute_dtype="float16",
         )
         model = EvollaForProteinText2Text.from_pretrained(
-            "westlake-repl/Evolla-10B", quantization_config=quantization_config, device_map="auto"
+            "/zhouxibin/workspaces/transformers/evolla-base", quantization_config=quantization_config, device_map="auto"
         )
-        processor = self.default_processor
-        inputs = processor(text=prompts, return_tensors="pt", padding="longest").to(torch_device)
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
