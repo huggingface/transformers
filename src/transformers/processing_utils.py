@@ -1094,7 +1094,7 @@ class ProcessorMixin(PushToHubMixin):
     @staticmethod
     def _get_class_from_class_name(attribute_name, class_name):
         if hasattr(transformers_module, class_name):
-            obj_class = transformers_module.class_name
+            obj_class = getattr(transformers_module, class_name)
         else:
             if attribute_name == "tokenizer":
                 mapping = getattr(transformers_module.models.auto.tokenization_auto, "TOKENIZER_MAPPING")
