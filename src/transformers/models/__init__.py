@@ -167,6 +167,7 @@ from . import (
     mimi,
     mistral,
     mixtral,
+    mlcd,
     mllama,
     mluke,
     mobilebert,

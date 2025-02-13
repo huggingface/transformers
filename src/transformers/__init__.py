@@ -609,6 +609,7 @@ _import_structure = {
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
+    "models.mlcd": ["MLCDVisionConfig"],
     "models.mllama": [
         "MllamaConfig",
         "MllamaProcessor",
