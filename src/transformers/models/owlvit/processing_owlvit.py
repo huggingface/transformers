@@ -167,14 +167,14 @@ class OwlViTProcessor(ProcessorMixin):
                 encodings = []
 
                 # Maximum number of queries across batch
-                max_num_queries = max([len(t) for t in text])
+                max_num_queries = max([len(text_single) for text_single in text])
 
                 # Pad all batch samples to max number of text queries
-                for t in text:
-                    if len(t) != max_num_queries:
-                        t = t + [" "] * (max_num_queries - len(t))
+                for text_single in text:
+                    if len(text_single) != max_num_queries:
+                        text_single = text_single + [" "] * (max_num_queries - len(text_single))
 
-                    encoding = self.tokenizer(t, **output_kwargs["text_kwargs"])
+                    encoding = self.tokenizer(text_single, **output_kwargs["text_kwargs"])
                     encodings.append(encoding)
             else:
                 raise TypeError("Input text should be a string, a list of strings or a nested list of strings")
