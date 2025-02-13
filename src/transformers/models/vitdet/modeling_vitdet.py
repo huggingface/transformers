@@ -25,7 +25,12 @@ from torch import nn
 from ...activations import ACT2FN
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_vitdet import VitDetConfig
 
