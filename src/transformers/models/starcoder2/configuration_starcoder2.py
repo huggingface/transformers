@@ -143,6 +143,11 @@ class Starcoder2Config(PretrainedConfig):
         "layers.*.mlp.c_fc": "colwise",
         "layers.*.mlp.c_proj": "colwise",
     }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,

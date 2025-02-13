@@ -25,11 +25,11 @@ from ...test_image_processing_common import ImageProcessingTestMixin, prepare_im
 if is_vision_available():
     from transformers import ViTImageProcessor
 
-if is_torchvision_available():
-    from transformers import ViTImageProcessorFast
+    if is_torchvision_available():
+        from transformers import ViTImageProcessorFast
 
 
-class ViTImageProcessingTester(unittest.TestCase):
+class ViTImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -44,7 +44,6 @@ class ViTImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size

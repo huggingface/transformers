@@ -708,7 +708,7 @@ class AriaPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = False
 
     def _init_weights(self, module):
@@ -1056,7 +1056,7 @@ class AriaTextModel(AriaTextPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1141,6 +1141,7 @@ class AriaTextForCausalLM(AriaTextPreTrainedModel, GenerationMixin):
 
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = AriaTextConfig
 
     def __init__(self, config: AriaTextConfig):
@@ -1561,6 +1562,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             logits_to_keep=logits_to_keep,
+            cache_position=cache_position,
         )
 
         logits = outputs[0]

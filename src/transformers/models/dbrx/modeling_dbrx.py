@@ -675,6 +675,8 @@ class DbrxExperts(nn.Module):
         v1_chunked = [v1.squeeze(dim=0) for v1 in v1_chunked]
         w2_chunked = [w2.squeeze(dim=0) for w2 in w2_chunked]
         for expert_idx in range(0, self.moe_num_experts):
+            # (This cause torch.compile to fail with `torch._dynamo.exc.Unsupported: dynamic shape operator: aten.nonzero.default`)
+            # (set torch._dynamo.config.capture_dynamic_output_shape_ops = True may help but not tested)
             topk_idx, token_idx = torch.where(expert_mask[expert_idx])
             if token_idx.shape[0] == 0:
                 continue
@@ -831,7 +833,7 @@ class DbrxPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module: nn.Module):
         std = self.config.initializer_range
@@ -978,6 +980,7 @@ class DbrxModel(DbrxPreTrainedModel):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, MoeModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1157,7 +1160,7 @@ class DbrxModel(DbrxPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1276,6 +1279,7 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""Forward function for causal language modeling.
 
@@ -1342,16 +1346,12 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         aux_loss = None
         if output_router_logits:
