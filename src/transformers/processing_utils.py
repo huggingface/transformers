@@ -1201,18 +1201,18 @@ class ProcessorMixin(PushToHubMixin):
         **chat_template_kwargs: Unpack[AllKwargsForChatTemplate],
     ):
         """
-        Used within `apply_chat_template` when a model has special way to process conversation history. For example,
-        video models might want to specify in the prompt the duratin of video or which frame indices ate which timestamps
+        Used within `apply_chat_template` when a model has a special way to process conversation history. For example,
+        video models might want to specify in the prompt the duration of video or which frame indices at which timestamps
         were sampled. This information cannot be accessed before the video is loaded.
 
-        For most models it is a no-op, must be overriden by model processors which require special processing.
+        For most models it is a no-op, and must be overriden by model processors which require special processing.
 
         Args:
             conversation (`List[Dict, str, str]`):
                 The conversation to process. Always comes in batched format.
             batch_images (`List[List[ImageInput]]`):
                 Batch of images that were loaded from url/path defined in the conversation. The images
-                are ordered in the samm way as in the conversation. Comes in nested list format, one list of `PIL` images
+                are ordered in the same way as in the conversation. Comes in nested list format, one list of `PIL` images
                 per batch.
             batch_videos (`List[List[ImageInput]]`):
                 Batch of videos that were loaded from url/path defined in the conversation. The videos
@@ -1220,7 +1220,7 @@ class ProcessorMixin(PushToHubMixin):
                 per batch.
             batch_video_metadata (`List[List[Dict[[str, any]]]]`):
                 Batch of metadata returned from loading videos. That includes video fps, duration and total number of framer in original video.
-                Metadata are ordered in the samm way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
+                Metadata are ordered in the same way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
                 per batch.
 
         """
