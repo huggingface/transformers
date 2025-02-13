@@ -450,13 +450,13 @@ Implementations:
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 - [OSLO](https://github.com/tunib-ai/oslo) has the tensor parallelism implementation based on the Transformers.
-- [`transformers` integration](main_classes/trainer)
+- [`transformers` integration](main_classes/trainer) tensor parallelism is available through tp_size attribute for models having `base_tp_plan`. Further you can look at [example usage](perf_infer_gpu_multi)
 
 SageMaker combines TP with DP for a more efficient processing.
 
 🤗 Transformers status:
-- core: not yet implemented in the core
-- but if you want inference [parallelformers](https://github.com/tunib-ai/parallelformers) provides this support for most of our models. So until this is implemented in the core you can use theirs. And hopefully training mode will be supported too.
+- core: uses PyTorch 2 APIs to support tensor parallelism to models having base_tp_plan in their respective config classes.
+- Alternatively, you can as well try [parallelformers](https://github.com/tunib-ai/parallelformers) that provides this support for most of our models. Training mode with TP is as well supported natively in transformers.
 - Deepspeed-Inference also supports our BERT, GPT-2, and GPT-Neo models in their super-fast CUDA-kernel-based inference mode, see more [here](https://www.deepspeed.ai/tutorials/inference-tutorial/)
 
 🤗 Accelerate integrates with [TP from Megatron-LM](https://huggingface.co/docs/accelerate/v0.23.0/en/usage_guides/megatron_lm).
@@ -536,7 +536,7 @@ Important papers:
 - [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](
 https://arxiv.org/abs/2201.11990)
 
-🤗 Transformers status: not yet implemented, since we have no PP and TP.
+🤗 Transformers status: not yet implemented, since we have no PP.
 
 ## FlexFlow
 
