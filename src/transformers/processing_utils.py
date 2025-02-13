@@ -1325,7 +1325,11 @@ class ProcessorMixin(PushToHubMixin):
                             video = [np.array(load_image(image_fname)).T for image_fname in fname]
                             # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
-                            metadata = None  # TODO: infer metadata from loaded video
+                            metadata = None
+                            logger.warning(
+                                "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
+                                "If you model applies special processing based on metadata, please load the whole video and let the model sample frames."
+                            )
                         else:
                             video, metadata = load_video(
                                 fname,
