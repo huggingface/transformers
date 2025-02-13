@@ -186,7 +186,7 @@ class VideoProcessingTestMixin:
 
         encoding_slow = video_processor_slow(video_inputs, return_tensors="pt")
         encoding_fast = video_processor_fast(video_inputs, return_tensors="pt")
-        self.assertTrue(torch.allclose(encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1))
+        torch.testing.assert_close(encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1, rtol=1e-3)
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow[self.input_name] - encoding_fast[self.input_name])).item(), 1e-3
         )
@@ -212,7 +212,7 @@ class VideoProcessingTestMixin:
         encoding_slow = video_processor_slow(video_inputs, return_tensors="pt")
         encoding_fast = video_processor_fast(video_inputs, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1))
+        torch.testing.assert_close(encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1, rtol=1e-3)
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow[self.input_name] - encoding_fast[self.input_name])).item(), 1e-3
         )
