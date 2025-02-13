@@ -26,43 +26,51 @@
 import math
 from typing import Dict, List, Optional, Union
 
-import numpy as np
+import torch
+import torch.nn.functional as F
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    SizeDict,
     VideoInput,
     get_image_size,
-    infer_channel_dimension_format,
-    is_scaled_image,
     make_batched_videos,
     make_flat_list_of_images,
-    make_list_of_images,
-    to_numpy_array,
     valid_images,
-    validate_preprocess_arguments,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
+    add_start_docstrings,
     is_torchvision_available,
     is_torchvision_v2_available,
-    logging,
 )
 
 
 if is_torchvision_v2_available():
-    pass
+    from torchvision.transforms.v2 import functional as F
 elif is_torchvision_available():
-    pass
+    from torchvision.transforms import functional as F
 
 
-logger = logging.get_logger(__name__)
+class Qwen25FastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
 
 
 def smart_resize(
@@ -96,9 +104,25 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class Qwen2_5_VLImageProcessor(BaseImageProcessor):
+@add_start_docstrings(
+    "Constructs a fast Qwen2-VL image processor that dynamically resizes images based on the original images.",
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    """
+        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+            The min pixels of the image to resize the image.
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+            The max pixels of the image to resize the image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
+    """,
+)
+class Qwen2_5_VLImageProcessorFast(BaseImageProcessorFast):
     r"""
-    Constructs a Qwen2.5-VL image processor that dynamically resizes images based on the original images.
+    Constructs a fast Qwen2.5-VL image processor that dynamically resizes images based on the original images.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -129,6 +153,21 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
             The merge size of the vision encoder to llm encoder.
     """
 
+    do_resize = True
+    resample = PILImageResampling.BICUBIC
+    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
+    do_rescale = True
+    do_normalize = True
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    do_convert_rgb = True
+    patch_size = 14
+    temporal_patch_size = 2
+    merge_size = 2
+    min_pixels = 56 * 56
+    max_pixels = 28 * 28 * 1280
+    valid_init_kwargs = Qwen25FastImageProcessorInitKwargs
+
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -137,52 +176,23 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         "second_per_grid_ts",
     ]
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = True,
-        min_pixels: int = 56 * 56,
-        max_pixels: int = 28 * 28 * 1280,
-        patch_size: int = 14,
-        temporal_patch_size: int = 2,
-        merge_size: int = 2,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[Qwen25FastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
-        self.do_resize = do_resize
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
-        self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
-        self.size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
-        self.do_convert_rgb = do_convert_rgb
 
     def _preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
-        do_resize: bool = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        images: List["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        do_convert_rgb: bool,
+        input_data_format: Optional[Union[str, ChannelDimension]],
+        device: Optional[Union[str, torch.device]],
     ):
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
@@ -194,8 +204,8 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
                 Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` enums.
+            interpolation (`InterpolationMode`):
+                Resampling filter to use if resizing the image.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -208,38 +218,28 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
                 Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the input image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            device (`torch.device`, *optional*):
+                The device to process the images on. If unset, the device is inferred from the input images.
         """
-        images = make_list_of_images(images)
+        images = self._prepare_input_images(
+            images=images,
+            do_convert_rgb=do_convert_rgb,
+            input_data_format=input_data_format,
+            device=device,
+        )
 
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        height, width = get_image_size(images[0], channel_dim=input_data_format)
+        height, width = get_image_size(images[0], channel_dim=ChannelDimension.FIRST)
         resized_height, resized_width = height, width
-        processed_images = []
-        for image in images:
+
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
@@ -248,31 +248,34 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
                     min_pixels=self.min_pixels,
                     max_pixels=self.max_pixels,
                 )
-                image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+                stacked_images = F.resize(
+                    stacked_images, size=(resized_height, resized_width), interpolation=interpolation
                 )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-            if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
 
-            if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            processed_images.append(image)
-
-        patches = np.array(processed_images)
-        if data_format == ChannelDimension.LAST:
-            patches = patches.transpose(0, 3, 1, 2)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        patches = torch.stack(processed_images, dim=0)
         if patches.shape[0] % self.temporal_patch_size != 0:
-            repeats = np.repeat(patches[-1][np.newaxis], self.temporal_patch_size - 1, axis=0)
-            patches = np.concatenate([patches, repeats], axis=0)
+            repeats = patches[-1].unsqueeze(0).repeat(self.temporal_patch_size - 1, 1, 1, 1)
+            patches = torch.cat([patches, repeats], dim=0)
+
         channel = patches.shape[1]
         grid_t = patches.shape[0] // self.temporal_patch_size
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-        patches = patches.reshape(
+
+        patches = patches.view(
             grid_t,
             self.temporal_patch_size,
             channel,
@@ -283,7 +286,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
             self.merge_size,
             self.patch_size,
         )
-        patches = patches.transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
+        patches = patches.permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
         flatten_patches = patches.reshape(
             grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
         )
@@ -296,7 +299,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         videos: VideoInput = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
+        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
@@ -306,6 +309,8 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional["torch.device"] = None,
+        **kwargs,
     ):
         """
         Args:
@@ -354,7 +359,8 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-
+            device (`torch.device`, *optional*):
+                The device to process the images on. If unset, the device is inferred from the input images.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -366,6 +372,24 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
+        # Make hashable for cache
+        size = SizeDict(**size) if size is not None else None
+        image_mean = tuple(image_mean) if image_mean is not None else None
+        image_std = tuple(image_std) if image_std is not None else None
+
+        image_mean, image_std, interpolation = self._prepare_process_arguments(
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            return_tensors=return_tensors,
+            data_format=data_format,
+            device=device,
+        )
         if images is not None:
             images = make_flat_list_of_images(images)
         if videos is not None:
@@ -377,36 +401,27 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        validate_preprocess_arguments(
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
         if images is not None:
             pixel_values, vision_grid_thws = [], []
             for image in images:
                 patches, image_grid_thw = self._preprocess(
                     image,
                     do_resize=do_resize,
-                    resample=resample,
+                    size=size,
+                    interpolation=interpolation,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
-                    data_format=data_format,
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
+                    device=device,
                 )
                 pixel_values.extend(patches)
                 vision_grid_thws.append(image_grid_thw)
-            pixel_values = np.array(pixel_values)
-            vision_grid_thws = np.array(vision_grid_thws)
+            pixel_values = torch.stack(pixel_values)
+            vision_grid_thws = torch.tensor(vision_grid_thws)
             data = {"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}
 
         if videos is not None:
@@ -415,23 +430,24 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
                 patches, video_grid_thw = self._preprocess(
                     images,
                     do_resize=do_resize,
-                    resample=resample,
+                    size=size,
+                    interpolation=interpolation,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
                     do_normalize=do_normalize,
                     image_mean=image_mean,
                     image_std=image_std,
-                    data_format=data_format,
                     do_convert_rgb=do_convert_rgb,
                     input_data_format=input_data_format,
+                    device=device,
                 )
                 pixel_values.extend(patches)
                 vision_grid_thws.append(video_grid_thw)
-            pixel_values = np.array(pixel_values)
-            vision_grid_thws = np.array(vision_grid_thws)
+            pixel_values = torch.stack(pixel_values)
+            vision_grid_thws = torch.tensor(vision_grid_thws)
             data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["Qwen2_5_VLImageProcessor"]
+__all__ = ["Qwen2_5_VLImageProcessorFast"]

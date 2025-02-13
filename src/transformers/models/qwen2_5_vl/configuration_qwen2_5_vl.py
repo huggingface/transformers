@@ -23,8 +23,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
+from ...utils import is_torchvision_available, is_torchvision_v2_available
+
+
+if is_torchvision_v2_available():
+    pass
+elif is_torchvision_available():
+    pass
 
 
 class Qwen2_5_VLVisionConfig(PretrainedConfig):
