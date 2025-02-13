@@ -24,6 +24,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizerFast
 from transformers.testing_utils import require_tokenizers
 
 from ..test_tokenization_common import TokenizerTesterMixin
+from transformers import LlamaTokenizerFast
 
 
 @require_tokenizers
@@ -220,7 +221,6 @@ class TokenizerVersioningTest(unittest.TestCase):
         self.assertNotIn("huggingface", json_tokenizer["model"]["vocab"])
 
     def test_tokenizer_class(self):
-        from transformers import LlamaTokenizerFast
         model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
 
         with tempfile.TemporaryDirectory() as temp_dir:
