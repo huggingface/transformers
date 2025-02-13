@@ -34,13 +34,9 @@ from transformers import (
     MLCDVisionConfig,
     MLCDVisionModel,
 )
-from transformers.utils import logging
 from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 from .original_vit_rope2d import RoPE2d_ViT_bigG_14_1024
-
-logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
 
 
 def copy_attn_layer(hf_attn_layer, pt_attn_layer):
