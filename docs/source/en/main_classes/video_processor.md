@@ -53,14 +53,14 @@ from transformers.video_utils import load_video
 from transformers import DetrImageProcessorFast
 
 video = load_video("video.mp4")
-processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", use_fast=True)
-processed_video = processor(video, return_tensors="pt", device="cuda")
+processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", use_fast=True, device="cuda")
+processed_video = processor(video, return_tensors="pt")
 ```
 
-Here are some speed comparisons between the base and fast video processors:
+Here are some speed comparisons between the base and fast video processors with [Llava Onevision model](llava-hf/llava-onevision-qwen2-0.5b-ov-hf):
 
-#### TODO
-
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/fast_video_processors.png"
+alt="drawing" width="400"/>
 
 
 ## BaseVideoProcessor

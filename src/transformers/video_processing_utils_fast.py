@@ -111,12 +111,7 @@ BASE_VIDEO_PROCESSOR_FAST_DOCSTRING = r"""
             number of channels in the video. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
-            Whether to convert the video to RGB."""
-
-BASE_VIDEO_PROCESSOR_FAST_DOCSTRING_PREPROCESS = rf"""
-    Preprocess a video or batch of videos.
-
-        {BASE_VIDEO_PROCESSOR_FAST_DOCSTRING}
+            Whether to convert the video to RGB.
         return_tensors (`str` or `TensorType`, *optional*):
             Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
         data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
@@ -408,7 +403,7 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
 
         return image_mean, image_std, interpolation
 
-    @add_start_docstrings(BASE_VIDEO_PROCESSOR_FAST_DOCSTRING_PREPROCESS)
+    @add_start_docstrings(BASE_VIDEO_PROCESSOR_FAST_DOCSTRING)
     def preprocess(
         self,
         videos: VideoInput,

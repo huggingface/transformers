@@ -709,19 +709,3 @@ def reorder_videos(
         processed_videos[grouped_videos_index[i][0]][grouped_videos_index[i][1]]
         for i in range(len(grouped_videos_index))
     ]
-
-
-# class ConvertUint8ToFloat(torch.nn.Module):
-#     """
-#     Converts a video from dtype uint8 to dtype float32.
-#     """
-#     def __init__(self):
-#         super().__init__()
-#         self.convert_func = torchvision.transforms.ConvertImageDtype(torch.float32)
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         """
-#         Args:
-#             x (torch.Tensor): video tensor with shape (C, T, H, W).
-#         """
-#         assert x.dtype == torch.uint8, "image must have dtype torch.uint8"
-#         return self.convert_func(x)

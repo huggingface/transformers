@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -202,6 +202,7 @@ class LoadVideoTester(unittest.TestCase):
         video = load_video(video_file_path)
         self.assertEqual(video.shape, (243, 360, 640, 3))  # 243 frames is the whole video, no sampling applied
 
+    # FIXME: @raushan, yt-dlp downloading works for for some reason it cannot redirect to out buffer?
     # @requires_yt_dlp
     # def test_load_video_youtube(self):
     #     video = load_video("https://www.youtube.com/watch?v=QC8iQqtG0hg")
