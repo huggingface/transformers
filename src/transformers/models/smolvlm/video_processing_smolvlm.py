@@ -123,9 +123,10 @@ def load_smolvlm_video(
 
     # Wrap our skip-logic sampler in a partial, so we can pass skip_secs, etc.
     # We'll let load_video fill in (num_frames, fps, metadata, ...) automatically.
-    sample_indices_fn = lambda metadata, **fn_kwargs: smolvlm_sample_indices_fn(
-        metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs, **fn_kwargs
-    )
+    def sample_indices_fn_func(metadata, **fn_kwargs):
+        return smolvlm_sample_indices_fn(metadata, max_frames=max_frames, target_fps=target_fps,  skip_secs=skip_secs, **fn_kwargs)
+    sample_indices_fn = sample_indices_fn_func
+    
     video_array, metadata = load_video(
         video=path,
         backend=backend,
