@@ -22,7 +22,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
@@ -98,7 +98,6 @@ class OPTAttention(nn.Module):
     def __init__(
         self,
         config: OPTConfig,
-        is_decoder: bool = False,
         layer_idx: int = None,
         **kwargs,
     ):
@@ -131,9 +130,6 @@ class OPTAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int) -> torch.Tensor:
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -152,37 +148,16 @@ class OPTAttention(nn.Module):
         query_states = self.q_proj(hidden_states) * self.scaling
         query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
         if past_key_value is not None:
-            if not isinstance(past_key_value, EncoderDecoderCache):
-                curr_past_key_value = past_key_value
-            else:
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-
-        current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+            # save all key/value_states to cache to be re-used for fast auto-regressive generation
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+            )
 
         attn_weights = torch.matmul(query_states, key_states.transpose(3, 2))
         if attention_mask is not None:
@@ -240,46 +215,21 @@ class OptFlashAttention2(OPTAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
         bsz, query_length, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim)
 
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
         if past_key_value is not None:
-            if not isinstance(past_key_value, EncoderDecoderCache):
-                curr_past_key_value = past_key_value
-            else:
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-
-        current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+            # save all key/value_states to cache to be re-used for fast auto-regressive generation
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+            )
 
         attn_dropout = self.dropout if self.training else 0.0
 
@@ -361,47 +311,24 @@ class OPTSdpaAttention(OPTAttention):
                 layer_head_mask=layer_head_mask,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
-                key_value_states=key_value_states,
                 cache_position=cache_position,
             )
-        is_cross_attention = key_value_states is not None
 
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
         query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+
         if past_key_value is not None:
-            if not isinstance(past_key_value, EncoderDecoderCache):
-                curr_past_key_value = past_key_value
-            else:
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    # after the first generated id, we can subsequently re-use all key/value_states from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-
-        current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self.k_proj(current_states)
-            value_states = self.v_proj(current_states)
-            key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+            # save all key/value_states to cache to be re-used for fast auto-regressive generation
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+            )
 
         causal_mask = attention_mask
         if attention_mask is not None:
@@ -439,9 +366,7 @@ class OPTDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](
-            config=config, is_decoder=True, layer_idx=layer_idx
-        )
+        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
 
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
