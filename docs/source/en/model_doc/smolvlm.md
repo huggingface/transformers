@@ -46,7 +46,7 @@ This model was contributed by [orrzohar](https://huggingface.co/orrzohar).
 
 ### Single Media inference
 
-The model can accept both images and videos as input, but you should use only one of the modalities within one inference. Here's an example code for that.
+The model can accept both images and videos as input, but you should use only one of the modalities at a time. Here's an example code for that.
 
 ```python
 import torch
