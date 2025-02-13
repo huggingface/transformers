@@ -1318,6 +1318,7 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.got_ocr2"].append("GotOcr2ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -6474,6 +6475,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.got_ocr2 import GotOcr2ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
