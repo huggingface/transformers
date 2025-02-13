@@ -689,6 +689,8 @@
         title: Mask2Former
       - local: model_doc/maskformer
         title: MaskFormer
+      - local: model_doc/mlcd
+        title: MLCD
       - local: model_doc/mobilenet_v1
         title: MobileNetV1
       - local: model_doc/mobilenet_v2

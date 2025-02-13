@@ -231,6 +231,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [Mimi](model_doc/mimi)                          |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](model_doc/mistral)                       |       ✅        |         ✅         |      ✅      |
 |                       [Mixtral](model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
+|                          [MLCD](model_doc/mlcd)                          |       ✅        |         ❌         |      ❌      |
 |                        [Mllama](model_doc/mllama)                        |       ✅        |         ❌         |      ❌      |
 |                         [mLUKE](model_doc/mluke)                         |       ✅        |         ❌         |      ❌      |
 |                           [MMS](model_doc/mms)                           |       ✅        |         ✅         |      ✅      |
