@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from functools import partial
 from typing import List, Optional
 
@@ -20,7 +21,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
@@ -31,7 +32,6 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
     RTDetrMLPPredictionHead,
     RTDetrModel,
-    RTDetrMultiscaleDeformableAttention,
     RTDetrPreTrainedModel,
 )
 
@@ -141,8 +141,6 @@ class RTDetrV2Config(PretrainedConfig):
             Indicates whether the initial query embeddings for the decoder should be learned during training
         anchor_image_size (`Tuple[int, int]`, *optional*):
             Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
-            Whether to disable custom kernels.
         with_box_refine (`bool`, *optional*, defaults to `True`):
             Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
             based on the predictions from the previous layer.
@@ -249,7 +247,6 @@ class RTDetrV2Config(PretrainedConfig):
         box_noise_scale=1.0,
         learn_initial_query=False,
         anchor_image_size=None,
-        disable_custom_kernels=True,
         with_box_refine=True,
         is_encoder_decoder=True,
         # Loss
@@ -347,7 +344,6 @@ class RTDetrV2Config(PretrainedConfig):
         self.learn_initial_query = learn_initial_query
         self.anchor_image_size = anchor_image_size
         self.auxiliary_loss = auxiliary_loss
-        self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
         # Loss
         self.matcher_alpha = matcher_alpha
@@ -404,7 +400,7 @@ def multi_scale_deformable_attention_v2(
     value_list = (
         value.permute(0, 2, 3, 1)
         .flatten(0, 1)
-        .split([height.item() * width.item() for height, width in value_spatial_shapes], dim=-1)
+        .split([height * width for height, width in value_spatial_shapes], dim=-1)
     )
     # sampling_offsets [8, 480, 8, 12, 2]
     if method == "default":
@@ -466,22 +462,47 @@ def multi_scale_deformable_attention_v2(
 
 
 # the main change
-class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
+class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     """
     RTDetrV2 version of multiscale deformable attention, extending the base implementation
     with improved offset handling and initialization.
     """
 
     def __init__(self, config: RTDetrV2Config):
+        super().__init__()
         num_heads = config.decoder_attention_heads
         n_points = config.decoder_n_points
-        # Initialize parent class with config parameters
-        super().__init__(config=config, num_heads=num_heads, n_points=n_points)
+
+        if config.d_model % num_heads != 0:
+            raise ValueError(
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
+            )
+        dim_per_head = config.d_model // num_heads
+        # check if dim_per_head is power of 2
+        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
+            warnings.warn(
+                "You'd better set embed_dim (d_model) in RTDetrV2MultiscaleDeformableAttention to make the"
+                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
+                " implementation."
+            )
+
+        self.im2col_step = 64
+
+        self.d_model = config.d_model
 
         # V2-specific attributes
         self.n_levels = config.decoder_n_levels
+        self.n_heads = num_heads
+        self.n_points = n_points
+
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.value_proj = nn.Linear(config.d_model, config.d_model)
+        self.output_proj = nn.Linear(config.d_model, config.d_model)
+
         self.offset_scale = config.decoder_offset_scale
         self.method = config.decoder_method
+
         # Initialize n_points list and scale
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
@@ -497,17 +518,17 @@ class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
         position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
-        **kwargs,
     ):
         # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
+        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
             )
@@ -543,7 +564,7 @@ class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
 
         # V2-specific attention implementation choice
         output = multi_scale_deformable_attention_v2(
-            value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
+            value, spatial_shapes_list, sampling_locations, attention_weights, self.n_points_list, self.method
         )
 
         output = self.output_proj(output)
