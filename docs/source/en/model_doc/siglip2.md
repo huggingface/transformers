@@ -53,6 +53,15 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] Siglip2VisionConfig
 
+## SiglipImageProcessor
+
+[[autodoc]] SiglipImageProcessor
+    - preprocess
+
+## SiglipProcessor
+
+[[autodoc]] SiglipProcessor
+
 ## Siglip2Model
 
 [[autodoc]] Siglip2Model
