@@ -36,7 +36,7 @@ Here’s how to control resizing and set a custom size:
 image_processor = SmolVLMImageProcessor(do_resize=True, size={"longest_edge": 2 * 364}, max_image_size=364)
 ```
 
-Additionally, the `max_image_size` parameter, which controls the size of each square patch the image is decomposed into, is set to 364 by default but can be adjusted as needed. After resizing (if applicable), the image processor decomposes the images into square patches based on the `max_image_size` parameter.
+Additionally, the `max_image_size` parameter, which controls the size of each square patch the image is decomposed into, is set to 512 by default but can be adjusted as needed. After resizing (if applicable), the image processor decomposes the images into square patches based on the `max_image_size` parameter.
 
 This model was contributed by [orrzohar](https://huggingface.co/orrzohar).
 
