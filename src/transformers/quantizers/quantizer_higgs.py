@@ -175,17 +175,16 @@ class HiggsHfQuantizer(HfQuantizer):
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         from ..integrations import HiggsLinear
 
-        not_missing_keys = []
-        for name, module in model.named_modules():
-            if isinstance(module, HiggsLinear):
-                for missing in missing_keys:
-                    if (
-                        (name in missing or name in f"{prefix}.{missing}")
-                        and not missing.endswith(".weight")
-                        and not missing.endswith(".bias")
-                    ):
-                        not_missing_keys.append(missing)
-        return [k for k in missing_keys if k not in not_missing_keys]
+        higgs_names = {name for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
+
+        def should_update(key: str) -> bool:
+            if key.endswith('.weight') or key.endswith('.bias'):
+                return False
+            full_key = f"{prefix}.{key}"
+            return any(name in key or name in full_key for name in higgs_names)
+
+        return [key for key in missing_keys if not should_update(key)]
+
 
     @property
     def is_trainable(self, model: Optional["PreTrainedModel"] = None):

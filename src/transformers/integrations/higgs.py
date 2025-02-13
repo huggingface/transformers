@@ -477,6 +477,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
         vector_size=p,
         dtype=dtype,
         device=device,
+        check_correctness=False,
     )
 
     return {
