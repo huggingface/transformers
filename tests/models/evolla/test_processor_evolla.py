@@ -52,13 +52,12 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
         tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
-        print(type(tokenizer))
 
         processor = EvollaProcessor(protein_tokenizer, tokenizer)
 
         processor.save_pretrained(self.tmpdirname)
 
-        self.input_keys = ["protein_input_ids", "protein_attention_mask", "text_input_ids", "text_attention_mask"]
+        self.input_keys = ["protein_input_ids", "protein_attention_mask", "input_ids", "attention_mask"]
 
     def prepare_input_and_expected_output(self):
         amino_acid_sequence = "AAAA"
@@ -69,11 +68,11 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_output = {
             "protein_input_ids": torch.tensor([[0, 13, 13, 13, 13, 2]]),
             "protein_attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1]]),
-            "text_input_ids": torch.tensor([[128000, 128006,   9125, 128007,    271,   2675,    527,    459,  15592,
+            "input_ids": torch.tensor([[128000, 128006,   9125, 128007,    271,   2675,    527,    459,  15592,
             6335,    430,    649,   4320,    904,   4860,    922,  13128,     13,
           128009, 128006,    882, 128007,    271,   3923,    374,    279,    734,
              315,    420,  13128,     30, 128009, 128006,  78191, 128007,    271]]),
-            "text_attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+            "attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
           1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
         }
         protein_dict = {
@@ -85,9 +84,15 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return protein_dict, message, expected_output
 
     def test_processor(self):
+        protein_tokenizer = self.get_protein_tokenizer()
+        tokenizer = self.get_tokenizer()
+
+        processor = EvollaProcessor(protein_tokenizer, tokenizer)
+
         protein_dict, message, expected_output = self.prepare_input_and_expected_output()
-        inputs = self.processor(proteins=[protein_dict],
-                                messages_list=[message])
+        inputs = processor(proteins=[protein_dict],
+                            messages_list=[message])
+
         
         # check if the input is correct
         for key, value in expected_output.items():

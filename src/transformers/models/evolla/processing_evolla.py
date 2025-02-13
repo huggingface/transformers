@@ -28,6 +28,7 @@ from ...processing_utils import (
     TextKwargs,
     Unpack,
     _validate_images_text_input_order,
+    transformers_module,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
@@ -212,10 +213,12 @@ class EvollaProcessor(ProcessorMixin):
         text_max_length (`int`, *optional*, defaults to 512):
             The maximum length of the text to be generated.
     """
-    attributes = []
+    attributes = ["protein_tokenizer", "tokenizer"]
     valid_kwargs = ["sequence_max_length"]
     protein_tokenizer_class = "EsmTokenizer"
     tokenizer_class = "LlamaTokenizerFast"
+    protein_tokenizer_dir_name = "protein_tokenizer"
+    # tokenizer_dir_name = "text_tokenizer"
 
     def __init__(
             self, 
@@ -229,10 +232,8 @@ class EvollaProcessor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
         
-        super().__init__(**kwargs)
+        super().__init__(protein_tokenizer, tokenizer)
 
-        self.protein_tokenizer = protein_tokenizer
-        self.tokenizer = tokenizer
         self.tokenizer.pad_token = "<|reserved_special_token_0|>"
         self.protein_max_length = protein_max_length
         self.text_max_length = text_max_length
@@ -359,8 +360,8 @@ class EvollaProcessor(ProcessorMixin):
             data={
                 "protein_input_ids": sa_tokens["input_ids"],
                 "protein_attention_mask": sa_tokens["attention_mask"],
-                "text_input_ids": text_tokens["input_ids"],
-                "text_attention_mask": text_tokens["attention_mask"],
+                "input_ids": text_tokens["input_ids"],
+                "attention_mask": text_tokens["attention_mask"],
             }
         )
     
@@ -377,16 +378,34 @@ class EvollaProcessor(ProcessorMixin):
         return self.protein_tokenizer.decode(*args, **kwargs)
     
     def save_pretrained(self, save_directory, push_to_hub = False, **kwargs):
-        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, "protein_tokenizer"))
-        self.tokenizer.save_pretrained(os.path.join(save_directory, "text_tokenizer"))
+        # only save the protein tokenizer in sub_dir
+        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, self.protein_tokenizer_dir_name), push_to_hub=push_to_hub, **kwargs)
         return super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        protein_tokenizer = EsmTokenizer.from_pretrained(os.path.join(pretrained_model_name_or_path, "protein_tokenizer"), **kwargs)
-        tokenizer = LlamaTokenizerFast.from_pretrained(os.path.join(pretrained_model_name_or_path, "text_tokenizer"), **kwargs)
-        self = cls(protein_tokenizer, tokenizer, **kwargs)
-        return self
+    # reimplement this to add sub_dir_name support
+    def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        args = []
+        for attribute_name in cls.attributes:
+            class_name = getattr(cls, f"{attribute_name}_class")
+            sub_dir_name = getattr(cls, f"{attribute_name}_dir_name", None)
+            if isinstance(class_name, tuple):
+                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                use_fast = kwargs.get("use_fast", True)
+                if use_fast and classes[1] is not None:
+                    attribute_class = classes[1]
+                else:
+                    attribute_class = classes[0]
+            else:
+                attribute_class = getattr(transformers_module, class_name)
+            
+            if sub_dir_name is not None:
+                args.append(attribute_class.from_pretrained(os.path.join(pretrained_model_name_or_path, sub_dir_name), **kwargs))
+            else:
+                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+
+        return args
+
 
 class EvollaProcessor2(ProcessorMixin):
     r"""
