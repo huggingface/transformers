@@ -738,7 +738,7 @@ class EvollaProteinEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.model = SaProtProteinEncoder(config.protein_encoder_config)
-        self.sequence_compressor_resampler = SequenceCompressorResampler(config.resampler_config) # TODO
+        self.sequence_compressor_resampler = SequenceCompressorResampler(config) # TODO
     
     def sequence_encode(
         self,

@@ -2,7 +2,7 @@ import torch
 from einops import rearrange, repeat
 from einops_exts import rearrange_many
 from torch import einsum, nn
-from .configuration_evolla import EvollaResamplerConfig
+from .configuration_evolla import EvollaProteinConfig
 
 
 def FeedForward(dim, mult=4):
@@ -72,17 +72,19 @@ class SequenceCompressorAttention(nn.Module):
 class SequenceCompressorResampler(nn.Module):
     def __init__(
         self,
-        config: EvollaResamplerConfig,
+        config: EvollaProteinConfig,
     ):
         super().__init__()
+        protein_encoder_config = config.protein_encoder_config
+        sequence_compressor_config = config.resampler_config
         self.config = config
-        protein_repr_dim = config.protein_repr_dim
+        protein_repr_dim = protein_encoder_config.hidden_size
         output_repr_dim = config.output_repr_dim
-        depth = config.depth if hasattr(config, 'depth') else 6
-        dim_head = config.dim_head if hasattr(config, 'dim_head') else 64
-        heads = config.heads if hasattr(config, 'heads') else 8
-        num_latents = config.num_latents if hasattr(config, 'num_latents') else 64
-        ff_mult = config.ff_mult if hasattr(config, 'ff_mult') else 4
+        depth = sequence_compressor_config.depth if hasattr(sequence_compressor_config, 'depth') else 6
+        dim_head = sequence_compressor_config.dim_head if hasattr(sequence_compressor_config, 'dim_head') else 64
+        heads = sequence_compressor_config.heads if hasattr(sequence_compressor_config, 'heads') else 8
+        num_latents = sequence_compressor_config.num_latents if hasattr(sequence_compressor_config, 'num_latents') else 64
+        ff_mult = sequence_compressor_config.ff_mult if hasattr(sequence_compressor_config, 'ff_mult') else 4
 
         self.latents = nn.Parameter(torch.randn(num_latents, protein_repr_dim))
 

@@ -26,31 +26,6 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-class EvollaResamplerConfig(PretrainedConfig):
-    r"""
-    """
-    model_type = "Resampler"
-
-    def __init__(
-            self,
-            protein_repr_dim,
-            output_repr_dim,
-            depth: int = 6,
-            dim_head: int = 64,
-            heads: int = 8,
-            num_latents=64,
-            ff_mult=4,
-            **kwargs
-    ):
-        self.protein_repr_dim = protein_repr_dim
-        self.output_repr_dim = output_repr_dim
-        self.depth = depth
-        self.dim_head = dim_head
-        self.heads = heads
-        self.num_latents = num_latents
-        self.ff_mult = ff_mult
-        super().__init__(**kwargs)
-
 class EvollaSequenceCompressorConfig(PretrainedConfig):
     r"""
     """
@@ -194,7 +169,7 @@ class EvollaProteinConfig(PretrainedConfig):
         initializer_range=0.02,
         protein_encoder_config=None,
         resampler_config=None,
-        llm_repr_dim=None,
+        protein_text_hidden_size=4096,
         **kwargs
     ):
         self.initializer_range = initializer_range
@@ -211,11 +186,9 @@ class EvollaProteinConfig(PretrainedConfig):
             self.resampler_config = EvollaSequenceCompressorConfig(**resampler_config)
         elif isinstance(resampler_config, EvollaSequenceCompressorConfig):
             self.resampler_config = resampler_config
-        
-        # align the configs
-        self.resampler_config.protein_repr_dim = self.protein_encoder_config.hidden_size
-        self.resampler_config.output_repr_dim = llm_repr_dim
 
+        self.output_repr_dim = protein_text_hidden_size
+        
         super().__init__(**kwargs)
 
 class EvollaPerceiverConfig(PretrainedConfig):
@@ -490,7 +463,7 @@ class EvollaLLMConfig(PretrainedConfig):
         output_hidden_states=False,
         llama_config=None,
         sequence_aligner_config=None,
-        protein_encoder_dim=None,
+        protein_text_hidden_size=4096,
         quantization="8bit",
         initializer_range=0.02,
         **kwargs
@@ -511,7 +484,7 @@ class EvollaLLMConfig(PretrainedConfig):
         elif isinstance(sequence_aligner_config, EvollaSequenceAlignerConfig):
             self.sequence_aligner_config = sequence_aligner_config
         
-        self.sequence_aligner_config.protein_encoder_dim = protein_encoder_dim
+        self.sequence_aligner_config.protein_encoder_dim = protein_text_hidden_size
         
         self.quantization = quantization
         self.initializer_range = initializer_range
@@ -604,6 +577,8 @@ class EvollaConfig(PretrainedConfig):
 
     def __init__(
         self,
+        vocab_size=128256, # llama vocab size
+        protein_text_hidden_size=4096, # llama hidden size
         output_attentions=False,
         output_hidden_states=False,
         use_cache=False,
@@ -613,30 +588,34 @@ class EvollaConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        self.vocab_size = vocab_size
+        self.protein_text_hidden_size = protein_text_hidden_size
         self.output_attentions = output_attentions
         self.output_hidden_states = output_hidden_states
         self.use_cache = use_cache
         self.return_dict = return_dict
 
         if protein_config is None:
-            self.protein_config = EvollaProteinConfig()
+            self.protein_config = EvollaProteinConfig(protein_text_hidden_size=self.protein_text_hidden_size)
         elif isinstance(protein_config, dict):
+            protein_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
             self.protein_config = EvollaProteinConfig(**protein_config)
         elif isinstance(protein_config, EvollaProteinConfig):
             self.protein_config = protein_config
 
         if llm_config is None:
-            self.llm_config = EvollaLLMConfig()
+            self.llm_config = EvollaLLMConfig(protein_text_hidden_size=self.protein_text_hidden_size)
         elif isinstance(llm_config, dict):
+            llm_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
             self.llm_config = EvollaLLMConfig(**llm_config)
         elif isinstance(llm_config, EvollaLLMConfig):
             self.llm_config = llm_config
         
-        if self.protein_config.resampler_config.output_repr_dim is None:
-            self.protein_config.resampler_config.output_repr_dim = self.llm_config.llama_config.hidden_size
+        # if self.protein_config.resampler_config.output_repr_dim is None:
+        #     self.protein_config.resampler_config.output_repr_dim = self.llm_config.llama_config.hidden_size
         
-        if self.llm_config.sequence_aligner_config.protein_encoder_dim is None:
-            self.llm_config.sequence_aligner_config.protein_encoder_dim = self.protein_config.resampler_config.output_repr_dim
+        # if self.llm_config.sequence_aligner_config.protein_encoder_dim is None:
+        #     self.llm_config.sequence_aligner_config.protein_encoder_dim = self.protein_config.resampler_config.output_repr_dim
         
         self.initializer_range = initializer_range
         super().__init__(
