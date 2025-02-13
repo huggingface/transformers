@@ -176,7 +176,8 @@ class MusicgenDecoderTester:
 @require_torch
 class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenModel, MusicgenForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = ()  # See `greedy_sample_model_classes` below
+    # Doesn't run generation tests. See `greedy_sample_model_classes` below
+    all_generative_model_classes = ()
     greedy_sample_model_classes = (
         (MusicgenForCausalLM,) if is_torch_available() else ()
     )  # we don't want to run all the generation tests, only a specific subset
@@ -802,7 +803,8 @@ class MusicgenTester:
 @require_torch
 class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = ()  # See `greedy_sample_model_classes` below
+    # Doesn't run generation tests. See `greedy_sample_model_classes` below
+    all_generative_model_classes = ()
     greedy_sample_model_classes = (MusicgenForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-audio": MusicgenForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False  # training is not supported yet for MusicGen
