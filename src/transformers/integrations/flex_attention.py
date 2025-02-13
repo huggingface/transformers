@@ -17,7 +17,7 @@ if is_torch_flex_attn_available():
     )
 
 
-class wrapped_flex_attention:
+class WrappedFlexAttention:
     """
     We are doing a singleton class so that flex attention is compiled once when it's first called.
     """
@@ -43,7 +43,7 @@ class wrapped_flex_attention:
 
     def __call__(self):
         return self._compiled_flex_attention
-        
+  
 
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor
@@ -94,13 +94,14 @@ def make_flex_block_causal_mask(
         return causal_mask & document_mask & padding_mask
 
     return create_block_causal_mask_flex(
-        causal_mask_mod,
-        batch_size,
-        None,
+        mask_mod=causal_mask_mod,
+        B=batch_size, 
+        H=None,  # attention head
         Q_LEN=total_seq_len,
         KV_LEN=total_seq_len,
         device=device,
     )
+
 
 @torch.compiler.disable(recursive=False)
 def compile_friendly_flex_attention(
@@ -117,6 +118,7 @@ def compile_friendly_flex_attention(
         value,
         **kwargs,
     )
+
 
 def flex_attention_forward(
     module: torch.nn.Module,
