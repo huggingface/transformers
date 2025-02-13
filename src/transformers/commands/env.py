@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import contextlib
 import importlib.util
+import io
 import os
 import platform
 from argparse import ArgumentParser
@@ -20,6 +23,7 @@ from argparse import ArgumentParser
 import huggingface_hub
 
 from .. import __version__ as version
+from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
     is_accelerate_available,
     is_flax_available,
@@ -104,6 +108,13 @@ class EnvironmentCommand(BaseTransformersCLICommand):
                 # returns list of devices, convert to bool
                 tf_cuda_available = bool(tf.config.list_physical_devices("GPU"))
 
+        deepspeed_version = "not installed"
+        if is_deepspeed_available():
+            # Redirect command line output to silence deepspeed import output.
+            with contextlib.redirect_stdout(io.StringIO()):
+                import deepspeed
+            deepspeed_version = deepspeed.__version__
+
         flax_version = "not installed"
         jax_version = "not installed"
         jaxlib_version = "not installed"
@@ -126,6 +137,7 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "Safetensors version": f"{safetensors_version}",
             "Accelerate version": f"{accelerate_version}",
             "Accelerate config": f"{accelerate_config_str}",
+            "DeepSpeed version": f"{deepspeed_version}",
             "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
             "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
             "Flax version (CPU?/GPU?/TPU?)": f"{flax_version} ({jax_backend})",
