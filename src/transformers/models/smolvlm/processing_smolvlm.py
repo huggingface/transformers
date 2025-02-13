@@ -37,6 +37,7 @@ from .video_processing_smolvlm import (
     DEFAULT_MEDIA_OUTTRO,
     DEFAULT_VIDEO_INTRO,
     FRAME_TIMESTAMP_MESSAGE,
+    smolvlm_sample_indices_fn,
 )
 
 
@@ -178,6 +179,53 @@ class SmolVLMProcessor(ProcessorMixin):
         self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
+    def process_vision(self, text, images, output_kwargs, do_image_splitting=None, image_processor_size=None):
+        image_seq_len = self.image_seq_len
+        if text is not None:
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+
+        n_images_in_images = [len(sublist) for sublist in images]
+        image_inputs = self.image_processor(
+            images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs["images_kwargs"]
+        )
+
+        if text is not None:
+            if n_images_in_images != n_images_in_text:
+                raise ValueError(
+                    f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
+                )
+
+            image_rows = image_inputs.pop("rows", [[0] * len(text)])
+            image_cols = image_inputs.pop("cols", [[0] * len(text)])
+
+            prompt_strings = []
+            for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
+                # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
+                image_prompt_strings = []
+                for n_rows, n_cols in zip(sample_rows, sample_cols):
+                    image_prompt_string = get_image_prompt_string(
+                        n_rows,
+                        n_cols,
+                        image_seq_len,
+                        image_token=self.image_token,
+                        fake_token_around_image=self.fake_image_token,
+                        global_img_token=self.global_img_token,
+                    )
+                    image_prompt_strings.append(image_prompt_string)
+
+                split_sample = sample.split(self.image_token)
+                if len(split_sample) == 0:
+                    raise ValueError("The image token should be present in the text.")
+
+                # Place in the image prompt strings where the image tokens are
+                sample = split_sample[0]
+                for i, image_prompt_string in enumerate(image_prompt_strings):
+                    sample += image_prompt_string + split_sample[i + 1]
+                prompt_strings.append(sample)
+
+        return prompt_strings, image_inputs
+
+
     def __call__(
         self,
         images: Union[ImageInput, List[ImageInput], List[List[ImageInput]]] = None,
@@ -270,52 +318,6 @@ class SmolVLMProcessor(ProcessorMixin):
             inputs.update(text_inputs)
 
         return inputs
-
-    def process_vision(self, text, images, output_kwargs, do_image_splitting=None, image_processor_size=None):
-        image_seq_len = self.image_seq_len
-        if text is not None:
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
-
-        n_images_in_images = [len(sublist) for sublist in images]
-        image_inputs = self.image_processor(
-            images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs["images_kwargs"]
-        )
-
-        if text is not None:
-            if n_images_in_images != n_images_in_text:
-                raise ValueError(
-                    f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
-                )
-
-            image_rows = image_inputs.pop("rows", [[0] * len(text)])
-            image_cols = image_inputs.pop("cols", [[0] * len(text)])
-
-            prompt_strings = []
-            for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
-                # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-                image_prompt_strings = []
-                for n_rows, n_cols in zip(sample_rows, sample_cols):
-                    image_prompt_string = get_image_prompt_string(
-                        n_rows,
-                        n_cols,
-                        image_seq_len,
-                        image_token=self.image_token,
-                        fake_token_around_image=self.fake_image_token,
-                        global_img_token=self.global_img_token,
-                    )
-                    image_prompt_strings.append(image_prompt_string)
-
-                split_sample = sample.split(self.image_token)
-                if len(split_sample) == 0:
-                    raise ValueError("The image token should be present in the text.")
-
-                # Place in the image prompt strings where the image tokens are
-                sample = split_sample[0]
-                for i, image_prompt_string in enumerate(image_prompt_strings):
-                    sample += image_prompt_string + split_sample[i + 1]
-                prompt_strings.append(sample)
-
-        return prompt_strings, image_inputs
 
     def _process_messaged_for_chat_template(
         self,
@@ -424,8 +426,9 @@ class SmolVLMProcessor(ProcessorMixin):
         return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
     # Add model-specific video sampling method when applying the template
-    #def apply_chat_template(self, conversation, **kwargs):
-    #    return super().apply_chat_template(conversation, sample_indices_fn=sample_indices_fn, **kwargs)
+    def apply_chat_template(self, conversation, max_frames=64, target_fps=1, skip_secs=1, **kwargs):
+        sample_indices_fn = lambda metadata, **fn_kwargs: smolvlm_sample_indices_fn(metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs)
+        return super().apply_chat_template(conversation, sample_indices_fn=sample_indices_fn, **kwargs)
 
 
 __all__ = ["SmolVLMProcessor"]
