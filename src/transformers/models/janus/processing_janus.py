@@ -99,7 +99,7 @@ class JanusProcessor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
-        self.num_image_tokens = 10 # revert back to 576 or fetch from pre_processor config
+        self.num_image_tokens = 576 # revert back to 576 or fetch from pre_processor config
         self.image_start_token = "<begin_of_image>"
         self.image_end_token = "<end_of_image>"
         self.use_default_system_prompt = use_default_system_prompt
@@ -152,7 +152,7 @@ class JanusProcessor(ProcessorMixin):
         image_start_id = self.tokenizer.vocab.get(self.image_start_token)
 
         # Compute image sequence mask
-        images_seq_mask = (input_ids == image_token_id) | (input_ids == image_start_id)
+        images_seq_mask = (input_ids == image_token_id)
 
         # Compute image embedding mask dynamically
         max_n_images = max(1,len(images))

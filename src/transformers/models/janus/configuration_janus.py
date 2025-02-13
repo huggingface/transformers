@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class JanusVisionEncoderConfig(PretrainedConfig):
+class JanusVisionConfig(PretrainedConfig):
     """Encoder Vision config in this case its the SIGLIP model"""
 
     model_type = "siglip_vision_model"
@@ -54,6 +54,8 @@ class JanusVisionEncoderConfig(PretrainedConfig):
         use_qk_norm = False,
         layerscale_value=None,
         vision_use_head = True,
+        num_aligner_hidden_states=2,
+        aligner_projection_size = 2048,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -80,7 +82,9 @@ class JanusVisionEncoderConfig(PretrainedConfig):
         self.select_layer = select_layer
         self.select_feature = select_feature
         self.vision_use_head = vision_use_head
-
+        self.use_special_tokens = kwargs.get('use_special_tokens',False)
+        self.num_aligner_hidden_states = num_aligner_hidden_states
+        self.aligner_projection_size = aligner_projection_size
 
 class JanusTextConfig(PretrainedConfig):
     r"""
@@ -214,14 +218,14 @@ class JanusTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
+        vocab_size=102400,
+        hidden_size=2048,
+        intermediate_size=5632,
+        num_hidden_layers=24,
+        num_attention_heads=16,
         num_key_value_heads=None,
         hidden_act="silu",
-        max_position_embeddings=2048,
+        max_position_embeddings=16384,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
@@ -342,28 +346,28 @@ class JanusConfig(PretrainedConfig):
     model_type = "janus"
     sub_configs = {
         "text_config": JanusTextConfig,
-        "encoder_vision_config": JanusVisionEncoderConfig,
-        "decoder_vision_config": JanusDecoderVisionConfig,
+        "vision_config": JanusVisionConfig,
+        # "decoder_vision_config": JanusDecoderVisionConfig,
     }
 
-    def __init__(self, text_config, encoder_vision_config, decoder_vision_config, **kwargs):
-        super.__init__(**kwargs)
+    def __init__(self, text_config=None, vision_config=None, **kwargs):
+        super().__init__(**kwargs)
 
         if text_config is None:
             text_config = {}
             logger.info("`text_config` is None. Initializaing with default JanusTextConfig values")
 
-        if encoder_vision_config is None:
-            encoder_vision_config = {}
-            logger.info("`encodr_vision_config` is None. Initializaing with default JanusVisionEncoderConfig values")
+        if vision_config is None:
+            vision_config = {}
+            logger.info("`encodr_vision_config` is None. Initializaing with default JanusVisionConfig values")
 
-        if decoder_vision_config is None:
-            decoder_vision_config = {}
-            logger.info("`text_config` is None. Initializaing with default JanusDecoderVisionConfig values")
+        # if decoder_vision_config is None:
+        #     decoder_vision_config = {}
+        #     logger.info("`text_config` is None. Initializaing with default JanusDecoderVisionConfig values")
 
-        text_config = JanusTextConfig(**text_config)
-        encoder_vision_config = JanusVisionEncoderConfig(**encoder_vision_config)
-        decoder_vision_config = JanusDecoderVisionConfig(**decoder_vision_config)
+        self.text_config = JanusTextConfig(**text_config)
+        self.vision_config = JanusVisionConfig(**vision_config)
+        # decoder_vision_config = JanusDecoderVisionConfig(**decoder_vision_config)
 
 
-__all__ = ["JanusDecoderVisionConfig", "JanusTextConfig", "JanusVisionEncoderConfig", "JanusConfig"]
+__all__ = ["JanusDecoderVisionConfig", "JanusTextConfig", "JanusVisionConfig", "JanusConfig"]
