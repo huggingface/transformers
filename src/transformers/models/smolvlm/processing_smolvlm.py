@@ -124,11 +124,6 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
         "images_kwargs": {
             "return_row_col_info": True,
         },
-        "videos_kwargs": {
-            "max_frames": None,
-            "sampling_fps": None,
-            "video_duration": None,
-        },
     }
 
 
