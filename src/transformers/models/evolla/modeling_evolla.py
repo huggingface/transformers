@@ -932,8 +932,17 @@ class EvollaLLM(EvollaPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        batch_size, seq_length, _ = inputs_embeds.shape
+        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+        seq_length_with_past = seq_length + past_key_values_length
+
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
+
+        if attention_mask is None:
+            attention_mask = torch.ones(
+                (batch_size, seq_length_with_past), dtype=torch.int64, device=inputs_embeds.device
+            )
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -1230,6 +1239,9 @@ class EvollaModel(EvollaPreTrainedModel):
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (protein_input_ids is None):
+            raise ValueError("protein_input_ids is required")
 
         text_input_ids = input_ids
         text_attention_mask = attention_mask
