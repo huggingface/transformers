@@ -548,7 +548,7 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     # TODO (Orr?) this is a dummy test to check if the model generates things that make sense.
-    # Needs to be expanded to a tiny video input
+    # Needs to be expanded to a tiny video
     def test_integration_test(self):
         model = SmolVLMForConditionalGeneration.from_pretrained(
             "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
