@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ if is_accelerate_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
 @triton.jit
 def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(axis=0)
@@ -182,10 +183,6 @@ def w8a8_block_fp8_matmul_triton(
     C_shape = A.shape[:-1] + (N,)
     C = A.new_empty(C_shape, dtype=output_dtype)
 
-    # TODO:
-    # BLOCK_SIZE_M, BLOCK_SIZE_K, BLOCK_SIZE_N can be optimized.
-    # BLOCK_SIZE_K must be divisible by block_k
-    # BLOCK_SIZE_N and BLOCK_SIZE_M has no requirements
     BLOCK_SIZE_M = 128
     if M < BLOCK_SIZE_M:
         BLOCK_SIZE_M = triton.next_power_of_2(M)
@@ -258,10 +255,8 @@ def w8a8_block_fp8_matmul_compile(
     num_weight_blocks_m = out_features // block_size[0]
     num_weight_blocks_n = hidden_dim // block_size[1]
 
-    # Initialize output tensor
     output = torch.zeros((batch_size * seq_len, out_features), dtype=torch.float32, device=input_q.device)
 
-    # Process each block
     for i in range(num_weight_blocks_m):
         m_start = i * block_size[0]
         m_end = m_start + block_size[0]
