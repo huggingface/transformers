@@ -61,10 +61,10 @@ model = AutoModelForImageTextToText.from_pretrained(
 
 conversation = [
     {
-        "role":"user",
+        "role": "user",
         "content":[
-            {"type":"image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-            {"type":"text", "text":"Describe this image."}
+            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+            {"type": "text", "text": "Describe this image."}
         ]
     }
 ]
