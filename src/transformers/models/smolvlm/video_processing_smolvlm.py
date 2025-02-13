@@ -135,6 +135,7 @@ def load_smolvlm_video(
     # Construct final frames & timestamps
     # Decide if we need to do color conversion
     sampled_indices = metadata.get("frame_indices", list(range(video_array.shape[0])))
+    fps = metadata.get("fps")
 
     frames, timestamps = [], []
     for i, frame_idx in enumerate(sampled_indices):
@@ -149,3 +150,4 @@ def load_smolvlm_video(
         timestamps.append(f"{mm:02d}:{ss:02d}")
 
     return frames, timestamps, duration_seconds
+    
