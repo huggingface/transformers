@@ -101,6 +101,7 @@ _import_structure = {
     "data.data_collator": [
         "DataCollator",
         "DataCollatorForLanguageModeling",
+        "DataCollatorForMultipleChoice",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
         "DataCollatorForSOP",
@@ -1023,6 +1024,7 @@ _import_structure = {
         "CompressedTensorsConfig",
         "EetqConfig",
         "FbgemmFp8Config",
+        "FineGrainedFP8Config",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
@@ -5188,6 +5190,7 @@ if TYPE_CHECKING:
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForMultipleChoice,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSeq2Seq,
         DataCollatorForSOP,
@@ -6195,6 +6198,7 @@ if TYPE_CHECKING:
         CompressedTensorsConfig,
         EetqConfig,
         FbgemmFp8Config,
+        FineGrainedFP8Config,
         GPTQConfig,
         HiggsConfig,
         HqqConfig,

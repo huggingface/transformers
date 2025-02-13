@@ -24,6 +24,7 @@ from ..utils.quantization_config import (
     CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
+    FineGrainedFP8Config,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
@@ -42,6 +43,7 @@ from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
+from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
@@ -67,6 +69,7 @@ AUTO_QUANTIZER_MAPPING = {
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
+    "fp8": FineGrainedFP8HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -85,6 +88,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitnet": BitNetConfig,
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
+    "fp8": FineGrainedFP8Config,
 }
 
 logger = logging.get_logger(__name__)

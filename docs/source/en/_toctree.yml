@@ -187,6 +187,8 @@
     title: BitNet
   - local: quantization/compressed_tensors
     title: compressed-tensors
+  - local: quantization/finegrained_fp8
+    title: Fine-grained FP8
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
