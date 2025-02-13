@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 # SmolVLM
 
 ## Overview
-SmolVLM2 is an adaptation of the Idefics3 model with three main differences:
+SmolVLM2 is an adaptation of the Idefics3 model with two main differences:
 
 - It uses SmolLM2 for the text model.
 - It supports multi-image and video inputs
