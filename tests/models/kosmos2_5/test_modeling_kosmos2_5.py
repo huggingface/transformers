@@ -636,7 +636,6 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
 
     def run_example(self, prompt, image, model, processor):
         inputs = processor(text=prompt, images=image, return_tensors="pt")
-        _, _ = inputs.pop("height"), inputs.pop("width")
         inputs = {k: v.to(torch_device) if v is not None else None for k, v in inputs.items()}
         inputs["flattened_patches"] = inputs["flattened_patches"].to(model.dtype)
 
