@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import is_torchdynamo_compiling, logging
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
 )
@@ -400,7 +400,7 @@ def multi_scale_deformable_attention_v2(
     value_list = (
         value.permute(0, 2, 3, 1)
         .flatten(0, 1)
-        .split([height.item() * width.item() for height, width in value_spatial_shapes], dim=-1)
+        .split([height * width for height, width in value_spatial_shapes], dim=-1)
     )
     # sampling_offsets [8, 480, 8, 12, 2]
     if method == "default":
@@ -518,9 +518,9 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
-        **kwargs,
     ):
         # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
@@ -528,7 +528,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
+        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
             )
@@ -564,7 +564,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         # V2-specific attention implementation choice
         output = multi_scale_deformable_attention_v2(
-            value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
+            value, spatial_shapes_list, sampling_locations, attention_weights, self.n_points_list, self.method
         )
 
         output = self.output_proj(output)

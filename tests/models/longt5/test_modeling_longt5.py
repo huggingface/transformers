@@ -785,7 +785,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
         encoder_expected_shape = (batch_size, 2, config.num_attention_heads, block_len, 3 * block_len)
         self.assertIsInstance(attentions, tuple)
@@ -920,10 +920,10 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len + global_seq_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
         global_block_size = getattr(self.model_tester, "global_block_size", None)
-        global_seq_length = seq_length // global_block_size
+        global_seq_length = prompt_length // global_block_size
         encoder_expected_shape = (
             batch_size,
             2,
