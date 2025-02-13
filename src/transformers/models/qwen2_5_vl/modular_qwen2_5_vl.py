@@ -49,7 +49,7 @@ from ...activations import ACT2FN
 from ...cache_utils import StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput, PILImageResampling, VideoInput
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_flash_attn_2_available, is_torchdynamo_compiling
@@ -905,6 +905,8 @@ class Qwen2_5_VLImageProcessorFast(Qwen2VLImageProcessorFast):
         merge_size (`int`, *optional*, defaults to 2):
             The merge size of the vision encoder to llm encoder.
     """
+
+    resample = PILImageResampling.BICUBIC
 
     model_input_names = [
         "pixel_values",
