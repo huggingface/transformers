@@ -312,7 +312,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
         return inputs
 
-    def _process_messaged_for_chat_template(
+    def _process_messages_for_chat_template(
         self,
         conversations: List[List[Dict[str, str]]],
         batch_images: List[ImageInput],
