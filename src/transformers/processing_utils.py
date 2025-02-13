@@ -1077,17 +1077,47 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
-                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                classes = tuple(
+                    cls._get_class_from_class_name(attribute_name, n) if n is not None else None for n in class_name
+                )
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = getattr(transformers_module, class_name)
+                attribute_class = cls._get_class_from_class_name(attribute_name, class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
+
+    @staticmethod
+    def _get_class_from_class_name(attribute_name, class_name):
+        if hasattr(transformers_module, class_name):
+            obj_class = transformers_module.class_name
+        else:
+            if attribute_name == "tokenizer":
+                mapping = getattr(transformers_module.models.auto.tokenization_auto, "TOKENIZER_MAPPING")
+            elif attribute_name == "feature_extractor":
+                mapping = getattr(transformers_module.models.auto.feature_extraction_auto, "FEATURE_EXTRACTOR_MAPPING")
+            elif attribute_name == "image_processor":
+                mapping = getattr(transformers_module.models.auto.image_processing_auto, "IMAGE_PROCESSOR_MAPPING")
+            else:
+                raise ValueError(
+                    f"Could not figure out reference for {attribute_name} {class_name}! "
+                    "This is probably an internal Transformers bug, so unless you're doing "
+                    "something really weird, please open an issue at "
+                    "https://github.com/huggingface/transformers/"
+                )
+            if class_name in mapping:
+                obj_class = mapping[class_name]
+            else:
+                raise ValueError(
+                    f"{class_name} is not a valid {attribute_name} class name. "
+                    f"You may need to pass {class_name} to the the `register()` method of the "
+                    f"autoclass for {attribute_name}."
+                )
+        return obj_class
 
     @property
     def model_input_names(self):
