@@ -16,6 +16,7 @@
 import base64
 import os
 from contextlib import redirect_stdout
+from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -158,6 +159,10 @@ def is_valid_image(img):
     return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_tf_tensor(img) or is_jax_tensor(img)
 
 
+def is_valid_list_of_images(images: List):
+    return images and all(is_valid_image(image) for image in images)
+
+
 def valid_images(imgs):
     # If we have an list of images, make sure every image is valid
     if isinstance(imgs, (list, tuple)):
@@ -189,7 +194,7 @@ def is_scaled_image(image: np.ndarray) -> bool:
 
 def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
     """
-    Ensure that the input is a list of images. If the input is a single image, it is converted to a list of length 1.
+    Ensure that the output is a list of images. If the input is a single image, it is converted to a list of length 1.
     If the input is a batch of images, it is converted to a list of images.
 
     Args:
@@ -203,7 +208,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
         return images
 
     # Either the input is a single image, in which case we create a list of length 1
-    if isinstance(images, PIL.Image.Image):
+    if is_pil_image(images):
         # PIL images are never batched
         return [images]
 
@@ -224,6 +229,108 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
         "Invalid image type. Expected either PIL.Image.Image, numpy.ndarray, torch.Tensor, tf.Tensor or "
         f"jax.ndarray, but got {type(images)}."
     )
+
+
+def make_flat_list_of_images(
+    images: Union[List[ImageInput], ImageInput],
+) -> ImageInput:
+    """
+    Ensure that the output is a flat list of images. If the input is a single image, it is converted to a list of length 1.
+    If the input is a nested list of images, it is converted to a flat list of images.
+    Args:
+        images (`Union[List[ImageInput], ImageInput]`):
+            The input image.
+    Returns:
+        list: A list of images or a 4d array of images.
+    """
+    # If the input is a nested list of images, we flatten it
+    if (
+        isinstance(images, (list, tuple))
+        and all(isinstance(images_i, (list, tuple)) for images_i in images)
+        and all(is_valid_list_of_images(images_i) for images_i in images)
+    ):
+        return [img for img_list in images for img in img_list]
+
+    if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
+        if is_pil_image(images[0]) or images[0].ndim == 3:
+            return images
+        if images[0].ndim == 4:
+            return [img for img_list in images for img in img_list]
+
+    if is_valid_image(images):
+        if is_pil_image(images) or images.ndim == 3:
+            return [images]
+        if images.ndim == 4:
+            return list(images)
+
+    raise ValueError(f"Could not make a flat list of images from {images}")
+
+
+def make_nested_list_of_images(
+    images: Union[List[ImageInput], ImageInput],
+) -> ImageInput:
+    """
+    Ensure that the output is a nested list of images.
+    Args:
+        images (`Union[List[ImageInput], ImageInput]`):
+            The input image.
+    Returns:
+        list: A list of list of images or a list of 4d array of images.
+    """
+    # If it's a list of batches, it's already in the right format
+    if (
+        isinstance(images, (list, tuple))
+        and all(isinstance(images_i, (list, tuple)) for images_i in images)
+        and all(is_valid_list_of_images(images_i) for images_i in images)
+    ):
+        return images
+
+    # If it's a list of images, it's a single batch, so convert it to a list of lists
+    if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
+        if is_pil_image(images[0]) or images[0].ndim == 3:
+            return [images]
+        if images[0].ndim == 4:
+            return [list(image) for image in images]
+
+    # If it's a single image, convert it to a list of lists
+    if is_valid_image(images):
+        if is_pil_image(images) or images.ndim == 3:
+            return [[images]]
+        if images.ndim == 4:
+            return [list(images)]
+
+    raise ValueError("Invalid input type. Must be a single image, a list of images, or a list of batches of images.")
+
+
+def make_batched_videos(videos) -> VideoInput:
+    """
+    Ensure that the input is a list of videos.
+    Args:
+        videos (`VideoInput`):
+            Video or videos to turn into a list of videos.
+    Returns:
+        list: A list of videos.
+    """
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+        # case 1: nested batch of videos so we flatten it
+        if not is_pil_image(videos[0][0]) and videos[0][0].ndim == 4:
+            videos = [[video for batch_list in batched_videos for video in batch_list] for batched_videos in videos]
+        # case 2: list of videos represented as list of video frames
+        return videos
+
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
+        if is_pil_image(videos[0]) or videos[0].ndim == 3:
+            return [videos]
+        elif videos[0].ndim == 4:
+            return [list(video) for video in videos]
+
+    elif is_valid_image(videos):
+        if is_pil_image(videos) or videos.ndim == 3:
+            return [[videos]]
+        elif videos.ndim == 4:
+            return [list(videos)]
+
+    raise ValueError(f"Could not make batched video from {videos}")
 
 
 def to_numpy_array(img) -> np.ndarray:
@@ -318,6 +425,37 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         return image.shape[-3], image.shape[-2]
     else:
         raise ValueError(f"Unsupported data format: {channel_dim}")
+
+
+def get_image_size_for_max_height_width(
+    image_size: Tuple[int, int],
+    max_height: int,
+    max_width: int,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+    """
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
 
 
 def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]) -> bool:
@@ -424,7 +562,7 @@ def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] =
     return indices
 
 
-def read_video_opencv(video_path: str, num_frames: Optional[int] = None):
+def read_video_opencv(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with open-cv decoder.
 
@@ -432,13 +570,25 @@ def read_video_opencv(video_path: str, num_frames: Optional[int] = None):
         video_path (`str`):
             Path to the video file.
         num_frames (`int`, *optional*):
-            Number of frames to sample uniformly. If not specified, all frames are sampled.
+            Number of frames to sample uniformly. Should be passed only when `fps=None`.
+            If not specified and `fps==None`, all frames are sampled.
+        fps (`int`, *optional*):
+            Number of frames to sample per second. Should be passed only when `num_frames=None`.
+            If not specified and `num_frames==None`, all frames are sampled.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
     video = cv2.VideoCapture(video_path)
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    video_fps = video.get(cv2.CAP_PROP_FPS)
+    if num_frames is None and fps is not None:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
+                f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
+            )
     indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     index = 0
@@ -457,7 +607,7 @@ def read_video_opencv(video_path: str, num_frames: Optional[int] = None):
     return np.stack(frames)
 
 
-def read_video_decord(video_path: str, num_frames: Optional[int] = None):
+def read_video_decord(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with Decord decoder.
 
@@ -465,18 +615,31 @@ def read_video_decord(video_path: str, num_frames: Optional[int] = None):
         video_path (`str`):
             Path to the video file.
         num_frames (`int`, *optional*):
-            Number of frames to sample uniformly. If not specified, all frames are sampled.
+            Number of frames to sample uniformly. Should be passed only when `fps=None`.
+            If not specified and `fps==None`, all frames are sampled.
+        fps (`int`, *optional*):
+            Number of frames to sample per second. Should be passed only when `num_frames=None`.
+            If not specified and `num_frames==None`, all frames are sampled.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
-    indices = get_uniform_frame_indices(total_num_frames=len(vr), num_frames=num_frames)
+    video_fps = vr.get_avg_fps()
+    total_num_frames = len(vr)
+    if num_frames is None and fps is not None:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
+                f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
+            )
+    indices = get_uniform_frame_indices(total_num_frames=total_num_frames, num_frames=num_frames)
     frames = vr.get_batch(indices).asnumpy()
     return frames
 
 
-def read_video_pyav(video_path: str, num_frames: Optional[int] = None):
+def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with PyAV decoder.
 
@@ -484,15 +647,26 @@ def read_video_pyav(video_path: str, num_frames: Optional[int] = None):
         video_path (`str`):
             Path to the video file.
         num_frames (`int`, *optional*):
-            Number of frames to sample uniformly. If not specified, all frames are sampled.
+            Number of frames to sample uniformly. Should be passed only when `fps=None`.
+            If not specified and `fps==None`, all frames are sampled.
+        fps (`int`, *optional*):
+            Number of frames to sample per second. Should be passed only when `num_frames=None`.
+            If not specified and `num_frames==None`, all frames are sampled.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
     container = av.open(video_path)
 
-    # sample uniformly "num_frames" frames from the video
     total_num_frames = container.streams.video[0].frames
+    video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
+    if num_frames is None and fps is not None:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
+                f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
+            )
     indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
 
     frames = []
@@ -506,7 +680,7 @@ def read_video_pyav(video_path: str, num_frames: Optional[int] = None):
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-def read_video_torchvision(video_path: str, num_frames: Optional[int] = None):
+def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fps: Optional[int] = None):
     """
     Decode the video with torchvision decoder.
 
@@ -514,7 +688,11 @@ def read_video_torchvision(video_path: str, num_frames: Optional[int] = None):
         video_path (`str`):
             Path to the video file.
         num_frames (`int`, *optional*):
-            Number of frames to sample uniformly. If not specified, all frames are sampled.
+            Number of frames to sample uniformly. Should be passed only when `fps=None`.
+            If not specified and `fps==None`, all frames are sampled.
+        fps (`int`, *optional*):
+            Number of frames to sample per second. Should be passed only when `num_frames=None`.
+            If not specified and `num_frames==None`, all frames are sampled.
 
     Returns:
         np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
@@ -526,6 +704,15 @@ def read_video_torchvision(video_path: str, num_frames: Optional[int] = None):
         pts_unit="sec",
         output_format="TCHW",
     )
+    video_fps = info["video_fps"]
+    total_num_frames = video.size(0) - 1
+    if num_frames is None and fps is not None:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
+            raise ValueError(
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
+                f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
+            )
 
     if num_frames is not None:
         idx = torch.linspace(0, video.size(0) - 1, num_frames, dtype=torch.int64)
@@ -542,7 +729,12 @@ VIDEO_DECODERS = {
 }
 
 
-def load_video(video: Union[str, "VideoInput"], num_frames: Optional[int] = None, backend: str = "opencv") -> np.array:
+def load_video(
+    video: Union[str, "VideoInput"],
+    num_frames: Optional[int] = None,
+    fps: Optional[int] = None,
+    backend: str = "opencv",
+) -> np.array:
     """
     Loads `video` to a numpy array.
 
@@ -551,12 +743,19 @@ def load_video(video: Union[str, "VideoInput"], num_frames: Optional[int] = None
             The video to convert to the numpy array format. Can be a link to video or local path.
         num_frames (`int`, *optional*):
             Number of frames to sample uniformly. If not passed, the whole video is loaded.
+        fps (`int`, *optional*):
+            Number of frames to sample per second. Should be passed only when `num_frames=None`.
+            If not specified and `num_frames==None`, all frames are sampled.
         backend (`str`, *optional*, defaults to `"opencv"`):
             The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
 
     Returns:
         `np.array`: A numpy array of shape (num_frames, channels, height, width).
     """
+
+    if fps is not None and num_frames is not None:
+        raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
+
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
@@ -597,7 +796,7 @@ def load_video(video: Union[str, "VideoInput"], num_frames: Optional[int] = None
         )
 
     video_decoder = VIDEO_DECODERS[backend]
-    video = video_decoder(file_obj)
+    video = video_decoder(file_obj, num_frames=num_frames, fps=fps)
     return video
 
 
@@ -689,12 +888,16 @@ def validate_fast_preprocess_arguments(
         do_normalize=do_normalize,
         image_mean=image_mean,
         image_std=image_std,
+        do_pad=do_pad,
+        size_divisibility=size_divisibility,
+        do_center_crop=do_center_crop,
+        crop_size=crop_size,
         do_resize=do_resize,
         size=size,
         resample=resample,
     )
     # Extra checks for ImageProcessorFast
-    if return_tensors != "pt":
+    if return_tensors is not None and return_tensors != "pt":
         raise ValueError("Only returning PyTorch tensors is currently supported.")
 
     if data_format != ChannelDimension.FIRST:
@@ -1084,3 +1287,22 @@ def validate_kwargs(valid_processor_keys: List[str], captured_kwargs: List[str])
         unused_key_str = ", ".join(unused_keys)
         # TODO raise a warning here instead of simply logging?
         logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
+
+
+@dataclass(frozen=True)
+class SizeDict:
+    """
+    Hashable dictionary to store image size information.
+    """
+
+    height: int = None
+    width: int = None
+    longest_edge: int = None
+    shortest_edge: int = None
+    max_height: int = None
+    max_width: int = None
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in SizeDict.")

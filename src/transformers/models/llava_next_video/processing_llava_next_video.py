@@ -18,6 +18,8 @@ Processor class for LLaVa-NeXT-Video.
 
 from typing import List, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
@@ -197,7 +199,11 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
         # videos are easier, simply get frames and multiply
         if videos_inputs:
-            one_video = to_numpy_array(videos_inputs.get("pixel_values_videos")[0])
+            one_video = videos_inputs.get("pixel_values_videos")[0]
+            if isinstance(one_video, (list, tuple)):
+                one_video = np.array(one_video)
+            else:
+                one_video = to_numpy_array(one_video)
             height, width = get_image_size(one_video[0])
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
@@ -245,11 +251,11 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height
         if original_aspect_ratio > current_aspect_ratio:
-            new_height = (height * current_width) // width
+            new_height = int(round(height * (current_width / width), 7))
             padding = (current_height - new_height) // 2
             current_height -= padding * 2
         else:
-            new_width = (width * current_height) // height
+            new_width = int(round(width * (current_height / height), 7))
             padding = (current_width - new_width) // 2
             current_width -= padding * 2
 

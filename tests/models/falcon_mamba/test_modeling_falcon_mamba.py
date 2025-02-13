@@ -247,7 +247,6 @@ class FalconMambaModelTester:
 # Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (FalconMambaForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # FalconMamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
@@ -354,11 +353,12 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                         self.assertTrue(param.data.min().item() >= inv_dt[0])
                 elif "A_log" in name:
                     A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
-                    self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                    A = A.expand(config.intermediate_size, -1).contiguous()
+                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                 elif "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
 
     @slow
     # Ignore copy

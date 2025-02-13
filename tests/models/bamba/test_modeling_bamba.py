@@ -18,11 +18,11 @@ import inspect
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -257,15 +257,7 @@ class BambaModelTester:
 
 @require_torch
 class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            BambaModel,
-            BambaForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (BambaForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BambaModel,
@@ -313,11 +305,11 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     if "A_log" in name:
-                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)[None, :]
-                        self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
+                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                     elif "D" in name:
                         D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
-                        self.assertTrue(torch.allclose(param.data, D, atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -394,11 +386,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
-
-    @unittest.skip(reason="Bamba has its own special cache type")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
     def test_batching_equivalence(self):
         # need to disable the tril input mask
@@ -488,11 +475,12 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-1)
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
 
 @slow
 @require_torch
+@require_torch_gpu
 class BambaModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
@@ -537,7 +525,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.cuda_compute_capability_major_version == 8:
             with torch.no_grad():
-                logits = self.model(input_ids=input_ids, num_logits_to_keep=40).logits
+                logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [

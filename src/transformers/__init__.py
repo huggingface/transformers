@@ -73,7 +73,6 @@ _import_structure = {
         "tool",
     ],
     "audio_utils": [],
-    "benchmark": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
     "convert_graph_to_onnx": [],
@@ -102,6 +101,7 @@ _import_structure = {
     "data.data_collator": [
         "DataCollator",
         "DataCollatorForLanguageModeling",
+        "DataCollatorForMultipleChoice",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
         "DataCollatorForSOP",
@@ -329,6 +329,7 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
+    "models.dab_detr": ["DabDetrConfig"],
     "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
         "Data2VecAudioConfig",
@@ -400,6 +401,7 @@ _import_structure = {
     "models.deprecated.vit_hybrid": ["ViTHybridConfig"],
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
+    "models.depth_pro": ["DepthProConfig"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
@@ -477,6 +479,11 @@ _import_structure = {
     ],
     "models.glm": ["GlmConfig"],
     "models.glpn": ["GLPNConfig"],
+    "models.got_ocr2": [
+        "GotOcr2Config",
+        "GotOcr2Processor",
+        "GotOcr2VisionConfig",
+    ],
     "models.gpt2": [
         "GPT2Config",
         "GPT2Tokenizer",
@@ -709,6 +716,10 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_5_vl": [
+        "Qwen2_5_VLConfig",
+        "Qwen2_5_VLProcessor",
+    ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
         "Qwen2AudioEncoderConfig",
@@ -739,6 +750,7 @@ _import_structure = {
         "RoFormerTokenizer",
     ],
     "models.rt_detr": ["RTDetrConfig", "RTDetrResNetConfig"],
+    "models.rt_detr_v2": ["RTDetrV2Config"],
     "models.rwkv": ["RwkvConfig"],
     "models.sam": [
         "SamConfig",
@@ -785,6 +797,7 @@ _import_structure = {
     ],
     "models.stablelm": ["StableLmConfig"],
     "models.starcoder2": ["Starcoder2Config"],
+    "models.superglue": ["SuperGlueConfig"],
     "models.superpoint": ["SuperPointConfig"],
     "models.swiftformer": ["SwiftFormerConfig"],
     "models.swin": ["SwinConfig"],
@@ -885,6 +898,7 @@ _import_structure = {
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
     "models.zamba": ["ZambaConfig"],
+    "models.zamba2": ["Zamba2Config"],
     "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
@@ -1010,10 +1024,12 @@ _import_structure = {
         "CompressedTensorsConfig",
         "EetqConfig",
         "FbgemmFp8Config",
+        "FineGrainedFP8Config",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
+        "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
     ],
@@ -1225,6 +1241,7 @@ else:
     _import_structure["models.deprecated.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.depth_pro"].extend(["DepthProImageProcessor", "DepthProImageProcessorFast"])
     _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
@@ -1233,6 +1250,7 @@ else:
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
+    _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
@@ -1242,6 +1260,7 @@ else:
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
+    _import_structure["models.llava"].append("LlavaImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
@@ -1262,12 +1281,14 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.textnet"].extend(["TextNetImageProcessor"])
@@ -1293,14 +1314,24 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.blip"].append("BlipImageProcessorFast")
+    _import_structure["models.clip"].append("CLIPImageProcessorFast")
+    _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
+    _import_structure["models.deit"].append("DeiTImageProcessorFast")
+    _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.llava"].append("LlavaImageProcessorFast")
+    _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
+    _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
+    _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
+    _import_structure["models.siglip"].append("SiglipImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
-    if not is_torchvision_available() and not is_timm_available():
+    if not (is_torchvision_available() and is_timm_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .utils import dummy_timm_and_torchvision_objects
@@ -1321,8 +1352,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
     _import_structure["activations"] = []
-    _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
-    _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
     _import_structure["cache_utils"] = [
         "Cache",
         "CacheConfig",
@@ -1377,7 +1406,6 @@ else:
             "LogitNormalization",
             "LogitsProcessor",
             "LogitsProcessorList",
-            "LogitsWarper",
             "MaxLengthCriteria",
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
@@ -1886,6 +1914,13 @@ else:
             "CvtPreTrainedModel",
         ]
     )
+    _import_structure["models.dab_detr"].extend(
+        [
+            "DabDetrForObjectDetection",
+            "DabDetrModel",
+            "DabDetrPreTrainedModel",
+        ]
+    )
     _import_structure["models.dac"].extend(
         [
             "DacModel",
@@ -2150,6 +2185,13 @@ else:
         [
             "DepthAnythingForDepthEstimation",
             "DepthAnythingPreTrainedModel",
+        ]
+    )
+    _import_structure["models.depth_pro"].extend(
+        [
+            "DepthProForDepthEstimation",
+            "DepthProModel",
+            "DepthProPreTrainedModel",
         ]
     )
     _import_structure["models.detr"].extend(
@@ -2418,6 +2460,12 @@ else:
             "GLPNForDepthEstimation",
             "GLPNModel",
             "GLPNPreTrainedModel",
+        ]
+    )
+    _import_structure["models.got_ocr2"].extend(
+        [
+            "GotOcr2ForConditionalGeneration",
+            "GotOcr2PreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -3276,6 +3324,13 @@ else:
             "Qwen2PreTrainedModel",
         ]
     )
+    _import_structure["models.qwen2_5_vl"].extend(
+        [
+            "Qwen2_5_VLForConditionalGeneration",
+            "Qwen2_5_VLModel",
+            "Qwen2_5_VLPreTrainedModel",
+        ]
+    )
     _import_structure["models.qwen2_audio"].extend(
         [
             "Qwen2AudioEncoder",
@@ -3413,6 +3468,9 @@ else:
             "RTDetrResNetPreTrainedModel",
         ]
     )
+    _import_structure["models.rt_detr_v2"].extend(
+        ["RTDetrV2ForObjectDetection", "RTDetrV2Model", "RTDetrV2PreTrainedModel"]
+    )
     _import_structure["models.rwkv"].extend(
         [
             "RwkvForCausalLM",
@@ -3544,6 +3602,12 @@ else:
             "Starcoder2ForTokenClassification",
             "Starcoder2Model",
             "Starcoder2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.superglue"].extend(
+        [
+            "SuperGlueForKeypointMatching",
+            "SuperGluePreTrainedModel",
         ]
     )
     _import_structure["models.superpoint"].extend(
@@ -3971,6 +4035,14 @@ else:
             "ZambaPreTrainedModel",
         ]
     )
+    _import_structure["models.zamba2"].extend(
+        [
+            "Zamba2ForCausalLM",
+            "Zamba2ForSequenceClassification",
+            "Zamba2Model",
+            "Zamba2PreTrainedModel",
+        ]
+    )
     _import_structure["models.zoedepth"].extend(
         [
             "ZoeDepthForDepthEstimation",
@@ -4011,8 +4083,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
 else:
     _import_structure["activations_tf"] = []
-    _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
-    _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation"].extend(
         [
             "TFForcedBOSTokenLogitsProcessor",
@@ -5120,6 +5190,7 @@ if TYPE_CHECKING:
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForMultipleChoice,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSeq2Seq,
         DataCollatorForSOP,
@@ -5350,6 +5421,9 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.dab_detr import (
+        DabDetrConfig,
+    )
     from .models.dac import (
         DacConfig,
         DacFeatureExtractor,
@@ -5438,6 +5512,7 @@ if TYPE_CHECKING:
         XLMProphetNetConfig,
     )
     from .models.depth_anything import DepthAnythingConfig
+    from .models.depth_pro import DepthProConfig
     from .models.detr import DetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
@@ -5515,6 +5590,7 @@ if TYPE_CHECKING:
     )
     from .models.glm import GlmConfig
     from .models.glpn import GLPNConfig
+    from .models.got_ocr2 import GotOcr2Config, GotOcr2Processor, GotOcr2VisionConfig
     from .models.gpt2 import (
         GPT2Config,
         GPT2Tokenizer,
@@ -5779,6 +5855,10 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_5_vl import (
+        Qwen2_5_VLConfig,
+        Qwen2_5_VLProcessor,
+    )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
         Qwen2AudioEncoderConfig,
@@ -5814,6 +5894,7 @@ if TYPE_CHECKING:
         RTDetrConfig,
         RTDetrResNetConfig,
     )
+    from .models.rt_detr_v2 import RTDetrV2Config
     from .models.rwkv import RwkvConfig
     from .models.sam import (
         SamConfig,
@@ -5862,6 +5943,7 @@ if TYPE_CHECKING:
     )
     from .models.stablelm import StableLmConfig
     from .models.starcoder2 import Starcoder2Config
+    from .models.superglue import SuperGlueConfig
     from .models.superpoint import SuperPointConfig
     from .models.swiftformer import (
         SwiftFormerConfig,
@@ -5983,6 +6065,7 @@ if TYPE_CHECKING:
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
     from .models.zamba import ZambaConfig
+    from .models.zamba2 import Zamba2Config
     from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
@@ -6115,10 +6198,12 @@ if TYPE_CHECKING:
         CompressedTensorsConfig,
         EetqConfig,
         FbgemmFp8Config,
+        FineGrainedFP8Config,
         GPTQConfig,
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        SpQRConfig,
         TorchAoConfig,
         VptqConfig,
     )
@@ -6299,6 +6384,7 @@ if TYPE_CHECKING:
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
+        from .models.depth_pro import DepthProImageProcessor, DepthProImageProcessorFast
         from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
@@ -6311,6 +6397,7 @@ if TYPE_CHECKING:
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
+        from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
@@ -6326,6 +6413,7 @@ if TYPE_CHECKING:
             LayoutLMv3ImageProcessor,
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
+        from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
@@ -6356,12 +6444,14 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.qwen2_5_vl import Qwen2_5_VLImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.textnet import TextNetImageProcessor
@@ -6383,14 +6473,24 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.blip import BlipImageProcessorFast
+        from .models.clip import CLIPImageProcessorFast
+        from .models.convnext import ConvNextImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
+        from .models.deit import DeiTImageProcessorFast
+        from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.llava import LlavaImageProcessorFast
+        from .models.llava_next import LlavaNextImageProcessorFast
+        from .models.llava_onevision import LlavaOnevisionImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
+        from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
+        from .models.siglip import SiglipImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     try:
-        if not is_torchvision_available() and not is_timm_available():
+        if not (is_torchvision_available() and is_timm_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_and_torchvision_objects import *
@@ -6404,9 +6504,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
-        # Benchmarks
-        from .benchmark.benchmark import PyTorchBenchmark
-        from .benchmark.benchmark_args import PyTorchBenchmarkArguments
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -6460,7 +6557,6 @@ if TYPE_CHECKING:
             LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
-            LogitsWarper,
             MaxLengthCriteria,
             MaxTimeCriteria,
             MinLengthLogitsProcessor,
@@ -6881,6 +6977,11 @@ if TYPE_CHECKING:
             CvtModel,
             CvtPreTrainedModel,
         )
+        from .models.dab_detr import (
+            DabDetrForObjectDetection,
+            DabDetrModel,
+            DabDetrPreTrainedModel,
+        )
         from .models.dac import (
             DacModel,
             DacPreTrainedModel,
@@ -7095,6 +7196,11 @@ if TYPE_CHECKING:
         from .models.depth_anything import (
             DepthAnythingForDepthEstimation,
             DepthAnythingPreTrainedModel,
+        )
+        from .models.depth_pro import (
+            DepthProForDepthEstimation,
+            DepthProModel,
+            DepthProPreTrainedModel,
         )
         from .models.detr import (
             DetrForObjectDetection,
@@ -7314,6 +7420,10 @@ if TYPE_CHECKING:
             GLPNForDepthEstimation,
             GLPNModel,
             GLPNPreTrainedModel,
+        )
+        from .models.got_ocr2 import (
+            GotOcr2ForConditionalGeneration,
+            GotOcr2PreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2DoubleHeadsModel,
@@ -7976,6 +8086,11 @@ if TYPE_CHECKING:
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
+        from .models.qwen2_5_vl import (
+            Qwen2_5_VLForConditionalGeneration,
+            Qwen2_5_VLModel,
+            Qwen2_5_VLPreTrainedModel,
+        )
         from .models.qwen2_audio import (
             Qwen2AudioEncoder,
             Qwen2AudioForConditionalGeneration,
@@ -8085,6 +8200,7 @@ if TYPE_CHECKING:
             RTDetrResNetBackbone,
             RTDetrResNetPreTrainedModel,
         )
+        from .models.rt_detr_v2 import RTDetrV2ForObjectDetection, RTDetrV2Model, RTDetrV2PreTrainedModel
         from .models.rwkv import (
             RwkvForCausalLM,
             RwkvModel,
@@ -8187,6 +8303,10 @@ if TYPE_CHECKING:
             Starcoder2ForTokenClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
+        )
+        from .models.superglue import (
+            SuperGlueForKeypointMatching,
+            SuperGluePreTrainedModel,
         )
         from .models.superpoint import (
             SuperPointForKeypointDetection,
@@ -8512,6 +8632,12 @@ if TYPE_CHECKING:
             ZambaModel,
             ZambaPreTrainedModel,
         )
+        from .models.zamba2 import (
+            Zamba2ForCausalLM,
+            Zamba2ForSequenceClassification,
+            Zamba2Model,
+            Zamba2PreTrainedModel,
+        )
         from .models.zoedepth import (
             ZoeDepthForDepthEstimation,
             ZoeDepthPreTrainedModel,
@@ -8547,10 +8673,6 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_tf_objects import *
     else:
-        from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
-
-        # Benchmarks
-        from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
