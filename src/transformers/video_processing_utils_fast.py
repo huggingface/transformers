@@ -150,7 +150,7 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
     do_convert_rgb = None
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, model_init_kwargs, **kwargs) -> None:
+    def __init__(self, model_init_kwargs, **kwargs: Unpack[VideosKwargs]) -> None:
         super().__init__(**kwargs)
         size = kwargs.pop("size", self.size)
         self.size = (

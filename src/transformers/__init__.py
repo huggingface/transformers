@@ -131,7 +131,6 @@ _import_structure = {
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
     "image_transforms": [],
-    "video_utils": [],
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
@@ -146,7 +145,6 @@ _import_structure = {
     ],
     "loss": [],
     "modelcard": ["ModelCard"],
-    # Losses
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
         "load_pytorch_checkpoint_in_tf2_model",
@@ -156,8 +154,9 @@ _import_structure = {
         "load_tf2_model_in_pytorch_model",
         "load_tf2_weights_in_pytorch_model",
     ],
-    # Models
+    # Losses
     "models": [],
+    # Models
     "models.albert": ["AlbertConfig"],
     "models.align": [
         "AlignConfig",
@@ -1033,6 +1032,7 @@ _import_structure = {
         "TorchAoConfig",
         "VptqConfig",
     ],
+    "video_utils": [],
 }
 
 # sentencepiece-backed objects
