@@ -1234,7 +1234,7 @@ class WhisperGenerationMixin(GenerationMixin):
     def _setup_no_speech_detection(logits_processor, segment_input, decoder_input_ids, kwargs):
         set_inputs = _get_attr_from_logit_processors(logits_processor, WhisperNoSpeechDetection, "set_inputs")
         extra_kwargs = {k: v for k, v in kwargs.items() if torch.is_tensor(v)}
-        set_inputs({"inputs": segment_input, "decoder_input_ids": decoder_input_ids, **extra_kwargs})
+        set_inputs({"inputs": segment_input, "input_ids": decoder_input_ids, **extra_kwargs})
 
     @staticmethod
     def _retrieve_total_input_frames(input_features, input_stride, kwargs):
@@ -1571,7 +1571,7 @@ class WhisperGenerationMixin(GenerationMixin):
         )
 
         with torch.no_grad():
-            logits = self(**inputs, decoder_input_ids=decoder_input_ids).logits[:, -1]
+            logits = self(**inputs, decoder_input_ids=decoder_input_ids, use_cache=False).logits[:, -1]
 
         non_lang_mask = torch.ones_like(logits[0], dtype=torch.bool)
         non_lang_mask[list(generation_config.lang_to_id.values())] = False

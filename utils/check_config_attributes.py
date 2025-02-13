@@ -161,6 +161,16 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
         "mask_loss_coefficient",
     ],
+    "DabDetrConfig": [
+        "dilation",
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "cls_loss_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
     "DetrConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
@@ -193,6 +203,20 @@ SPECIAL_CASES_TO_ALLOW = {
         "weight_loss_giou",
         "weight_loss_vfl",
     ],
+    "RTDetrV2Config": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+    ],
     "YolosConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
@@ -201,6 +225,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
+    "GPTNeoXConfig": ["rotary_emb_base"],
 }
 
 
@@ -266,6 +291,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 f"config.{attribute}" in modeling_source
                 or f'getattr(config, "{attribute}"' in modeling_source
                 or f'getattr(self.config, "{attribute}"' in modeling_source
+                or (
+                    "TextConfig" in config_class.__name__
+                    and f"config.get_text_config().{attribute}" in modeling_source
+                )
             ):
                 attribute_used = True
             # Deal with multi-line cases

@@ -110,6 +110,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
 |                           [CvT](model_doc/cvt)                           |       ✅        |         ✅         |      ❌      |
+|                      [DAB-DETR](model_doc/dab-detr)                      |       ✅        |         ❌         |      ❌      |
 |                           [DAC](model_doc/dac)                           |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
@@ -122,6 +123,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [DeiT](model_doc/deit)                          |       ✅        |         ✅         |      ❌      |
 |                        [DePlot](model_doc/deplot)                        |       ✅        |         ❌         |      ❌      |
 |                [Depth Anything](model_doc/depth_anything)                |       ✅        |         ❌         |      ❌      |
+|                     [DepthPro](model_doc/depth_pro)                      |       ✅        |         ❌         |      ❌      |
 |                          [DETA](model_doc/deta)                          |       ✅        |         ❌         |      ❌      |
 |                          [DETR](model_doc/detr)                          |       ✅        |         ❌         |      ❌      |
 |                      [DialoGPT](model_doc/dialogpt)                      |       ✅        |         ✅         |      ✅      |
@@ -137,6 +139,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [EfficientFormer](model_doc/efficientformer)               |       ✅        |         ✅         |      ❌      |
 |                  [EfficientNet](model_doc/efficientnet)                  |       ✅        |         ❌         |      ❌      |
 |                       [ELECTRA](model_doc/electra)                       |       ✅        |         ✅         |      ✅      |
+|                          [Emu3](model_doc/emu3)                          |       ✅        |         ❌         |      ❌      |
 |                       [EnCodec](model_doc/encodec)                       |       ✅        |         ❌         |      ❌      |
 |               [Encoder decoder](model_doc/encoder-decoder)               |       ✅        |         ✅         |      ✅      |
 |                         [ERNIE](model_doc/ernie)                         |       ✅        |         ❌         |      ❌      |
@@ -160,6 +163,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                           [GLM](model_doc/glm)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
+|                      [GOT-OCR2](model_doc/got_ocr2)                      |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
 |                      [GPT NeoX](model_doc/gpt_neox)                      |       ✅        |         ❌         |      ❌      |
 |             [GPT NeoX Japanese](model_doc/gpt_neox_japanese)             |       ✅        |         ❌         |      ❌      |
@@ -172,6 +176,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                    [Graphormer](model_doc/graphormer)                    |       ✅        |         ❌         |      ❌      |
 |                [Grounding DINO](model_doc/grounding-dino)                |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
+|                        [Helium](model_doc/helium)                        |       ✅        |         ❌         |      ❌      |
 |                       [HerBERT](model_doc/herbert)                       |       ✅        |         ✅         |      ✅      |
 |                         [Hiera](model_doc/hiera)                         |       ✅        |         ❌         |      ❌      |
 |                        [Hubert](model_doc/hubert)                        |       ✅        |         ✅         |      ❌      |
@@ -235,6 +240,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [MobileViT](model_doc/mobilevit)                     |       ✅        |         ✅         |      ❌      |
 |                   [MobileViTV2](model_doc/mobilevitv2)                   |       ✅        |         ❌         |      ❌      |
 |                    [ModernBERT](model_doc/modernbert)                    |       ✅        |         ❌         |      ❌      |
+|                     [Moonshine](model_doc/moonshine)                     |       ✅        |         ❌         |      ❌      |
 |                         [Moshi](model_doc/moshi)                         |       ✅        |         ❌         |      ❌      |
 |                         [MPNet](model_doc/mpnet)                         |       ✅        |         ✅         |      ❌      |
 |                           [MPT](model_doc/mpt)                           |       ✅        |         ❌         |      ❌      |
@@ -282,6 +288,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [PVTv2](model_doc/pvt_v2)                         |       ✅        |         ❌         |      ❌      |
 |                       [QDQBert](model_doc/qdqbert)                       |       ✅        |         ❌         |      ❌      |
 |                         [Qwen2](model_doc/qwen2)                         |       ✅        |         ❌         |      ❌      |
+|                    [Qwen2_5_VL](model_doc/qwen2_5_vl)                    |       ✅        |         ❌         |      ❌      |
 |                   [Qwen2Audio](model_doc/qwen2_audio)                    |       ✅        |         ❌         |      ❌      |
 |                     [Qwen2MoE](model_doc/qwen2_moe)                      |       ✅        |         ❌         |      ❌      |
 |                      [Qwen2VL](model_doc/qwen2_vl)                       |       ✅        |         ❌         |      ❌      |
@@ -299,6 +306,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [RoFormer](model_doc/roformer)                      |       ✅        |         ✅         |      ✅      |
 |                       [RT-DETR](model_doc/rt_detr)                       |       ✅        |         ❌         |      ❌      |
 |                [RT-DETR-ResNet](model_doc/rt_detr_resnet)                |       ✅        |         ❌         |      ❌      |
+|                    [RT-DETRv2](model_doc/rt_detr_v2)                     |       ✅        |         ❌         |      ❌      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
@@ -315,6 +323,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                   [SqueezeBERT](model_doc/squeezebert)                   |       ✅        |         ❌         |      ❌      |
 |                      [StableLm](model_doc/stablelm)                      |       ✅        |         ❌         |      ❌      |
 |                    [Starcoder2](model_doc/starcoder2)                    |       ✅        |         ❌         |      ❌      |
+|                     [SuperGlue](model_doc/superglue)                     |       ✅        |         ❌         |      ❌      |
 |                    [SuperPoint](model_doc/superpoint)                    |       ✅        |         ❌         |      ❌      |
 |                   [SwiftFormer](model_doc/swiftformer)                   |       ✅        |         ✅         |      ❌      |
 |                    [Swin Transformer](model_doc/swin)                    |       ✅        |         ✅         |      ❌      |
@@ -356,8 +365,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [ViTMAE](model_doc/vit_mae)                        |       ✅        |         ✅         |      ❌      |
 |                      [ViTMatte](model_doc/vitmatte)                      |       ✅        |         ❌         |      ❌      |
 |                       [ViTMSN](model_doc/vit_msn)                        |       ✅        |         ❌         |      ❌      |
-|                       [VitPose](model_doc/vitpose)                       |       ✅        |         ❌         |      ❌      |
-|              [VitPoseBackbone](model_doc/vitpose_backbone)               |       ✅        |         ❌         |      ❌      |
+|                       [ViTPose](model_doc/vitpose)                       |       ✅        |         ❌         |      ❌      |
+|              [ViTPoseBackbone](model_doc/vitpose_backbone)               |       ✅        |         ❌         |      ❌      |
 |                          [VITS](model_doc/vits)                          |       ✅        |         ❌         |      ❌      |
 |                         [ViViT](model_doc/vivit)                         |       ✅        |         ❌         |      ❌      |
 |                      [Wav2Vec2](model_doc/wav2vec2)                      |       ✅        |         ✅         |      ✅      |
@@ -380,6 +389,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [YOLOS](model_doc/yolos)                         |       ✅        |         ❌         |      ❌      |
 |                          [YOSO](model_doc/yoso)                          |       ✅        |         ❌         |      ❌      |
 |                         [Zamba](model_doc/zamba)                         |       ✅        |         ❌         |      ❌      |
+|                        [Zamba2](model_doc/zamba2)                        |       ✅        |         ❌         |      ❌      |
 |                      [ZoeDepth](model_doc/zoedepth)                      |       ✅        |         ❌         |      ❌      |
 
 <!-- End table-->

@@ -28,7 +28,7 @@ This guide will walk you through how to deploy DeepSpeed training, the features 
 
 ## Installation
 
-DeepSpeed is available to install from PyPI or Transformers (for more detailed installation options, take a look at the DeepSpeed [installation details](https://www.deepspeed.ai/tutorials/advanced-install/) or the GitHub [README](https://github.com/microsoft/deepspeed#installation)).
+DeepSpeed is available to install from PyPI or Transformers (for more detailed installation options, take a look at the DeepSpeed [installation details](https://www.deepspeed.ai/tutorials/advanced-install/) or the GitHub [README](https://github.com/deepspeedai/DeepSpeed#installation)).
 
 <Tip>
 
@@ -114,10 +114,10 @@ DeepSpeed works with the [`Trainer`] class by way of a config file containing al
 
 <Tip>
 
-Find a complete list of DeepSpeed configuration options on the [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) reference. You can also find more practical examples of various DeepSpeed configuration examples on the [DeepSpeedExamples](https://github.com/microsoft/DeepSpeedExamples) repository or the main [DeepSpeed](https://github.com/microsoft/DeepSpeed) repository. To quickly find specific examples, you can:
+Find a complete list of DeepSpeed configuration options on the [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) reference. You can also find more practical examples of various DeepSpeed configuration examples on the [DeepSpeedExamples](https://github.com/deepspeedai/DeepSpeedExamples) repository or the main [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) repository. To quickly find specific examples, you can:
 
 ```bash
-git clone https://github.com/microsoft/DeepSpeedExamples
+git clone https://github.com/deepspeedai/DeepSpeedExamples
 cd DeepSpeedExamples
 find . -name '*json'
 # find examples with the Lamb optimizer
@@ -303,7 +303,7 @@ For more information about initializing large models with ZeRO-3 and accessing t
 
 [ZeRO-Infinity](https://hf.co/papers/2104.07857) allows offloading model states to the CPU and/or NVMe to save even more memory. Smart partitioning and tiling algorithms allow each GPU to send and receive very small amounts of data during offloading such that a modern NVMe can fit an even larger total memory pool than is available to your training process. ZeRO-Infinity requires ZeRO-3.
 
-Depending on the CPU and/or NVMe memory available, you can offload both the [optimizer states](https://www.deepspeed.ai/docs/config-json/#optimizer-offloading) and [parameters](https://www.deepspeed.ai/docs/config-json/#parameter-offloading), just one of them, or none. You should also make sure the `nvme_path` is pointing to an NVMe device, because while it still works with a normal hard drive or solid state drive, it'll be significantly slower. With a modern NVMe, you can expect peak transfer speeds of ~3.5GB/s for read and ~3GB/s for write operations. Lastly, [run a benchmark](https://github.com/microsoft/DeepSpeed/issues/998) on your training setup to determine the optimal `aio` configuration.
+Depending on the CPU and/or NVMe memory available, you can offload both the [optimizer states](https://www.deepspeed.ai/docs/config-json/#optimizer-offloading) and [parameters](https://www.deepspeed.ai/docs/config-json/#parameter-offloading), just one of them, or none. You should also make sure the `nvme_path` is pointing to an NVMe device, because while it still works with a normal hard drive or solid state drive, it'll be significantly slower. With a modern NVMe, you can expect peak transfer speeds of ~3.5GB/s for read and ~3GB/s for write operations. Lastly, [run a benchmark](https://github.com/deepspeedai/DeepSpeed/issues/998) on your training setup to determine the optimal `aio` configuration.
 
 The example ZeRO-3/Infinity configuration file below sets most of the parameter values to `auto`, but you could also manually add these values.
 
@@ -583,6 +583,20 @@ You can choose the communication data type by setting the `communication_data_ty
 ```yaml
 {
     "communication_data_type": "fp32"
+}
+```
+
+### Universal Checkpointing
+
+[Universal Checkpointing](https://www.deepspeed.ai/tutorials/universal-checkpointing) is an efficient and flexible feature for saving and loading model checkpoints. It enables seamless model training continuation and fine-tuning across different model architectures, parallelism techniques, and training configurations.
+
+Resume training with a universal checkpoint by setting [load_universal](https://www.deepspeed.ai/docs/config-json/#checkpoint-options) to `true` in the config file.
+
+```yaml
+{
+    "checkpoint": {
+        "load_universal": true
+    }
 }
 ```
 
@@ -1143,7 +1157,7 @@ For Transformers>=4.28, if `synced_gpus` is automatically set to `True` if multi
 
 ## Troubleshoot
 
-When you encounter an issue, you should consider whether DeepSpeed is the cause of the problem because often it isn't (unless it's super obviously and you can see DeepSpeed modules in the exception)! The first step should be to retry your setup without DeepSpeed, and if the problem persists, then you can report the issue. If the issue is a core DeepSpeed problem and unrelated to the Transformers integration, open an Issue on the [DeepSpeed repository](https://github.com/microsoft/DeepSpeed).
+When you encounter an issue, you should consider whether DeepSpeed is the cause of the problem because often it isn't (unless it's super obviously and you can see DeepSpeed modules in the exception)! The first step should be to retry your setup without DeepSpeed, and if the problem persists, then you can report the issue. If the issue is a core DeepSpeed problem and unrelated to the Transformers integration, open an Issue on the [DeepSpeed repository](https://github.com/deepspeedai/DeepSpeed).
 
 For issues related to the Transformers integration, please provide the following information:
 
@@ -1213,7 +1227,7 @@ This means the DeepSpeed loss scaler is unable to find a scaling coefficient to 
 
 ## Resources
 
-DeepSpeed ZeRO is a powerful technology for training and loading very large models for inference with limited GPU resources, making it more accessible to everyone. To learn more about DeepSpeed, feel free to read the [blog posts](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [documentation](https://www.deepspeed.ai/getting-started/), and [GitHub repository](https://github.com/microsoft/deepspeed). 
+DeepSpeed ZeRO is a powerful technology for training and loading very large models for inference with limited GPU resources, making it more accessible to everyone. To learn more about DeepSpeed, feel free to read the [blog posts](https://www.microsoft.com/en-us/research/search/?q=deepspeed), [documentation](https://www.deepspeed.ai/getting-started/), and [GitHub repository](https://github.com/deepspeedai/DeepSpeed). 
 
 The following papers are also a great resource for learning more about ZeRO:
 

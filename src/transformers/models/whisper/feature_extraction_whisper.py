@@ -140,12 +140,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         Compute the log-mel spectrogram of the audio using PyTorch's GPU-accelerated STFT implementation with batching,
         yielding results similar to cpu computing with 1e-5 tolerance.
         """
-        waveform = torch.from_numpy(waveform).type(torch.float32)
-
-        window = torch.hann_window(self.n_fft)
-        if device != "cpu":
-            waveform = waveform.to(device)
-            window = window.to(device)
+        waveform = torch.from_numpy(waveform).to(device, torch.float32)
+        window = torch.hann_window(self.n_fft, device=device)
 
         # Note: it would be better to dither the chunked waveform,
         # so overlapping signal does not get the same dithering.
@@ -156,9 +152,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[..., :-1].abs() ** 2
 
-        mel_filters = torch.from_numpy(self.mel_filters).type(torch.float32)
-        if device != "cpu":
-            mel_filters = mel_filters.to(device)
+        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
         mel_spec = mel_filters.T @ magnitudes
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
