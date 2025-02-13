@@ -180,6 +180,11 @@ class VideoProcessingTestMixin:
         if self.video_processing_class is None or self.fast_video_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the video processors is not defined")
 
+        if hasattr(self.video_processor_tester, "do_center_crop") and self.video_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
         video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
         video_processor_slow = self.video_processing_class(**self.video_processor_dict)
         video_processor_fast = self.fast_video_processing_class(**self.video_processor_dict)
