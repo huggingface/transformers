@@ -21,7 +21,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from functools import lru_cache, partial, wraps
+from functools import partial
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -37,6 +37,7 @@ from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchdynamo_compiling,
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
