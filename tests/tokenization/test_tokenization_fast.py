@@ -171,6 +171,23 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             # thus tok(sentences, truncation = True) does nothing and does not warn either
             self.assertEqual(tok(sentences, truncation = True, max_length = 8), {'input_ids': [[8774, 6, 3, 63, 31, 1748, 55, 1],[ 571, 33, 25, 3, 2, 3, 58, 1]], 'token_type_ids': [[0, 0, 0, 0, 0, 0, 0, 0],[0, 0, 0, 0, 0, 0, 0, 0]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1],[1, 1, 1, 1, 1, 1, 1, 1]]})  # fmt: skip
 
+    def test_tokenizer_class(self):
+        model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast),
+                            f"Expected tokenizer(use_fast=True) type: LlamaTokenizerFast, , actual={type(tokenizer)}")
+
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
+            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast),
+                            f"Expected tokenizer type(use_fast=False): LlamaTokenizerFast, , actual={type(tokenizer)}")
+
+            tokenizer.save_pretrained(temp_dir)
+            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
+            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast),
+                            f"Expected tokenizer type: LlamaTokenizerFast, , actual={type(tokenizer)}")
+
 
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):
@@ -219,21 +236,6 @@ class TokenizerVersioningTest(unittest.TestCase):
         self.assertEqual(len(old_tokenizer), 28996)
         json_tokenizer = json.loads(old_tokenizer._tokenizer.to_str())
         self.assertNotIn("huggingface", json_tokenizer["model"]["vocab"])
-
-    def test_tokenizer_class(self):
-        model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast), f"Expected tokenizer(use_fast=True) type: LlamaTokenizerFast, , actual={type(tokenizer)}")
-
-            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast), f"Expected tokenizer type(use_fast=False): LlamaTokenizerFast, , actual={type(tokenizer)}")
-
-            tokenizer.save_pretrained(temp_dir)
-            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
-            self.assertTrue(isinstance(tokenizer, LlamaTokenizerFast), f"Expected tokenizer type: LlamaTokenizerFast, , actual={type(tokenizer)}")
-
 
 @require_tokenizers
 class ReduceMutableBorrowTests(unittest.TestCase):
