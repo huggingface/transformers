@@ -859,6 +859,13 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 
     image_processor_class = "AutoImageProcessor"
 
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return names_from_processor + ["second_per_grid_ts"]
+
     def __call__(
         self,
         images: ImageInput = None,

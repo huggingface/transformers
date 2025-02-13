@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2VLImageProcessor, Qwen2_5_VLProcessor
+    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessor
 
 
 @require_vision
