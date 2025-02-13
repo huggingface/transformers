@@ -48,10 +48,10 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
 class Qwen2_5_VLProcessor(ProcessorMixin):
     r"""
     Constructs a Qwen2.5-VL processor which wraps a Qwen2.5-VL image processor and a Qwen2 tokenizer into a single processor.
-    [`Qwen2_5_VLProcessor`] offers all the functionalities of [`Qwen2_5_VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`Qwen2_5_VLProcessor`] offers all the functionalities of [`Qwen2VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
     [`~Qwen2_5_VLProcessor.__call__`] and [`~Qwen2_5_VLProcessor.decode`] for more information.
     Args:
-        image_processor ([`Qwen2_5_VLImageProcessor`], *optional*):
+        image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -81,7 +81,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
-        Qwen2_5_VLImageProcessor's [`~Qwen2_5_VLImageProcessor.__call__`] if `vision_infos` is not `None`.
+        Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
