@@ -327,6 +327,11 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=None, padding=True)
 
+        # see https://github.com/huggingface/transformers/pull/35934
+        images = [self.image1, self.image2]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=None, padding=True)
+
     # Override as MllamaProcessor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:

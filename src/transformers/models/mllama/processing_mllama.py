@@ -301,7 +301,7 @@ class MllamaProcessor(ProcessorMixin):
                 raise ValueError(
                     "If a batch of text is provided, there should be either no images or at least one image per sample"
                 )
-            if n_images_in_images != n_images_in_text:
+            if sum(n_images_in_text) > 0 and n_images_in_images != n_images_in_text:
                 if images is None:
                     raise ValueError("No image were provided, but there are image tokens in the prompt")
                 else:
