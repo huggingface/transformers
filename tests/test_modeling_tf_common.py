@@ -114,7 +114,6 @@ def _config_zero_init(config):
 class TFModelTesterMixin:
     model_tester = None
     all_model_classes = ()
-    all_generative_model_classes = ()
     test_mismatched_shapes = True
     test_resize_embeddings = True
     test_head_masking = True

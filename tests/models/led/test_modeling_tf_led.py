@@ -194,6 +194,7 @@ def prepare_led_inputs_dict(
 @require_tf
 class TFLEDModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFLEDForConditionalGeneration, TFLEDModel) if is_tf_available() else ()
+    all_generative_model_classes = (TFLEDForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": TFLEDModel,

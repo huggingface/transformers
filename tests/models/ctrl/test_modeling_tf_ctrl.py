@@ -173,6 +173,7 @@ class TFCTRLModelTester:
 @require_tf
 class TFCTRLModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel, TFCTRLForSequenceClassification) if is_tf_available() else ()
+    all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": TFCTRLModel,

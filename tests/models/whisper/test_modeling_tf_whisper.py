@@ -267,6 +267,7 @@ class TFWhisperModelTester:
 @require_tf
 class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFWhisperModel, TFWhisperForConditionalGeneration) if is_tf_available() else ()
+    all_generative_model_classes = (TFWhisperForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = {"feature-extraction": TFWhisperModel} if is_tf_available() else {}
     is_encoder_decoder = True
     fx_compatible = False

@@ -180,6 +180,7 @@ def prepare_blenderbot_inputs_dict(
 @require_tf
 class TFBlenderbotModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TFBlenderbotForConditionalGeneration, TFBlenderbotModel) if is_tf_available() else ()
+    all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": TFBlenderbotModel,
