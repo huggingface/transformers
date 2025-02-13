@@ -377,7 +377,7 @@ class SmolVLMProcessor(ProcessorMixin):
                         curr_num_frames = batch_num_frames.pop(0)
 
                         # Build the video intro texts
-                        td = timedelta(seconds=float(duration_sec))
+                        td = timedelta(seconds=int(duration_sec))
                         new_content.append(
                             {
                                 "type": "text",
@@ -427,7 +427,9 @@ class SmolVLMProcessor(ProcessorMixin):
 
     # Add model-specific video sampling method when applying the template
     def apply_chat_template(self, conversation, max_frames=64, target_fps=1, skip_secs=1, **kwargs):
-        sample_indices_fn = lambda metadata, **fn_kwargs: smolvlm_sample_indices_fn(metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs)
+        def sample_indices_fn_func(metadata, **fn_kwargs):
+            return smolvlm_sample_indices_fn(metadata, max_frames=max_frames, target_fps=target_fps,  skip_secs=skip_secs, **fn_kwargs)
+        sample_indices_fn = sample_indices_fn_func
         return super().apply_chat_template(conversation, sample_indices_fn=sample_indices_fn, **kwargs)
 
 
