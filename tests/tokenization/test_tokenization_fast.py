@@ -219,6 +219,23 @@ class TokenizerVersioningTest(unittest.TestCase):
         json_tokenizer = json.loads(old_tokenizer._tokenizer.to_str())
         self.assertNotIn("huggingface", json_tokenizer["model"]["vocab"])
 
+    def test_tokenizer_class(self):
+        from transformers import LlamaTokenizerFast
+        model_id = "deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+            isFast = isinstance(tokenizer, LlamaTokenizerFast)
+            self.assertTrue(isFast, f"Expected tokenizer(use_fast=True) type: LlamaTokenizerFast, , actual={type(tokenizer)}")
+
+            tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
+            isFast = isinstance(tokenizer, LlamaTokenizerFast)
+            self.assertTrue(isFast, f"Expected tokenizer type(use_fast=False): LlamaTokenizerFast, , actual={type(tokenizer)}")
+
+            tokenizer.save_pretrained(temp_dir)
+            tokenizer = AutoTokenizer.from_pretrained(temp_dir, use_fast=False)
+            self.assertTrue(isFast, f"Expected tokenizer type: LlamaTokenizerFast, , actual={type(tokenizer)}")
+
 
 @require_tokenizers
 class ReduceMutableBorrowTests(unittest.TestCase):
