@@ -556,7 +556,22 @@ class TvpPooler(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
-        first_token_tensor = hidden_states[:, 0]
+
+        # Original approach: direct indexing
+        # first_token_tensor = hidden_states[:, 0]
+
+        # Approach 1: Using narrow for potentially reduced memory footprint
+        # first_token_tensor = hidden_states.narrow(1, 0, 1).squeeze(1)
+
+        # Approach 2: Using select for potentially reduced memory footprint (similar to narrow)
+        # first_token_tensor = hidden_states.select(1, 0)
+
+        # Approach 3: Using indexing with Ellipsis for generality (in case batch dim is not the first)
+        first_token_tensor = hidden_states[..., 0, :]
+
+        # Approach 4: Detaching the tensor to avoid gradient tracking if not needed
+        # first_token_tensor = hidden_states[..., 0, :].detach()
+
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
@@ -773,7 +788,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
 
 
 @add_start_docstrings(
-    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on" " top.",
+    "The bare Tvp Model transformer outputting BaseModelOutputWithPooling object without any specific head on top.",
     TVP_START_DOCSTRING,
 )
 class TvpModel(TvpPreTrainedModel):

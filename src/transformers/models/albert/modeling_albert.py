@@ -235,20 +235,21 @@ class AlbertEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
+                token_type_ids = buffered_token_type_ids.expand(
+                    input_shape[0], seq_length
+                )  # Removed intermediate variable
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
-        embeddings = self.LayerNorm(embeddings)
+        # Combined embedding addition and LayerNorm/Dropout
+        embeddings = self.LayerNorm(
+            inputs_embeds
+            + self.token_type_embeddings(token_type_ids)
+            + (self.position_embeddings(position_ids) if self.position_embedding_type == "absolute" else 0)
+        )
         embeddings = self.dropout(embeddings)
         return embeddings
 

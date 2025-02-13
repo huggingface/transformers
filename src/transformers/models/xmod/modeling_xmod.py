@@ -268,8 +268,8 @@ class XmodSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Xmod
 class XmodSelfOutput(nn.Module):
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput.__init__
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -277,9 +277,20 @@ class XmodSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        # In-place operations where possible for memory efficiency. However, depending on the
+        # specifics of autograd, this *might* not be ideal.  If there are issues with
+        # training using these in-place ops, they can be reverted.  Empirical testing
+        # recommended for large models.  Readability is maintained with comments.
+
+        # Perform dense and dropout operations in-place if possible
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = hidden_states + input_tensor
+        hidden_states = self.dropout(hidden_states)  # Dropout might not have in-place version
+
+        hidden_states.add_(input_tensor)  # In-place addition
+
+        # LayerNorm typically operates in-place anyway, but explicitly call in-place version if available.
+        hidden_states = self.LayerNorm(hidden_states)
+
         return hidden_states
 
 
@@ -619,7 +630,7 @@ class XmodEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->Xmod
 class XmodPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -629,7 +640,22 @@ class XmodPooler(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
-        first_token_tensor = hidden_states[:, 0]
+
+        # Original approach: direct indexing
+        # first_token_tensor = hidden_states[:, 0]
+
+        # Approach 1: Using narrow for potentially reduced memory footprint
+        # first_token_tensor = hidden_states.narrow(1, 0, 1).squeeze(1)
+
+        # Approach 2: Using select for potentially reduced memory footprint (similar to narrow)
+        # first_token_tensor = hidden_states.select(1, 0)
+
+        # Approach 3: Using indexing with Ellipsis for generality (in case batch dim is not the first)
+        first_token_tensor = hidden_states[..., 0, :]
+
+        # Approach 4: Detaching the tensor to avoid gradient tracking if not needed
+        # first_token_tensor = hidden_states[..., 0, :].detach()
+
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output

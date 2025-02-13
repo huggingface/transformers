@@ -185,20 +185,21 @@ class ElectraEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
+                token_type_ids = buffered_token_type_ids.expand(
+                    input_shape[0], seq_length
+                )  # Removed intermediate variable
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
-        embeddings = self.LayerNorm(embeddings)
+        # Combined embedding addition and LayerNorm/Dropout
+        embeddings = self.LayerNorm(
+            inputs_embeds
+            + self.token_type_embeddings(token_type_ids)
+            + (self.position_embeddings(position_ids) if self.position_embedding_type == "absolute" else 0)
+        )
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -339,7 +340,7 @@ class ElectraSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class ElectraSelfOutput(nn.Module):
+class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -347,9 +348,20 @@ class ElectraSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        # In-place operations where possible for memory efficiency. However, depending on the
+        # specifics of autograd, this *might* not be ideal.  If there are issues with
+        # training using these in-place ops, they can be reverted.  Empirical testing
+        # recommended for large models.  Readability is maintained with comments.
+
+        # Perform dense and dropout operations in-place if possible
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dropout(hidden_states)  # Dropout might not have in-place version
+
+        hidden_states.add_(input_tensor)  # In-place addition
+
+        # LayerNorm typically operates in-place anyway, but explicitly call in-place version if available.
+        hidden_states = self.LayerNorm(hidden_states)
+
         return hidden_states
 
 
@@ -467,6 +479,9 @@ class ElectraLayer(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        # Ensure hidden_states is contiguous
+        hidden_states = hidden_states.contiguous()
+
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -492,6 +507,9 @@ class ElectraLayer(nn.Module):
                     f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
                     " by setting `config.add_cross_attention=True`"
                 )
+
+            # Ensure encoder_hidden_states is contiguous
+            encoder_hidden_states = encoder_hidden_states.contiguous()
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None

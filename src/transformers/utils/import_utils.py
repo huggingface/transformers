@@ -99,6 +99,7 @@ VPTQ_MIN_VERSION = "0.0.4"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
+_apollo_torch_available = _is_package_available("apollo_torch")
 _aqlm_available = _is_package_available("aqlm")
 _vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
 _av_available = importlib.util.find_spec("av") is not None
@@ -401,6 +402,10 @@ def is_torchvision_v2_available():
 
 def is_galore_torch_available():
     return _galore_torch_available
+
+
+def is_apollo_torch_available():
+    return _apollo_torch_available
 
 
 def is_lomo_available():
@@ -1922,10 +1927,15 @@ def fetch__all__(file_content):
     if "__all__" not in file_content:
         return []
 
+    start_index = None
     lines = file_content.splitlines()
     for index, line in enumerate(lines):
         if line.startswith("__all__"):
             start_index = index
+
+    # There is no line starting with `__all__`
+    if start_index is None:
+        return []
 
     lines = lines[start_index:]
 

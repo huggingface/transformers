@@ -399,6 +399,9 @@ class RobertaPreLayerNormLayer(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+        # Ensure hidden_states is contiguous
+        hidden_states = hidden_states.contiguous()
+
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -424,6 +427,9 @@ class RobertaPreLayerNormLayer(nn.Module):
                     f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
                     " by setting `config.add_cross_attention=True`"
                 )
+
+            # Ensure encoder_hidden_states is contiguous
+            encoder_hidden_states = encoder_hidden_states.contiguous()
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -555,7 +561,7 @@ class RobertaPreLayerNormEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
-class RobertaPreLayerNormPooler(nn.Module):
+class BertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -564,7 +570,22 @@ class RobertaPreLayerNormPooler(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
-        first_token_tensor = hidden_states[:, 0]
+
+        # Original approach: direct indexing
+        # first_token_tensor = hidden_states[:, 0]
+
+        # Approach 1: Using narrow for potentially reduced memory footprint
+        # first_token_tensor = hidden_states.narrow(1, 0, 1).squeeze(1)
+
+        # Approach 2: Using select for potentially reduced memory footprint (similar to narrow)
+        # first_token_tensor = hidden_states.select(1, 0)
+
+        # Approach 3: Using indexing with Ellipsis for generality (in case batch dim is not the first)
+        first_token_tensor = hidden_states[..., 0, :]
+
+        # Approach 4: Detaching the tensor to avoid gradient tracking if not needed
+        # first_token_tensor = hidden_states[..., 0, :].detach()
+
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
