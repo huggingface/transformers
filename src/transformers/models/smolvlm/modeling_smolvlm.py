@@ -53,6 +53,57 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SmolVLMConfig"
 
 
+SMOLVLM_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`SmolVLMConfig`] or [`SmolVLMVisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare SmolVLM Model outputting raw hidden-states without any specific head on top.",
+    SMOLVLM_START_DOCSTRING,
+)
+class SmolVLMPreTrainedModel(PreTrainedModel):
+    config_class = SmolVLMConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["SmolVLMVisionAttention", "SmolVLMDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+
+    def _init_weights(self, module):
+        std = (
+            self.config.text_config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
 class SmolVLMVisionEmbeddings(nn.Module):
     """
     This is a modified version of `siglip.modelign_siglip.SiglipVisionEmbeddings` to enable images of variable
@@ -443,57 +494,6 @@ class SmolVLMEncoder(nn.Module):
         )
 
 
-SMOLVLM_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SmolVLMConfig`] or [`SmolVLMVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare SmolVLM Model outputting raw hidden-states without any specific head on top.",
-    SMOLVLM_START_DOCSTRING,
-)
-class SmolVLMPreTrainedModel(PreTrainedModel):
-    config_class = SmolVLMConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["SmolVLMVisionAttention", "SmolVLMDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-
-    def _init_weights(self, module):
-        std = (
-            self.config.text_config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-
 SMOLVLM_VISION_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -818,40 +818,17 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
           - inputs_embeds:      (B, T, D)
           - image_hidden_states:(N, S, D) where N is total images across the batch,
             S is #patches (or #slots) per image, D is embedding dim.
-        Logic:
-          1) For each sample in the batch, find <image> tokens in the text.
-          2) If zero <image> tokens => text-only. Concatenate a zero-length slice
-             from image_hidden_states but do NOT advance the offset. This ensures
-             the model's image encoder is still in the computation graph, but we
-             skip "consuming" any image block for a text-only sample.
-          3) If there are <image> tokens, they appear in multiples of S for each image
-             (because each image is S embeddings). We chunk those positions into groups
-             of S. For each chunk => we consume one block from image_hidden_states[offset]
-             (which is shape (S, D)), and place each row into the text in place of a token.
         Returns:
           A tensor of (B, T, D).
         """
 
-        ##############################################
-        # 1) Basic shape checks
-        ##############################################
-        # old_merger_outputs = self.inputs_merger_old(input_ids, inputs_embeds, image_hidden_states)
         B, T, D_text = inputs_embeds.shape
         N, S, D_img = image_hidden_states.shape
-        if D_text != D_img:
-            raise ValueError(f"Text embedding dim {D_text} != image embedding dim {D_img}")
 
-        ##############################################
-        # 2) We'll track how many images we've used so far across the entire batch
-        ##############################################
         image_offset = 0
-
-        # We'll store one merged tensor per batch sample
         merged_outputs: List[torch.Tensor] = []
 
-        ##############################################
-        # 3) Iterate through each sample
-        ##############################################
+        # Iterate through each sample
         for b_idx, (cur_ids, cur_embeds) in enumerate(zip(input_ids, inputs_embeds)):
             # Find positions of <image> tokens in the text
             image_positions = (cur_ids == self.image_token_id).nonzero(as_tuple=True)[0]
@@ -859,16 +836,12 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
 
             # If no <image> => text-only
             if num_image_tokens == 0:
-                # We do not consume any row from image_hidden_states;
-                # but we do a zero-length slice so the image encoder is in the graph.
-                empty_slice = image_hidden_states[0][:0, :]  # shape (0, D)
-                # Concatenate text plus that empty slice.
                 # NOTE: this is important for DeepSpeed.
+                empty_slice = image_hidden_states[0][:0, :]  # shape (0, D)
                 merged_text_only = torch.cat([cur_embeds, empty_slice], dim=0)
                 merged_outputs.append(merged_text_only)
                 continue
 
-            # Otherwise, we have at least one <image> token.
             # Typically, if each image is S embeddings, we expect the total # of <image> tokens
             # in this sample to be multiple of S => each group of S tokens = 1 image
             if num_image_tokens % S != 0:
@@ -877,30 +850,24 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
                     "Cannot map them to blocks of shape (S, D)."
                 )
 
-            # We'll chunk image_positions into groups of size S
             positions_list = image_positions.tolist()
-            # Example: if num_image_tokens=162 and S=81 => we have 2 images => 2 chunks each of length 81
             chunks = [positions_list[i : i + S] for i in range(0, num_image_tokens, S)]
 
-            # We'll build a list of segments: text, then image row(s), text, etc.
             segments = []
             text_start = 0
 
             # For each chunk (each chunk => 1 image)
             for chunk in chunks:
-                # image_hidden_states[image_offset] => shape (S, D)
                 cur_block = image_hidden_states[image_offset]
                 image_offset += 1
 
                 # We'll iterate over the S positions in ascending order
                 for i_s, pos in enumerate(chunk):
-                    # Add text from [text_start..pos)
                     if pos > text_start:
                         segments.append(cur_embeds[text_start:pos])
                     # Then add one row from cur_block => shape (1, D)
                     row_of_block = cur_block[i_s : i_s + 1, :]
                     segments.append(row_of_block)
-                    # skip the <image> token
                     text_start = pos + 1
 
             # leftover text after the final <image> token
@@ -912,7 +879,6 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
             merged_outputs.append(merged_sample)
 
         merged_outputs = torch.stack(merged_outputs)
-        # assert (old_merger_outputs==merged_outputs).all()
         return merged_outputs
 
     @add_start_docstrings_to_model_forward(
@@ -1100,7 +1066,7 @@ class SmolVLMCausalLMOutputWithPast(ModelOutput):
 )
 class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
     """
-    A subclass of Idefics3ForConditionalGeneration that uses MyIdefics3Model
+    A subclass of Idefics3ForConditionalGeneration that uses SmolVLMModel
     instead of the default Idefics3Model.
     """
 
@@ -1108,12 +1074,8 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
-        # Instead of the original self.model = Idefics3Model(config),
-        # we point to our custom class.
         self.model = SmolVLMModel(config)
         self.image_token_id = self.config.image_token_id
-
-        # We *keep* the same lm_head from the parent, or re-init if you prefer:
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.vocab_size = config.text_config.vocab_size
 

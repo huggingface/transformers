@@ -58,13 +58,13 @@ def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
 
     total_num_frames = metadata.get("total_num_frames", 0)
     if total_num_frames <= 0:
-        raise ValueError("Invalid total_num_frames in metadata.")
+        raise ValueError(f"Invalid total_num_frames={total_num_frames} in metadata.")
 
     native_fps = metadata.get("fps", 30.0) or 30.0
     duration_seconds = metadata.get("duration", 0)
     
     if duration_seconds <= 0:
-        raise ValueError("Invalid duration_seconds in metadata.")
+        raise ValueError("fInvalid duration_seconds={duration_seconds} in metadata.")
         
     # Step 1) Estimate how many frames we'd sample at `target_fps`, fallback if target_fps <= 0
     estimated_frames = int(round(target_fps * duration_seconds))

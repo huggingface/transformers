@@ -42,6 +42,10 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     pass
 
 
+class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
+    pass
+    
+
 class SmolVLMVisionTransformer(Idefics3VisionTransformer):
     pass
 
@@ -57,9 +61,10 @@ class SmolVLMImageProcessor(Idefics3ImageProcessor):
 
 class SmolVLMBaseModelOutputWithPast(Idefics3BaseModelOutputWithPast):
     pass
+    
 
-class SmolVLMPreTrainedModel(Idefics3PreTrainedModel):
-    pass
+
+
 
 class SmolVLMModel(Idefics3Model):
     """

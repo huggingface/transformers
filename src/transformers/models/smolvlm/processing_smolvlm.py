@@ -430,7 +430,7 @@ class SmolVLMProcessor(ProcessorMixin):
         def sample_indices_fn_func(metadata, **fn_kwargs):
             return smolvlm_sample_indices_fn(metadata, max_frames=max_frames, target_fps=target_fps,  skip_secs=skip_secs, **fn_kwargs)
         sample_indices_fn = sample_indices_fn_func
-        return super().apply_chat_template(conversation, sample_indices_fn=sample_indices_fn, **kwargs)
+        return super().apply_chat_template(conversation, sample_indices_fn=sample_indices_fn, video_load_backend="decord", **kwargs)
 
 
 __all__ = ["SmolVLMProcessor"]
