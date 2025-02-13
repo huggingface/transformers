@@ -39,7 +39,7 @@ pip install --upgrade accelerate torch
 By default, the weights are loaded in full precision (torch.float32) regardless of the actual data type the weights are stored in such as torch.float16. Set `torch_dtype="auto"` to load the weights in the data type defined in a model's `config.json` file to automatically load the most memory-optimal data type.
 
 ```py
-from transformers import FP8Config, AutoModelForCausalLM, AutoTokenizer
+from transformers import FineGrainedFP8Config, AutoModelForCausalLM, AutoTokenizer
 
 model_name = "meta-llama/Meta-Llama-3-8B"
 quantization_config = FineGrainedFP8Config()
