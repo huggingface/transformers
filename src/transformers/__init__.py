@@ -2914,6 +2914,12 @@ else:
             "MixtralPreTrainedModel",
         ]
     )
+    _import_structure["models.mlcd"].extend(
+        [
+            "MLCDPreTrainedModel",
+            "MLCDVisionModel",
+        ]
+    )
     _import_structure["models.mllama"].extend(
         [
             "MllamaForCausalLM",
