@@ -24,7 +24,7 @@ import requests
 
 from transformers import SmolVLMProcessor
 from transformers.models.auto.processing_auto import AutoProcessor
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -38,6 +38,7 @@ if is_vision_available():
 @require_vision
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
+    videos_input_name = "pixel_values"
 
     @classmethod
     def setUpClass(cls):
@@ -62,9 +63,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
-        cls.image_token = processor.image_token.content
-        cls.fake_image_token = processor.fake_image_token.content
-        cls.global_img_token = processor.global_image_tag
+        cls.image_token = processor.image_token
+        cls.fake_image_token = processor.fake_image_token
+        cls.global_img_token = processor.global_image_token
 
         cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
         cls.image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.image_token)
@@ -81,6 +82,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def get_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
+    def prepare_processor_dict(self):
+        return {
+            "image_seq_len": self.image_seq_len,
+            "chat_template": "<|im_start|>{% for message in messages %}{{message['role'] | capitalize}}{% if message['content'][0]['type'] == 'image' %}{{':'}}{% else %}{{': '}}{% endif %}{% for line in message['content'] %}{% if line['type'] == 'text' %}{{line['text']}}{% elif line['type'] == 'image' %}{{ '<image>' }}{% endif %}{% endfor %}<end_of_utterance>\n{% endfor %}{% if add_generation_prompt %}{{ 'Assistant:' }}{% endif %}",
+        }
 
     def get_split_image_expected_tokens(self, processor, image_rows, image_cols):
         text_split_images = []
@@ -108,8 +115,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(cls.tmpdirname)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
-        processor = self.get_processor()
-        processor.image_processor.do_image_splitting = False
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
+        processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=False)
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs)
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1)
@@ -168,8 +179,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # fmt: on
 
     def test_process_interleaved_images_prompts_image_splitting(self):
-        processor = self.get_processor()
-        processor.image_processor.do_image_splitting = True
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
+        processor_components["image_processor"] = self.get_component("image_processor", do_image_splitting=True)
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs)
 
         # Test that a single image is processed correctly
         inputs = processor(images=self.image1)
@@ -262,7 +277,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             image_str + text_str_1,
             image_str + image_str + text_str_2,
         ]
-        images = [self.image1, self.image2, self.image3]
+        images = [[self.image1], [self.image2, self.image3]]
 
         inputs = processor(text=text, images=images, padding=True)
 
@@ -346,12 +361,64 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         rendered = processor.apply_chat_template(messages, add_generation_prompt=True)
 
         expected_rendered = (
-            "<|begin_of_text|>User: What do these images show?<image><image><end_of_utterance>\n"
+            "<|im_start|>User: What do these images show?<image><image><end_of_utterance>\n"
             "Assistant: The first image shows the statue of Liberty in New York. The second image picture depicts Idefix, the dog of Obelix in Asterix and Obelix.<end_of_utterance>\n"
             "User: And who is that?<end_of_utterance>\n"
             "Assistant:"
         )
         self.assertEqual(rendered, expected_rendered)
+
+    @require_av
+    def test_chat_template_video(self):
+        # overriden because SmolVLM has special preprocessing for videos
+        processor = self.get_processor()
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
+                        },
+                        {"type": "text", "text": "What is shown in this video?"},
+                    ],
+                },
+            ]
+        ]
+
+        num_frames = 3
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            num_frames=num_frames,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 10)
+
+        # Load with `video_fps` arg
+        video_fps = 1
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            video_fps=video_fps,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
+        # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), video_fps * 10)
+
+        # NOTE: the last assert checks are removed
+        # Loading video as a list of frames (i.e. images) is not supported in SmolVLM
 
     # Override as SmolVLMProcessor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
@@ -466,6 +533,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_str = self.prepare_text_inputs(batch_size=2)
         image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = [[image_input[0]], [image_input[1]]]
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -510,7 +578,11 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_vision
     def test_text_only_inference(self):
         """Test that the processor works correctly with text-only input."""
-        processor = self.get_processor()
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding_side="left")
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs)
 
         text = "This is a simple text without images."
         inputs = processor(text=text)
@@ -557,7 +629,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         text = "Let me show you this image: <image> What do you think?"
         with self.assertRaises(ValueError) as context:
             processor(text=text)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
+        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
 
         # Test batch with image tokens but no images
         texts = [
@@ -566,13 +638,13 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         with self.assertRaises(ValueError) as context:
             processor(text=texts)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
+        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
 
         # Test with None as Images
         with self.assertRaises(ValueError) as context:
             processor(text=text, images=None)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
+        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))
 
         with self.assertRaises(ValueError) as context:
             processor(text=texts, images=None)
-        self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
+        self.assertTrue("tokens in the text but no images/videos were passed" in str(context.exception))

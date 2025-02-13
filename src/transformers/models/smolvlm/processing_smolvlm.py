@@ -16,6 +16,7 @@
 Processor class for SmolVLM.
 """
 
+import copy
 import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
@@ -63,7 +64,9 @@ def is_image_or_image_url(elem):
     return is_url(elem) or is_valid_image(elem)
 
 
-def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token):
+def _prompt_split_image(
+    image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_image_token
+):
     """Prompt with expanded image tokens for when the image is split into patches."""
     text_split_images = ""
     for n_h in range(image_rows):
@@ -75,35 +78,35 @@ def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around
 
     text_split_images += (
         f"\n{fake_token_around_image}"
-        + f"{global_img_token}"
+        + f"{global_image_token}"
         + f"{image_token}" * image_seq_len
         + f"{fake_token_around_image}"
     )
     return text_split_images
 
 
-def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, global_img_token):
+def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, global_image_token):
     """Prompt with expanded image tokens for a single image."""
     return (
         f"{fake_token_around_image}"
-        + f"{global_img_token}"
+        + f"{global_image_token}"
         + f"{image_token}" * image_seq_len
         + f"{fake_token_around_image}"
     )
 
 
 def get_image_prompt_string(
-    image_rows, image_cols, image_seq_len, fake_token_around_image, image_token, global_img_token
+    image_rows, image_cols, image_seq_len, fake_token_around_image, image_token, global_image_token
 ):
     if image_rows == 0 and image_cols == 0:
         return _prompt_single_image(
             image_seq_len,
             fake_token_around_image=fake_token_around_image,
             image_token=image_token,
-            global_img_token=global_img_token,
+            global_image_token=global_image_token,
         )
     return _prompt_split_image(
-        image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token
+        image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_image_token
     )
 
 
@@ -156,15 +159,10 @@ class SmolVLMProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str = None, **kwargs):
-        self.fake_image_token = "<fake_token_around_image>"
-        self.image_token = "<image>"
-        self.end_of_utterance_token = "<end_of_utterance>"
-        self.global_img_token = "<global-img>"
-
-        # self.fake_image_token = tokenizer.fake_image_token
-        # self.image_token = tokenizer.image_token
-        # self.end_of_utterance_token = tokenizer.end_of_utterance_token
-        # self.global_img_token = tokenizer.global_img_token  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
+        self.fake_image_token = tokenizer.fake_image_token
+        self.image_token = tokenizer.image_token
+        self.end_of_utterance_token = tokenizer.end_of_utterance_token
+        self.global_image_token = tokenizer.global_image_token  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
         self.video_frame_size = image_processor.video_sampling["video_size"]
 
@@ -173,7 +171,6 @@ class SmolVLMProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def process_vision(self, text, images, output_kwargs, do_image_splitting=None, image_processor_size=None):
-        image_seq_len = self.image_seq_len
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
@@ -182,39 +179,40 @@ class SmolVLMProcessor(ProcessorMixin):
             images, do_image_splitting=do_image_splitting, size=image_processor_size, **output_kwargs["images_kwargs"]
         )
 
-        if text is not None:
-            if n_images_in_images != n_images_in_text:
-                raise ValueError(
-                    f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
+        if text is None:
+            return None, image_inputs
+
+        if n_images_in_images != n_images_in_text:
+            raise ValueError(
+                f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
+            )
+        image_rows = image_inputs.pop("rows", [[0] * len(text)])
+        image_cols = image_inputs.pop("cols", [[0] * len(text)])
+
+        prompt_strings = []
+        for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
+            # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
+            image_prompt_strings = []
+            for n_rows, n_cols in zip(sample_rows, sample_cols):
+                image_prompt_string = get_image_prompt_string(
+                    n_rows,
+                    n_cols,
+                    self.image_seq_len,
+                    image_token=self.image_token,
+                    fake_token_around_image=self.fake_image_token,
+                    global_image_token=self.global_image_token,
                 )
+                image_prompt_strings.append(image_prompt_string)
 
-            image_rows = image_inputs.pop("rows", [[0] * len(text)])
-            image_cols = image_inputs.pop("cols", [[0] * len(text)])
+            split_sample = sample.split(self.image_token)
+            if len(split_sample) == 0:
+                raise ValueError("The image token should be present in the text.")
 
-            prompt_strings = []
-            for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
-                # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-                image_prompt_strings = []
-                for n_rows, n_cols in zip(sample_rows, sample_cols):
-                    image_prompt_string = get_image_prompt_string(
-                        n_rows,
-                        n_cols,
-                        image_seq_len,
-                        image_token=self.image_token,
-                        fake_token_around_image=self.fake_image_token,
-                        global_img_token=self.global_img_token,
-                    )
-                    image_prompt_strings.append(image_prompt_string)
-
-                split_sample = sample.split(self.image_token)
-                if len(split_sample) == 0:
-                    raise ValueError("The image token should be present in the text.")
-
-                # Place in the image prompt strings where the image tokens are
-                sample = split_sample[0]
-                for i, image_prompt_string in enumerate(image_prompt_strings):
-                    sample += image_prompt_string + split_sample[i + 1]
-                prompt_strings.append(sample)
+            # Place in the image prompt strings where the image tokens are
+            sample = split_sample[0]
+            for i, image_prompt_string in enumerate(image_prompt_strings):
+                sample += image_prompt_string + split_sample[i + 1]
+            prompt_strings.append(sample)
 
         return prompt_strings, image_inputs
 
@@ -273,7 +271,7 @@ class SmolVLMProcessor(ProcessorMixin):
         if text is None and images is None and videos is None:
             raise ValueError("You must provide one of `text`, `images` or `videos'.")
 
-        if (images is None) ^ (videos is not None):
+        if text is None and ((images is None) ^ (videos is not None)):
             raise ValueError("You must specify exactly one of `images` or `videos`")
 
         output_kwargs = self._merge_kwargs(
@@ -282,13 +280,16 @@ class SmolVLMProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not isinstance(text, list) and not isinstance(text[0], str):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            n_images_in_text = sum([sample.count(self.image_token) for sample in text])
+            if n_images_in_text > 0 and (images is None and videos is None):
+                raise ValueError(f"We detected {n_images_in_text} tokens in the text but no images/videos were passed")
 
         inputs = BatchFeature()
-
         # Images and videos are mutually exclusive, so process one which is present
         if images is not None:
             images = make_nested_list_of_images(images)
@@ -340,6 +341,9 @@ class SmolVLMProcessor(ProcessorMixin):
                 Metadata are ordered in the samm way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
                 per batch.
         """
+        # We don't want to modify in-place the messages passed by user
+        # The user might want to add new turn on conv and continue geenration
+        conversations = copy.deepcopy(conversations)
         batch_num_frames, batch_timestamps = [], []
         for metadata_list, video_list in zip(batch_video_metadata, batch_videos):
             for metadata, video in zip(metadata_list, video_list):

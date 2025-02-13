@@ -367,7 +367,7 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
-        
+
     @unittest.skip
     def test_training_gradient_checkpointing(self):
         pass
@@ -395,7 +395,7 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     @unittest.skip(reason="Unsupported")
     def test_generate_with_static_cache(self):
         pass
-    
+
     @pytest.mark.generate
     @require_torch_sdpa
     @slow
