@@ -131,6 +131,7 @@ _import_structure = {
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
     "image_transforms": [],
+    "video_utils": [],
     "integrations": [
         "is_clearml_available",
         "is_comet_available",
@@ -1326,11 +1327,11 @@ else:
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoVideoProcessorFast")
     _import_structure["models.llava_onevision"].extend(
-        ("LlavaOnevisionImageProcessorFast", "LlavaOnevisionVideoProcessorFast")
+        ["LlavaOnevisionImageProcessorFast", "LlavaOnevisionVideoProcessorFast"]
     )
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_5_vl"].append("Qwen2_5_VLVideoProcessorFast")
-    _import_structure["models.qwen2_vl"].extend(("Qwen2VLImageProcessorFast", "Qwen2VLVideoProcessorFast"))
+    _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessorFast", "Qwen2VLVideoProcessorFast"])
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
     _import_structure["models.video_llava"].append("VideoLlavaVideoProcessorFast")
