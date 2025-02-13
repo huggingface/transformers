@@ -298,7 +298,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torchscript = False
     has_attentions = False
 
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MraModel,

@@ -4477,7 +4477,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
             if hasattr(self.model, "config"):
-                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", [])
+                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", ["past_key_values"])
             else:
                 ignore_keys = []
 
