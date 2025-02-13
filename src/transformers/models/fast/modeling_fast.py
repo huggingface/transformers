@@ -590,7 +590,6 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
                 **kwargs,
             )
         else:
-            # TODO: check how to configure this backbone
             backbone = AutoBackbone.from_config(config.backbone_config)
         self.backbone = backbone
         self.neck = FASTNeck(config=config)
