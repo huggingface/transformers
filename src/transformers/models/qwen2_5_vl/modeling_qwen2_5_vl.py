@@ -222,10 +222,8 @@ def apply_rotary_pos_emb_vision(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     orig_q_dtype = q.dtype
     orig_k_dtype = k.dtype
-    q = q.float()
-    k = k.float()
-    cos = cos.unsqueeze(-2)
-    sin = sin.unsqueeze(-2)
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2), sin.unsqueeze(-2)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     q_embed = q_embed.to(orig_q_dtype)
