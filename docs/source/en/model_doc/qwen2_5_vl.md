@@ -28,17 +28,12 @@ The abstract from this update is the following:
 
 ### Single Media inference
 
-The model can accept both images and videos as input. Here's an example code for inference.
+The model can accept both images and videos as input. Here's an example code for inference for images:
 
 ```python
-
 from PIL import Image
 import requests
-import torch
-from torchvision import io
-from typing import Dict
-from transformers.image_utils import load_images, load_video
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
 # Load the model in half-precision on the available device(s)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", device_map="auto")
@@ -76,8 +71,20 @@ output_ids = model.generate(**inputs, max_new_tokens=128)
 generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
 output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 print(output_text)
+```
 
-# Video
+and for video:
+
+```python
+from PIL import Image
+import requests
+from transformers.image_utils import load_video
+from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+
+# Load the model in half-precision on the available device(s)
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", device_map="auto")
+processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+
 video = load_video(video="/path/to/video.mp4")
 conversation = [
     {
