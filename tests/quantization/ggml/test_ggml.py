@@ -43,7 +43,7 @@ class GgufQuantizationTests(unittest.TestCase):
     Test cases for weights dequantization with GGUF models.
     Note: The quantization names should keep aligned with `GGMLQuantizationType` in gguf-py:
     https://github.com/ggerganov/llama.cpp/blob/4b0c638b9a68f577cb2066b638c9f622d91ee661/gguf-py/gguf/constants.py#L1545-L1576
-    So quantization like Q4_K_M or Q4_K_S dshouldn't be added to this tests.
+    So quantization like Q4_K_M or Q4_K_S shouldn't be added to this tests.
     """
 
     example_text = "Hello"

@@ -380,6 +380,9 @@ class ChatTemplateKwargs(TypedDict, total=False):
         The backend to use when loading the video which will be used only when there are videos in the conversation.
         Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
         that supports all types of sources to load from.
+    video_fps (`int`, *optional*):
+        Number of frames to sample per second. Should be passed only when `num_frames=None`.
+        If not specified and `num_frames==None`, all frames are sampled.
     sampling_rate (`int`, *optional*, defaults to `16_000`):
         The sampling rate at which the given audio file should be loaded. Defaults to `16_000`.
     """
@@ -393,6 +396,7 @@ class ChatTemplateKwargs(TypedDict, total=False):
     return_assistant_tokens_mask: Optional[bool] = False
     num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
+    video_fps: Optional[int] = None
     sampling_rate: Optional[int] = 16_000
 
 
@@ -766,7 +770,11 @@ class ProcessorMixin(PushToHubMixin):
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
         # However, for models added in the future, we won't get the expected error if this file is missing.
         if resolved_processor_file is None:
-            return {}, kwargs
+            # In any case we need to pass `chat_template` if it is available
+            processor_dict = {}
+            if "chat_template" in kwargs:
+                processor_dict = {"chat_template": kwargs.pop("chat_template")}
+            return processor_dict, kwargs
 
         try:
             # Load processor dict
@@ -789,6 +797,9 @@ class ProcessorMixin(PushToHubMixin):
                 "Chat templates should be in a 'chat_template.jinja' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
+
+        if "chat_template" in kwargs:
+            processor_dict["chat_template"] = kwargs.pop("chat_template")
 
         if not is_local:
             if "auto_map" in processor_dict:
@@ -821,7 +832,6 @@ class ProcessorMixin(PushToHubMixin):
         """
         processor_dict = processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        chat_template = kwargs.pop("chat_template", None)
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
         # If we don't pop, some specific kwargs will raise a warning
@@ -833,8 +843,6 @@ class ProcessorMixin(PushToHubMixin):
 
         unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
         processor = cls(*args, **processor_dict)
-        if chat_template is not None:
-            setattr(processor, "chat_template", chat_template)
 
         # Update processor with kwargs if needed
         for key in set(kwargs.keys()):
@@ -1204,12 +1212,6 @@ class ProcessorMixin(PushToHubMixin):
                     "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
                 )
 
-        text_kwargs = {}
-        for key in TextKwargs.__annotations__.keys():
-            value = kwargs.pop(key, None)
-            if value is not None:
-                text_kwargs[key] = value
-
         chat_template_kwargs = {}
         for key in ChatTemplateKwargs.__annotations__.keys():
             value = kwargs.pop(key, getattr(ChatTemplateKwargs, key))
@@ -1219,6 +1221,7 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = chat_template_kwargs.pop("tokenize")
         return_dict = chat_template_kwargs.pop("return_dict")
         num_frames = chat_template_kwargs.pop("num_frames")
+        video_fps = chat_template_kwargs.pop("video_fps")
         video_load_backend = chat_template_kwargs.pop("video_load_backend")
         sampling_rate = chat_template_kwargs.pop("sampling_rate")
 
@@ -1227,40 +1230,80 @@ class ProcessorMixin(PushToHubMixin):
             chat_template=chat_template,
             tokenize=False,
             return_dict=False,
-            **text_kwargs,
             **chat_template_kwargs,
         )
 
-        # we will have to return all processed inputs in a dict
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        ):
+            conversations = conversation
+            is_batched = True
+        else:
+            conversations = [conversation]
+            is_batched = False
+
         if tokenize:
-            images, videos = [], []
-            audios = []
-            for message in conversation:
-                # Load vidoes and images if exist
-                multimodals = [
-                    content for content in message["content"] if content["type"] in ["image", "video", "audio"]
-                ]
-                for dict_info in multimodals:
-                    if dict_info["type"] == "image":
-                        for key in ["image", "url", "path", "base64"]:
-                            if key in dict_info:
-                                images.append(load_image(dict_info[key]))
-                    elif dict_info["type"] == "video":
-                        for key in ["video", "url", "path"]:
-                            if key in dict_info:
-                                videos.append(
-                                    load_video(dict_info[key], num_frames=num_frames, backend=video_load_backend)
-                                )
-                    elif dict_info["type"] == "audio":
-                        for key in ["audio", "url", "path"]:
-                            if key in dict_info:
-                                audios.append(load_audio(dict_info[key], sampling_rate=sampling_rate))
+            batch_images, batch_videos = [], []
+            batch_audios = []
+            for conversation in conversations:
+                images, videos = [], []
+                for message in conversation:
+                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    audio_fnames = [
+                        content[key]
+                        for content in message["content"]
+                        for key in ["audio", "url", "path"]
+                        if key in content and content["type"] == "audio"
+                    ]
+                    image_fnames = [
+                        vision_info[key]
+                        for vision_info in visuals
+                        for key in ["image", "url", "path", "base64"]
+                        if key in vision_info and vision_info["type"] == "image"
+                    ]
+                    video_fnames = [
+                        vision_info[key]
+                        for vision_info in visuals
+                        for key in ["video", "url", "path"]
+                        if key in vision_info and vision_info["type"] == "video"
+                    ]
+
+                    # Audio models do not accept nested list of audios (yet!)
+                    for fname in audio_fnames:
+                        batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
+                    for fname in image_fnames:
+                        images.append(load_image(fname))
+                    for fname in video_fnames:
+                        if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+                            video = [np.array(load_image(image_fname)).T for image_fname in fname]
+                            # create a 4D video because `load_video` always returns a 4D array
+                            video = np.stack(video)
+                        else:
+                            video = load_video(fname, num_frames=num_frames, fps=video_fps, backend=video_load_backend)
+                        videos.append(video)
+
+                # Currently all processors can accept accept nested list of batches, but not flat list of visuals
+                # So we'll make a batched list of images and let the processor handle it
+                if images:
+                    batch_images.append(images)
+                if videos:
+                    batch_videos.append(videos)
+
+            # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
+            # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
+            # and pass it to the processor. Users thus never worried about special tokens relying on processor hadnling
+            # everything internally. The below line is to keep BC for that and be able to work with model that have
+            # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood command line
+            # without actionable solution for users
+            single_prompt = prompt[0] if is_batched else prompt
+            if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
+                kwargs["add_special_tokens"] = False
 
             out = self(
                 text=prompt,
-                images=images if images else None,
-                videos=videos if videos else None,
-                audios=audios if audios else None,
+                images=batch_images if batch_images else None,
+                videos=batch_videos if batch_videos else None,
+                audios=batch_audios if batch_audios else None,
                 **kwargs,
             )
             if return_dict:
