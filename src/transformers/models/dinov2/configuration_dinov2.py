@@ -88,6 +88,8 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
+        use_mask_token (`bool`, *optional*, defaults to `True`):
+            Whether to use mask_token in embeddings.
 
     Example:
 
@@ -128,6 +130,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         out_indices=None,
         apply_layernorm=True,
         reshape_hidden_states=True,
+        use_mask_token=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -154,6 +157,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
+        self.use_mask_token = use_mask_token
 
 
 class Dinov2OnnxConfig(OnnxConfig):
