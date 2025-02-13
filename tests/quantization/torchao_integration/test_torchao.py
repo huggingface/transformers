@@ -33,13 +33,13 @@ if is_torchao_available():
     from torchao.dtypes import AffineQuantizedTensor, Int4CPULayout, TensorCoreTiledLayout
 
 
-def check_torchao_quantized(test_module, qlayer, batch_size=1, context_size=1024):
+def check_torchao_int4_wo_quantized(test_module, qlayer):
     weight = qlayer.weight
     test_module.assertEqual(weight.quant_min, 0)
     test_module.assertEqual(weight.quant_max, 15)
     if is_torchao_available():
         test_module.assertTrue(isinstance(weight, AffineQuantizedTensor))
-        layout = TensorCoreTiledLayout if torch.cuda.is_available() else Int4CPULayout
+        layout = Int4CPULayout if weight.device.type == "cpu" else TensorCoreTiledLayout
         test_module.assertTrue(isinstance(weight.tensor_impl._layout, layout))
 
 
@@ -89,6 +89,7 @@ class TorchAoTest(unittest.TestCase):
     EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     device = "cpu"
+    quant_scheme_kwargs = {"group_size": 32, "layout": Int4CPULayout()}
 
     def tearDown(self):
         gc.collect()
@@ -99,7 +100,7 @@ class TorchAoTest(unittest.TestCase):
         """
         Simple LLM model testing int4 weight only quantization
         """
-        quant_config = TorchAoConfig("int4_weight_only", group_size=32)
+        quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
 
         # Note: we quantize the bfloat16 model on the fly to int4
         quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -110,7 +111,7 @@ class TorchAoTest(unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        check_torchao_quantized(self, quantized_model.model.layers[0].self_attn.v_proj)
+        check_torchao_int4_wo_quantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
 
@@ -121,7 +122,7 @@ class TorchAoTest(unittest.TestCase):
         """
         Testing the dtype of model will be modified to be bfloat16 for int4 weight only quantization
         """
-        quant_config = TorchAoConfig("int4_weight_only", group_size=32)
+        quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
 
         # Note: we quantize the bfloat16 model on the fly to int4
         quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -132,35 +133,13 @@ class TorchAoTest(unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        check_torchao_quantized(self, quantized_model.model.layers[0].self_attn.v_proj)
+        check_torchao_int4_wo_quantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
 
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    @require_torch_multi_gpu
-    def test_int4wo_quant_multi_gpu(self):
-        """
-        Simple test that checks if the quantized model int4 wieght only is working properly with multiple GPUs
-        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
-        """
-
-        quant_config = TorchAoConfig("int4_weight_only", group_size=32)
-        quantized_model = AutoModelForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.bfloat16,
-            device_map="auto",
-            quantization_config=quant_config,
-        )
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-
-        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
-
-        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
-
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
-        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
     def test_int8_dynamic_activation_int8_weight_quant(self):
         """
@@ -189,6 +168,7 @@ class TorchAoTest(unittest.TestCase):
 @require_torch_gpu
 class TorchAoGPUTest(TorchAoTest):
     device = "cuda"
+    quant_scheme_kwargs = {"group_size": 32}
 
     def test_int4wo_offload(self):
         """
@@ -240,6 +220,29 @@ class TorchAoGPUTest(TorchAoTest):
         EXPECTED_OUTPUT = "What are we having for dinner?\n- 2. What is the temperature outside"
 
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
+
+    @require_torch_multi_gpu
+    def test_int4wo_quant_multi_gpu(self):
+        """
+        Simple test that checks if the quantized model int4 wieght only is working properly with multiple GPUs
+        set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
+        """
+
+        quant_config = TorchAoConfig("int4_weight_only", **self.quant_scheme_kwargs)
+        quantized_model = AutoModelForCausalLM.from_pretrained(
+            self.model_name,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            quantization_config=quant_config,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
+        self.assertTrue(set(quantized_model.hf_device_map.values()) == {0, 1})
+
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
+
+        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
+        self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
 
 @require_torchao
@@ -299,28 +302,18 @@ class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
     ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
 
+    @require_torch_gpu
+    def test_serialization_expected_output_on_cuda(self):
+        self.check_serialization_expected_output("cuda", self.SERIALIZED_EXPECTED_OUTPUT)
+
 
 class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
     quant_scheme, quant_scheme_kwargs = "int8_weight_only", {}
     ORIGINAL_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     SERIALIZED_EXPECTED_OUTPUT = ORIGINAL_EXPECTED_OUTPUT
 
-
-@require_torch_gpu
-class TorchAoSerializationW8A8CPUCUDATest(TorchAoSerializationW8A8CPUTest):
-    def test_original_model_expected_output(self):
-        pass
-
-    def test_serialization_expected_output(self):
-        self.check_serialization_expected_output("cuda", self.SERIALIZED_EXPECTED_OUTPUT)
-
-
-@require_torch_gpu
-class TorchAoSerializationW8CPUCUDATest(TorchAoSerializationW8CPUTest):
-    def test_original_model_expected_output(self):
-        pass
-
-    def test_serialization_expected_output(self):
+    @require_torch_gpu
+    def test_serialization_expected_output_on_cuda(self):
         self.check_serialization_expected_output("cuda", self.SERIALIZED_EXPECTED_OUTPUT)
 
 
