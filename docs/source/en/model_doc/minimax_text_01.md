@@ -1,4 +1,4 @@
-<!--Copyright 2023 Mistral AI and The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 MiniMaxAI and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -18,58 +18,51 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-MiniMaxText01-8x7B was introduced in the [MiniMaxText01 of Experts blogpost](https://mistral.ai/news/mixtral-of-experts/) by Albert Jiang, Alexandre Sablayrolles, Arthur Mensch, Chris Bamford, Devendra Singh Chaplot, Diego de las Casas, Florian Bressand, Gianna Lengyel, Guillaume Lample, Lélio Renard Lavaud, Lucile Saulnier, Marie-Anne Lachaux, Pierre Stock, Teven Le Scao, Thibaut Lavril, Thomas Wang, Timothée Lacroix, William El Sayed.
+The DepthPro model was proposed in [MiniMax-01: Scaling Foundation Models with Lightning Attention](https://arxiv.org/abs/2501.08313) by MiniMax, Aonian Li, Bangwei Gong, Bo Yang, Boji Shan, Chang Liu, Cheng Zhu, Chunhao Zhang, Congchao Guo, Da Chen, Dong Li, Enwei Jiao, Gengxin Li, Guojun Zhang, Haohai Sun, Houze Dong, Jiadai Zhu, Jiaqi Zhuang, Jiayuan Song, Jin Zhu, Jingtao Han, Jingyang Li, Junbin Xie, Junhao Xu, Junjie Yan, Kaishun Zhang, Kecheng Xiao, Kexi Kang, Le Han, Leyang Wang, Lianfei Yu, Liheng Feng, Lin Zheng, Linbo Chai, Long Xing, Meizhi Ju, Mingyuan Chi, Mozhi Zhang, Peikai Huang, Pengcheng Niu, Pengfei Li, Pengyu Zhao, Qi Yang, Qidi Xu, Qiexiang Wang, Qin Wang, Qiuhui Li, Ruitao Leng, Shengmin Shi, Shuqi Yu, Sichen Li, Songquan Zhu, Tao Huang, Tianrun Liang, Weigao Sun, Weixuan Sun, Weiyu Cheng, Wenkai Li, Xiangjun Song, Xiao Su, Xiaodong Han, Xinjie Zhang, Xinzhu Hou, Xu Min, Xun Zou, Xuyang Shen, Yan Gong, Yingjie Zhu, Yipeng Zhou, Yiran Zhong, Yongyi Hu, Yuanxiang Fan, Yue Yu, Yufeng Yang, Yuhao Li, Yunan Huang, Yunji Li, Yunpeng Huang, Yunzhi Xu, Yuxin Mao, Zehan Li, Zekang Li, Zewei Tao, Zewen Ying, Zhaoyang Cong, Zhen Qin, Zhenhua Fan, Zhihang Yu, Zhuo Jiang, Zijia Wu.
 
-The introduction of the blog post says:
+The abstract from the paper is the following:
 
-*Today, the team is proud to release MiniMaxText01 8x7B, a high-quality sparse mixture of experts models (SMoE) with open weights. Licensed under Apache 2.0. MiniMaxText01 outperforms Llama 2 70B on most benchmarks with 6x faster inference. It is the strongest open-weight model with a permissive license and the best model overall regarding cost/performance trade-offs. In particular, it matches or outperforms GPT3.5 on most standard benchmarks.*
+*We introduce MiniMax-01 series, including MiniMax-Text-01 and MiniMax-VL-01, which are comparable to top-tier models while offering superior capabilities in processing longer contexts. The core lies in lightning attention and its efficient scaling. To maximize computational capacity, we integrate it with Mixture of Experts (MoE), creating a model with 32 experts and 456 billion total parameters, of which 45.9 billion are activated for each token. We develop an optimized parallel strategy and highly efficient computation-communication overlap techniques for MoE and lightning attention. This approach enables us to conduct efficient training and inference on models with hundreds of billions of parameters across contexts spanning millions of tokens. The context window of MiniMax-Text-01 can reach up to 1 million tokens during training and extrapolate to 4 million tokens during inference at an affordable cost. Our vision-language model, MiniMax-VL-01 is built through continued training with 512 billion vision-language tokens. Experiments on both standard and in-house benchmarks show that our models match the performance of state-of-the-art models like GPT-4o and Claude-3.5-Sonnet while offering 20-32 times longer context window.*
 
-MiniMaxText01-8x7B is the second large language model (LLM) released by [mistral.ai](https://mistral.ai/), after [Mistral-7B](mistral).
+<!-- TODO: upload this image at https://huggingface.co/datasets/huggingface/documentation-images -->
+<img src="https://raw.githubusercontent.com/MiniMax-AI/MiniMax-01/main/figures/TextBench.png"
+alt="drawing" width="600"/>
+
+<small> Text benchmark for MiniMaxText01. Taken from the <a href="https://github.com/MiniMax-AI/MiniMax-01" target="_blank">official code</a>. </small>
+
+This model was contributed by [geetu040](https://github.com/geetu040). The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/tree/main).
 
 ### Architectural details
 
-MiniMaxText01-8x7B is a decoder-only Transformer with the following architectural choices:
+MiniMax-Text-01 is a powerful language model with 456 billion total parameters, of which 45.9 billion are activated per token. To better unlock the long context capabilities of the model, MiniMax-Text-01 adopts a hybrid architecture that combines Lightning Attention, Softmax Attention and Mixture-of-Experts (MoE). Leveraging advanced parallel strategies and innovative compute-communication overlap methods—such as Linear Attention Sequence Parallelism Plus (LASP+), varlen ring attention, Expert Tensor Parallel (ETP), etc., MiniMax-Text-01's training context length is extended to 1 million tokens, and it can handle a context of up to 4 million tokens during the inference. On various academic benchmarks, MiniMax-Text-01 also demonstrates the performance of a top-tier model.
 
-- MiniMaxText01 is a Mixture of Experts (MoE) model with 8 experts per MLP, with a total of 45 billion parameters. To learn more about mixture-of-experts, refer to the [blog post](https://huggingface.co/blog/moe).
-- Despite the model having 45 billion parameters, the compute required for a single forward pass is the same as that of a 14 billion parameter model. This is because even though each of the experts have to be loaded in RAM (70B like ram requirement) each token from the hidden states are dispatched twice (top 2 routing) and thus the compute (the operation required at each forward computation) is just 2 X sequence_length. 
+The architecture of MiniMax-Text-01 is briefly described as follows:
 
-The following implementation details are shared with Mistral AI's first model [Mistral-7B](mistral):
-- Sliding Window Attention - Trained with 8k context length and fixed cache size, with a theoretical attention span of 128K tokens
-- GQA (Grouped Query Attention) - allowing faster inference and lower cache size.
-- Byte-fallback BPE tokenizer - ensures that characters are never mapped to out of vocabulary tokens.
+- Total Parameters: 456B
+- Activated Parameters per Token: 45.9B
+- Number Layers: 80
+- Hybrid Attention: a softmax attention is positioned after every 7 lightning attention.
+    - Number of attention heads: 64
+    - Attention head dimension: 128
+- Mixture of Experts:
+    - Number of experts: 32
+    - Expert hidden dimension: 9216
+    - Top-2 routing strategy
+- Positional Encoding: Rotary Position Embedding (RoPE) applied to half of the attention head dimension with a base frequency of 10,000,000
+- Hidden Size: 6144
+- Vocab Size: 200,064
 
-For more details refer to the [release blog post](https://mistral.ai/news/mixtral-of-experts/).
+For more details refer to the [release blog post](https://www.minimaxi.com/en/news/minimax-01-series-2).
 
 ### License
 
-`MiniMaxText01-8x7B` is released under the Apache 2.0 license.
+`MiniMaxText01` is released under the MINIMAX MODEL LICENSE AGREEMENT.
 
 ## Usage tips
 
-The Mistral team has released 2 checkpoints:
-- a base model, [MiniMaxText01-8x7B-v0.1](https://huggingface.co/mistralai/MiniMaxText01-8x7B-v0.1), which has been pre-trained to predict the next token on internet-scale data.
-- an instruction tuned model, [MiniMaxText01-8x7B-Instruct-v0.1](https://huggingface.co/mistralai/MiniMaxText01-8x7B-Instruct-v0.1), which is the base model optimized for chat purposes using supervised fine-tuning (SFT) and direct preference optimization (DPO).
+The pre-trained model can be used as follows:
 
-The base model can be used as follows:
-
-```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
-
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/MiniMaxText01-8x7B-v0.1", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/MiniMaxText01-8x7B-v0.1")
-
->>> prompt = "My favourite condiment is"
-
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
->>> model.to(device)
-
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
->>> tokenizer.batch_decode(generated_ids)[0]
-"My favourite condiment is to ..."
-```
-
-The instruction tuned model can be used as follows:
-
+<!-- TODO: update below -->
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -93,7 +86,7 @@ As can be seen, the instruction-tuned model requires a [chat template](../chat_t
 
 ## Speeding up MiniMaxText01 by using Flash Attention
 
-The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
+The pre-trained model used in the following code snippet above showcases inference with [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model and drastically speeds up the model.
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 
