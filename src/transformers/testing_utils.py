@@ -62,6 +62,7 @@ from .utils import (
     GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
@@ -135,6 +136,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
+    is_torch_greater_or_equal,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -403,6 +405,14 @@ def require_galore_torch(test_case):
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
 
 
+def require_apollo_torch(test_case):
+    """
+    Decorator marking a test that requires GaLore. These tests are skipped when APOLLO isn't installed.
+    https://github.com/zhuhanqing/APOLLO
+    """
+    return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
+
+
 def require_lomo(test_case):
     """
     Decorator marking a test that requires LOMO. These tests are skipped when LOMO-optim isn't installed.
@@ -554,6 +564,21 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_torch_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PyTorch version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_flash_attn(test_case):
@@ -2170,7 +2195,7 @@ def pytest_terminal_summary_main(tr, id):
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
                 if rep.duration < durations_min:
-                    f.write(f"{len(dlist)-i} durations < {durations_min} secs were omitted")
+                    f.write(f"{len(dlist) - i} durations < {durations_min} secs were omitted")
                     break
                 f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
@@ -2555,7 +2580,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     process.join(timeout=timeout)
 
     if results["error"] is not None:
-        test_case.fail(f'{results["error"]}')
+        test_case.fail(f"{results['error']}")
 
 
 def run_test_using_subprocess(func):

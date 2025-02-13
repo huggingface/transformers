@@ -29,7 +29,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import is_torchdynamo_compiling, logging
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
@@ -131,6 +131,11 @@ class Gemma2Config(PretrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
@@ -344,7 +349,7 @@ class Gemma2DecoderLayer(nn.Module):
             # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
             # from the left, with an offset if we are beyond the sliding window
             else:
-                min_dtype = torch.finfo(hidden_states.dtype).min
+                min_dtype = torch.finfo(attention_mask.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
@@ -668,8 +673,13 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
