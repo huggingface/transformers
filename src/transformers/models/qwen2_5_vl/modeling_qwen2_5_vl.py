@@ -162,8 +162,8 @@ class Qwen2_5_VLPatchMerger(nn.Module):
 
 def apply_rotary_pos_emb_flashatt(tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
     tensor_ = tensor.float()
-    cos = freqs.cos()
-    sin = freqs.sin()
+    cos = freqs.cos().float()
+    sin = freqs.sin().float()
     output = apply_rotary_emb(tensor_, cos, sin).type_as(tensor)
     return output
 
@@ -1331,7 +1331,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 if attention_mask.shape[-1] > target_length:
                     attention_mask = attention_mask[:, :target_length]
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
