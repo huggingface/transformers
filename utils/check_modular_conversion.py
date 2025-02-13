@@ -121,7 +121,10 @@ if __name__ == "__main__":
         "--fix_and_overwrite", action="store_true", help="Overwrite the modeling_xxx.py file if differences are found."
     )
     parser.add_argument(
-        "--num_workers", default=1, type=int, help="The number of workers to run. No effect if `fix_and_overwrite` is specified."
+        "--num_workers",
+        default=1,
+        type=int,
+        help="The number of workers to run. No effect if `fix_and_overwrite` is specified.",
     )
     args = parser.parse_args()
     if args.files == ["all"]:
