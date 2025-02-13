@@ -7769,6 +7769,10 @@ if TYPE_CHECKING:
             MixtralModel,
             MixtralPreTrainedModel,
         )
+        from .models.mlcd import (
+            MLCDPreTrainedModel,
+            MLCDVisionModel,
+        )
         from .models.mllama import (
             MllamaForCausalLM,
             MllamaForConditionalGeneration,
@@ -7776,10 +7780,6 @@ if TYPE_CHECKING:
             MllamaProcessor,
             MllamaTextModel,
             MllamaVisionModel,
-        )
-        from .models.mlcd import (
-            MLCDPreTrainedModel,
-            MLCDVisionModel,
         )
         from .models.mobilebert import (
             MobileBertForMaskedLM,
