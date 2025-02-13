@@ -49,7 +49,7 @@ logger = logging.get_logger(__name__)
 if is_num2words_available():
     from num2words import num2words
 else:
-    logger.warn("Please install `num2words` to use smolvlm. For example:\n\n" "  pip install num2words\n")
+    num2words = None
 
 
 def is_url(val) -> bool:
@@ -168,6 +168,12 @@ class SmolVLMProcessor(ProcessorMixin):
 
         # Matches one or more occurrences of <row_x_col_y> tags (where x and y are digits, optionally surrounded by newline characters
         self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
+
+        if not num2words:
+            raise ImportError(
+                "Package `num2words` is required to run SmolVLM processor. Install it with `pip install num2words`."
+            )
+
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def process_vision(self, text, images, output_kwargs, do_image_splitting=None, image_processor_size=None):
