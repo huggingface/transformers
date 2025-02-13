@@ -125,7 +125,6 @@ class OPTAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
-        self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=self.enable_bias)
@@ -138,7 +137,6 @@ class OPTAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
@@ -148,11 +146,6 @@ class OPTAttention(nn.Module):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
         """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
@@ -238,7 +231,6 @@ class OptFlashAttention2(OPTAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
@@ -350,7 +342,6 @@ class OPTSdpaAttention(OPTAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,

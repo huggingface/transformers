@@ -18,7 +18,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 
 import contextlib
 import copy
-import errno
 import functools
 import glob
 import importlib.metadata
@@ -1645,28 +1644,44 @@ class Trainer:
                 raise ValueError("Invalid optimizer")
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
+            OptimizerNames.SCHEDULE_FREE_RADAM,
             OptimizerNames.SCHEDULE_FREE_ADAMW,
             OptimizerNames.SCHEDULE_FREE_SGD,
         ]:
             if not is_schedulefree_available():
                 raise ImportError(
-                    "You need to install `schedulefree` in order to use schedulefree optimizers"
-                    " install it with `pip install schedulefree`"
+                    "You need to install `schedulefree` in order to use schedulefree optimizers. "
+                    "Install it with `pip install schedulefree.`"
                 )
             if not is_accelerate_available("0.30.0"):
                 raise ImportError("You need to have `accelerate>=0.30.0` to be able to use schedulefree optimizers")
             from schedulefree import AdamWScheduleFree, SGDScheduleFree
 
             additional_optim_kwargs = {}
-            if args.optim == OptimizerNames.SCHEDULE_FREE_ADAMW:
+            require_warmup = True
+
+            if args.optim == OptimizerNames.SCHEDULE_FREE_RADAM:
+                if not is_schedulefree_available("1.4.0"):
+                    raise ImportError(
+                        "You need to install `schedulefree>=1.4.0` in order to use RAdamScheduleFree optimizer. "
+                        "Install it with `pip install schedulefree.`"
+                    )
+                from schedulefree import RAdamScheduleFree
+
+                optimizer_cls = RAdamScheduleFree
+                additional_optim_kwargs = adam_kwargs
+                require_warmup = False
+            elif args.optim == OptimizerNames.SCHEDULE_FREE_ADAMW:
                 optimizer_cls = AdamWScheduleFree
                 additional_optim_kwargs = adam_kwargs
             elif args.optim == OptimizerNames.SCHEDULE_FREE_SGD:
                 optimizer_cls = SGDScheduleFree
             else:
                 raise ValueError("Invalid schedulefree optimizer")
+
             additional_optim_kwargs["weight_decay"] = args.weight_decay
-            additional_optim_kwargs["warmup_steps"] = args.warmup_steps
+            if require_warmup:
+                additional_optim_kwargs["warmup_steps"] = args.warmup_steps
             additional_optim_kwargs.update(
                 {
                     "weight_lr_power": float(optim_args.get("weight_lr_power", 2.0)),
@@ -3129,42 +3144,31 @@ class Trainer:
             self.store_flos()
 
         run_dir = self._get_output_dir(trial=trial)
-        checkpoint_dir = os.path.join(run_dir, checkpoint_folder)
-        with tempfile.TemporaryDirectory(prefix=f"tmp-{PREFIX_CHECKPOINT_DIR}-", dir=run_dir) as output_dir:
-            self.save_model(output_dir, _internal_call=True)
+        output_dir = os.path.join(run_dir, checkpoint_folder)
+        self.save_model(output_dir, _internal_call=True)
 
-            if not self.args.save_only_model:
-                # Save optimizer and scheduler
-                self._save_optimizer_and_scheduler(output_dir)
-                # Save RNG state
-                self._save_rng_state(output_dir)
+        if not self.args.save_only_model:
+            # Save optimizer and scheduler
+            self._save_optimizer_and_scheduler(output_dir)
+            # Save RNG state
+            self._save_rng_state(output_dir)
 
-            # Save the Trainer state
-            if self.args.should_save:
-                # Update `ExportableState` callbacks and `TrainerControl` state to where we are currently
-                for cb in [
-                    cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
-                ]:
-                    cb_name = cb.__class__.__name__
-                    cb_state = cb.state()
-                    if isinstance(self.state.stateful_callbacks[cb_name], list):
-                        self.state.stateful_callbacks[cb_name].append(cb_state)
-                    else:
-                        self.state.stateful_callbacks[cb_name] = cb_state
-                self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
-
-                if os.path.exists(output_dir):
-                    try:
-                        os.renames(output_dir, checkpoint_dir)
-                    except OSError as e:
-                        if e.errno in [errno.ENOTEMPTY, errno.EEXIST]:  # Directory/File already exists
-                            shutil.rmtree(checkpoint_dir)
-                            os.renames(output_dir, checkpoint_dir)
-                        else:
-                            raise
+        # Save the Trainer state
+        if self.args.should_save:
+            # Update `ExportableState` callbacks and `TrainerControl` state to where we are currently
+            for cb in [
+                cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
+            ]:
+                cb_name = cb.__class__.__name__
+                cb_state = cb.state()
+                if isinstance(self.state.stateful_callbacks[cb_name], list):
+                    self.state.stateful_callbacks[cb_name].append(cb_state)
+                else:
+                    self.state.stateful_callbacks[cb_name] = cb_state
+            self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
-            self._push_from_checkpoint(checkpoint_dir)
+            self._push_from_checkpoint(output_dir)
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
