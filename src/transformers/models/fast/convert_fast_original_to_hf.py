@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 the Fast authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 the Fast authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -187,13 +187,14 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
             tiny_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.5300, 0.0000, 0.0000, 0.0000, 0.0000, 1.1221]
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 2.0192, 3.3453, 0.0000,
+            0.0000]
         )
         expected_slice_logits = torch.tensor(
-            [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
+            [-28.7481, -34.1635, -25.7430, -22.0260]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
+            [157, 149, 158, 66, 348, 68, 347, 151]
         )
 
     elif "small" in content[checkpoint_config_filename]["config"]:
@@ -201,13 +202,14 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
             small_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1394]
+            [0.0000, 0.0000, 0.0147, 0.3930, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
+            0.0000]
         )
         expected_slice_logits = torch.tensor(
-            [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
+            [-13.1852, -17.2011, -16.9553, -16.8269]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
+            [154, 151, 155, 61, 351, 63, 350, 153]
         )
 
     else:
@@ -215,7 +217,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
             base_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
         expected_slice_backbone = torch.tensor(
-            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000]
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1394]
         )
         expected_slice_logits = torch.tensor(
             [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
@@ -273,7 +275,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
         output = model(pixel_values)
 
     target_sizes = [(image.shape[1], image.shape[2]) for image in pixel_values]
-    threshold = 0.85
+    threshold = 0.88
     text_locations = fast_image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="poly")
     #TODO: update assert logic
     # text_locations[0]["bboxes"][0][:10]

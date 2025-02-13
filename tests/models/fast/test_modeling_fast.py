@@ -332,7 +332,11 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip(reason="FAST does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
-@require_torch
+
+    @unittest.skip(reason="Fast does not support input and output embeddings")
+    def test_generate_from_inputs_embeds(self):
+        pass
+
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
     @slow
