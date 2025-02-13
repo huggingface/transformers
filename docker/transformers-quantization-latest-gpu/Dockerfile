@@ -11,7 +11,7 @@ SHELL ["sh", "-lc"]
 
 ARG PYTORCH='2.5.1'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu118'
+ARG CUDA='cu121'
 
 RUN apt update
 RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
@@ -73,8 +73,8 @@ RUN python3 -m pip install --no-cache-dir optimum-quanto
 RUN python3 -m pip install git+https://github.com/NetEase-FuXi/EETQ.git
 
 # Add flute-kernel and fast_hadamard_transform for quantization testing
-RUN python3 -m pip install --no-cache-dir flute-kernel==0.3.0 -i https://flute-ai.github.io/whl/cu118
-RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
+# RUN python3 -m pip install --no-cache-dir flute-kernel==0.3.0 -i https://flute-ai.github.io/whl/cu118
+# RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
 
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors
