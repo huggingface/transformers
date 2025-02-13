@@ -140,7 +140,6 @@ class TorchAoTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-
     def test_int8_dynamic_activation_int8_weight_quant(self):
         """
         Simple LLM model testing int8_dynamic_activation_int8_weight
