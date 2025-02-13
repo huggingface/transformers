@@ -156,6 +156,7 @@ if __name__ == "__main__":
 
         new_ordered_files = ordered_files
         import multiprocessing
+
         with multiprocessing.Pool(4) as p:
             outputs = p.map(compare_files, new_ordered_files)
         for output in outputs:
