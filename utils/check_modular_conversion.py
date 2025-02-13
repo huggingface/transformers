@@ -2,7 +2,9 @@ import argparse
 import difflib
 import glob
 import logging
+import multiprocessing
 from io import StringIO
+from multiprocessing import Pool
 
 from create_dependency_mapping import find_priority_list
 
@@ -52,7 +54,8 @@ def process_file(modular_file_path, generated_modeling_content, file_type="model
         return 0
 
 
-def compare_files(modular_file_path, fix_and_overwrite=False):
+def compare_files(args):
+    modular_file_path, fix_and_overwrite = args
     # Generate the expected modeling content
     generated_modeling_content = convert_modular_file(modular_file_path)
     diff = 0
@@ -72,9 +75,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.files == ["all"]:
         args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-    non_matching_files = 0
-    for modular_file_path in find_priority_list(args.files):
-        non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)
+
+    num_cores = max(1, multiprocessing.cpu_count() - 1)  # Use all cores except one to avoid overloading the system
+    with Pool(num_cores) as pool:
+        files_with_args = [(f, args.fix_and_overwrite) for f in find_priority_list(args.files)]
+        non_matching_files = sum(pool.map(compare_files, files_with_args))
 
     if non_matching_files and not args.fix_and_overwrite:
         raise ValueError("Some diff and their modeling code did not match.")
