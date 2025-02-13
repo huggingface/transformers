@@ -131,7 +131,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's dimensions to fit `max_num_patches` according to given `patch_size`.
             Can be overridden by `do_resize` in the `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
@@ -163,16 +163,14 @@ class Siglip2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
-        do_patchify: bool = True,
         patch_size: int = 16,
-        do_pad: bool = True,
         max_num_patches: int = 256,
         **kwargs,
     ):
@@ -308,8 +306,8 @@ class Siglip2ImageProcessor(BaseImageProcessor):
 
             if do_resize:
                 height, width = get_image_size_for_max_num_patches(
-                    image_height=image.shape[1],
-                    image_width=image.shape[2],
+                    image_height=image.shape[0],
+                    image_width=image.shape[1],
                     patch_size=patch_size,
                     max_num_patches=max_num_patches,
                 )
