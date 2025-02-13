@@ -319,7 +319,6 @@ class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGener
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxBlenderbotForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxBlenderbotModelTester(self)

@@ -124,7 +124,6 @@ class Emu3Text2TextModelTester:
 @require_torch
 class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Emu3ForCausalLM,) if is_torch_available() else ()
-    all_generative_model_classes = (Emu3ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-generation": Emu3ForCausalLM,
@@ -312,7 +311,6 @@ class Emu3Vision2TextModelTester:
 @require_torch
 class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Emu3ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {}
     test_headmasking = False
     test_pruning = False

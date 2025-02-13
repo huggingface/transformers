@@ -152,9 +152,6 @@ class MoshiDecoderTester:
 @require_torch
 class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (
-        (MoshiForCausalLM,) if is_torch_available() else ()
-    )  # we don't want to run all the generation tests, only a specific subset
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
@@ -528,7 +525,6 @@ class MoshiTester:
 @require_torch
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False  # training is not supported yet for Moshi
     test_headmasking = False
     test_resize_embeddings = False
@@ -610,6 +606,18 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip("Moshi doesn't support contrastive generation yet.")
     def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(
+        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+    )
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(
+        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+    )
+    def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip("Adapting this test is costly. `test_eager_matches_sdpa_generate` tests this already.")
