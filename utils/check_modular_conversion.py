@@ -160,7 +160,6 @@ if __name__ == "__main__":
             else:
                 new_ordered_files.append(modular_file_path)
 
-        new_ordered_files = ordered_files
         import multiprocessing
 
         with multiprocessing.Pool(4) as p:
