@@ -143,7 +143,7 @@ class FastConfig(PretrainedConfig):
                     "`backbone_config` is `None`. Initializing the config with the default `TextNet` backbone."
                 )
                 backbone_config = CONFIG_MAPPING["textnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
-                
+
             elif isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]

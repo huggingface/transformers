@@ -239,8 +239,8 @@ class FastImageProcessor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
-       
-      
+
+
 class Emu3ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 

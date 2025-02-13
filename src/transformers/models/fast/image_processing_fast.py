@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 the Fast authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 the Fast authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@
 # limitations under the License.
 """Image processor class for FAST."""
 import math
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 from ...utils.import_utils import is_cv2_available
+
 
 if is_cv2_available():
     import cv2
@@ -44,6 +45,7 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_torch_available, is_vision_available, logging
+
 
 if is_vision_available():
     import PIL
@@ -415,7 +417,7 @@ class FastImageProcessor(BaseImageProcessor):
         for i in range(batch_size):
             org_img_size = target_sizes[i]
             scales = (float(org_img_size[1]) / float(img_size[1]), float(org_img_size[0]) / float(img_size[0]))
-            
+
 
             bboxes, scores = self.generate_bbox(
                 keys[i], labels[i], score_maps[i], scales, threshold, bbox_type=bbox_type
@@ -457,5 +459,5 @@ class FastImageProcessor(BaseImageProcessor):
             bbox = bbox.astype("int32")
             bboxes.append(bbox.reshape(-1).tolist())
             scores.append(score_i)
-        
+
         return bboxes, scores

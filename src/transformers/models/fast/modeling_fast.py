@@ -35,7 +35,7 @@ from transformers import (
     PreTrainedModel,
     add_start_docstrings,
     is_timm_available,
-    requires_backends
+    requires_backends,
 )
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
 
@@ -162,7 +162,7 @@ class FASTRepConvLayer(nn.Module):
         else:
             self.vertical_conv, self.vertical_batch_norm = None, None
 
-        if kernel_size[0] != 1:  
+        if kernel_size[0] != 1:
             self.horizontal_conv = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -618,13 +618,11 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
 
         selected_masks = ohem_batch(texts, gt_texts, training_masks)
         loss_text = dice_loss_with_masks(texts, gt_texts, selected_masks, reduce=False)
-
         selected_masks = gt_texts * training_masks
         loss_kernel = dice_loss_with_masks(kernels, gt_kernels, selected_masks, reduce=False)
         loss_kernel = torch.mean(loss_kernel, dim=0)
 
         loss_emb = emb_loss_batch(embs, gt_instances, gt_kernels, training_masks, reduce=False)
-
         return torch.mean(loss_text) + torch.mean(loss_kernel) + torch.mean(loss_emb)
 
     @add_start_docstrings_to_model_forward(FAST_FOR_CAPTIONING_INPUTS_DOCSTRING)

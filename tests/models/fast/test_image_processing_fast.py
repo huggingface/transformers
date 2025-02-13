@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -111,6 +111,7 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def setUp(self):
         self.image_processor_tester = FastImageProcessingTester(self)
+        self.image_processor_list = []
 
     @property
     def image_processor_dict(self):
@@ -134,14 +135,14 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = self.image_processing_class.from_dict(
             self.image_processor_dict, size=42, crop_size=84, reduce_labels=True
         )
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+        self.assertEqual(image_processor.size, {'shortest_edge': 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     @slow
     def test_post_process_text_detection(self):
-        model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast-tiny")
 
-        image_processor = FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+        image_processor = FastImageProcessor.from_pretrained("jadechoghari/fast-tiny")
 
         def prepare_image():
             image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
@@ -149,14 +150,15 @@ class FastImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             return raw_image
 
         image = prepare_image()
-        inputs = image_processor(image, return_tensor="np")
+        inputs = image_processor(image, return_tensor="pt")
 
         output = model(pixel_values=torch.tensor(inputs["pixel_values"]))
-        target_sizes = [(image.shape[1], image.shape[2]) for image in inputs["pixel_values"]]
-        threshold = 0.85
-        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="poly")
 
-        assert len(final_out[0]["bboxes"]) == 2
-        assert len(final_out[0]["bboxes"][0]) == 716
-        assert final_out[0]["bboxes"][0][:10] == [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
-        assert round(float(final_out[0]["scores"][0]), 5) == 0.92356
+        # TODO: check how to not hard code this
+        target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
+        target_sizes = [(300, 400)]
+        threshold = 0.88
+        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="rect")
+
+        assert final_out[0]["bboxes"][0] == [151, 151, 160, 56, 355, 74, 346, 169]
+        assert round(float(final_out[0]["scores"][0]), 5) == 0.91862

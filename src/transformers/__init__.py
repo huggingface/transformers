@@ -5479,13 +5479,13 @@ if TYPE_CHECKING:
     from .models.esm import EsmConfig, EsmTokenizer
     from .models.falcon import FalconConfig
     from .models.falcon_mamba import FalconMambaConfig
+    from .models.fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig
     from .models.fastspeech2_conformer import (
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
         FastSpeech2ConformerTokenizer,
         FastSpeech2ConformerWithHifiGanConfig,
     )
-    from .models.fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig
     from .models.flaubert import FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FlavaConfig,
@@ -6301,8 +6301,8 @@ if TYPE_CHECKING:
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
-        from .models.fast import FastImageProcessor
         from .models.emu3 import Emu3ImageProcessor
+        from .models.fast import FastImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -7218,13 +7218,13 @@ if TYPE_CHECKING:
             FalconMambaModel,
             FalconMambaPreTrainedModel,
         )
+        from .models.fast import FastForSceneTextRecognition, FastPreTrainedModel
         from .models.fastspeech2_conformer import (
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
             FastSpeech2ConformerWithHifiGan,
         )
-        from .models.fast import FastForSceneTextRecognition, FastPreTrainedModel
         from .models.flaubert import (
             FlaubertForMultipleChoice,
             FlaubertForQuestionAnswering,

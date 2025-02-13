@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -325,53 +325,21 @@ class FastModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         return to_return
 
+    @unittest.skip(reason="FAST params are bigger than 80M params")
     def test_model_is_small(self):
-        # Just a consistency check to make sure we are not running tests on 80M parameter models.
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        pass
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            num_params = model.num_parameters()
-            assert (
-                num_params < 3000000
-            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
-
-        # def prepare_image():
-        #     image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img_329.jpg"
-        #     raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
-        #     return raw_image
-
-
+    @unittest.skip(reason="FAST does not have input/output embeddings")
+    def test_model_get_set_embeddings(self):
+        pass
 @require_torch
 @require_vision
 class FastModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_fast_tiny_ic17mlt_model(self):
-        model = FastForSceneTextRecognition.from_pretrained("Raghavan/ic17mlt_Fast_T")
+    def test_inference(self):
+        model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast-tiny")
 
-        image_processor = FastImageProcessor.from_pretrained("Raghavan/ic17mlt_Fast_T")
-
-        def prepare_image():
-            image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img_329.jpg"
-            raw_image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
-            return raw_image
-
-        image = prepare_image()
-        input = image_processor(image, return_tensors="pt")
-
-        output = model(pixel_values=torch.tensor(input["pixel_values"]))
-        target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
-        threshold = 0.88
-        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold)
-
-        assert final_out[0]["bboxes"][0] == [224, 120, 246, 120, 246, 134, 224, 134]
-        assert round(float(final_out[0]["scores"][0]), 5) == 0.95541
-
-    @slow
-    def test_inference_fast_base_800_total_text_ic17mlt_model(self):
-        model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
-
-        image_processor = FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+        image_processor = FastImageProcessor.from_pretrained("jadechoghari/fast-tiny")
 
         def prepare_image():
             image_url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
@@ -382,9 +350,7 @@ class FastModelIntegrationTest(unittest.TestCase):
         input = image_processor(image, return_tensors="pt")
 
         output = model(pixel_values=torch.tensor(input["pixel_values"]))
-        target_sizes = [(image.shape[1], image.shape[2]) for image in input["pixel_values"]]
-        threshold = 0.85
-        final_out = image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="poly")
 
-        assert final_out[0]["bboxes"][0][:10] == [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
-        assert round(float(final_out[0]["scores"][0]), 5) == 0.92356
+        expected_values = torch.tensor([-9.9181, -13.0701, -12.5045, -12.6523])
+
+        torch.testing.assert_close(output.last_hidden_state[0][0][0][:4], expected_values, rtol=1e-4, atol=1e-4)

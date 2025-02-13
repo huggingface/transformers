@@ -24,11 +24,8 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import AutoConfig, AutoBackbone
-from transformers import TextNetConfig
-from transformers import FastConfig, FastForSceneTextRecognition
+from transformers import FastConfig, FastForSceneTextRecognition, TextNetConfig
 from transformers.models.fast.image_processing_fast import FastImageProcessor
-
 
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
@@ -168,7 +165,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
 
     with open(config_filepath) as f:
         content = json.loads(f.read())
-    
+
     with open(config_model_file_path) as f:
         content_model = json.loads(f.read())
 
@@ -189,17 +186,44 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
         config = prepare_config(
             tiny_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
+        expected_slice_backbone = torch.tensor(
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.5300, 0.0000, 0.0000, 0.0000, 0.0000, 1.1221]
+        )
+        expected_slice_logits = torch.tensor(
+            [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
+        )
 
     elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(
             small_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
+        )
+        expected_slice_backbone = torch.tensor(
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1394]
+        )
+        expected_slice_logits = torch.tensor(
+            [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
         )
 
     else:
         config = prepare_config(
             base_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
-    
+        expected_slice_backbone = torch.tensor(
+            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000]
+        )
+        expected_slice_logits = torch.tensor(
+            [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
+        )
+        expected_slice_boxes = torch.tensor(
+            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
+        )
+
     if "train" in data_config:
         if "short_size" in data_config["train"]:
             size = data_config["train"]["short_size"]
@@ -232,7 +256,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
             # Using regex to find and replace the pattern in the string
             new_key = re.sub(pattern, adjust_stage, new_key)
             state_dict_changed[new_key] = val
-        
+
     model.load_state_dict(state_dict_changed)
     model.eval()
 

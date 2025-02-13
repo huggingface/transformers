@@ -844,6 +844,7 @@ class ModelTesterMixin:
                 else:
                     single_row_input[key] = value
 
+            breakpoint()
             with torch.no_grad():
                 model_batched_output = model(**batched_input_prepared)
                 model_row_output = model(**single_row_input)
