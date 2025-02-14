@@ -160,7 +160,7 @@ jobs:
         environment:
             TRANSFORMERS_IS_CI: yes
             PYTEST_TIMEOUT: 120
-        parallelism: 1
+        parallelism: 4
         steps:
             - checkout
             - run: uv pip install -e ".[quality]"
@@ -169,19 +169,19 @@ jobs:
                 command: pip freeze | tee installed.txt
             - store_artifacts:
                   path: ~/transformers/installed.txt
-            - run: python utils/check_copies.py
-            - run: python utils/check_modular_conversion.py --num_workers 4
-            - run: python utils/check_table.py
-            - run: python utils/check_dummies.py
-            - run: python utils/check_repo.py
-            - run: python utils/check_inits.py
-            - run: python utils/check_config_docstrings.py
-            - run: python utils/check_config_attributes.py
-            - run: python utils/check_doctest_list.py
-            - run: make deps_table_check_updated
-            - run: python utils/update_metadata.py --check-only
-            - run: python utils/check_docstrings.py
-            - run: python utils/check_support_list.py
+            - run: if [ "$CIRCLE_NODE_INDEX" == "0" ]; then python utils/check_copies.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "1" ]; then python utils/check_modular_conversion.py --num_workers 4; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "3" ]; then python utils/check_table.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "0" ]; then python utils/check_dummies.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "2" ]; then python utils/check_repo.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "2" ]; then python utils/check_inits.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "2" ]; then python utils/check_config_docstrings.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "2" ]; then python utils/check_config_attributes.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "0" ]; then python utils/check_doctest_list.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "0" ]; then make deps_table_check_updated; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "3" ]; then python utils/update_metadata.py --check-only; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "3" ]; then python utils/check_docstrings.py; fi
+            - run: if [ "$CIRCLE_NODE_INDEX" == "0" ]; then python utils/check_support_list.py; fi
 
 workflows:
     version: 2
