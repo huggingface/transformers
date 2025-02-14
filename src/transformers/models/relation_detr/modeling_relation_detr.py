@@ -2330,6 +2330,7 @@ class GenerateCDNQueries(nn.Module):
         box_noise_scale: float = 1.0,
         return_dict: bool = True,
     ):
+        super().__init__()
         self.num_queries = num_queries
         self.num_classes = num_classes
         self.label_embed_dim = label_embed_dim
