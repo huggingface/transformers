@@ -74,7 +74,7 @@ def prepare_mbart_inputs_dict(
     }
 
 
-class FlaxMBartModelTester(unittest.TestCase):
+class FlaxMBartModelTester:
     def __init__(
         self,
         parent,
@@ -116,7 +116,6 @@ class FlaxMBartModelTester(unittest.TestCase):
         self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
         self.initializer_range = initializer_range
-        super().__init__()
 
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
@@ -343,7 +342,6 @@ class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxMBartForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxMBartModelTester(self)
