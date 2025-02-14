@@ -22,7 +22,7 @@ python src/transformers/models/timesfm/convert_timesfm_orignal_to_hf.py \
 
 def get_nested_attr(obj, key):
     """Recursively retrieves an attribute from an object, handling list/tuple indexing if present."""
-    parts = key.split('.')
+    parts = key.split(".")
     for part in parts:
         match = re.match(r"(.*)\[(\d+)\]", part)  # Handle list indexing like `layers[0]`
         if match:
@@ -71,39 +71,34 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
 
     # mapping of the layers from the original model to the transformer model
     MODEL_LAYER_MAPPING = {
-        "input_ff_layer.hidden_layer[0].weight":    "decoder.input_ff_layer.hidden_layer[0].weight",
-        "input_ff_layer.hidden_layer[0].bias":      "decoder.input_ff_layer.hidden_layer[0].bias",
-        "input_ff_layer.output_layer.weight":       "decoder.input_ff_layer.output_layer.weight",
-        "input_ff_layer.output_layer.bias":         "decoder.input_ff_layer.output_layer.bias",
-        "input_ff_layer.residual_layer.weight":     "decoder.input_ff_layer.residual_layer.weight",
-        "input_ff_layer.residual_layer.bias":       "decoder.input_ff_layer.residual_layer.bias",
-
-        "freq_emb.weight":                          "decoder.freq_emb.weight",
-
-        "horizon_ff_layer.hidden_layer[0].weight":  "horizon_ff_layer.hidden_layer[0].weight",
-        "horizon_ff_layer.hidden_layer[0].bias":    "horizon_ff_layer.hidden_layer[0].bias",
-        "horizon_ff_layer.output_layer.weight":     "horizon_ff_layer.output_layer.weight",
-        "horizon_ff_layer.output_layer.bias":       "horizon_ff_layer.output_layer.bias",
-        "horizon_ff_layer.residual_layer.weight":   "horizon_ff_layer.residual_layer.weight",
-        "horizon_ff_layer.residual_layer.bias":     "horizon_ff_layer.residual_layer.bias",
+        "input_ff_layer.hidden_layer[0].weight": "decoder.input_ff_layer.hidden_layer[0].weight",
+        "input_ff_layer.hidden_layer[0].bias": "decoder.input_ff_layer.hidden_layer[0].bias",
+        "input_ff_layer.output_layer.weight": "decoder.input_ff_layer.output_layer.weight",
+        "input_ff_layer.output_layer.bias": "decoder.input_ff_layer.output_layer.bias",
+        "input_ff_layer.residual_layer.weight": "decoder.input_ff_layer.residual_layer.weight",
+        "input_ff_layer.residual_layer.bias": "decoder.input_ff_layer.residual_layer.bias",
+        "freq_emb.weight": "decoder.freq_emb.weight",
+        "horizon_ff_layer.hidden_layer[0].weight": "horizon_ff_layer.hidden_layer[0].weight",
+        "horizon_ff_layer.hidden_layer[0].bias": "horizon_ff_layer.hidden_layer[0].bias",
+        "horizon_ff_layer.output_layer.weight": "horizon_ff_layer.output_layer.weight",
+        "horizon_ff_layer.output_layer.bias": "horizon_ff_layer.output_layer.bias",
+        "horizon_ff_layer.residual_layer.weight": "horizon_ff_layer.residual_layer.weight",
+        "horizon_ff_layer.residual_layer.bias": "horizon_ff_layer.residual_layer.bias",
     }
 
-
     TRANSFORMER_LAYER_MAPPING = {
-        "stacked_transformer.layers[{i}].self_attn.qkv_proj.weight":    "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.weight",
-        "stacked_transformer.layers[{i}].self_attn.qkv_proj.bias":      "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.bias",
-        "stacked_transformer.layers[{i}].self_attn.o_proj.weight":      "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.weight",
-        "stacked_transformer.layers[{i}].self_attn.o_proj.bias":        "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.bias",
-        "stacked_transformer.layers[{i}].self_attn.scaling":            "decoder.stacked_transformer.layers[{i}].self_attn.scaling",
-
-        "stacked_transformer.layers[{i}].mlp.gate_proj.weight":         "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.weight",
-        "stacked_transformer.layers[{i}].mlp.gate_proj.bias":           "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.bias",
-        "stacked_transformer.layers[{i}].mlp.down_proj.weight":         "decoder.stacked_transformer.layers[{i}].mlp.down_proj.weight",
-        "stacked_transformer.layers[{i}].mlp.down_proj.bias":           "decoder.stacked_transformer.layers[{i}].mlp.down_proj.bias",
-        "stacked_transformer.layers[{i}].mlp.layer_norm.weight":        "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.weight",
-        "stacked_transformer.layers[{i}].mlp.layer_norm.bias":          "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.bias",
-
-        "stacked_transformer.layers[{i}].input_layernorm.weight":       "decoder.stacked_transformer.layers[{i}].input_layernorm.weight",
+        "stacked_transformer.layers[{i}].self_attn.qkv_proj.weight": "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.weight",
+        "stacked_transformer.layers[{i}].self_attn.qkv_proj.bias": "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.bias",
+        "stacked_transformer.layers[{i}].self_attn.o_proj.weight": "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.weight",
+        "stacked_transformer.layers[{i}].self_attn.o_proj.bias": "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.bias",
+        "stacked_transformer.layers[{i}].self_attn.scaling": "decoder.stacked_transformer.layers[{i}].self_attn.scaling",
+        "stacked_transformer.layers[{i}].mlp.gate_proj.weight": "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.weight",
+        "stacked_transformer.layers[{i}].mlp.gate_proj.bias": "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.bias",
+        "stacked_transformer.layers[{i}].mlp.down_proj.weight": "decoder.stacked_transformer.layers[{i}].mlp.down_proj.weight",
+        "stacked_transformer.layers[{i}].mlp.down_proj.bias": "decoder.stacked_transformer.layers[{i}].mlp.down_proj.bias",
+        "stacked_transformer.layers[{i}].mlp.layer_norm.weight": "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.weight",
+        "stacked_transformer.layers[{i}].mlp.layer_norm.bias": "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.bias",
+        "stacked_transformer.layers[{i}].input_layernorm.weight": "decoder.stacked_transformer.layers[{i}].input_layernorm.weight",
     }
 
     for old_key, new_key in MODEL_LAYER_MAPPING.items():
