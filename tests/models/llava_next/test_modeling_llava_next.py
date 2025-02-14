@@ -215,7 +215,6 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     """
 
     all_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (LlavaNextForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": LlavaNextForConditionalGeneration} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False

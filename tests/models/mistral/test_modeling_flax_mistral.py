@@ -187,7 +187,6 @@ class FlaxMistralModelTester:
 @require_flax
 class FlaxMistralModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxMistralModel, FlaxMistralForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = (FlaxMistralForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxMistralModelTester(self)

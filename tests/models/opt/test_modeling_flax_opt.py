@@ -205,7 +205,6 @@ class FlaxOPTModelTester:
 @require_flax
 class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     all_model_classes = (FlaxOPTModel, FlaxOPTForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = () if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxOPTModelTester(self)

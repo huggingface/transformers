@@ -130,8 +130,6 @@ class RTDetrV2Config(PretrainedConfig):
             Indicates whether the initial query embeddings for the decoder should be learned during training
         anchor_image_size (`Tuple[int, int]`, *optional*):
             Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
-        disable_custom_kernels (`bool`, *optional*, defaults to `True`):
-            Whether to disable custom kernels.
         with_box_refine (`bool`, *optional*, defaults to `True`):
             Whether to apply iterative bounding box refinement, where each decoder layer refines the bounding boxes
             based on the predictions from the previous layer.
@@ -238,7 +236,6 @@ class RTDetrV2Config(PretrainedConfig):
         box_noise_scale=1.0,
         learn_initial_query=False,
         anchor_image_size=None,
-        disable_custom_kernels=True,
         with_box_refine=True,
         is_encoder_decoder=True,
         # Loss
@@ -336,7 +333,6 @@ class RTDetrV2Config(PretrainedConfig):
         self.learn_initial_query = learn_initial_query
         self.anchor_image_size = anchor_image_size
         self.auxiliary_loss = auxiliary_loss
-        self.disable_custom_kernels = disable_custom_kernels
         self.with_box_refine = with_box_refine
         # Loss
         self.matcher_alpha = matcher_alpha

@@ -314,7 +314,7 @@ def make_batched_videos(videos) -> VideoInput:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
         # case 1: nested batch of videos so we flatten it
         if not is_pil_image(videos[0][0]) and videos[0][0].ndim == 4:
-            videos = [video for batch_list in videos for video in batch_list]
+            videos = [[video for batch_list in batched_videos for video in batch_list] for batched_videos in videos]
         # case 2: list of videos represented as list of video frames
         return videos
 
