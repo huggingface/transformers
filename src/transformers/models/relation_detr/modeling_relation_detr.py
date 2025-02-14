@@ -1768,7 +1768,11 @@ class RelationDetrChannelMapper(nn.Module):
         Returns:
             List of mapped torch.FloatTensor
         """
-        assert len(inputs) <= len(self.in_channels)
+        if len(inputs) > len(self.in_channels):
+            raise ValueError(
+                "The length of inputs is larger than the number of convolution modules."
+                "Please make sure `in_channels` is set correctly."
+            )
         start = len(self.in_channels) - len(inputs)
         convs = self.convs[start:]
         outs = [convs[i](inputs[i]) for i in range(len(inputs))]
@@ -2202,7 +2206,6 @@ class GenerateCDNQueries(nn.Module):
         for i in range(self.denoising_groups):
             start_col = start_row = max_gt_num_per_image * i
             end_col = end_row = max_gt_num_per_image * (i + 1)
-            assert noised_query_nums >= end_col and start_col >= 0, "check attn_mask"
             attn_mask[start_row:end_row, :start_col] = True
             attn_mask[start_row:end_row, end_col:noised_query_nums] = True
         return attn_mask
@@ -2287,7 +2290,8 @@ class GenerateCDNQueries(nn.Module):
 
         # set the device as "gt_labels"
         device = gt_labels.device
-        assert len(gt_labels_list) == len(gt_boxes_list)
+        if not len(gt_labels_list) == len(gt_boxes_list):
+            raise ValueError("The length of gt_labels_list and gt_boxes_list should be the same.")
 
         batch_size = len(gt_labels_list)
 
