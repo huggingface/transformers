@@ -1173,11 +1173,13 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         self.dropout = config.dropout
         self.layers = nn.ModuleList([RelationDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        self.memory_fusion = nn.Sequential(
-            nn.Linear(config.d_model * (config.encoder_layers + 1), config.d_model),
-            nn.ReLU(inplace=True),
-            nn.Linear(config.d_model, config.d_model),
-            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
+        self.memory_fusion = nn.ModuleList(
+            [
+                nn.Linear(config.d_model * (config.encoder_layers + 1), config.d_model),
+                nn.ReLU(inplace=True),
+                nn.Linear(config.d_model, config.d_model),
+                nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
+            ]
         )
 
         # Initialize weights and apply final processing
@@ -1303,7 +1305,8 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         encoder_states = encoder_states + (hidden_states,)
 
         hidden_states = torch.cat(encoder_states, dim=-1)
-        hidden_states = self.memory_fusion(hidden_states)
+        for layer in self.memory_fusion:
+            hidden_states = layer(hidden_states)
 
         if not output_hidden_states:
             encoder_states = None
