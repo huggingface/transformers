@@ -529,7 +529,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
         EXPECTED_TEXT_COMPLETION = (
-            """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
+            "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
@@ -621,11 +621,13 @@ class Qwen2IntegrationTest(unittest.TestCase):
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
-    @require_flash_attn
+    # @require_flash_attn
+    @slow
     def test_3b_generation(self):
         model_id = "Qwen/Qwen2.5-3B"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = Qwen2ForCausalLM.from_pretrained(model_id).to(torch_device)
+        model = Qwen2ForCausalLM.from_pretrained(model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048).to(torch_device)
+        # we need a long text to test sliding window
         # fmt: off
         LONG_TEXT = """The Warring States period in Chinese history (c. 475 – 221 BC) comprises the final centuries of the Zhou dynasty (c. 1046 – 256 BC), which were characterized by warfare, bureaucratic and military reform, and political consolidation. It followed the Spring and Autumn period and concluded with the wars of conquest that saw the state of Qin annex each of the other contender states by 221 BC and found the Qin dynasty, the first imperial dynastic state in East Asian history.
 
@@ -1017,11 +1019,11 @@ In summary:"""
 
         input_ids = tokenizer(LONG_TEXT, return_tensors="pt").input_ids.to(torch_device)
         generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279,   467, 19859,  4180,  4168,   572,   264,   882,   315,  2244, 2297,   304,  5616,    13,   576, 66827, 66846,   572,   304, 17704, 11,   323,   279,  5302,  1033,   304,  6783, 12055,   448,  1817, 1008,    13,   576,  5302,  1033, 10454,   803, 79395,    11,   323, 279,  8584,   572,  7826,    13,   576,  4168,   572,  1083,   264]], dtype=torch.long))  # fmt: skip
-        print(tokenizer.decode(generated_ids[0]))
+
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[  576,  4570, 71818,   374,  6509,   825,   315,   279,  1429, 88228, 21984,   315,   279, 11220,  4948,  8584,   304,   279,   467, 19859, 4180,  4168,    13,  1084, 14230, 16170,   315,  3349, 19256,   304, 279,  2266,   315, 13444, 14550,   448, 50867,   429,   525,   330, 4145,     1,   476,   330, 88845,     1,   323,  1246,  3425,   264]], dtype=torch.long))  # fmt: skip
         self.assertEqual(
             tokenizer.decode(generated_ids[0]),
-            """ the Warring States period was a time of great change in China. The Zhou dynasty was in decline, and the states were in constant conflict with each other. The states were becoming more bureaucratic, and the economy was growing. The period was also a""",
+            """ The Guanzi is considered one of the most foundational texts of the developing political economy in the Warring States period. It addresses principles of price regulation in the context of effectively dealing with commodities that are "light" or "heavy" and how whether a""",
         )
         model.config._attn_implementation = "eager"
         new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
