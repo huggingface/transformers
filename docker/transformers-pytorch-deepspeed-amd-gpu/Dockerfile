@@ -16,9 +16,11 @@ RUN apt update && \
     python-is-python3 \
     rocrand-dev \
     rocthrust-dev \
+    rocblas-dev \
+    hipsolver-dev \
     hipsparse-dev \
     hipblas-dev \
-    rocblas-dev && \
+    hipblaslt-dev && \
     apt clean && \
     rm -rf /var/lib/apt/lists/*
 
