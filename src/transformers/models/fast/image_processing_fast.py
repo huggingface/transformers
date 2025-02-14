@@ -205,7 +205,6 @@ class FastImageProcessor(BaseImageProcessor):
             height += self.size_divisor - (height % self.size_divisor)
         if width % self.size_divisor != 0:
             width += self.size_divisor - (width % self.size_divisor)
-            
         self.img_size = (height, width)
         return resize(
             image,
@@ -379,7 +378,6 @@ class FastImageProcessor(BaseImageProcessor):
     def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", img_size=None):
         scale = 2
         img_size = img_size if img_size is not None else self.img_size
-        print("image size", img_size)
         out = output["last_hidden_state"]
         batch_size = out.size(0)
         final_results = {}

@@ -21,9 +21,7 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 FAST_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "fast_base_tt_800_finetune_ic17mlt": (
-        "https://huggingface.co/Raghavan/fast_base_tt_800_finetune_ic17mlt/raw/main/config.json"
-    ),
+    "fast_base_tt_800_finetune_ic17mlt": ("https://huggingface.co/jadechoghari/fast-tiny/raw/main/config.json"),
 }
 
 
@@ -33,7 +31,7 @@ class FastConfig(PretrainedConfig):
     instantiate a FastForSceneTextRecognition model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     FastForSceneTextRecognition.
-    [Raghavan/fast_base_tt_800_finetune_ic17mlt](https://huggingface.co/Raghavan/fast_base_tt_800_finetune_ic17mlt)
+    [jadechoghari/fast-tiny](https://huggingface.co/jadechoghari/fast-tiny)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -105,7 +103,7 @@ class FastConfig(PretrainedConfig):
     ```"""
 
     r"""
-    [Raghavan/fast_base_tt_800_finetune_ic17mlt](https://huggingface.co/Raghavan/fast_base_tt_800_finetune_ic17mlt)
+    [jadechoghari/fast-tiny](https://huggingface.co/jadechoghari/fast-tiny)
     """
 
     def __init__(

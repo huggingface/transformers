@@ -70,6 +70,7 @@ OBJECTS_TO_IGNORE = [
     # Deprecated
     "InputExample",
     "InputFeatures",
+    "LogitsWarper",
     # Signature is *args/**kwargs
     "TFSequenceSummary",
     "TFBertTokenizer",
@@ -831,10 +832,6 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
 
     if idx == len(obj_doc_lines):
         # Nothing to do, no parameters are documented.
-        return
-
-    if "kwargs" in signature and signature["kwargs"].annotation != inspect._empty:
-        # Inspecting signature with typed kwargs is not supported yet.
         return
 
     indent = find_indent(obj_doc_lines[idx])

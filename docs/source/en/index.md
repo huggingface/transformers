@@ -149,8 +149,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [Falcon](model_doc/falcon)                        |       ✅        |         ❌         |      ❌      |
 |                       [Falcon3](model_doc/falcon3)                       |       ✅        |         ❌         |      ✅      |
 |                  [FalconMamba](model_doc/falcon_mamba)                   |       ✅        |         ❌         |      ❌      |
-|         [FastSpeech2Conformer](model_doc/fastspeech2_conformer)          |       ✅        |         ❌         |      ❌      |
 |                          [FAST](model_doc/fast)                          |       ✅        |         ❌         |      ❌      |
+|         [FastSpeech2Conformer](model_doc/fastspeech2_conformer)          |       ✅        |         ❌         |      ❌      |
 |                       [FLAN-T5](model_doc/flan-t5)                       |       ✅        |         ✅         |      ✅      |
 |                      [FLAN-UL2](model_doc/flan-ul2)                      |       ✅        |         ✅         |      ✅      |
 |                      [FlauBERT](model_doc/flaubert)                      |       ✅        |         ✅         |      ❌      |

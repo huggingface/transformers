@@ -291,7 +291,7 @@ class FASTNeck(nn.Module):
             setattr(self, f"reduce_layer{layer_ix + 1}", FASTRepConvLayer(*reduce_layer_configs[layer_ix]))
 
     def _upsample(self, layer_out, height, width):
-        return F.upsample(layer_out, size=(height, width), mode="bilinear")
+        return F.interpolate(layer_out, size=(height, width), mode="bilinear")
 
     def forward(self, hidden_states):
         first_layer_hidden = hidden_states[0]
@@ -657,16 +657,16 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
 
         >>> url = "https://huggingface.co/datasets/Raghavan/fast_model_samples/resolve/main/img657.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-        >>> processor = FastImageProcessor.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
-        >>> model = FastForSceneTextRecognition.from_pretrained("Raghavan/fast_base_tt_800_finetune_ic17mlt")
+        >>> processor = FastImageProcessor.from_pretrained("jadechoghari/fast-tiny")
+        >>> model = FastForSceneTextRecognition.from_pretrained("jadechoghari/fast-tiny")
         >>> inputs = processor(image, return_tensors="pt")
         >>> # forward pass
         >>> outputs = model(pixel_values=inputs["pixel_values"])
-        >>> target_sizes = [(image.shape[1], image.shape[2]) for image in inputs["pixel_values"]]
-        >>> threshold = 0.85
-        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold, bbox_type="poly")
+        >>> target_sizes = [(image.height, image.width)]
+        >>> threshold = 0.88
+        >>> text_locations = processor.post_process_text_detection(outputs, target_sizes, threshold, bbox_type="rect")
         >>> print(text_locations[0]["bboxes"][0][:10])
-        [484, 175, 484, 178, 483, 179, 452, 179, 452, 182]
+        [151, 151, 160, 56, 355, 74, 346, 169]
         ```
         """
         # outputs = {}

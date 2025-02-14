@@ -52,4 +52,3 @@ TextNet is the backbone for Fast, but can also be used as an efficient text/imag
 
 [[autodoc]] TextNetForImageClassification
     - forward
-

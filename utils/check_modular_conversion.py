@@ -69,7 +69,7 @@ def get_models_in_diff():
     Returns:
         A set containing the names of the models that have been modified (e.g. {'llama', 'whisper'}).
     """
-    fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+    fork_point_sha = subprocess.check_output("git merge-base add-fast HEAD".split()).decode("utf-8")
     modified_files = (
         subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split())
         .decode("utf-8")
