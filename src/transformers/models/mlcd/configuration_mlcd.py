@@ -83,7 +83,6 @@ class MLCDVisionConfig(PretrainedConfig):
         self,
         hidden_size=1664,
         intermediate_size=8192,
-        projection_dim=1024,
         num_hidden_layers=48,
         num_attention_heads=16,
         num_channels=3,
@@ -100,7 +99,6 @@ class MLCDVisionConfig(PretrainedConfig):
 
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
-        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
