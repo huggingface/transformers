@@ -60,7 +60,7 @@ What are these?<|im_end|>
 ```
 
 
-### Passing Images as Paths or URLs for Seamless Integration
+### Image paths or URLs
 
 To incorporate images into your chat templates, you can pass them as file paths or URLs. This method automatically loads the image, processes it, and prepares the necessary pixel values to create ready-to-use inputs for the model. This approach simplifies the integration of images, enabling seamless multimodal functionality.
 
