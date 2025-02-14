@@ -2134,7 +2134,15 @@ class GenerationTesterMixin:
             # compilation-specific setup
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-            model.generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
+
+            # BLIP is the only exception with custom generate which call `self.lm.generate()`
+            # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
+            # compatible with multimodality
+            if "blip" in model.__class__.__name__.lower():
+                model.language_model.generation_config.compile_config._compile_all_devices = True
+            else:
+                # force compilation (e.g. fast CI, CPU
+                model.generation_config.compile_config._compile_all_devices = True
 
             generation_kwargs = {
                 "do_sample": False,
@@ -2205,9 +2213,19 @@ class GenerationTesterMixin:
             # compilation-specific setup
             torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
-            model.generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
-            if not has_defined_cache_implementation:
-                model.generation_config.cache_implementation = "static"
+
+            # BLIP is the only exception with custom generate which call `self.lm.generate()`
+            # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
+            # compatible with multimodality
+            if "blip" in model.__class__.__name__.lower():
+                model.language_model.generation_config.compile_config._compile_all_devices = True
+                if not has_defined_cache_implementation:
+                    model.language_model.generation_config.cache_implementation = "static"
+            else:
+                # force compilation (e.g. fast CI, CPU)
+                model.generation_config.compile_config._compile_all_devices = True
+                if not has_defined_cache_implementation:
+                    model.generation_config.cache_implementation = "static"
 
             logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
             output_generate = model.generate(
@@ -2225,9 +2243,6 @@ class GenerationTesterMixin:
                 **inputs_dict,
             )
 
-            # BLIP is the only exception with custom generate which call `self.lm.generate()`
-            # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
-            # compatible with multimodality
             if "blip" in model.__class__.__name__.lower():
                 self.assertTrue(hasattr(model.language_model, "_compiled_call"))
             else:
