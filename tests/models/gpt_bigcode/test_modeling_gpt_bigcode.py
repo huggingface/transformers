@@ -390,7 +390,6 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GPTBigCodeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GPTBigCodeModel,
@@ -448,6 +447,10 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     @unittest.skip(reason="BigCodeGPT has a non-standard KV cache format.")
     def test_past_key_values_format(self):
+        pass
+
+    @unittest.skip(reason="BigCodeGPT has a non-standard KV cache format and breaks this test.")
+    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     def test_gpt_bigcode_model(self):
@@ -589,4 +592,4 @@ class GPTBigCodeMQATest(unittest.TestCase):
         attention_mqa_result = attention_mqa(hidden_states)[0]
 
         # CHECK THAT ALL OUTPUTS ARE THE SAME
-        self.assertTrue(torch.allclose(attention_mha_result, attention_mqa_result, atol=1e-5))
+        torch.testing.assert_close(attention_mha_result, attention_mqa_result, rtol=1e-5, atol=1e-5)

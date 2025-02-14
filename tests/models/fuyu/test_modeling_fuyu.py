@@ -22,7 +22,7 @@ import requests
 from parameterized import parameterized
 
 from transformers import FuyuConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -268,7 +268,6 @@ class FuyuModelTester:
 @require_torch
 class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
-    all_generative_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
     )
@@ -325,9 +324,13 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
+    @unittest.skip(reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position.")
+    def test_generate_continue_from_inputs_embeds():
+        pass
+
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class FuyuModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):

@@ -1632,7 +1632,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1692,7 +1692,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -1732,14 +1734,6 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
 
     def set_output_embeddings(self, new_embeddings):
         self.decoder.set_output_embeddings(new_embeddings)
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
-        model_embeds = self.decoder.resize_token_embeddings(new_num_tokens)
-
-        # update vocab size
-        self.config.text_config.vocab_size = new_num_tokens
-
-        return model_embeds
 
     def get_decoder(self):
         return self.decoder
@@ -1892,3 +1886,11 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "Pix2StructPreTrainedModel",
+    "Pix2StructForConditionalGeneration",
+    "Pix2StructVisionModel",
+    "Pix2StructTextModel",
+]

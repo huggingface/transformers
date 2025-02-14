@@ -557,7 +557,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     all_model_classes = (
         (SwitchTransformersModel, SwitchTransformersForConditionalGeneration) if is_torch_available() else ()
     )
-    all_generative_model_classes = (SwitchTransformersForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": SwitchTransformersModel,
@@ -576,6 +575,8 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     test_torchscript = False
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
+    # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
+    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)

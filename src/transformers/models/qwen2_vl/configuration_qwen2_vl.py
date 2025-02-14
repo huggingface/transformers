@@ -173,6 +173,11 @@ class Qwen2VLConfig(PretrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -198,9 +203,9 @@ class Qwen2VLConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(vision_config, dict):
-            self.vision_config = Qwen2VLVisionConfig(**vision_config)
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
-            self.vision_config = Qwen2VLVisionConfig()
+            self.vision_config = self.sub_configs["vision_config"]()
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -237,3 +242,6 @@ class Qwen2VLConfig(PretrainedConfig):
         rope_config_validation(self, ignore_keys={"mrope_section"})
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["Qwen2VLConfig"]

@@ -79,6 +79,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntConfig"),
         ("ctrl", "CTRLConfig"),
         ("cvt", "CvtConfig"),
+        ("dab-detr", "DabDetrConfig"),
         ("dac", "DacConfig"),
         ("data2vec-audio", "Data2VecAudioConfig"),
         ("data2vec-text", "Data2VecTextConfig"),
@@ -90,8 +91,10 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deformable_detr", "DeformableDetrConfig"),
         ("deit", "DeiTConfig"),
         ("depth_anything", "DepthAnythingConfig"),
+        ("depth_pro", "DepthProConfig"),
         ("deta", "DetaConfig"),
         ("detr", "DetrConfig"),
+        ("diffllama", "DiffLlamaConfig"),
         ("dinat", "DinatConfig"),
         ("dinov2", "Dinov2Config"),
         ("dinov2_with_registers", "Dinov2WithRegistersConfig"),
@@ -102,6 +105,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EfficientFormerConfig"),
         ("efficientnet", "EfficientNetConfig"),
         ("electra", "ElectraConfig"),
+        ("emu3", "Emu3Config"),
         ("encodec", "EncodecConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("ernie", "ErnieConfig"),
@@ -122,6 +126,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("git", "GitConfig"),
         ("glm", "GlmConfig"),
         ("glpn", "GLPNConfig"),
+        ("got_ocr2", "GotOcr2Config"),
         ("gpt-sw3", "GPT2Config"),
         ("gpt2", "GPT2Config"),
         ("gpt_bigcode", "GPTBigCodeConfig"),
@@ -132,9 +137,11 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
         ("granitemoe", "GraniteMoeConfig"),
+        ("granitevision", "LlavaNextConfig"),
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
+        ("helium", "HeliumConfig"),
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
@@ -189,6 +196,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTConfig"),
         ("mobilevitv2", "MobileViTV2Config"),
         ("modernbert", "ModernBertConfig"),
+        ("moonshine", "MoonshineConfig"),
         ("moshi", "MoshiConfig"),
         ("mpnet", "MPNetConfig"),
         ("mpt", "MptConfig"),
@@ -233,6 +241,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pvt_v2", "PvtV2Config"),
         ("qdqbert", "QDQBertConfig"),
         ("qwen2", "Qwen2Config"),
+        ("qwen2_5_vl", "Qwen2_5_VLConfig"),
         ("qwen2_audio", "Qwen2AudioConfig"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoderConfig"),
         ("qwen2_moe", "Qwen2MoeConfig"),
@@ -252,6 +261,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerConfig"),
         ("rt_detr", "RTDetrConfig"),
         ("rt_detr_resnet", "RTDetrResNetConfig"),
+        ("rt_detr_v2", "RTDetrV2Config"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
         ("seamless_m4t", "SeamlessM4TConfig"),
@@ -270,6 +280,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertConfig"),
         ("stablelm", "StableLmConfig"),
         ("starcoder2", "Starcoder2Config"),
+        ("superglue", "SuperGlueConfig"),
         ("superpoint", "SuperPointConfig"),
         ("swiftformer", "SwiftFormerConfig"),
         ("swin", "SwinConfig"),
@@ -279,6 +290,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("t5", "T5Config"),
         ("table-transformer", "TableTransformerConfig"),
         ("tapas", "TapasConfig"),
+        ("textnet", "TextNetConfig"),
         ("time_series_transformer", "TimeSeriesTransformerConfig"),
         ("timesformer", "TimesformerConfig"),
         ("timm_backbone", "TimmBackboneConfig"),
@@ -308,6 +320,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_msn", "ViTMSNConfig"),
         ("vitdet", "VitDetConfig"),
         ("vitmatte", "VitMatteConfig"),
+        ("vitpose", "VitPoseConfig"),
+        ("vitpose_backbone", "VitPoseBackboneConfig"),
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
@@ -326,6 +340,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
         ("zamba", "ZambaConfig"),
+        ("zamba2", "Zamba2Config"),
         ("zoedepth", "ZoeDepthConfig"),
     ]
 )
@@ -388,6 +403,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("cpmant", "CPM-Ant"),
         ("ctrl", "CTRL"),
         ("cvt", "CvT"),
+        ("dab-detr", "DAB-DETR"),
         ("dac", "DAC"),
         ("data2vec-audio", "Data2VecAudio"),
         ("data2vec-text", "Data2VecText"),
@@ -401,9 +417,11 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("deplot", "DePlot"),
         ("depth_anything", "Depth Anything"),
         ("depth_anything_v2", "Depth Anything V2"),
+        ("depth_pro", "DepthPro"),
         ("deta", "DETA"),
         ("detr", "DETR"),
         ("dialogpt", "DialoGPT"),
+        ("diffllama", "DiffLlama"),
         ("dinat", "DiNAT"),
         ("dinov2", "DINOv2"),
         ("dinov2_with_registers", "DINOv2 with Registers"),
@@ -415,6 +433,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("efficientformer", "EfficientFormer"),
         ("efficientnet", "EfficientNet"),
         ("electra", "ELECTRA"),
+        ("emu3", "Emu3"),
         ("encodec", "EnCodec"),
         ("encoder-decoder", "Encoder decoder"),
         ("ernie", "ERNIE"),
@@ -438,6 +457,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("git", "GIT"),
         ("glm", "GLM"),
         ("glpn", "GLPN"),
+        ("got_ocr2", "GOT-OCR2"),
         ("gpt-sw3", "GPT-Sw3"),
         ("gpt2", "OpenAI GPT-2"),
         ("gpt_bigcode", "GPTBigCode"),
@@ -448,9 +468,11 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
         ("granitemoe", "GraniteMoeMoe"),
+        ("granitevision", "LLaVA-NeXT"),
         ("graphormer", "Graphormer"),
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
+        ("helium", "Helium"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
         ("hubert", "Hubert"),
@@ -515,6 +537,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
         ("modernbert", "ModernBERT"),
+        ("moonshine", "Moonshine"),
         ("moshi", "Moshi"),
         ("mpnet", "MPNet"),
         ("mpt", "MPT"),
@@ -562,6 +585,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pvt_v2", "PVTv2"),
         ("qdqbert", "QDQBert"),
         ("qwen2", "Qwen2"),
+        ("qwen2_5_vl", "Qwen2_5_VL"),
         ("qwen2_audio", "Qwen2Audio"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoE"),
@@ -581,6 +605,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roformer", "RoFormer"),
         ("rt_detr", "RT-DETR"),
         ("rt_detr_resnet", "RT-DETR-ResNet"),
+        ("rt_detr_v2", "RT-DETRv2"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
         ("seamless_m4t", "SeamlessM4T"),
@@ -599,6 +624,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("squeezebert", "SqueezeBERT"),
         ("stablelm", "StableLm"),
         ("starcoder2", "Starcoder2"),
+        ("superglue", "SuperGlue"),
         ("superpoint", "SuperPoint"),
         ("swiftformer", "SwiftFormer"),
         ("swin", "Swin Transformer"),
@@ -610,6 +636,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("table-transformer", "Table Transformer"),
         ("tapas", "TAPAS"),
         ("tapex", "TAPEX"),
+        ("textnet", "TextNet"),
         ("time_series_transformer", "Time Series Transformer"),
         ("timesformer", "TimeSformer"),
         ("timm_backbone", "TimmBackbone"),
@@ -640,6 +667,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_msn", "ViTMSN"),
         ("vitdet", "VitDet"),
         ("vitmatte", "ViTMatte"),
+        ("vitpose", "ViTPose"),
+        ("vitpose_backbone", "ViTPoseBackbone"),
         ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
@@ -662,6 +691,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
         ("zamba", "Zamba"),
+        ("zamba2", "Zamba2"),
         ("zoedepth", "ZoeDepth"),
     ]
 )
@@ -713,6 +743,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("siglip_vision_model", "siglip"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
+        ("granitevision", "llava_next"),
     ]
 )
 
@@ -1063,7 +1094,12 @@ class AutoConfig:
                 raise ValueError(
                     f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
                     "but Transformers does not recognize this architecture. This could be because of an "
-                    "issue with the checkpoint, or because your version of Transformers is out of date."
+                    "issue with the checkpoint, or because your version of Transformers is out of date.\n\n"
+                    "You can update Transformers with the command `pip install --upgrade transformers`. If this "
+                    "does not work, and the checkpoint is very new, then there may not be a release version "
+                    "that supports this model yet. In this case, you can get the most up-to-date code by installing "
+                    "Transformers from source with the command "
+                    "`pip install git+https://github.com/huggingface/transformers.git`"
                 )
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:

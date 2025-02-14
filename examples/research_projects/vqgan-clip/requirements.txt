@@ -21,7 +21,7 @@ taming-transformers
 torch
 torchvision
 tqdm
-transformers==4.38.0
+transformers==4.48.0
 tokenizers==0.13.2
 typing_extensions
 wandb

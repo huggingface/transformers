@@ -240,7 +240,6 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (M2M100ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": M2M100Model,
@@ -374,7 +373,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.7780, -0.1676, 0.1038], [-6.7556, -1.3992, 0.0567], [-7.5383, -0.5920, -0.2779]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_inference_head(self):
         model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M").to(torch_device)
@@ -391,7 +390,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-1.0448, -1.0411, 3.7992], [-3.2191, -3.2386, -1.3451], [-3.6210, -3.5993, 0.4925]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
         model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M").to(torch_device)
