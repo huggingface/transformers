@@ -29,7 +29,7 @@ class TimesFmConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`TimesFmModelForPrediction`] or a [`TFTimesFmModel`]. It is used to
     instantiate a TimesFM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the TimesFM
-    [google/timesfm-1.0-200m](https://huggingface.co/google/timesfm-1.0-200m) architecture.
+    [google/timesfm-2.0-500m-pytorch](https://huggingface.co/google/timesfm-2.0-500m-pytorch) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -43,7 +43,7 @@ class TimesFmConfig(PretrainedConfig):
             The length of the prediction horizon.
         freq_size (`int`, *optional*, defaults to 3):
             The number of frequency embeddings.
-        num_layers (`int`, *optional*, defaults to 20):
+        num_layers (`int`, *optional*, defaults to 50):
             Number of Transformer layers.
         model_dim (`int`, *optional*, defaults to 1280):
             Size of the hidden layers in the feed-forward networks.
@@ -64,7 +64,7 @@ class TimesFmConfig(PretrainedConfig):
             The value used to pad the predictions.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention scores.
-        use_positional_embedding (`bool`, *optional*, defaults to `True`):
+        use_positional_embedding (`bool`, *optional*, defaults to `False`):
             Whether to add positional embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -91,7 +91,7 @@ class TimesFmConfig(PretrainedConfig):
         context_len: int = 512,
         horizon_len: int = 128,
         freq_size: int = 3,
-        num_layers: int = 20,
+        num_layers: int = 50,
         model_dim: int = 1280,
         intermediate_size: int = 1280,
         head_dim: int = 80,
@@ -101,7 +101,7 @@ class TimesFmConfig(PretrainedConfig):
         quantiles: List[float] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
         pad_val: float = 1123581321.0,
         attention_dropout: float = 0.0,
-        use_positional_embedding: bool = True,
+        use_positional_embedding: bool = False,
         initializer_range: float = 0.02,
         min_timescale: int = 1,
         max_timescale: int = 10_000,
