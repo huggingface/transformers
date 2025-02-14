@@ -148,7 +148,6 @@ class TorchAoTest(unittest.TestCase):
         """
         quant_config = TorchAoConfig("int8_dynamic_activation_int8_weight")
 
-        # Note: we quantize the bfloat16 model on the fly to int4
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             device_map=self.device,
