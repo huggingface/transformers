@@ -19,7 +19,7 @@ import unittest
 import requests
 
 from transformers import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig, pipeline
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -105,6 +105,7 @@ class SamHQMaskDecoderTester:
             hidden_act=self.hidden_act,
             mlp_dim=self.mlp_dim,
             num_hidden_layers=self.num_hidden_layers,
+            # intermediate_embeddings=self.intermediate_embeddings,
             num_attention_heads=self.num_attention_heads,
             attention_downsample_rate=self.attention_downsample_rate,
             num_multimask_outputs=self.num_multimask_outputs,
@@ -120,7 +121,6 @@ class SamHQMaskDecoderTester:
         dummy_inputs = {
             "image_embedding": floats_tensor([self.batch_size, self.hidden_size]),
         }
-
         return config, dummy_inputs
 
 
@@ -246,11 +246,30 @@ class SamHQModelTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            image_embeddings,intermediate_embeddings = model.get_image_embeddings(pixel_values)
+            image_embeddings = model.get_image_embeddings(pixel_values)
+        self.parent.assertEqual(image_embeddings[0][0].shape, (self.output_channels , 12, 12))
 
+    def create_and_check_get_image_and_intermediate_embeddings(self, config, pixel_values):
+        model = SamHQModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            image_embeddings, intermediate_embeddings = model.get_image_embeddings(pixel_values)
 
         self.parent.assertEqual(image_embeddings[0].shape, (self.output_channels , 12, 12))
         self.parent.assertEqual(intermediate_embeddings[0][0].shape, (12, 12,self.hidden_size))
+
+    def create_and_check_get_image_intermediate_embeddings(self, config, pixel_values):
+        model = SamHQModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            image_embeddings,intermediate_embeddings = model.get_image_embeddings(pixel_values)
+
+        self.parent.assertIsInstance(intermediate_embeddings, list)
+        self.parent.assertTrue(len(intermediate_embeddings) > 0)
+        for embedding in intermediate_embeddings:
+            self.parent.assertEqual(embedding.shape, (self.batch_size,12, 12, self.hidden_size))
 
     def create_and_check_get_image_hidden_states(self, config, pixel_values):
         model = SamHQModel(config=config)
@@ -357,6 +376,14 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_get_image_features(*config_and_inputs)
 
+    def test_get_image_and_intermediate_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_get_image_and_intermediate_embeddings(*config_and_inputs)
+
+    def test_get_image_intermediate_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_get_image_intermediate_embeddings(*config_and_inputs)
+
     def test_image_hidden_states(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_get_image_hidden_states(*config_and_inputs)
@@ -457,6 +484,71 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "sushmanth/sam_hq_vit_b"
         model = SamHQModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+    
+    @require_torch_sdpa
+    def test_sdpa_can_compile_dynamic(self):
+        self.skipTest(reason="SamHQModel can't be compiled dynamic yet")
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
+
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+
+                # Root model determines SDPA support
+                attn_impl = "sdpa" if model._supports_sdpa else "eager"
+
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.vision_encoder.config._attn_implementation == attn_impl)
+                self.assertTrue(model_sdpa.mask_decoder.config._attn_implementation == attn_impl)
+
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.vision_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.mask_decoder.config._attn_implementation == "eager")
+                
+                # Verify SDPA/eager layer presence
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+
+                if not has_sdpa and attn_impl == "sdpa":
+                    raise ValueError("The SDPA model should have SDPA attention layers")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                            raise ValueError("The eager model should not have SDPA attention layers")
+                        
+
+
+    
 
 
 def prepare_image():
@@ -773,22 +865,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         _ = generator(raw_image, points_per_batch=64)
 
-    def test_intermediate_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        model = SamHQModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            # Get image embeddings and intermediate embeddings
-            image_embeddings, intermediate_embeddings = model.get_image_embeddings(pixel_values)
 
-            # Check if intermediate embeddings are returned
-            self.assertIsNotNone(intermediate_embeddings)
-            self.assertIsInstance(intermediate_embeddings, list)
-            self.assertTrue(len(intermediate_embeddings) > 0)
-            for embedding in intermediate_embeddings:
-                self.assertEqual(embedding.shape, (self.model_tester.batch_size, 12, 12, 36))
 
     def test_mask_decoder_hq_token_only(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -855,3 +932,4 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
             self.assertEqual(outputs[0].shape, (self.model_tester.batch_size, 1, 1, 256, 256))
             self.assertEqual(outputs[1].shape, (self.model_tester.batch_size, 1, 1))
+
