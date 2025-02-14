@@ -3522,7 +3522,7 @@ class WhisperEncoderModelTester:
 
 
 @require_torch
-class WhisperEncoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperForAudioClassification,) if is_torch_available() else ()
     is_encoder_decoder = False
     fx_compatible = False

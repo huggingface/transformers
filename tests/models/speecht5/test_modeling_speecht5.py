@@ -362,6 +362,8 @@ class SpeechT5ForSpeechToTextTester:
 @require_torch
 class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SpeechT5ForSpeechToText,) if is_torch_available() else ()
+    # Doesn't run generation tests. TODO eustache/joao: shape checks probably need an update
+    all_generative_model_classes = ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False

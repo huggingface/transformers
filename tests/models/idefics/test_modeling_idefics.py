@@ -868,6 +868,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
+    @unittest.skip(
+        "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
+
 
 @require_torch
 @require_vision

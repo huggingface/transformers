@@ -190,8 +190,6 @@ class InformerModelTester:
 @require_torch
 class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
-    # Doesn't run generation tests. Has a custom `generate` with an unique interface
-    all_generative_model_classes = ()
     pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False

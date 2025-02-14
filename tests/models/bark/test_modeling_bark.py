@@ -707,8 +707,6 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 @require_torch
 class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BarkFineModel,) if is_torch_available() else ()
-    # Doesn't run generation tests. Has custom generation method with a different interface
-    all_generative_model_classes = ()
 
     is_encoder_decoder = False
     fx_compatible = False
