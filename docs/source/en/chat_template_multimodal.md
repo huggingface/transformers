@@ -64,7 +64,7 @@ What are these?<|im_end|>
 
 To incorporate images into your chat templates, you can pass them as file paths or URLs. This method automatically loads the image, processes it, and prepares the necessary pixel values to create ready-to-use inputs for the model. This approach simplifies the integration of images, enabling seamless multimodal functionality.
 
-Let's see how it works with an example using the same model as above. This time we'll indicate an image URL with `"url"` key in the message's **content** and ask the chat template to `tokenize` and `return_dict`. Currently the following sources are supported to load images: "base64", "url", and "path .
+Let's see how it works with an example using the same model as above. This time we'll indicate an image URL with `"url"` key in the message's **content** and ask the chat template to `tokenize` and `return_dict`. Currently, "base64", "url", and "path" are supported image sources.
 
 ```python
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
