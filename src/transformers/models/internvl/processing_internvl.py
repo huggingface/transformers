@@ -16,14 +16,17 @@
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, make_batched_videos, make_flat_list_of_images
+from ...image_utils import ImageInput, concatenate_list, make_batched_videos, make_flat_list_of_images
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
+    crop_to_patches: Optional[bool]
     min_patches: Optional[int]
     max_patches: Optional[int]
 
@@ -35,6 +38,7 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
             "padding_side": "left",
         },
         "images_kwargs": {
+            "crop_to_patches": True,
             "min_patches": 1,
             "max_patches": 12,
         },
@@ -118,19 +122,34 @@ class InternVLProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        min_patches = output_kwargs["images_kwargs"].pop("min_patches")
-        max_patches = output_kwargs["images_kwargs"].pop("max_patches")
-
         if not isinstance(text, (list, tuple)):
             text = [text]
-        image_video_inputs = {}
+
+        # Process images and videos separately, as videos don't support crop_to_patches
+        image_num_patches = []
+        video_num_patches = []
+        image_videos_inputs = {}
+        if images is not None:
+            images = make_flat_list_of_images(images)
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+            image_num_patches = image_inputs.pop("num_patches")
+            image_pixel_values = image_inputs.pop("pixel_values")
+            image_num_patches_indices = np.cumsum(image_num_patches)
+        if videos is not None:
+            videos = make_batched_videos(videos)
+            num_frames_per_video = [len(video) for video in videos]
+            patch_indices = np.cumsum(num_frames_per_video)
+            output_kwargs["images_kwargs"]["crop_to_patches"] = False
+            video_inputs = self.image_processor(images=videos, **output_kwargs["images_kwargs"])
+            video_num_patches = video_inputs.pop("num_patches")
+            video_pixel_values = video_inputs.pop("pixel_values")
+            video_num_patches_indices = np.cumsum(video_num_patches)
+
         if images is not None or videos is not None:
-            images = make_flat_list_of_images(images) if images is not None else None
-            videos = make_batched_videos(videos) if videos is not None else None
             image_index = 0
             video_index = 0
             processed_text = []
-            image_video_inputs = []  # List to store processed image/video patches
+            image_video_patches = []  # List to store processed image/video patches
             # Support interlaced image and video in prompts
             for prompt in text:
                 new_prompt = prompt
@@ -138,43 +157,35 @@ class InternVLProcessor(ProcessorMixin):
                     if "<image>" in new_prompt and (
                         "<video>" not in new_prompt or new_prompt.index("<image>") < new_prompt.index("<video>")
                     ):
-                        image_patches = self.image_processor.crop_image_to_patches(
-                            images[image_index],
-                            patch_size=output_kwargs["images_kwargs"].get("size"),
-                            min_patches=min_patches,
-                            max_patches=max_patches,
-                        )
-                        image_video_inputs.append(image_patches)
+                        start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
+                        end_index = image_num_patches_indices[image_index]
+                        image_video_patches.append(image_pixel_values[start_index:end_index])
                         new_prompt = new_prompt.replace(
-                            "<image>", f"<img>{'<IMG_CONTEXT>' * self.image_seq_length * len(image_patches)}</img>", 1
+                            "<image>",
+                            f"<img>{'<IMG_CONTEXT>' * self.image_seq_length * image_num_patches[image_index]}</img>",
+                            1,
                         )
                         image_index += 1
                     else:
-                        video = videos[video_index]
-                        for index_image, image_group in enumerate(video):
-                            image_group = self.image_processor.crop_image_to_patches(
-                                image_group,
-                                patch_size=output_kwargs["images_kwargs"].get("size"),
-                                min_patches=1,
-                                max_patches=1,
-                            )
-                            video[index_image] = image_group
+                        current_patch_index = patch_indices[video_index - 1] if video_index > 0 else 0
+                        end_patch_index = patch_indices[video_index]
+                        start_index = video_num_patches_indices[current_patch_index] if video_index > 0 else 0
+                        end_index = video_num_patches_indices[end_patch_index - 1]
+                        image_video_patches.append(video_pixel_values[start_index:end_index])
+                        num_patches = list(video_num_patches[current_patch_index:end_patch_index])
                         video_prompt = "\n".join(
-                            f"Frame{i+1}: <img>{'<IMG_CONTEXT>'*self.image_seq_length* len(video[i])}</img>"
-                            for i in range(len(video))
+                            f"Frame{i+1}: <img>{'<IMG_CONTEXT>'*self.image_seq_length* num_patches[i]}</img>"
+                            for i in range(len(num_patches))
                         )
                         new_prompt = new_prompt.replace("<video>", video_prompt, 1)
-                        image_video_inputs.append([image for group in video for image in group])
                         video_index += 1
-
                 processed_text.append(new_prompt)
+            image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
             text = processed_text
-            # Single call to process all interleaved image/video patches
-            image_video_inputs = self.image_processor(images=image_video_inputs, **output_kwargs["images_kwargs"])
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        return BatchFeature(data={**text_inputs, **image_video_inputs})
+        return BatchFeature(data={**text_inputs, **image_videos_inputs})
 
     def batch_decode(self, *args, **kwargs):
         """
