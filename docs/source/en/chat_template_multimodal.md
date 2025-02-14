@@ -203,7 +203,7 @@ print(processed_chat.keys())
 By using `sample_indices_fn`, you gain **full control** over frame selection, making your model **more adaptable** to different video scenarios. 🚀  
 
 
-### Using a List of Image Frames as a Video
+### List of image frames as video
 
 Sometimes, instead of having a full video file, you might only have a set of sampled frames stored as images. No worries—we've got you covered!
 
