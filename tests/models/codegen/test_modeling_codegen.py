@@ -322,7 +322,6 @@ class CodeGenModelTester:
 @require_torch
 class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CodeGenModel, CodeGenForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (CodeGenForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": CodeGenModel, "text-generation": CodeGenForCausalLM} if is_torch_available() else {}
     )

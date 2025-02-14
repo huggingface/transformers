@@ -302,7 +302,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Zamba2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Zamba2Model,
@@ -331,6 +330,10 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         For mamba layers, the KV cache has shape is empty and has shape [batch_size, 0].
         The shape checks of this test assume instead that every layer has an attention cache, so we skip it.
         """
+        pass
+
+    @unittest.skip(reason="Zamba2 has hybrid cache.")
+    def test_generate_continue_from_inputs_embeds(self):
         pass
 
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
