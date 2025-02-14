@@ -91,30 +91,24 @@ class TimesFmResidualBlock(nn.Module):
         return output + residual
 
 
-class TimesFmRMSNorm(torch.nn.Module):
-    """Pax rms norm in pytorch."""
-
-    def __init__(
-        self,
-        dim: int,
-        eps: float = 1e-6,
-        add_unit_offset: bool = False,
-    ):
+class TimesFmRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        TimesFmRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        self.eps = eps
-        self.add_unit_offset = add_unit_offset
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
-    def forward(self, x):
-        output = self._norm(x.float())
-        if self.add_unit_offset:
-            output = output * (1 + self.weight.float())
-        else:
-            output = output * self.weight.float()
-        return output.type_as(x)
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class TimesFmPositionalEmbedding(nn.Module):
@@ -904,7 +898,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     def forward(
         self,
         inputs: Sequence[torch.Tensor],
-        freq: Optional[Sequence[Union[torch.Tensor,int]]] = None,
+        freq: Optional[Sequence[Union[torch.Tensor, int]]] = None,
         window_size: Optional[int] = None,
         future_target: Optional[torch.Tensor] = None,
         forecast_context_len: Optional[int] = None,
@@ -1034,7 +1028,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             ]
         else:
             # `full_outputs` indexing starts at the forecast horizon.
-            full_outputs = torch.concatenate(full_outputs, axis=1)[:, 0:self.horizon_len, :]
+            full_outputs = torch.concatenate(full_outputs, axis=1)[:, 0 : self.horizon_len, :]
 
         mean_outputs = full_outputs[:, :, 0]
         if window_size is not None:
@@ -1067,3 +1061,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 return_tuple.append(decoder_output.all_attentions)
             return_tuple += [mean_outputs, full_outputs, loss]
             return tuple(return_tuple)
+
+
+__all__ = [
+    "TimesFmModelForPrediction",
+    "TimesFmPreTrainedModel",
+]
