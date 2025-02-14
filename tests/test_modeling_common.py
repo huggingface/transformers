@@ -4962,10 +4962,10 @@ class ModelTesterMixin:
                 msg=(
                     "This model can call `generate` from `GenerationMixin`, so one of two things must happen: 1) the "
                     "tester must inherit from `GenerationTesterMixin` to run `generate` tests, or 2) if the model "
-                    "doesn't fully support the original `generate` or has a custom `generate`, the tester must "
-                    "overwrite `all_generative_model_classes` to skip the failing classes (make sure to comment "
-                    "why). If `all_generative_model_classes` is overwritten as `()`, then we need to remove the "
-                    "`GenerationTesterMixin` inheritance -- no `generate` tests are being run anyway."
+                    "doesn't fully support the original `generate` or has a custom `generate` with partial feature "
+                    "support, the tester must overwrite `all_generative_model_classes` to skip the failing classes "
+                    "(make sure to comment why). If `all_generative_model_classes` is overwritten as `()`, then we "
+                    "need to remove the `GenerationTesterMixin` inheritance -- no `generate` tests are being run."
                 ),
             )
         else:
