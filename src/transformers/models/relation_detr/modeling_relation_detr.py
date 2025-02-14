@@ -2526,7 +2526,7 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # _tied_weights_keys = [r"bbox_head\.[1-9]\d*", r"class_head\.[1-9]\d*"]
     # We can't initialize the model on meta device as some weights are modified during the initialization
-    _no_split_modules = None
+    _no_split_modules = [r"RelationDetrConvEncoder", r"RelationDetrEncoderLayer", r"RelationDetrDecoderLayer"]
 
     def __init__(self, config: RelationDetrConfig):
         super().__init__(config)
