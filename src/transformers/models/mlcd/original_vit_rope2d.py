@@ -65,6 +65,7 @@ class VisionRotaryEmbedding(nn.Module):
 # elif "out_proj.bias" in k:
 #     convert[k.replace("out_proj.bias", "proj.bias")] = v
 
+
 class VisionSdpaAttention(nn.Module):
     def __init__(self, dim: int, num_heads: int = 16) -> None:
         super().__init__()
@@ -74,7 +75,7 @@ class VisionSdpaAttention(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor = None, rotary_pos_emb: torch.Tensor = None
-) -> torch.Tensor:
+    ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         batch_size = hidden_states.shape[1]
 
@@ -120,22 +121,22 @@ class QuickGELU(nn.Module):
 
 class ResidualAttentionBlock(nn.Module):
     def __init__(
-            self,
-            d_model: int,
-            n_head: int,
-            mlp_ratio: float = 4.0,
-            act_layer: Callable = nn.GELU,
-            scale_cosine_attn: bool = False,
-            scale_heads: bool = False,
-            scale_attn: bool = False,
-            scale_fc: bool = False,
-            attn_type = 'vision',
-            drop_path = 0,
+        self,
+        d_model: int,
+        n_head: int,
+        mlp_ratio: float = 4.0,
+        act_layer: Callable = nn.GELU,
+        scale_cosine_attn: bool = False,
+        scale_heads: bool = False,
+        scale_attn: bool = False,
+        scale_fc: bool = False,
+        attn_type="vision",
+        drop_path=0,
     ):
         super().__init__()
         self.attn_type = attn_type
         self.ln_1 = LayerNorm(d_model)
-        if attn_type == 'vision':
+        if attn_type == "vision":
             self.attn = VisionSdpaAttention(d_model, n_head)
         else:
             self.attn = nn.MultiheadAttention(d_model, n_head)
@@ -144,30 +145,35 @@ class ResidualAttentionBlock(nn.Module):
 
         self.ln_2 = LayerNorm(d_model)
         mlp_width = int(d_model * mlp_ratio)
-        self.mlp = nn.Sequential(OrderedDict([
-            ("c_fc", nn.Linear(d_model, mlp_width)),
-            ('ln', LayerNorm(mlp_width) if scale_fc else nn.Identity()),
-            ("gelu", act_layer()),
-            ("c_proj", nn.Linear(mlp_width, d_model))
-        ]))
+        self.mlp = nn.Sequential(
+            OrderedDict(
+                [
+                    ("c_fc", nn.Linear(d_model, mlp_width)),
+                    ("ln", LayerNorm(mlp_width) if scale_fc else nn.Identity()),
+                    ("gelu", act_layer()),
+                    ("c_proj", nn.Linear(mlp_width, d_model)),
+                ]
+            )
+        )
 
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def attention(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, rotary_pos_emb: Optional[torch.Tensor] = None):
-        if self.attn_type == 'vision':
+    def attention(
+        self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, rotary_pos_emb: Optional[torch.Tensor] = None
+    ):
+        if self.attn_type == "vision":
             assert rotary_pos_emb is not None
             return self.attn(x, rotary_pos_emb=rotary_pos_emb)
         else:
             return self.attn(x, x, x, need_weights=False, attn_mask=attn_mask)[0]
 
-
-    def forward(self,
-                x: torch.Tensor,
-                attn_mask: Optional[torch.Tensor] = None,
-                rotary_pos_emb: Optional[torch.Tensor] = None):
-
+    def forward(
+        self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, rotary_pos_emb: Optional[torch.Tensor] = None
+    ):
         if rotary_pos_emb is not None:
-            x = x + self.drop_path(self.ln_attn(self.attention(self.ln_1(x), attn_mask=attn_mask, rotary_pos_emb=rotary_pos_emb)))
+            x = x + self.drop_path(
+                self.ln_attn(self.attention(self.ln_1(x), attn_mask=attn_mask, rotary_pos_emb=rotary_pos_emb))
+            )
             x = x + self.drop_path(self.mlp(self.ln_2(x)))
         else:
             x = x + self.drop_path(self.ln_attn(self.attention(self.ln_1(x), attn_mask=attn_mask)))
@@ -176,23 +182,35 @@ class ResidualAttentionBlock(nn.Module):
 
 
 class Transformer(nn.Module):
-    def __init__(self, width: int, layers: int, heads: int,  mlp_ratio: float = 4.0, act_layer: Callable = nn.GELU, attn_type='text', drop_path=0):
+    def __init__(
+        self,
+        width: int,
+        layers: int,
+        heads: int,
+        mlp_ratio: float = 4.0,
+        act_layer: Callable = nn.GELU,
+        attn_type="text",
+        drop_path=0,
+    ):
         super().__init__()
         self.width = width
         self.layers = layers
         self.grad_checkpointing = False
         self.attn_type = attn_type
 
-        self.resblocks = nn.ModuleList([
-            ResidualAttentionBlock(
-                width, heads, mlp_ratio,
-                act_layer=act_layer, attn_type=attn_type,
-                drop_path=drop_path)
-            for _ in range(layers)
-        ])
+        self.resblocks = nn.ModuleList(
+            [
+                ResidualAttentionBlock(
+                    width, heads, mlp_ratio, act_layer=act_layer, attn_type=attn_type, drop_path=drop_path
+                )
+                for _ in range(layers)
+            ]
+        )
 
-    def forward(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, rotary_pos_emb: Optional[torch.Tensor] = None):
-        if self.attn_type == 'vision':
+    def forward(
+        self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, rotary_pos_emb: Optional[torch.Tensor] = None
+    ):
+        if self.attn_type == "vision":
             for r in self.resblocks:
                 if self.grad_checkpointing and not torch.jit.is_scripting():
                     x = checkpoint(r, x, attn_mask, rotary_pos_emb)
@@ -207,7 +225,9 @@ class Transformer(nn.Module):
                     x = r(x, attn_mask=attn_mask)
             return x
 
-    def forward_hidden_states(self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, rotary_pos_emb: Optional[torch.Tensor] = None):
+    def forward_hidden_states(
+        self, x: torch.Tensor, attn_mask: Optional[torch.Tensor] = None, rotary_pos_emb: Optional[torch.Tensor] = None
+    ):
         list_hidden_states = []
         list_hidden_states.append(x.permute(1, 0, 2))
         for r in self.resblocks:
@@ -218,30 +238,34 @@ class Transformer(nn.Module):
 
 class VisualTransformer(nn.Module):
     def __init__(
-            self,
-            patch_size: int,
-            width: int,
-            layers: int,
-            heads: int,
-            mlp_ratio: float,
-            output_dim: int,
-            act_layer: Callable = nn.GELU,
-            drop_path=0,
-            proj=None,
+        self,
+        patch_size: int,
+        width: int,
+        layers: int,
+        heads: int,
+        mlp_ratio: float,
+        output_dim: int,
+        act_layer: Callable = nn.GELU,
+        drop_path=0,
+        proj=None,
     ):
         super().__init__()
         self.spatial_merge_size = 1
 
         self.patch_size = to_2tuple(patch_size)
         self.output_dim = output_dim
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False)
+        self.conv1 = nn.Conv2d(
+            in_channels=3, out_channels=width, kernel_size=patch_size, stride=patch_size, bias=False
+        )
 
-        scale = width ** -0.5
+        scale = width**-0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(width))
 
         self.ln_pre = LayerNorm(width)
 
-        self.transformer = Transformer(width, layers, heads, mlp_ratio, act_layer=act_layer, attn_type='vision', drop_path=drop_path)
+        self.transformer = Transformer(
+            width, layers, heads, mlp_ratio, act_layer=act_layer, attn_type="vision", drop_path=drop_path
+        )
 
         self.ln_post = LayerNorm(width)
         if proj:
@@ -251,8 +275,6 @@ class VisualTransformer(nn.Module):
 
         self.vision_rotary_embedding = VisionRotaryEmbedding(width // heads // 2)
         self.class_pos_emb = nn.Parameter(torch.randn(1, width // heads // 2))
-
-
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -283,9 +305,8 @@ class VisualTransformer(nn.Module):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
-
     def lock(self, unlocked_groups=0, freeze_bn_stats=False):
-        assert unlocked_groups == 0, 'partial locking not currently supported for this model'
+        assert unlocked_groups == 0, "partial locking not currently supported for this model"
         for param in self.parameters():
             param.requires_grad = False
 
@@ -293,7 +314,7 @@ class VisualTransformer(nn.Module):
     def set_grad_checkpointing(self, enable=False):
         self.transformer.grad_checkpointing = enable
 
-    def forward(self, x: torch.Tensor, twh = None):
+    def forward(self, x: torch.Tensor, twh=None):
         if twh is None:
             twh = (1, x.size(3) // self.patch_size[0], x.size(2) // self.patch_size[1])
         rotary_pos_emb = self.rot_pos_emb(torch.tensor([twh], device=x.device))
@@ -303,8 +324,13 @@ class VisualTransformer(nn.Module):
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat(
-            [self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
-             x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+            [
+                self.class_embedding.to(x.dtype)
+                + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
+                x,
+            ],
+            dim=1,
+        )  # shape = [*, grid ** 2 + 1, width]
         # x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
 
@@ -319,8 +345,7 @@ class VisualTransformer(nn.Module):
 
         return x
 
-
-    def forward_hidden_states(self, x: torch.Tensor, twh = None):
+    def forward_hidden_states(self, x: torch.Tensor, twh=None):
         if twh is None:
             twh = (1, x.size(3) // self.patch_size[0], x.size(2) // self.patch_size[1])
         rotary_pos_emb = self.rot_pos_emb(torch.tensor([twh], device=x.device))
@@ -330,16 +355,20 @@ class VisualTransformer(nn.Module):
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat(
-            [self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
-             x], dim=1)  # shape = [*, grid ** 2 + 1, width]
+            [
+                self.class_embedding.to(x.dtype)
+                + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device),
+                x,
+            ],
+            dim=1,
+        )  # shape = [*, grid ** 2 + 1, width]
         # x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> LND
         return self.transformer.forward_hidden_states(x, rotary_pos_emb=rotary_pos_emb)
 
-    def load_state_dict(self, state_dict, strict = True, assign = False):
-
+    def load_state_dict(self, state_dict, strict=True, assign=False):
         if "positional_embedding" in state_dict:
             state_dict.pop("positional_embedding")
 

@@ -40,7 +40,6 @@ from .original_vit_rope2d import RoPE2d_ViT_bigG_14_1024
 
 
 def copy_attn_layer(hf_attn_layer, pt_attn_layer):
-
     # self.in_proj = nn.Linear(dim, dim * 3, bias=True)
     # self.out_proj = nn.Linear(dim, dim)
 
@@ -140,20 +139,20 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
         config = MLCDVisionConfig.from_pretrained(config_path)
     else:
         config = MLCDVisionConfig(
-        hidden_size=1664,
-        intermediate_size=8192,
-        projection_dim=1024,
-        num_hidden_layers=48,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=336,
-        patch_size=14,
-        hidden_act="gelu",
-        layer_norm_eps=1e-5,
-        attention_dropout=0.0,
-        initializer_range=0.02,
-        initializer_factor=1.0,
-    )
+            hidden_size=1664,
+            intermediate_size=8192,
+            projection_dim=1024,
+            num_hidden_layers=48,
+            num_attention_heads=16,
+            num_channels=3,
+            image_size=336,
+            patch_size=14,
+            hidden_act="gelu",
+            layer_norm_eps=1e-5,
+            attention_dropout=0.0,
+            initializer_range=0.02,
+            initializer_factor=1.0,
+        )
 
     hf_model = MLCDVisionModel(config).eval()
 
@@ -182,7 +181,6 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     )
     mlcd_image_processor.save_pretrained(pytorch_dump_folder_path)
 
-
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
     hf_image = mlcd_image_processor(image, return_tensors="pt")
@@ -201,10 +199,8 @@ def convert_clip_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_pa
     # cosine
     for i in range(49):
         cosine = torch.nn.functional.cosine_similarity(
-            result.hidden_states[i][:, 0].reshape(-1),
-            list_hidden_states[i][:, 0].reshape(-1),
-            dim=-1
-            )
+            result.hidden_states[i][:, 0].reshape(-1), list_hidden_states[i][:, 0].reshape(-1), dim=-1
+        )
         cosine = cosine.item()
         assert cosine > 0.9999, f"cosine: {cosine} at layer {i}"
 

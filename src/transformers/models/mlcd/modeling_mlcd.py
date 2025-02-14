@@ -127,7 +127,6 @@ class MLCDVisionEmbeddings(torch.nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
 
-
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embedding.weight.dtype
@@ -166,14 +165,13 @@ class MLCDSdpaAttention(torch.nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
         rotary_pos_emb: torch.Tensor,
-        ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Seq x Hidden Size"""
-        batch_size, seq_length , hidden_size = hidden_states.size()
+        batch_size, seq_length, hidden_size = hidden_states.size()
         # Each of shape: [batch_size, seq_length, num_heads, head_dim]
         q = self.q_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
         k = self.k_proj(hidden_states).reshape((batch_size, seq_length, self.num_heads, self.head_dim))
@@ -296,15 +294,10 @@ class MLCDEncoder(nn.Module):
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    encoder_layer.__call__,
-                    hidden_states,
-                    rotary_pos_emb
+                    encoder_layer.__call__, hidden_states, rotary_pos_emb
                 )
             else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    rotary_pos_emb
-                )
+                layer_outputs = encoder_layer(hidden_states, rotary_pos_emb)
 
             hidden_states = layer_outputs[0]
 
@@ -314,7 +307,9 @@ class MLCDEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, None] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=None,
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=None,
         )
 
 
@@ -331,7 +326,6 @@ class MLCDVisionTransformer(nn.Module):
 
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
         self.class_pos_emb = nn.Parameter(torch.rand(1, config.hidden_size // config.num_attention_heads // 2))
-
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -351,7 +345,6 @@ class MLCDVisionTransformer(nn.Module):
         rotary_pos_emb_full = self.vision_rotary_embedding(max_grid_size)
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
-
 
     def forward(
         self,
@@ -425,6 +418,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
     config_class = MLCDVisionConfig
     base_model_prefix = "mlcd"
     supports_gradient_checkpointing = True
@@ -452,7 +446,6 @@ class MLCDPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()

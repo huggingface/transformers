@@ -112,4 +112,5 @@ class MLCDVisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
+
 __all__ = ["MLCDVisionConfig"]
