@@ -274,7 +274,6 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (UdopForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": UdopModel, "image-text-to-text": UdopForConditionalGeneration}
         if is_torch_available()
