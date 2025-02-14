@@ -71,6 +71,35 @@ remote: 0.90 [333.09, 76.71, 369.77, 187.4]
 couch: 0.90 [0.45, 0.53, 640.44, 475.54]
 ```
 
+Relation-DETR also supports inference through the pipeline API. For comprehensive guidance, please refer to the [Pipeline Tutorial](https://huggingface.co/docs/transformers/v4.48.2/en/pipeline_tutorial).
+
+```python
+>>> import requests
+>>> from PIL import Image
+>>> from transformers import pipeline
+
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> obj_detector = pipeline("object-detection", model="xiuqhou/relation-detr-resnet50")
+>>> obj_detector(image)
+[{'score': 0.9554353952407837,
+  'label': 'cat',
+  'box': {'xmin': 343, 'ymin': 24, 'xmax': 639, 'ymax': 371}},
+ {'score': 0.9514887928962708,
+  'label': 'cat',
+  'box': {'xmin': 12, 'ymin': 54, 'xmax': 316, 'ymax': 471}},
+ {'score': 0.9453385472297668,
+  'label': 'remote',
+  'box': {'xmin': 40, 'ymin': 73, 'xmax': 175, 'ymax': 118}},
+ {'score': 0.8958991169929504,
+  'label': 'couch',
+  'box': {'xmin': 0, 'ymin': 0, 'xmax': 640, 'ymax': 475}},
+ {'score': 0.8953362703323364,
+  'label': 'remote',
+  'box': {'xmin': 333, 'ymin': 76, 'xmax': 369, 'ymax': 187}}]
+```
+
 ## RelationDetrConfig
 
 [[autodoc]] RelationDetrConfig
