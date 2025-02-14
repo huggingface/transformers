@@ -1117,16 +1117,43 @@ class ProcessorMixin(PushToHubMixin):
                         f"Only the `tokenizer_class` attribute can have a tuple of classes. "
                         f" Got {attribute_name} with {class_name}."
                     )
-                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                classes = tuple(getattr(transformers_module, n, None) if n is not None else None for n in class_name)
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = getattr(transformers_module, class_name)
-
-            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+                attribute_class = getattr(transformers_module, class_name, None)
+            if attribute_class is not None:
+                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
+            else:
+                if attribute_name == "tokenizer":
+                    autoclass = getattr(transformers_module, "AutoTokenizer")
+                elif attribute_name == "image_processor":
+                    autoclass = getattr(transformers_module, "AutoImageProcessor")
+                elif attribute_name == "feature_extractor":
+                    autoclass = getattr(transformers_module, "AutoFeatureExtractor")
+                elif attribute_name == "config":
+                    autoclass = getattr(transformers_module, "AutoConfig")
+                else:
+                    raise ValueError(
+                        f"The {cls.__name__} class has {attribute_name}_class "
+                        f"{getattr(cls, f"{attribute_name}_class")}"
+                        f"but we could not find this class in the Transformers root. We also cannot "
+                        f"find an autoclass for {attribute_name}, and so Transformers doesn't know how "
+                        f"to load it!"
+                    )
+                try:
+                    args.append(autoclass.from_pretrained(pretrained_model_name_or_path, **kwargs))
+                except:  # noqa
+                    raise ValueError(
+                        f"The {cls.__name__} class has {attribute_name}_class "
+                        f"{getattr(cls, f"{attribute_name}_class")}"
+                        f"but we could not find this class in the Transformers root. We also could "
+                        f"not load it with {autoclass.__name__}, and so Transformers doesn't know how "
+                        f"to initialize this module!"
+                    )
         return args
 
     @property
