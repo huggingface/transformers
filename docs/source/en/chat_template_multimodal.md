@@ -23,7 +23,7 @@ Just like with text-only LLMs, multimodal models expect a chat with **messages**
 
 ## Image inputs
 
-For models such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted as below. Notice that the only difference from text-only models is that we need to pass as well a placeholder for input images. TO accomodate for extra modalities, each **content** will be a list containing either a text or an image **type**.
+For models such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted as below. Notice that the only difference from text-only models is that we need to also pass a placeholder for input images. To accommodate for extra modalities, each **content** is a list containing either a text or an image **type**.
 
 Let's make this concrete with a quick example using the `llava-hf/llava-onevision-qwen2-0.5b-ov-hf` model:
 
