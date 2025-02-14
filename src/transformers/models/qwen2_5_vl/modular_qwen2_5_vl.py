@@ -51,7 +51,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_flash_attn_2_available, is_torchdynamo_compiling
+from ...utils import is_flash_attn_2_available, is_torchdynamo_compiling, logging
 
 
 if is_flash_attn_2_available():
@@ -63,12 +63,17 @@ else:
     apply_rotary_emb = None
 
 
-def apply_rotary_pos_emb_flashatt(tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
-    tensor_ = tensor.float()
-    cos = freqs.cos().float()
-    sin = freqs.sin().float()
-    output = apply_rotary_emb(tensor_, cos, sin).type_as(tensor)
-    return output
+logger = logging.get_logger(__name__)
+
+
+def apply_rotary_pos_emb_flashatt(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    cos = cos.chunk(2, dim=-1)[0].contiguous()
+    sin = sin.chunk(2, dim=-1)[0].contiguous()
+    q_embed = apply_rotary_emb(q.float(), cos, sin).type_as(q)
+    k_embed = apply_rotary_emb(k.float(), cos, sin).type_as(k)
+    return q_embed, k_embed
 
 
 class Qwen2_5_VLVisionConfig(PretrainedConfig):
@@ -153,12 +158,26 @@ class Qwen2_5_VLVisionFlashAttention2(nn.Module):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor = None,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        q = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
-        k = apply_rotary_pos_emb_flashatt(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
+        if position_embeddings is None:
+            logger.warning_once(
+                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
+                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
+                "removed and `position_embeddings` will be mandatory."
+            )
+            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+            cos = emb.cos().float()
+            sin = emb.sin().float()
+        else:
+            cos, sin = position_embeddings
+        q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
+        q = q.squeeze(0)
+        k = k.squeeze(0)
 
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
         attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
@@ -193,11 +212,18 @@ class Qwen2_5_VLVisionBlock(nn.Module):
         )
         self.mlp = Qwen2_5_VLMLP(config, bias=True)
 
-    def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
             rotary_pos_emb=rotary_pos_emb,
+            position_embeddings=position_embeddings,
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
@@ -312,7 +338,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
+            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
@@ -337,6 +363,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
         rotary_pos_emb = rotary_pos_emb[window_index, :, :]
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0,
@@ -355,14 +383,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 cu_seqlens_now = cu_window_seqlens
             if self.gradient_checkpointing and self.training:
                 hidden_states = self._gradient_checkpointing_func(
-                    blk.__call__, hidden_states, cu_seqlens_now, rotary_pos_emb
+                    blk.__call__, hidden_states, cu_seqlens_now, None, position_embeddings
                 )
             else:
-                hidden_states = blk(
-                    hidden_states,
-                    cu_seqlens=cu_seqlens_now,
-                    rotary_pos_emb=rotary_pos_emb,
-                )
+                hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens_now, position_embeddings=position_embeddings)
 
         hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
@@ -382,7 +406,7 @@ class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
     config_class = Qwen2_5_VLConfig
-    _no_split_modules = ["Qwen2VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
+    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config):
         super().__init__(config)
