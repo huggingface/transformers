@@ -244,7 +244,7 @@ To be supported soon. Stay tuned! 🤗
 
 ## Multimodal conversational pipeline
 
-Yes, similarly to text generation pipeline we support an [`ImageTextToTextPipeline`]. Currently it accepts only images as inputs but we are planning to add support for video inputs in the future. The pipeline supports chat inputs in the same format as we have seen above. Apart from that the pipeline will accept chats in OpenAI format. However note, that OpenAI format in supported exclusively within the pipeline to make inference easier and more accessible. 
+[`ImageTextToTextPipeline`] currently accepts images as inputs but we are planning to add support for video inputs in the future. The pipeline supports chat inputs in the same format as we have seen above. Apart from that, the pipeline will accept chats in OpenAI format. This format is supported exclusively within the pipeline to make inference easier and more accessible. 
 
 Here is how OpenAI conversation format looks like:
 
