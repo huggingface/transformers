@@ -464,8 +464,8 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
         outputs = model(**inputs)
 
-        # we take the second output since last_hidden_state is the second item
-        output = outputs[1]
+        # we take the first output since last_hidden_state is the first item
+        output = outputs[0]
 
         encoder_hidden_states = outputs.encoder_hidden_states[0]
         encoder_attentions = outputs.encoder_attentions[0]
