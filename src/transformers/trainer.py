@@ -1,4 +1,3 @@
-Trainer.py
 # coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
@@ -3179,7 +3178,11 @@ class Trainer:
                         self.model, "load_adapter"
                     ):
                         active_adapter = self._active_adapter_bc(self.model)
-                        output_dir = str(os.path.join(output_dir, active_adapter)) if active_adapter != "default" else output_dir
+                        output_dir = (
+                            str(os.path.join(output_dir, active_adapter))
+                            if active_adapter != "default"
+                            else output_dir
+                        )
                 self.state.best_model_checkpoint = output_dir
 
                 is_new_best_metric = True
