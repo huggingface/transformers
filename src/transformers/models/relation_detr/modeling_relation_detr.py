@@ -598,15 +598,15 @@ class RelationDetrSinePositionEmbedding(nn.Module):
         self.scale = config.sin_cos_scale
         self.eps = 1e-6
         self.offset = config.sin_cos_offset
-        assert (
-            isinstance(self.temperature, int) or len(self.temperature) == 2
-        ), "Only support (t_x, t_y) or an integer t for temperature"
+        if not isinstance(self.temperature, int) and not len(self.temperature) == 2:
+            raise ValueError("`sin_cos_temperature` should be an int, or a list of two ints for x and y dimension, respectively")
 
-    def get_dim_t(self, device: torch.device):
         if isinstance(self.temperature, int):
-            dim_t = get_dim_t(self.embedding_dim, self.temperature, device)
-            return dim_t, dim_t
-        return (get_dim_t(self.embedding_dim, t, device) for t in self.temperature)
+            self.dim_tx = self.dim_ty = get_dim_t(self.embedding_dim, self.temperature, torch.device("cpu"))
+        else:
+            temperature_x, temperature_y = self.temperature
+            self.dim_tx = get_dim_t(self.embedding_dim, temperature_x, torch.device("cpu"))
+            self.dim_ty = get_dim_t(self.embedding_dim, temperature_y, torch.device("cpu"))
 
     def forward(self, pixel_mask: torch.Tensor) -> torch.Tensor:
         y_embed = pixel_mask.cumsum(1)
@@ -618,10 +618,8 @@ class RelationDetrSinePositionEmbedding(nn.Module):
             y_embed = y_embed + self.offset
             x_embed = x_embed + self.offset
 
-        dim_tx, dim_ty = self.get_dim_t(pixel_mask.device)
-
-        pos_x = x_embed.unsqueeze(-1) / dim_tx
-        pos_y = y_embed.unsqueeze(-1) / dim_ty
+        pos_x = x_embed.unsqueeze(-1) / self.dim_tx
+        pos_y = y_embed.unsqueeze(-1) / self.dim_ty
         pos_x = torch.stack((pos_x.sin(), pos_x.cos()), dim=-1).flatten(-2)
         pos_y = torch.stack((pos_y.sin(), pos_y.cos()), dim=-1).flatten(-2)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
