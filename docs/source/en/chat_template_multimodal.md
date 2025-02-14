@@ -97,7 +97,7 @@ dict_keys(["input_ids", "attention_mask", "pixel_values", "image_sizes"])
 ```
 
 
-## How to use chat templates with video inputs
+## Video inputs
 
 Some vision models support videos as inputs as well as images. The message format is very similar to the image-only models with tiny differences to handle loading videos from a URL. We can continue using the same model as before since it supports videos.
 
