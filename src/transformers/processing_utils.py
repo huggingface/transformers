@@ -1077,6 +1077,11 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
+                if not attribute_name == "tokenizer":
+                    raise ValueError(
+                        f"Only the `tokenizer_class` attribute can have a tuple of classes. "
+                        f" Got {attribute_name} with {class_name}."
+                    )
                 classes = tuple(
                     cls._get_class_from_class_name(attribute_name, n) if n is not None else None for n in class_name
                 )
