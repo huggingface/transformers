@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Google LLC and HuggingFace Inc. team.
+# Copyright 2025 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 import logging
 import math
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple, Optional, Union
+from typing import List, Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -982,7 +982,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
         inp_freq = inp_freq.to(device)
-        
+
         final_out = input_ts
         context_len = final_out.shape[1]
         full_outputs = []
