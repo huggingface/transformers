@@ -101,6 +101,7 @@ _import_structure = {
     "data.data_collator": [
         "DataCollator",
         "DataCollatorForLanguageModeling",
+        "DataCollatorForMultipleChoice",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
         "DataCollatorForSOP",
@@ -495,6 +496,7 @@ _import_structure = {
     "models.gptj": ["GPTJConfig"],
     "models.granite": ["GraniteConfig"],
     "models.granitemoe": ["GraniteMoeConfig"],
+    "models.granitemoeshared": ["GraniteMoeSharedConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -1023,10 +1025,12 @@ _import_structure = {
         "CompressedTensorsConfig",
         "EetqConfig",
         "FbgemmFp8Config",
+        "FineGrainedFP8Config",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
         "QuantoConfig",
+        "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
     ],
@@ -1278,7 +1282,6 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
-    _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
@@ -2537,6 +2540,14 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+    _import_structure["models.granitemoeshared"].extend(
+        [
+            "GraniteMoeSharedForCausalLM",
+            "GraniteMoeSharedModel",
+            "GraniteMoeSharedPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -5187,6 +5198,7 @@ if TYPE_CHECKING:
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
+        DataCollatorForMultipleChoice,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSeq2Seq,
         DataCollatorForSOP,
@@ -5602,6 +5614,7 @@ if TYPE_CHECKING:
     from .models.gptj import GPTJConfig
     from .models.granite import GraniteConfig
     from .models.granitemoe import GraniteMoeConfig
+    from .models.granitemoeshared import GraniteMoeSharedConfig
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -6194,10 +6207,12 @@ if TYPE_CHECKING:
         CompressedTensorsConfig,
         EetqConfig,
         FbgemmFp8Config,
+        FineGrainedFP8Config,
         GPTQConfig,
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        SpQRConfig,
         TorchAoConfig,
         VptqConfig,
     )
@@ -6438,7 +6453,6 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
-        from .models.qwen2_5_vl import Qwen2_5_VLImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
@@ -7474,6 +7488,11 @@ if TYPE_CHECKING:
             GraniteMoeForCausalLM,
             GraniteMoeModel,
             GraniteMoePreTrainedModel,
+        )
+        from .models.granitemoeshared import (
+            GraniteMoeSharedForCausalLM,
+            GraniteMoeSharedModel,
+            GraniteMoeSharedPreTrainedModel,
         )
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
