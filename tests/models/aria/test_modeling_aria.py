@@ -428,6 +428,7 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @slow
     @require_torch
     @require_vision
+    @require_bitsandbytes
     def test_batched_generation(self):
         model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
 
