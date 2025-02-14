@@ -771,7 +771,9 @@ class ProcessorTesterMixin:
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
+        )
         add_special_tokens = True
         if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
             add_special_tokens = False
@@ -823,7 +825,7 @@ class ProcessorTesterMixin:
         self.assertEqual(len(formatted_prompt), 2)
 
         formatted_prompt_tokenized = processor.apply_chat_template(
-            batched_messages, add_generation_prompt=True, tokenize=True, padding=True
+            batched_messages, add_generation_prompt=True, tokenize=True, padding=True, return_tensors=None
         )
         add_special_tokens = True
         if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
@@ -837,7 +839,11 @@ class ProcessorTesterMixin:
         self.assertListEqual(expected_output, formatted_prompt_tokenized)
 
         out_dict = processor.apply_chat_template(
-            batched_messages, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True
+            batched_messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            padding=True,
         )
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
@@ -962,7 +968,9 @@ class ProcessorTesterMixin:
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
         self.assertEqual(len(formatted_prompt), 1)
 
-        formatted_prompt_tokenized = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
+        formatted_prompt_tokenized = processor.apply_chat_template(
+            messages, add_generation_prompt=True, tokenize=True, return_tensors=None
+        )
         add_special_tokens = True
         if processor.tokenizer.bos_token is not None and formatted_prompt[0].startswith(processor.tokenizer.bos_token):
             add_special_tokens = False
