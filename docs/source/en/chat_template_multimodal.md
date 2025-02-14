@@ -21,7 +21,7 @@ In this section, we'll explore how to use chat templates with multimodal models,
 Just like with text-only LLMs, multimodal models expect a chat with **messages**, each of which includes a **role** and **content**. However, for multimodal models, chat templates are a part of the [Processor](./main_cllasses/processors) class. Let's see how we can format our prompts when there are images or videos in the input along with text.
 
 
-## How to use chat templates with image inputs
+## Image inputs
 
 For models such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted as below. Notice that the only difference from text-only models is that we need to pass as well a placeholder for input images. TO accomodate for extra modalities, each **content** will be a list containing either a text or an image **type**.
 
