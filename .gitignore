@@ -167,7 +167,3 @@ tags
 
 # ruff
 .ruff_cache
-
-# to remove (by add-fast PR)
-/home/user/app/transformers/utils/check_docstrings.py
-/home/user/app/transformers/utils/check_modular_conversion.py

@@ -70,7 +70,6 @@ OBJECTS_TO_IGNORE = [
     # Deprecated
     "InputExample",
     "InputFeatures",
-    "LogitsWarper",
     # Signature is *args/**kwargs
     "TFSequenceSummary",
     "TFBertTokenizer",
@@ -834,6 +833,10 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
         # Nothing to do, no parameters are documented.
         return
 
+    if "kwargs" in signature and signature["kwargs"].annotation != inspect._empty:
+        # Inspecting signature with typed kwargs is not supported yet.
+        return
+
     indent = find_indent(obj_doc_lines[idx])
     arguments = {}
     current_arg = None
@@ -975,9 +978,7 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
             if modified_file_diff.a_path.startswith("src/transformers"):
                 module_diff_files.add(modified_file_diff.a_path)
         # Diff from index to `main`
-        default_branch = repo.active_branch.name if repo.active_branch else "main"
-        # Diff from index to the detected branch
-        for modified_file_diff in repo.index.diff(repo.refs[default_branch].commit):
+        for modified_file_diff in repo.index.diff(repo.refs.main.commit):
             if modified_file_diff.a_path.startswith("src/transformers"):
                 module_diff_files.add(modified_file_diff.a_path)
         # quick escape route: if there are no module files in the diff, skip this check
