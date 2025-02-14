@@ -1138,8 +1138,7 @@ class ProcessorMixin(PushToHubMixin):
                     autoclass = getattr(transformers_module, "AutoConfig")
                 else:
                     raise ValueError(
-                        f"The {cls.__name__} class has {attribute_name}_class "
-                        f"{getattr(cls, f"{attribute_name}_class")}"
+                        f"The {cls.__name__} class has {attribute_name}_class {class_name}"
                         f"but we could not find this class in the Transformers root. We also cannot "
                         f"find an autoclass for {attribute_name}, and so Transformers doesn't know how "
                         f"to load it!"
@@ -1148,8 +1147,7 @@ class ProcessorMixin(PushToHubMixin):
                     args.append(autoclass.from_pretrained(pretrained_model_name_or_path, **kwargs))
                 except:  # noqa
                     raise ValueError(
-                        f"The {cls.__name__} class has {attribute_name}_class "
-                        f"{getattr(cls, f"{attribute_name}_class")}"
+                        f"The {cls.__name__} class has {attribute_name}_class {class_name}"
                         f"but we could not find this class in the Transformers root. We also could "
                         f"not load it with {autoclass.__name__}, and so Transformers doesn't know how "
                         f"to initialize this module!"
