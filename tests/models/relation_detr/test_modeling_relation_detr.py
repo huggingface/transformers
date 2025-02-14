@@ -482,7 +482,8 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
         self.assertIsNotNone(encoder_hidden_states.grad)
         self.assertIsNotNone(encoder_attentions.grad)
-        self.assertIsNotNone(decoder_attentions.grad)
+        # MultiheadAttention cannot keep gradient on attention_weight, skip it
+        # self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
     # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_forward_auxiliary_loss
@@ -626,6 +627,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                         or "output_proj" in name
                         or "reference_points" in name
                         or "encoder_class_head.weight" in name
+                        or ("decoder.layers" in name and "self_attn" in name)
                         or ("class_head" in name and "weight" in name)
                         or name in backbone_params
                     ):

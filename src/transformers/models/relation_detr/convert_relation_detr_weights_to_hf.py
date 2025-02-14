@@ -103,22 +103,6 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None, model_name: str =
     return output_dict
 
 
-def split_q_k_v(state_dict):
-    # transformer decoder self-attention layers
-    for i in range(6):
-        # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"model.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"model.decoder.layers.{i}.self_attn.in_proj_bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
-    return state_dict
-
-
 def convert_linear_conv_for_focal(state_dict, model_name):
     if "focal" not in model_name:
         return state_dict
@@ -224,9 +208,6 @@ def convert_relation_detr_checkpoint(model_name, pytorch_dump_folder_path, push_
 
     # process for focalnet
     convert_linear_conv_for_focal(state_dict, model_name)
-
-    # query, key and value matrices need special treatment
-    split_q_k_v(state_dict)
 
     # finally, create HuggingFace model and load state dict
     model = RelationDetrForObjectDetection(config)
