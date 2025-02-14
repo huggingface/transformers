@@ -62,6 +62,14 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                 except ImportError:
                     # If the package can't be imported, it's not available
                     package_exists = False
+            elif pkg_name == "flash_attn_interface":
+                try:
+                    package = importlib.import_module(pkg_name)
+                    package_version = getattr(package, "__version__", "N/A")
+                    package_exists = True
+                except ImportError:
+                    # If the package can't be imported, it's not available
+                    package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available
                 package_exists = False
@@ -982,6 +990,17 @@ def is_flash_attn_greater_or_equal(library_version: str):
         return False
 
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
+
+
+@lru_cache()
+def is_flash_attn_3_available():
+    if not is_flash_attn_2_available():
+        return False
+
+    if not _is_package_available("flash_attn_interface"):
+        return False
+
+    return True
 
 
 @lru_cache()
