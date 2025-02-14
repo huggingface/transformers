@@ -35,7 +35,7 @@ from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import compile_compatible_method_lru_cache, meshgrid
+from ...pytorch_utils import meshgrid
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -1329,7 +1329,6 @@ def box_rel_encoding(src_boxes: torch.FloatTensor, tgt_boxes: torch.FloatTensor,
     return pos_embed
 
 
-@compile_compatible_method_lru_cache(maxsize=32)
 def get_dim_t(num_pos_feats: int, temperature: int, device: torch.device):
     dim_t = torch.arange(num_pos_feats // 2, dtype=torch.float32, device=device)
     dim_t = temperature ** (dim_t * 2 / num_pos_feats)
@@ -1703,6 +1702,13 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
 
 
 class RelationDetrChannelMapper(nn.Module):
+    """
+    Map the channels of a list of feature maps into specific embed_dim. The length of the output is determined by `num_outs`.
+    If the length of outputs is larger than inputs, the difference will be automatically inferred from the last feature map
+    repeatedly. The length of inputs can be smaller than `in_channels`. In this case, only the last `len(inputs) + extra` will
+    be used for mapping.
+    """
+
     def __init__(
         self,
         in_channels: List[int],
