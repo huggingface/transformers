@@ -41,8 +41,8 @@ class TimesFmOutputForPrediction(BaseModelOutput):
     loss: Optional[Union[torch.Tensor, float]] = None
 
 
-class TimesFmTransformerMLP(nn.Module):
-    """Pax transformer MLP in pytorch."""
+class TimesFmMLP(nn.Module):
+    """Pax MLP in pytorch."""
 
     def __init__(
         self,
@@ -365,7 +365,7 @@ class TimesFmDecoderLayer(nn.Module):
         attention_class = TIMESFM_ATTENTION_CLASSES[config._attn_implementation]
 
         self.self_attn = attention_class(config)
-        self.mlp = TimesFmTransformerMLP(config.model_dim, config.intermediate_size)
+        self.mlp = TimesFmMLP(config.model_dim, config.intermediate_size)
         self.input_layernorm = TimesFmRMSNorm(config.model_dim, eps=config.rms_norm_eps)
 
     def forward(
@@ -637,7 +637,7 @@ class TimesFmPreTrainedModel(PreTrainedModel):
         elif isinstance(module, TimesFmRMSNorm):
             nn.init.zeros_(module.weight)
 
-        elif isinstance(module, TimesFmTransformerMLP):
+        elif isinstance(module, TimesFmMLP):
             # Initialize gate projection
             module.gate_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
             if module.gate_proj.bias is not None:
