@@ -1331,8 +1331,9 @@ def box_rel_encoding(src_boxes: torch.FloatTensor, tgt_boxes: torch.FloatTensor,
 
 def get_dim_t(num_pos_feats: int, temperature: int, device: torch.device):
     dim_t = torch.arange(num_pos_feats // 2, dtype=torch.float32, device=device)
-    dim_t = temperature ** (dim_t * 2 / num_pos_feats)
-    return dim_t  # (0, 2, 4, ..., ⌊n/2⌋*2)
+    dim_t.mul_(2 / num_pos_feats)
+    dim_t.copy_(temperature**dim_t)
+    return dim_t
 
 
 def exchange_xy_fn(pos_res: torch.FloatTensor):
