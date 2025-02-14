@@ -29,7 +29,7 @@ from .configuration_timesfm import TimesFmConfig
 
 
 @dataclass
-class TimesFmDecoderOutput(BaseModelOutput):
+class TimesFmOutput(BaseModelOutput):
     loc: Optional[torch.Tensor] = None
     scale: Optional[torch.Tensor] = None
 
@@ -680,7 +680,7 @@ class TimesFmPreTrainedModel(PreTrainedModel):
             pass
 
 
-class TimesFmDecoder(TimesFmPreTrainedModel):
+class TimesFmModel(TimesFmPreTrainedModel):
     """Patched time-series decoder without any specific output layer."""
 
     def __init__(self, config: TimesFmConfig):
@@ -766,7 +766,7 @@ class TimesFmDecoder(TimesFmPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[TimesFmDecoderOutput, tuple[torch.Tensor, ...]]:
+    ) -> Union[TimesFmOutput, tuple[torch.Tensor, ...]]:
         model_input, patched_padding, stats, _ = self._preprocess_input(
             input_ts=input_ts,
             input_padding=input_padding,
@@ -786,7 +786,7 @@ class TimesFmDecoder(TimesFmPreTrainedModel):
             all_hidden_states = None
 
         if return_dict:
-            return TimesFmDecoderOutput(
+            return TimesFmOutput(
                 last_hidden_state=transformer_output.last_hidden_state,
                 hidden_states=all_hidden_states,
                 attentions=transformer_output.attentions if output_attentions else None,
@@ -813,7 +813,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         self.context_len = config.context_len
         self.horizon_len = config.horizon_len
 
-        self.decoder = TimesFmDecoder(config)
+        self.decoder = TimesFmModel(config)
 
         # quantile and mean output
         self.horizon_ff_layer = TimesFmResidualBlock(
@@ -1066,5 +1066,5 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 __all__ = [
     "TimesFmModelForPrediction",
     "TimesFmPreTrainedModel",
-    "TimesFmDecoder",
+    "TimesFmModel",
 ]

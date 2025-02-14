@@ -34,9 +34,9 @@ The original code can be found [here](https://github.com/google-research/timesfm
 
 [[autodoc]] TimesFmConfig
 
-## TimesFmDecoder
+## TimesFmModel
 
-[[autodoc]] TimesFmDecoder
+[[autodoc]] TimesFmModel
     - forward
 
 ## TimesFmModelForPrediction
