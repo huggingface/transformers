@@ -14,11 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable, Sequence
+import enum
 import itertools
 import math
 from typing import Optional, Union, cast
 
-from PIL import Image as PILImage
+import PIL
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
@@ -62,7 +63,7 @@ from ..gemma.modeling_gemma import (
 from ..siglip.configuration_siglip import SiglipVisionConfig
 
 
-_CHECKPOINT_FOR_DOC = "gg-hf/gemma-3-4b"
+_CHECKPOINT_FOR_DOC = "google/gemma-3-4b"
 
 logger = logging.get_logger(__name__)
 
@@ -76,14 +77,18 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 #   * Multi-image   --> Sequence[PIL.Image.Image]
 #
 # The single-image case
-BatchedImageInput = Sequence[PILImage.Image]
+BatchedImageInput = Sequence[PIL.Image.Image]
 BatchedMultiImageInput = Sequence[BatchedImageInput]
-Gemma3ProcessorImageInput = Union[PILImage.Image, BatchedImageInput, BatchedMultiImageInput]
+Gemma3ProcessorImageInput = Union[PIL.Image.Image, BatchedImageInput, BatchedMultiImageInput]
 
-PanAndScannedImage = tuple[PILImage.Image, Sequence[PILImage.Image]]
+PanAndScannedImage = tuple[PIL.Image.Image, Sequence[PIL.Image.Image]]
 BatchedPanAndScannedImage = Sequence[Sequence[PanAndScannedImage]]
-MutablePanAndScannedImage = tuple[PILImage.Image, list[PILImage.Image]]
+MutablePanAndScannedImage = tuple[PIL.Image.Image, list[PIL.Image.Image]]
 MutableBatchedPanAndScannedImage = list[list[MutablePanAndScannedImage]]
+
+ATTENTION_TYPE_GLOBAL = "global_sliding"
+ATTENTION_TYPE_LOCAL = "local_sliding"
+AttentionTypes = Union[ATTENTION_TYPE_GLOBAL, ATTENTION_TYPE_LOCAL]
 
 TextInputTypes = Union[TextInput, Sequence[TextInput]]
 
@@ -96,16 +101,19 @@ class Gemma3TextConfig(PretrainedConfig):
     e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Gemma3Model`]
+        num_hidden_layers (`int`, *optional*, defaults to 26):
+            Number of hidden layers in the Transformer decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
         hidden_size (`int`, *optional*, defaults to 2304):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 9216):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 26):
-            Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*, defaults to 4):
@@ -119,17 +127,13 @@ class Gemma3TextConfig(PretrainedConfig):
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
         hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
+            The non-linear activation function (function or string) in the decoder. Will default to
+            `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
+            activation function.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         eos_token_id (`int`, *optional*, defaults to 1):
@@ -140,15 +144,26 @@ class Gemma3TextConfig(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+        rope_global_base_freq (float, *optional*, defaults to `rope_theta`):
+            The base period of the RoPE embeddings for global attention.
+        rope_local_base_freq (float, *optional*, defaults to `rope_theta`):
+            The base period of the RoPE embeddings for local attention.
+        attention_pattern (Sequence[AttentionTypes], defaults to (5 * local, global)):
+            The attention pattern to apply
+        attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window attention. This is the
-            size of the sliding window.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
+        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
+            attention. This is the size of the sliding window.
+        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh soft-capping
+            on the logits.z
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh soft-capping
+            on the attention scorexs.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
 
     ```python
@@ -174,30 +189,62 @@ class Gemma3TextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256000,
-        hidden_size=2304,
+        # Config parameters found in all implementations, name differences noted
+        vocab_size=256000,                      # num_embed in FLAX
+        hidden_size=2304,                       # embed_dim in FLAX
         intermediate_size=9216,
-        num_hidden_layers=26,
-        num_attention_heads=8,
-        num_key_value_heads=4,
+        num_hidden_layers=26,                   # num_layers in FLAX
+        num_attention_heads=8,                  # num_heads in FLAX
+        num_key_value_heads=4,                  # num_kv_heads in FLAX
         head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
+        sliding_window=4096,                    # sliding_window_size in FLAX
+        final_logit_softcapping=30.0,
+        attn_logit_softcapping=50.0,
+        query_pre_attn_scalar=256,
+        attention_pattern: Sequence[str] = (    # attn_types in PyTorch, attention_types in FLAX
+            ATTENTION_TYPE_LOCAL,
+            ATTENTION_TYPE_LOCAL,
+            ATTENTION_TYPE_LOCAL,
+            ATTENTION_TYPE_LOCAL,
+            ATTENTION_TYPE_LOCAL,
+            ATTENTION_TYPE_GLOBAL,
+        ),
+        rope_theta=10_000.0,                    # Consolidated in rope_wave_length Mapping in PyTorch
+        rope_global_base_freq=10_000.0,
+        rope_local_base_freq=10_000.0,
+
+        # Config parameters NOT in FLAX but in others
         rms_norm_eps=1e-6,
-        use_cache=True,
+
+        # Config parameters NOT in PyTorch but in others
+
+        # Config parameters NOT in Transformers but in others
+        use_pre_ffw_norm: bool = False,         # use_post_attn_norm in FLAX
+        use_post_ffw_norm: bool = False,
+
+
+        # Config parameters in Transformers but not others
+        hidden_activation="gelu_pytorch_tanh",
         pad_token_id=0,
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
-        rope_theta=10000.0,
+        max_position_embeddings=8192,
+        initializer_range=0.02,
         attention_bias=False,
         attention_dropout=0.0,
-        query_pre_attn_scalar=256,
-        sliding_window=4096,
-        final_logit_softcapping=30.0,
-        attn_logit_softcapping=50.0,
+        use_cache=True,
         cache_implementation="hybrid",
+
+        # Config parameters in FLAX but not others
+        query_pre_attn_norm: enum.Enum = None,
+        v3_compression_type: enum.Enum = None,
+        transpose_gating_einsum: bool = False,
+
+        # Config parameters in PyTorch but not others
+        architecture: str = "",
+        quant: bool = False,
+        use_qk_norm: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -229,11 +276,36 @@ class Gemma3TextConfig(PretrainedConfig):
         self.cache_implementation = cache_implementation
 
 
+class Gemma3VisionConfig(SiglipVisionConfig):
+    # Config parameters found in all implementations, name differences noted
+    hidden_size: int                        # width in FLAX
+    intermediate_size: int                  # mlp_dim in FLAX
+    num_attention_heads: int                # num_heads in FLAX
+    num_hidden_layers: int                  # depth in FLAX
+    attention_dropout: float                # dropout in FLAX
+    patch_size: int                         # Same in FLAX
+
+    # Config parameters in Transformers but not in FLAX
+    image_size: int                         # Defaults to 896
+    num_channels: int                       # Defaults to 3
+    hidden_act: str                         # Defaults to "gelu_pytorch_tanh"
+    layer_norm_eps: float                   # Defaults to 1e-06
+
+    # Config parameters not in Transformers but in FLAX
+    position_embedding: str
+    representation_size: Union[int, bool]
+    pool_type: Optional[str]
+    head_zeroinit: bool
+    scan: bool
+    remat_policy: str
+    output_length: int
+
+
 class Gemma3Config(PretrainedConfig):
     model_type = "gemma3"
     sub_configs = {
         "text_config": Gemma3TextConfig,
-        "vision_config": SiglipVisionConfig,
+        "vision_config": Gemma3VisionConfig,
     }
 
     def __init__(
@@ -244,13 +316,13 @@ class Gemma3Config(PretrainedConfig):
     ):
         if text_config is None:
             self.text_config = Gemma3TextConfig()
-            logger.info("text_config is None, using default SigLIP vision config.")
+            logger.info("text_config is None, using default Gemma3TextConfig vision config.")
         elif isinstance(text_config, dict):
             self.text_config = Gemma3TextConfig(**text_config)
         elif isinstance(text_config, Gemma3TextConfig):
             self.text_config = text_config
-        # else:
-        #     raise ValueError("text_config much be None or compatible with initializing a Gemma3TextConfig.")
+        else:
+            raise ValueError("text_config much be None or compatible with initializing a Gemma3TextConfig.")
 
         """
             Gemma 3 FLAX                SigLIP HF
@@ -271,20 +343,18 @@ class Gemma3Config(PretrainedConfig):
             output_length       ==>
         """
         if vision_config is None:
-            self.vision_config = SiglipVisionConfig()
+            self.vision_config = Gemma3VisionConfig()
             logger.info("vision_config is None, using default SigLIP vision config.")
         elif isinstance(vision_config, dict):
-            self.vision_config = SiglipVisionConfig(**vision_config)
-        elif isinstance(vision_config, SiglipVisionConfig):
+            self.vision_config = Gemma3VisionConfig(**vision_config)
+        elif isinstance(vision_config, Gemma3VisionConfig):
             self.vision_config = vision_config
-        # else:
-        #     raise ValueError("vision_config much be None or compatible with initializing a SiglipVisionConfig.")
 
         super().__init__(**kwargs)
 
 
 class Gemma3TextKwargs(TextKwargs):
-    suffix: Optional[TextInputTypes]
+    pass
 
 
 class Gemma3ImagesKwargs(ImagesKwargs):
@@ -293,6 +363,15 @@ class Gemma3ImagesKwargs(ImagesKwargs):
     pan_and_scan_max_num_crops: int
     pan_and_scan_min_ratio_to_activate: float
     do_convert_rgb: Optional[bool]
+    do_resize: bool
+    size: dict[str, int]
+    resample: PIL.Image.Resampling = PIL.Image.Resampling.BICUBIC,
+    do_rescale: bool = True,
+    rescale_factor: Union[int, float] = 1 / 255,
+    do_normalize: bool = True,
+    image_mean: Optional[Union[float, list[float]]] = None,
+    image_std: Optional[Union[float, list[float]]] = None,
+    do_convert_rgb: bool = None,
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
@@ -311,12 +390,12 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 def pan_and_scan(
-    image: PILImage.Image,
+    image: PIL.Image.Image,
     pan_and_scan_min_crop_size: int,
     pan_and_scan_max_num_crops: int,
     pan_and_scan_min_ratio_to_activate: float,
     **unused_kwargs,
-) -> Sequence[PILImage.Image]:
+) -> Sequence[PIL.Image.Image]:
     w, h = image.size
 
     # Square or landscape image.
@@ -432,9 +511,9 @@ class Gemma3Processor(ProcessorMixin):
         **kwargs: Unpack[Gemma3ImagesKwargs]
     ) -> BatchedPanAndScannedImage:
         # Normalize image structures
-        if isinstance(images, PILImage.Image):
+        if isinstance(images, PIL.Image.Image):
             images_lists: MutableBatchedPanAndScannedImage = [[(images, [])]]
-        elif isinstance(images[0], PILImage.Image):
+        elif isinstance(images[0], PIL.Image.Image):
             images = cast(BatchedImageInput, images)
             images_lists: MutableBatchedPanAndScannedImage = [[(i, [])] for i in images]
         else:
@@ -445,7 +524,7 @@ class Gemma3Processor(ProcessorMixin):
         #     raise ValueError("All elements in a batch must have the same number of images.")
 
         if kwargs["do_pan_and_scan"]:
-            if not isinstance(images_lists[0][0], PILImage.Image):
+            if not isinstance(images_lists[0][0], PIL.Image.Image):
                 raise ValueError("Pan and scan is only supported for `Pillow.Image.Image` inputs")
 
             for images_list in images_lists:
