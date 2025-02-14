@@ -1047,8 +1047,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if return_dict:
             return TimesFmOutputForPrediction(
                 last_hidden_state=decoder_output.last_hidden_state,
-                attentions=decoder_output.all_attentions if output_attentions else None,
-                hidden_states=decoder_output.all_hidden_states if output_hidden_states else None,
+                attentions=decoder_output.attentions if output_attentions else None,
+                hidden_states=decoder_output.hidden_states if output_hidden_states else None,
                 mean_predictions=mean_outputs,
                 full_predictions=full_outputs,
                 loss=loss,
@@ -1056,9 +1056,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         else:
             return_tuple = [decoder_output.last_hidden_state]
             if output_hidden_states:
-                return_tuple.append(decoder_output.all_hidden_states)
+                return_tuple.append(decoder_output.hidden_states)
             if output_attentions:
-                return_tuple.append(decoder_output.all_attentions)
+                return_tuple.append(decoder_output.attentions)
             return_tuple += [mean_outputs, full_outputs, loss]
             return tuple(return_tuple)
 
@@ -1066,4 +1066,5 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 __all__ = [
     "TimesFmModelForPrediction",
     "TimesFmPreTrainedModel",
+    "TimesFmDecoder",
 ]
