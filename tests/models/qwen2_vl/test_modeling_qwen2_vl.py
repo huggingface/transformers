@@ -225,7 +225,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     """
 
     all_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Qwen2VLForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
     test_pruning = False
     test_head_masking = False

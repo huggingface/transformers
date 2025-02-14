@@ -299,7 +299,6 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
 
-    all_generative_model_classes = (StableLmForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
 
