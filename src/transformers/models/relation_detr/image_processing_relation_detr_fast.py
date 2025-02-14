@@ -436,7 +436,6 @@ class RelationDetrImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask, annotation
 
     @functools.lru_cache(maxsize=1)
-    # Copied from transformers.models.detr.image_processing_detr_fast.DetrImageProcessorFast._validate_input_arguments
     def _validate_input_arguments(
         self,
         do_rescale: bool,
