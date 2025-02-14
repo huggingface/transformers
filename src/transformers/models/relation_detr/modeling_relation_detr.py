@@ -2308,13 +2308,15 @@ class RelationDetrMLPPredictionHead(nn.Module):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
         super().__init__()
         self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        hidden_dim = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(
+            nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip([input_dim] + hidden_dim, hidden_dim + [output_dim])
+        )
 
-    def forward(self, x: torch.FloatTensor):
+    def forward(self, tensor: torch.FloatTensor) -> torch.Tensor:
         for i, layer in enumerate(self.layers):
-            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
+            tensor = nn.functional.relu(layer(tensor)) if i < self.num_layers - 1 else layer(tensor)
+        return tensor
 
 
 class GenerateDNQueries(nn.Module):
