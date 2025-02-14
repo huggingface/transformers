@@ -206,7 +206,7 @@ class RelationDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
 
     @slow
-    # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr->RelationDetr
+    # Modified from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_detection_annotations with Detr->RelationDetr
     def test_batched_coco_detection_annotations(self):
         image_0 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         image_1 = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png").resize((800, 800))
