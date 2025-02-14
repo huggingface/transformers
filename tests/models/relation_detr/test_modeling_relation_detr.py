@@ -447,7 +447,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
 
-    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_retain_grad_hidden_states_attentions
+    # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_retain_grad_hidden_states_attentions
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
 
