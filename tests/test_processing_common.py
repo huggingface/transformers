@@ -940,7 +940,7 @@ class ProcessorTesterMixin:
             ]
         ]
 
-        def _process_messaged_for_chat_template(
+        def _process_messages_for_chat_template(
             conversation,
             batch_images,
             batch_videos,
@@ -954,14 +954,14 @@ class ProcessorTesterMixin:
                         "role": "user",
                         "content": [
                             {"type": "video"},  # no need to use path, video is loaded already by this moment
-                            {"type": "text", "text": "Dummy prompt for preprocess testsing"},
+                            {"type": "text", "text": "Dummy prompt for preprocess testing"},
                         ],
                     },
                 ]
             ]
             return new_msg
 
-        processor._process_messaged_for_chat_template = _process_messaged_for_chat_template
+        processor._process_messages_for_chat_template = _process_messages_for_chat_template
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -972,6 +972,6 @@ class ProcessorTesterMixin:
 
         # Check with `in` because we don't know how each template formats the prompt with BOS/EOS/etc
         formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
-        self.assertTrue("Dummy prompt for preprocess testsing" in formatted_text)
+        self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 243)
