@@ -1155,9 +1155,18 @@ class ProcessorMixin(PushToHubMixin):
                     "something really weird, please open an issue at "
                     "https://github.com/huggingface/transformers/"
                 )
-            if class_name in mapping:
-                obj_class = mapping[class_name]
+            extra_content = mapping._extra_content  # Contains extra registered custom classes
+            extra_classes = []
+            for extra_class in extra_content.values():
+                if isinstance(extra_class, tuple):
+                    extra_classes.extend([c for c in extra_class if c is not None])
+                elif extra_class is not None:
+                    extra_classes.append(extra_class)
+            custom_class_name_mapping = {c.__name__.split(".")[-1]: c for c in extra_classes}
+            if class_name in custom_class_name_mapping:
+                obj_class = custom_class_name_mapping[class_name]
             else:
+                breakpoint()
                 raise ValueError(
                     f"{class_name} is not a valid {attribute_name} class name. "
                     f"You may need to pass {class_name} to the the `register()` method of the "
