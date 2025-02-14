@@ -1073,6 +1073,14 @@ class ProcessorMixin(PushToHubMixin):
 
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        """
+        Identify and instantiate the subcomponents of Processor classes, like image processors and
+        tokenizers. This method uses the Processor attributes like `tokenizer_class` to figure out what class those
+        subcomponents should be. Note that any subcomponents must either be library classes that are accessible in
+        the `transformers` root, or they must be custom code that has been registered with the relevant autoclass,
+        via methods like `AutoTokenizer.register()`. If neither of these conditions are fulfilled, this method
+        will be unable to find the relevant subcomponent class and will raise an error.
+        """
         args = []
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
@@ -1098,6 +1106,12 @@ class ProcessorMixin(PushToHubMixin):
 
     @staticmethod
     def _get_class_from_class_name(attribute_name, class_name):
+        """
+        This method converts a class name, like "BertTokenizer", to the relevant class. It does that by looking the
+        name up in the root `transformers` module, and if it can't find it there then it checks the autoclass
+        mappings, where custom code classes should be registered. If it can't find it in either place,
+        it raises an error.
+        """
         if hasattr(transformers_module, class_name):
             obj_class = getattr(transformers_module, class_name)
         else:
@@ -1120,7 +1134,7 @@ class ProcessorMixin(PushToHubMixin):
                 raise ValueError(
                     f"{class_name} is not a valid {attribute_name} class name. "
                     f"You may need to pass {class_name} to the the `register()` method of the "
-                    f"autoclass for {attribute_name}."
+                    f"{attribute_name} autoclass."
                 )
         return obj_class
 
