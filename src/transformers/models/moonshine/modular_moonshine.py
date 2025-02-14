@@ -658,7 +658,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
             downsample_stride = 64 * 3 * 2  # conv strides
             attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash_attention" in self.config._attn_implementation:
                 attention_mask = attention_mask if (attention_mask == 0.0).any() else None
 
             # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
@@ -812,7 +812,7 @@ class MoonshineDecoder(LlamaModel):
             mask_len = encoder_hidden_states.shape[-2]
             downsample_stride = 64 * 3 * 2  # conv strides
             encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash_attention" in self.config._attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if (encoder_attention_mask == 0.0).any() else None
 
             # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward

@@ -980,6 +980,7 @@ class BartEncoder(BartPreTrainedModel):
         )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -1068,7 +1069,7 @@ class BartEncoder(BartPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self._use_sdpa and head_mask is None and not output_attentions:
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
@@ -1164,6 +1165,7 @@ class BartDecoder(BartPreTrainedModel):
         )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -1284,7 +1286,7 @@ class BartDecoder(BartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input)
 
-        if self._use_flash_attention_2:
+        if self._use_flash_attention_2 or self._use_flash_attention_3:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._use_sdpa and not output_attentions and cross_attn_head_mask is None:
@@ -1304,7 +1306,7 @@ class BartDecoder(BartPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self._use_sdpa and cross_attn_head_mask is None and not output_attentions:
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on

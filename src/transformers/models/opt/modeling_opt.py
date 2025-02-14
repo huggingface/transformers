@@ -646,6 +646,7 @@ class OPTDecoder(OPTPreTrainedModel):
 
         self.layers = nn.ModuleList([OPTDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.gradient_checkpointing = False
@@ -672,7 +673,7 @@ class OPTDecoder(OPTPreTrainedModel):
         """
         batch_size, seq_length = input_shape
         mask_seq_length = past_key_values_length + seq_length
-        if self._use_flash_attention_2:
+        if self._use_flash_attention_2 or self._use_flash_attention_3:
             # 2d mask is passed through the layers
             causal_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             attention_mask = (

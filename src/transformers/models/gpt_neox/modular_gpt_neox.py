@@ -174,6 +174,7 @@ class GPTNeoXAttention(nn.Module):
         if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
             "sdpa",
             "flash_attention_2",
+            "flash_attention_3",
         ]:
             logger.warning_once(
                 f"Setting `attention_type` to `eager` because `{attention_type}` does not support"

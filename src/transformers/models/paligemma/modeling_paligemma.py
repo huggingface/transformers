@@ -346,7 +346,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         input_tensor,
         is_training: bool = False,
     ):
-        if self.config.text_config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config.text_config._attn_implementation:
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

@@ -182,6 +182,7 @@ class GPTNeoXAttention(nn.Module):
         if (output_attentions or head_mask is not None) and self.config._attn_implementation in [
             "sdpa",
             "flash_attention_2",
+            "flash_attention_3",
         ]:
             logger.warning_once(
                 f"Setting `attention_type` to `eager` because `{attention_type}` does not support"
@@ -636,7 +637,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None

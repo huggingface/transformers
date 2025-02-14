@@ -954,6 +954,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
         self.layers = nn.ModuleList([M2M100EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
         self.gradient_checkpointing = False
@@ -1035,7 +1036,7 @@ class M2M100Encoder(M2M100PreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self._use_sdpa and head_mask is None and not output_attentions:
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
@@ -1136,6 +1137,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
         )
         self.layers = nn.ModuleList([M2M100DecoderLayer(config) for _ in range(config.decoder_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1247,7 +1249,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self._use_flash_attention_2:
+        if self._use_flash_attention_2 or self._use_flash_attention_3:
             # 2d mask is passed through the layers
             combined_attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self._use_sdpa and not output_attentions and cross_attn_head_mask is None:
@@ -1267,7 +1269,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self._use_sdpa and cross_attn_head_mask is None and not output_attentions:
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
@@ -1407,9 +1409,9 @@ class M2M100Model(M2M100PreTrainedModel):
         self.encoder = M2M100Encoder(config, self.shared)
         self.decoder = M2M100Decoder(config, self.shared)
 
-        if config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in config._attn_implementation:
             logger.warning_once(
-                "Attention with Flash Attention 2 does not support `layer_head_mask`. If you need this feature, please use standard attention."
+                "Attention with Flash Attention 2/3 does not support `layer_head_mask`. If you need this feature, please use standard attention."
             )
 
         # Initialize weights and apply final processing

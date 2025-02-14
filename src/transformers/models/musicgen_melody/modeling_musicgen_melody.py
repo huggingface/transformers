@@ -950,7 +950,7 @@ class MusicgenMelodyDecoder(MusicgenMelodyPreTrainedModel):
 
         input_shape = inputs_embeds.size()[:-1]
 
-        if self.attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.attn_implementation:
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self.attn_implementation == "sdpa" and not output_attentions:
             # output_attentions=True can not be supported when using SDPA, and we fall back on

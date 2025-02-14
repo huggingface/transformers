@@ -939,6 +939,7 @@ class SiglipTextTransformer(nn.Module):
 
         self.head = nn.Linear(embed_dim, embed_dim)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipTextConfig)
@@ -971,7 +972,7 @@ class SiglipTextTransformer(nn.Module):
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and not self._use_flash_attention_2 and not self._use_flash_attention_3:
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 

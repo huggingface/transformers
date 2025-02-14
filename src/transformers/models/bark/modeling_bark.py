@@ -562,6 +562,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=True) for _ in range(config.num_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
         self.layernorm_final = BarkLayerNorm(config.hidden_size, bias=config.bias)
 
@@ -704,7 +705,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 attention_mask = attention_mask.view(batch_size, -1)
@@ -1159,6 +1160,7 @@ class BarkFineModel(BarkPreTrainedModel):
 
         self.layers = nn.ModuleList([BarkBlock(config, is_causal=False) for _ in range(config.num_layers)])
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
         self.layernorm_final = nn.LayerNorm(config.hidden_size)
 
@@ -1354,7 +1356,7 @@ class BarkFineModel(BarkPreTrainedModel):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
@@ -1823,6 +1825,42 @@ class BarkModel(BarkPreTrainedModel):
         can initialize the correct attention module
         """
         config = super()._check_and_enable_flash_attn_2(
+            config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
+        )
+
+        config.semantic_config._attn_implementation = config._attn_implementation
+        config.coarse_acoustics_config._attn_implementation = config._attn_implementation
+        config.fine_acoustics_config._attn_implementation = config._attn_implementation
+        return config
+
+    @classmethod
+    def _check_and_enable_flash_attn_3(
+        cls,
+        config,
+        torch_dtype: Optional[torch.dtype] = None,
+        device_map: Optional[Union[str, Dict[str, int]]] = None,
+        hard_check_only: bool = False,
+        check_device_map: bool = False,
+    ):
+        """
+        `_check_and_enable_flash_attn_3` originally don't expand flash attention enabling to the model
+        sub-configurations. We override the original method to make sure that Bark sub-models are using Flash Attention
+        if necessary.
+
+        If you don't know about Flash Attention, check out the official repository of flash attention:
+        https://github.com/Dao-AILab/flash-attention
+
+        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a look at this
+        specific section of the documentation to learn more about it:
+        https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
+
+        The method checks if the current setup is compatible with Flash Attention as it requires the model to be in
+        half precision and not ran on CPU.
+
+        If all checks pass and `hard_check_only` is False, the method will set the config attribute `_attn_implementation` to "flash_attention_3" so that the model
+        can initialize the correct attention module
+        """
+        config = super()._check_and_enable_flash_attn_3(
             config, torch_dtype, device_map, hard_check_only=hard_check_only, check_device_map=check_device_map
         )
 

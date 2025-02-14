@@ -811,6 +811,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
         self._use_sdpa = config._attn_implementation == "sdpa"
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -892,7 +893,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         key_length = past_length + query_length
         self_attention_mask = self.bias[None, key_length - query_length : key_length, :key_length]
 
-        if self._use_flash_attention_2:
+        if self._use_flash_attention_2 or self._use_flash_attention_3:
             # 2d mask is passed through the layers
             attention_mask = attention_mask.bool() if (attention_mask is not None and 0 in attention_mask) else None
             encoder_attention_mask = (

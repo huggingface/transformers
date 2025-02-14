@@ -261,8 +261,8 @@ class Cohere2Attention(nn.Module):
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-            # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
+            # Here we need to slice as we use a static cache by default, but FA does not support it
+            if attention_mask is not None and "flash_attention" in self.config._attn_implementation:
                 seq_len = attention_mask.shape[-1]
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
@@ -358,7 +358,7 @@ class Cohere2DecoderLayer(nn.Module):
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
             # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
             # thus we must slice from the right (at most `effective_seq_len` elements)
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash_attention" in self.config._attn_implementation:
                 attention_mask = attention_mask[:, -effective_seq_len:]
             # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
             # from the left, with an offset if we are beyond the sliding window
@@ -697,7 +697,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
         # So we will pass in attention mask as is in any case, not only when ther's padding. Then we'll use its shape
         # to cut out keys/values trailing 0 used in static cache. This workaround should be compile compatible
         # as it doesn't cause dynamic control issues.
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             return attention_mask
 
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -963,7 +963,7 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
         if (
             isinstance(past_key_values, HybridCache)
             and attention_mask.ndim == 2
-            and not self.config._attn_implementation == "flash_attention_2"
+            and "flash_attention" not in self.config._attn_implementation
         ):
             if model_inputs["inputs_embeds"] is not None:
                 batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape

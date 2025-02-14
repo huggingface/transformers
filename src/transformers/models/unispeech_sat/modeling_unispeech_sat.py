@@ -989,6 +989,7 @@ class UniSpeechSatEncoder(nn.Module):
         self.layers = nn.ModuleList([UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -1005,7 +1006,7 @@ class UniSpeechSatEncoder(nn.Module):
             # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states[~expand_attention_mask] = 0
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
@@ -1077,6 +1078,7 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
         )
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -1093,7 +1095,7 @@ class UniSpeechSatEncoderStableLayerNorm(nn.Module):
             # make sure padded tokens are not attended to
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             hidden_states = hidden_states * expand_attention_mask.to(dtype=hidden_states.dtype)
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:

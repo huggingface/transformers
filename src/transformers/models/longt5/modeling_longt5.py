@@ -1599,7 +1599,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None

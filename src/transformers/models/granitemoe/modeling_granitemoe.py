@@ -1122,7 +1122,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
         # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

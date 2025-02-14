@@ -1362,6 +1362,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config.text_config._attn_implementation == "flash_attention_3"
         self.post_init()
 
     def _create_patch_attention_mask(self, pixel_mask):

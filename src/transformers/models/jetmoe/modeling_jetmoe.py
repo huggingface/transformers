@@ -1036,7 +1036,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if attention_mask is not None and self._attn_implementation == "flash_attention_2" and use_cache:
+        if attention_mask is not None and "flash_attention" in self._attn_implementation and use_cache:
             batch_size = inputs_embeds.shape[0]
             is_padding_right = attention_mask[:, -1].sum().item() != batch_size
             if is_padding_right:
@@ -1124,7 +1124,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None

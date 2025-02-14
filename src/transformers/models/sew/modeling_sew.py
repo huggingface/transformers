@@ -869,6 +869,7 @@ class SEWEncoder(nn.Module):
         self.upsample = SEWUpsampling(config)
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     def forward(
         self,
@@ -883,7 +884,7 @@ class SEWEncoder(nn.Module):
 
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            if self._use_flash_attention_2:
+            if self._use_flash_attention_2 or self._use_flash_attention_3:
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers

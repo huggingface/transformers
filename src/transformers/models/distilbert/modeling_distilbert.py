@@ -677,6 +677,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self.embeddings = Embeddings(config)  # Embeddings
         self.transformer = Transformer(config)  # Encoder
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
         self._use_sdpa = config._attn_implementation == "sdpa"
 
         # Initialize weights and apply final processing
@@ -784,7 +785,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         embeddings = self.embeddings(input_ids, inputs_embeds)  # (bs, seq_length, dim)
 
-        if self._use_flash_attention_2:
+        if self._use_flash_attention_2 or self._use_flash_attention_3:
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         else:
             if attention_mask is None:

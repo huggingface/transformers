@@ -917,6 +917,7 @@ class CLIPTextTransformer(nn.Module):
 
         # For attention mask, it differs between `flash_attention_2` and other attention implementations
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_3 = config._attn_implementation == "flash_attention_3"
 
     @add_start_docstrings_to_model_forward(CLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPTextConfig)
@@ -954,7 +955,7 @@ class CLIPTextTransformer(nn.Module):
         )
 
         # expand attention_mask
-        if attention_mask is not None and not self._use_flash_attention_2:
+        if attention_mask is not None and not self._use_flash_attention_2 and not self._use_flash_attention_3:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 

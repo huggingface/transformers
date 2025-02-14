@@ -1044,7 +1044,7 @@ class MBartEncoder(MBartPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash_attention" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa" and head_mask is None and not output_attentions:
                 # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
@@ -1261,7 +1261,7 @@ class MBartDecoder(MBartPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash_attention" in self.config._attn_implementation:
             # 2d mask is passed through the layers
             attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
         elif self.config._attn_implementation == "sdpa" and not output_attentions and cross_attn_head_mask is None:
@@ -1281,7 +1281,7 @@ class MBartDecoder(MBartPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash_attention" in self.config._attn_implementation:
                 encoder_attention_mask = encoder_attention_mask if 0 in encoder_attention_mask else None
             elif self.config._attn_implementation == "sdpa" and cross_attn_head_mask is None and not output_attentions:
                 # output_attentions=True & cross_attn_head_mask can not be supported when using SDPA, and we fall back on
