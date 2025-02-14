@@ -617,10 +617,10 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         if isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.weight.data.normal_(mean=0, std=self.config.initializer_range)
 
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
 
@@ -633,12 +633,12 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmMLP):
             # Initialize gate projection
-            module.gate_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.gate_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.gate_proj.bias is not None:
                 nn.init.zeros_(module.gate_proj.bias)
 
             # Initialize down projection
-            module.down_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.down_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.down_proj.bias is not None:
                 nn.init.zeros_(module.down_proj.bias)
 
@@ -648,12 +648,12 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmAttention):
             # Initialize qkv projection
-            module.qkv_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.qkv_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.qkv_proj.bias is not None:
                 nn.init.zeros_(module.qkv_proj.bias)
 
             # Initialize output projection
-            module.o_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.o_proj.weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.o_proj.bias is not None:
                 nn.init.zeros_(module.o_proj.bias)
 
@@ -662,17 +662,17 @@ class TimesFmPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, TimesFmResidualBlock):
             # Initialize hidden layer
-            module.hidden_layer[0].weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.hidden_layer[0].weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.hidden_layer[0].bias is not None:
                 nn.init.zeros_(module.hidden_layer[0].bias)
 
             # Initialize output layer
-            module.output_layer.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.output_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.output_layer.bias is not None:
                 nn.init.zeros_(module.output_layer.bias)
 
             # Initialize residual layer
-            module.residual_layer.weight.data.normal_(mean=0, std=self.config.initializer_factor)
+            module.residual_layer.weight.data.normal_(mean=0, std=self.config.initializer_range)
             if module.residual_layer.bias is not None:
                 nn.init.zeros_(module.residual_layer.bias)
 

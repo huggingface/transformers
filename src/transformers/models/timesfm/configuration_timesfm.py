@@ -66,9 +66,8 @@ class TimesFmConfig(PretrainedConfig):
             The dropout probability for the attention scores.
         use_positional_embedding (`bool`, *optional*, defaults to `True`):
             Whether to add positional embeddings.
-        initializer_factor (`float`, *optional*, defaults to 1.0):
-            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
-            testing).
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
 
     model_type = "timesfm"
@@ -97,7 +96,7 @@ class TimesFmConfig(PretrainedConfig):
         pad_val: float = 1123581321.0,
         attention_dropout: float = 0.0,
         use_positional_embedding: bool = True,
-        initializer_factor: float = 1.0,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         self.patch_len = patch_len
@@ -115,7 +114,7 @@ class TimesFmConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.attention_dropout = attention_dropout
         self.use_positional_embedding = use_positional_embedding
-        self.initializer_factor = initializer_factor
+        self.initializer_range = initializer_range
 
         super().__init__(
             is_encoder_decoder=self.is_encoder_decoder,
