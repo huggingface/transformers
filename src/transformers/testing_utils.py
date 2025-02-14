@@ -301,7 +301,24 @@ class RocmUtil:
         # For non-Linux systems or if /etc/os-release is not available.
         return platform.system().lower()
 
-    def is_rocm_skippable(self, arch=None, rocm_version=None, os_name=None):
+    def get_current_os_version(self):
+        """
+        Attempts to determine the current operating system version.
+        On Linux, parses /etc/os-release for the VERSION_ID (e.g., "24.04").
+        Otherwise, falls back to platform.version().
+        """
+        if os.name == "posix" and os.path.exists("/etc/os-release"):
+            try:
+                with open("/etc/os-release") as f:
+                    for line in f:
+                        if line.startswith("VERSION_ID="):
+                            # VERSION_ID value may be quoted.
+                            return line.split("=")[1].strip().strip('"').lower()
+            except Exception:
+                pass
+        return platform.version().lower()
+
+    def is_rocm_skippable(self, arch=None, rocm_version=None, os_name=None, os_version=None):
         """
         Determines whether the current system should be considered "skippable" based on ROCm criteria.
 
@@ -345,18 +362,35 @@ class RocmUtil:
             if any(current_ver.startswith(v) for v in ver_list):
                 return True
 
-        # Check operating system.
-        if os_name is not None:
-            os_list = (os_name,) if isinstance(os_name, str) else os_name
+        # Check OS and OS version as a pair.
+        if os_name is not None or os_version is not None:
+            if os_name is None or os_version is None:
+                raise ValueError("Both os_name and os_version must be provided together for OS-based skipping.")
             current_os = self.get_current_os()
-            if current_os in os_list:
-                return True
+            current_os_ver = self.get_current_os_version()
+
+            # Normalize to lists.
+            if isinstance(os_name, str):
+                os_name_list = [os_name]
+                os_version_list = [os_version]
+            else:
+                os_name_list = list(os_name)
+                os_version_list = list(os_version) if not isinstance(os_version, str) else [os_version]
+
+            if len(os_name_list) != len(os_version_list):
+                raise ValueError("os_name and os_version lists must have the same length.")
+
+            # Check each OS/version pair.
+            for name, ver in zip(os_name_list, os_version_list):
+                # Use '*' as a wildcard for version (matching all versions).
+                if current_os == name and (ver == "*" or current_os_ver.startswith(ver)):
+                    return True
 
         return False
 
 rocmUtils = RocmUtil()
 
-def skipIfRocm(func=None, *, msg="test doesn't currently work on the ROCm stack", arch=None, rocm_version=None, os_name=None):
+def skipIfRocm(func=None, *, msg="test doesn't currently work on the ROCm stack", arch=None, rocm_version=None, os_name=None, os_version=None):
     """
     Pytest decorator to skip a test on AMD systems running ROCm, with additional conditions based on
     GPU architecture, ROCm version, and/or operating system.
@@ -419,12 +453,26 @@ def skipIfRocm(func=None, *, msg="test doesn't currently work on the ROCm stack"
                     if any(current_version.startswith(v) for v in ver_list):
                         should_skip = True
 
-                # Check the operating system if provided.
-                if os_name is not None:
-                    os_list = (os_name,) if isinstance(os_name, str) else os_name
+                # Check OS and OS version as a pair.
+                if os_name is not None or os_version is not None:
+                    if os_name is None or os_version is None:
+                        raise ValueError("Both os_name and os_version must be provided together for OS-based skipping. Give '*' for all versions")
                     current_os = rocmUtils.get_current_os()
-                    if current_os in os_list:
-                        should_skip = True
+                    current_os_ver = rocmUtils.get_current_os_version()
+
+                    if isinstance(os_name, str):
+                        os_name_list = [os_name]
+                        os_version_list = [os_version]
+                    else:
+                        os_name_list = list(os_name)
+                        os_version_list = list(os_version) if not isinstance(os_version, str) else [os_version]
+
+                    if len(os_name_list) != len(os_version_list):
+                        raise ValueError("os_name and os_version lists must have the same length.")
+
+                    for name, ver in zip(os_name_list, os_version_list):
+                        if current_os == name and (ver == "*" or current_os_ver.startswith(ver)):
+                            should_skip = True
 
                 if should_skip:
                     pytest.skip(reason)
