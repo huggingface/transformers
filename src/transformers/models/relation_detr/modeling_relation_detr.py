@@ -619,8 +619,8 @@ class RelationDetrSinePositionEmbedding(nn.Module):
             y_embed = y_embed + self.offset
             x_embed = x_embed + self.offset
 
-        pos_x = x_embed.unsqueeze(-1) / self.dim_tx
-        pos_y = y_embed.unsqueeze(-1) / self.dim_ty
+        pos_x = x_embed.unsqueeze(-1) / self.dim_tx.to(x_embed.device)
+        pos_y = y_embed.unsqueeze(-1) / self.dim_ty.to(x_embed.device)
         pos_x = torch.stack((pos_x.sin(), pos_x.cos()), dim=-1).flatten(-2)
         pos_y = torch.stack((pos_y.sin(), pos_y.cos()), dim=-1).flatten(-2)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
