@@ -3284,6 +3284,7 @@ class GenerationMixin:
         else:
             return input_ids
 
+    # Auxiliary functions for beam search
     def _temporary_reorder_cache(self, past_key_values, beam_idx):
         """
         Temporary function to handle the different types of cache reordering processes while we roll out `Cache`.
@@ -3309,6 +3310,38 @@ class GenerationMixin:
         else:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values
+
+    @staticmethod
+    def _flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
+        """[batch_size, num_beams, ...] -> [batch_size * num_beams, ...]"""
+        shape = list(tensor.shape)
+        return torch.reshape(tensor, [shape[0] * shape[1]] + shape[2:])
+
+    @staticmethod
+    def _unflatten_beam_dim(tensor: torch.Tensor, batch_size: int, num_beams: int) -> torch.Tensor:
+        """[batch_size * num_beams, ...] -> [batch_size, num_beams, ...]"""
+        shape = list(tensor.shape)
+        return torch.reshape(tensor, [batch_size, num_beams] + shape[1:])
+
+    @staticmethod
+    def _gather_beams(tensor: torch.Tensor, beam_indices: torch.Tensor) -> torch.Tensor:
+        """
+        Gathers the beam slices indexed by beam_indices into new beam array.
+
+        Args:
+            tensor (`torch.Tensor`): A tensor containing data to be gathered. The tensor is a 2D or a 3D tensor
+                with the two first dimensions depicting the batch and the beam dimensions.
+            beam_indices (`torch.Tensor` of shape `(batch_size, num_beams_to_select)`): The indices of the beams to
+                select .
+
+        Returns:
+            A tensor with the selected beams
+        """
+        # `take_along_dim` requires its indices arg to have the same number of dims as `input`
+        while len(beam_indices.shape) < len(tensor.shape):
+            beam_indices = beam_indices.unsqueeze(-1)
+        gathered_tensor = torch.take_along_dim(input=tensor, indices=beam_indices, dim=1)
+        return gathered_tensor
 
     @staticmethod
     def _beam_search_has_unfinished_sequences(
@@ -3349,6 +3382,133 @@ class GenerationMixin:
         valid_continuations = ~torch.all(next_token_hits_stopping_criteria)
 
         return improvement_possible & exists_open_beam & valid_continuations
+
+    def _get_top_k_continuations(
+        self,
+        accumulated_log_probs: torch.Tensor,
+        running_sequences: torch.Tensor,
+        running_beam_indices: torch.Tensor,
+        cur_len: int,
+        decoder_prompt_len: int,
+        do_sample: bool,
+        beams_to_keep: int,
+        num_beams: int,
+        vocab_size: int,
+        batch_size: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Get top-K continuations given the accumulated log probs on the next token.
+
+        A few notes to understand what's going on:
+        1. Each item in batch has `num_beams` * `vocab_size` candidate continuations. For each item, get the
+        top K [K = (number of EOS tokens + 1) * `num_beams`] candidates with the highest accumulated
+        log-probabilities, or sample them without replacement using the accumulated scores
+        2. We gather the top K (as opposed to `num_beams`, or any number lower than K) here so that we have at
+        least `num_beams` sequences remaining to continue the live beam search.
+        3. Note that other stopping criteria might result in impossible to continue beams, i.e. all continuations
+        selected in this step hit the stopping criteria.
+        """
+        # TODO (joao): This function should take an optional beam scorer function, to manipulate the scores after
+        # token selection. The function should be an argument exposed, so that custom scoring functions can be
+        # defined.
+
+        # Gather the top K scores from _all_ beams.
+        if do_sample:
+            topk_indices = torch.multinomial(
+                nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
+            )
+            topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
+        else:
+            topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
+
+        # Gather K top beams, recover the beam index by floor division and token id by modulo division
+        topk_current_beam_indices = topk_indices // vocab_size
+        topk_running_beam_indices = self._gather_beams(running_beam_indices, topk_current_beam_indices)
+        topk_running_sequences = self._gather_beams(running_sequences, topk_current_beam_indices)
+        topk_ids = topk_indices % vocab_size
+
+        # Update sequences for the K top-k new sequences.
+        topk_running_sequences[:, :, cur_len] = topk_ids
+
+        # we want to store the beam indices with batch information -> real beam index = beam index % num beams
+        batch_offset = torch.arange(batch_size, device=topk_ids.device).view(-1, 1) * num_beams
+        batch_modified_indices = topk_current_beam_indices + batch_offset
+        topk_running_beam_indices[:, :, cur_len - decoder_prompt_len] = batch_modified_indices
+
+        return topk_log_probs, topk_running_sequences, topk_running_beam_indices
+
+    def _get_running_beams_for_next_iteration(
+        self,
+        topk_log_probs: torch.Tensor,
+        topk_running_sequences: torch.Tensor,
+        topk_running_beam_indices: torch.Tensor,
+        next_token_hits_stopping_criteria: torch.Tensor,
+        num_beams: int,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Given the top-K continuations, their scores, and whether they hit a stopping criteria, select the
+        best non-finished beams to continue beam search in the next iteration.
+        """
+        # To prevent these just finished sequences from being used in subsequent iterations, set their log probs
+        # to a very large negative value
+        topk_running_log_probs = topk_log_probs + next_token_hits_stopping_criteria.to(torch.float32) * -1.0e9
+
+        next_topk_indices = torch.topk(topk_running_log_probs, k=num_beams)[1]
+        running_sequences = self._gather_beams(topk_running_sequences, next_topk_indices)
+        running_beam_scores = self._gather_beams(topk_running_log_probs, next_topk_indices)
+        running_beam_indices = self._gather_beams(topk_running_beam_indices, next_topk_indices)
+        return running_sequences, running_beam_scores, running_beam_indices
+
+    def _update_finished_beams(
+        self,
+        sequences: torch.Tensor,
+        topk_running_sequences: torch.Tensor,
+        beam_scores: torch.Tensor,
+        topk_log_probs: torch.Tensor,
+        beam_indices: torch.Tensor,
+        topk_running_beam_indices: torch.Tensor,
+        is_sent_finished: torch.Tensor,
+        next_token_hits_stopping_criteria: torch.Tensor,
+        top_num_beam_mask: torch.Tensor,
+        num_beams: int,
+        cur_len: int,
+        decoder_prompt_len: int,
+        length_penalty: float,
+        early_stopping: Union[bool, str],
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Updates the finished beams if (and only if) there are new completed sequences that have a higher score than
+        the current finished sequences.
+        """
+        # Only the top `num_beam` sequences can be considered for the final returned sequences. Remember: the
+        # remaining sequences only exist as a backup to ensure that we have at least `num_beams` sequences to
+        # continue.
+        did_top_num_beams_just_finished = next_token_hits_stopping_criteria & top_num_beam_mask[None, :]
+
+        # Further process topk logits for the finished beams
+        # - add length penalty
+        topk_log_probs = topk_log_probs / ((cur_len + 1 - decoder_prompt_len) ** length_penalty)
+        # - make sure no scores can be added anymore if beam is full and early stopping is on
+        beams_in_batch_are_full = torch.all(is_sent_finished, axis=-1, keepdims=True) & (early_stopping is True)
+        topk_log_probs += beams_in_batch_are_full.to(torch.float32) * -1.0e9
+        # - make sure still running sequences cannot be chosen as finalized beam
+        topk_log_probs += (~did_top_num_beams_just_finished) * -1.0e9
+
+        # Get finalized  `num_beam` sequences for the next generation step -- combine the previous finalized
+        # data with the new finalized sequences (if any, non-finalized sequences have a very large negative score
+        # in this step), and keep the best `num_beams` sequences.
+        merged_sequences = torch.cat((sequences, topk_running_sequences), dim=1)
+        merged_scores = torch.cat((beam_scores, topk_log_probs), dim=1)
+        merged_beam_indices = torch.cat((beam_indices, topk_running_beam_indices), dim=1)
+        merged_is_sent_finished = torch.cat((is_sent_finished, did_top_num_beams_just_finished), dim=1)
+        topk_merged_indices = torch.topk(merged_scores, k=num_beams)[1]
+        sequences = self._gather_beams(merged_sequences, topk_merged_indices)
+        beam_scores = self._gather_beams(merged_scores, topk_merged_indices)
+        beam_indices = self._gather_beams(merged_beam_indices, topk_merged_indices)
+        is_sent_finished = self._gather_beams(merged_is_sent_finished, topk_merged_indices)
+        return sequences, beam_scores, beam_indices, is_sent_finished
+
+    # end of auxiliary functions for beam search
 
     def _beam_search(
         self,
@@ -3395,37 +3555,7 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
 
-        # 1. Auxiliary tensor manipulation functions
-        def flatten_beam_dim(tensor: torch.Tensor) -> torch.Tensor:
-            """[batch_size, num_beams, ...] -> [batch_size * num_beams, ...]"""
-            shape = list(tensor.shape)
-            return torch.reshape(tensor, [shape[0] * shape[1]] + shape[2:])
-
-        def unflatten_beam_dim(tensor: torch.Tensor, batch_size: int, num_beams: int) -> torch.Tensor:
-            """[batch_size * num_beams, ...] -> [batch_size, num_beams, ...]"""
-            shape = list(tensor.shape)
-            return torch.reshape(tensor, [batch_size, num_beams] + shape[1:])
-
-        def gather_beams(tensor: torch.Tensor, beam_indices: torch.Tensor) -> torch.Tensor:
-            """
-            Gathers the beam slices indexed by beam_indices into new beam array.
-
-            Args:
-                tensor (`torch.Tensor`): A tensor containing data to be gathered. The tensor is a 2D or a 3D tensor
-                    with the two first dimensions depicting the batch and the beam dimensions.
-                beam_indices (`torch.Tensor` of shape `(batch_size, num_beams_to_select)`): The indices of the beams to
-                    select .
-
-            Returns:
-                A tensor with the selected beams
-            """
-            # `take_along_dim` requires its indices arg to have the same number of dims as `input`
-            while len(beam_indices.shape) < len(tensor.shape):
-                beam_indices = beam_indices.unsqueeze(-1)
-            gathered_tensor = torch.take_along_dim(input=tensor, indices=beam_indices, dim=1)
-            return gathered_tensor
-
-        # 2. init beam_search values
+        # 1. init beam_search values
         pad_token_id = generation_config._pad_token_tensor
         eos_token_id = generation_config._eos_token_tensor
         output_attentions = generation_config.output_attentions
@@ -3458,10 +3588,7 @@ class GenerationMixin:
         n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
         beams_to_keep = max(2, 1 + n_eos_tokens) * num_beams
         top_num_beam_mask = torch.cat(
-            (
-                torch.ones((num_beams), dtype=torch.bool),
-                torch.zeros((beams_to_keep - num_beams), dtype=torch.bool),
-            ),
+            (torch.ones((num_beams), dtype=torch.bool), torch.zeros((beams_to_keep - num_beams), dtype=torch.bool)),
             dim=0,
         ).to(input_ids.device)
 
@@ -3476,7 +3603,7 @@ class GenerationMixin:
                 "#35802 *after the PR got merged*, and add a comment there if your questions are not yet answered."
             )
 
-        # 3. init output tuples
+        # 2. init output tuples
         all_scores = () if (return_dict_in_generate and output_scores) else None
         raw_logits = () if (return_dict_in_generate and output_logits) else None
         beam_indices = () if (return_dict_in_generate and output_logits) else None
@@ -3491,7 +3618,7 @@ class GenerationMixin:
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
 
-        # 4. init running tensors and static-shaped placeholders
+        # 3. init running tensors and static-shaped placeholders
 
         # per batch, beam-item holding current token in loop and completed sequences
         running_sequences = torch.full(
@@ -3500,7 +3627,7 @@ class GenerationMixin:
             dtype=torch.int64,
             device=input_ids.device,
         )
-        running_sequences[:, :, :cur_len] = unflatten_beam_dim(input_ids, batch_size, num_beams)
+        running_sequences[:, :, :cur_len] = self._unflatten_beam_dim(input_ids, batch_size, num_beams)
         sequences = running_sequences.clone().detach()
 
         # per batch, beam-item score, logprobs
@@ -3524,139 +3651,10 @@ class GenerationMixin:
         )
         beam_indices = running_beam_indices.clone().detach()
 
-        # placeholders to prevent torch.cat operations
-        merged_sequences = torch.zeros(
-            (batch_size, num_beams + beams_to_keep, max_length), dtype=torch.int64, device=input_ids.device
-        )
-        merged_scores = torch.zeros(
-            (batch_size, num_beams + beams_to_keep), dtype=torch.float, device=input_ids.device
-        )
-        merged_beam_indices = torch.zeros(
-            (batch_size, num_beams + beams_to_keep, max_length - cur_len), dtype=torch.int32, device=input_ids.device
-        )
-        merged_is_sent_finished = torch.zeros(
-            (batch_size, num_beams + beams_to_keep), dtype=torch.bool, device=input_ids.device
-        )
-
-        # 5. Abstract logical blocks for beam search, for a simpler understanding of the beam search loop. Note that
-        # some variables, like `num_beams`, come from outside the score of the function.
-        def get_top_k_continuations(
-            accumulated_log_probs: torch.Tensor,
-            running_sequences: torch.Tensor,
-            running_beam_indices: torch.Tensor,
-            cur_len: int,
-        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            """
-            Get top-K continuations given the accumulated log probs on the next token.
-
-            A few notes to understand what's going on:
-            1. Each item in batch has `num_beams` * `vocab_size` candidate continuations. For each item, get the
-               top K [K = (number of EOS tokens + 1) * `num_beams`] candidates with the highest accumulated
-               log-probabilities, or sample them without replacement using the accumulated scores
-            2. We gather the top K (as opposed to `num_beams`, or any number lower than K) here so that we have at
-               least `num_beams` sequences remaining to continue the live beam search.
-            3. Note that other stopping criteria might result in impossible to continue beams, i.e. all continuations
-               selected in this step hit the stopping criteria.
-            """
-            # TODO (joao): This function should take an optional beam scorer function, to manipulate the scores after
-            # token selection. The function should be an argument exposed, so that custom scoring functions can be
-            # defined.
-
-            # Gather the top K scores from _all_ beams.
-            if do_sample:
-                topk_indices = torch.multinomial(
-                    nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
-                )
-                topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
-            else:
-                topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
-
-            # Gather K top beams, recover the beam index by floor division and token id by modulo division
-            topk_current_beam_indices = topk_indices // vocab_size
-            topk_running_beam_indices = gather_beams(running_beam_indices, topk_current_beam_indices)
-            topk_running_sequences = gather_beams(running_sequences, topk_current_beam_indices)
-            topk_ids = topk_indices % vocab_size
-
-            # Update sequences for the K top-k new sequences.
-            topk_running_sequences[:, :, cur_len] = topk_ids
-
-            # we want to store the beam indices with batch information -> real beam index = beam index % num beams
-            batch_offset = torch.arange(batch_size, device=input_ids.device).view(-1, 1) * num_beams
-            batch_modified_indices = topk_current_beam_indices + batch_offset
-            topk_running_beam_indices[:, :, cur_len - decoder_prompt_len] = batch_modified_indices
-
-            return topk_log_probs, topk_running_sequences, topk_running_beam_indices
-
-        def get_running_beams_for_next_iteration(
-            topk_log_probs: torch.Tensor,
-            topk_running_sequences: torch.Tensor,
-            topk_running_beam_indices: torch.Tensor,
-            next_token_hits_stopping_criteria: torch.Tensor,
-        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-            """
-            Given the top-K continuations, their scores, and whether they hit a stopping criteria, select the
-            best non-finished beams to continue beam search in the next iteration.
-            """
-            # To prevent these just finished sequences from being used in subsequent iterations, set their log probs
-            # to a very large negative value
-            topk_running_log_probs = topk_log_probs + next_token_hits_stopping_criteria.to(torch.float32) * -1.0e9
-
-            next_topk_indices = torch.topk(topk_running_log_probs, k=num_beams)[1]
-            running_sequences = gather_beams(topk_running_sequences, next_topk_indices)
-            running_beam_scores = gather_beams(topk_running_log_probs, next_topk_indices)
-            running_beam_indices = gather_beams(topk_running_beam_indices, next_topk_indices)
-            return running_sequences, running_beam_scores, running_beam_indices
-
-        def update_finished_beams(
-            sequences: torch.Tensor,
-            topk_running_sequences: torch.Tensor,
-            beam_scores: torch.Tensor,
-            topk_log_probs: torch.Tensor,
-            beam_indices: torch.Tensor,
-            topk_running_beam_indices: torch.Tensor,
-            is_sent_finished: torch.Tensor,
-            next_token_hits_stopping_criteria: torch.Tensor,
-        ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-            """
-            Updates the finished beams if (and only if) there are new completed sequences that have a higher score than
-            the current finished sequences.
-            """
-            # Only the top `num_beam` sequences can be considered for the final returned sequences. Remember: the
-            # remaining sequences only exist as a backup to ensure that we have at least `num_beams` sequences to
-            # continue.
-            did_top_num_beams_just_finished = next_token_hits_stopping_criteria & top_num_beam_mask[None, :]
-
-            # Further process topk logits for the finished beams
-            # - add length penalty
-            topk_log_probs = topk_log_probs / ((cur_len + 1 - decoder_prompt_len) ** length_penalty)
-            # - make sure no scores can be added anymore if beam is full and early stopping is on
-            beams_in_batch_are_full = torch.all(is_sent_finished, axis=-1, keepdims=True) & (early_stopping is True)
-            topk_log_probs += beams_in_batch_are_full.to(torch.float32) * -1.0e9
-            # - make sure still running sequences cannot be chosen as finalized beam
-            topk_log_probs += (~did_top_num_beams_just_finished) * -1.0e9
-
-            # Get finalized  `num_beam` sequences for the next generation step -- combine the previous finalized
-            # data with the new finalized sequences (if any, non-finalized sequences have a very large negative score
-            # in this step), and keep the best `num_beams` sequences.
-            merged_sequences[:, :num_beams, :] = sequences
-            merged_sequences[:, num_beams:, :] = topk_running_sequences
-            merged_scores[:, :num_beams] = beam_scores
-            merged_scores[:, num_beams:] = topk_log_probs
-            merged_beam_indices[:, :num_beams, :] = beam_indices
-            merged_beam_indices[:, num_beams:, :] = topk_running_beam_indices
-            merged_is_sent_finished[:, :num_beams] = is_sent_finished
-            merged_is_sent_finished[:, num_beams:] = did_top_num_beams_just_finished
-            topk_merged_indices = torch.topk(merged_scores, k=num_beams)[1]
-            sequences = gather_beams(merged_sequences, topk_merged_indices)
-            beam_scores = gather_beams(merged_scores, topk_merged_indices)
-            beam_indices = gather_beams(merged_beam_indices, topk_merged_indices)
-            is_sent_finished = gather_beams(merged_is_sent_finished, topk_merged_indices)
-            return sequences, beam_scores, beam_indices, is_sent_finished
-
-        # 6. run the generation loop
+        # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # a. Forward current tokens, obtain the logits
-            flat_running_sequences = flatten_beam_dim(running_sequences[:, :, :cur_len])
+            flat_running_sequences = self._flatten_beam_dim(running_sequences[:, :, :cur_len])
             model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
 
             # prepare variable output controls (note: some models won't accept all output controls)
@@ -3709,40 +3707,59 @@ class GenerationMixin:
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del model_outputs
 
-            log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
+            log_probs = self._unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]
             log_probs = torch.reshape(log_probs, (batch_size, num_beams * vocab_size))
 
             # c. Retrieve top-K continuations, i.e. select the next token (greedy or sampling) and then keep the best
             # continuations among all beams based on the accumulated scores.
-            topk_log_probs, topk_running_sequences, topk_running_beam_indices = get_top_k_continuations(
-                log_probs, running_sequences, running_beam_indices, cur_len
+            topk_log_probs, topk_running_sequences, topk_running_beam_indices = self._get_top_k_continuations(
+                accumulated_log_probs=log_probs,
+                running_sequences=running_sequences,
+                running_beam_indices=running_beam_indices,
+                cur_len=cur_len,
+                decoder_prompt_len=decoder_prompt_len,
+                do_sample=do_sample,
+                beams_to_keep=beams_to_keep,
+                num_beams=num_beams,
+                vocab_size=vocab_size,
+                batch_size=batch_size,
             )
 
             # d. Check which running sequences have finished
             next_token_hits_stopping_criteria = stopping_criteria(
-                flatten_beam_dim(topk_running_sequences[:, :, : cur_len + 1]),  # remove unfilled token indexes
+                self._flatten_beam_dim(topk_running_sequences[:, :, : cur_len + 1]),  # remove unfilled token indexes
                 all_scores,
             )
-            next_token_hits_stopping_criteria = unflatten_beam_dim(
+            next_token_hits_stopping_criteria = self._unflatten_beam_dim(
                 next_token_hits_stopping_criteria, batch_size, beams_to_keep
             )
 
             # e. Get the non-finished running `num_beams` sequences for the next generation step
-            running_sequences, running_beam_scores, running_beam_indices = get_running_beams_for_next_iteration(
-                topk_log_probs, topk_running_sequences, topk_running_beam_indices, next_token_hits_stopping_criteria
+            running_sequences, running_beam_scores, running_beam_indices = self._get_running_beams_for_next_iteration(
+                topk_log_probs=topk_log_probs,
+                topk_running_sequences=topk_running_sequences,
+                topk_running_beam_indices=topk_running_beam_indices,
+                next_token_hits_stopping_criteria=next_token_hits_stopping_criteria,
+                num_beams=num_beams,
             )
 
             # f. Update the completed beams if a new high score in a finished sequence is found
-            sequences, beam_scores, beam_indices, is_sent_finished = update_finished_beams(
-                sequences,
-                topk_running_sequences,
-                beam_scores,
-                topk_log_probs,
-                beam_indices,
-                topk_running_beam_indices,
-                is_sent_finished,
-                next_token_hits_stopping_criteria,
+            sequences, beam_scores, beam_indices, is_sent_finished = self._update_finished_beams(
+                sequences=sequences,
+                topk_running_sequences=topk_running_sequences,
+                beam_scores=beam_scores,
+                topk_log_probs=topk_log_probs,
+                beam_indices=beam_indices,
+                topk_running_beam_indices=topk_running_beam_indices,
+                is_sent_finished=is_sent_finished,
+                next_token_hits_stopping_criteria=next_token_hits_stopping_criteria,
+                top_num_beam_mask=top_num_beam_mask,
+                num_beams=num_beams,
+                cur_len=cur_len,
+                decoder_prompt_len=decoder_prompt_len,
+                length_penalty=length_penalty,
+                early_stopping=early_stopping,
             )
 
             # g. Prepare remaining data for the next iteration, including computing the stopping condition for
@@ -3752,7 +3769,7 @@ class GenerationMixin:
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     past_key_values=model_kwargs["past_key_values"],
-                    beam_idx=flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len]),
+                    beam_idx=self._flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len]),
                 )
 
             cur_len = cur_len + 1
@@ -3768,11 +3785,11 @@ class GenerationMixin:
                 length_penalty,
             )
 
-        # 7. prepare outputs
+        # 5. prepare outputs
         # Take best beams for each batch (the score is sorted in descending order)
-        sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
-        beam_scores = flatten_beam_dim(beam_scores[:, :num_return_sequences])
-        beam_indices = flatten_beam_dim(beam_indices[:, :num_return_sequences, :])
+        sequences = self._flatten_beam_dim(sequences[:, :num_return_sequences, :])
+        beam_scores = self._flatten_beam_dim(beam_scores[:, :num_return_sequences])
+        beam_indices = self._flatten_beam_dim(beam_indices[:, :num_return_sequences, :])
 
         # Crop the static-shaped tensors to the actual size
         sequences = sequences[:, :cur_len]
