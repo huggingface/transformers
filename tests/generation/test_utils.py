@@ -1783,12 +1783,12 @@ class GenerationTesterMixin:
             model.config.use_cache = True
             model.config.is_decoder = True
             batch_size = input_ids.shape[0]
-            max_length = 30
+            max_new_tokens = 10
 
             # here we force to not stop at eos and go until max-length
             model.generation_config.eos_token_id = model.config.get_text_config().eos_token_id = -1
             generation_kwargs = {
-                "max_length": max_length,
+                "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
@@ -1811,10 +1811,11 @@ class GenerationTesterMixin:
 
             # we should get `max_length - 1` in shape, not `max_length - embeds_length`.
             # -1 because the last generated token isn't yet in the cache.
-            cache_shape = (batch_size, num_key_value_heads, max_length - 1, head_dim)
-            self.assertTrue(isinstance(outputs.past_key_values, StaticCache))
-            self.assertTrue(len(outputs.past_key_values.key_cache) == num_hidden_layers)
-            self.assertTrue(outputs.past_key_values.key_cache[0].shape == cache_shape)
+            max_length = max_new_tokens + inputs_embeds.shape[1] - 1
+            cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
+            self.assertIsInstance(outputs.past_key_values, StaticCache)
+            self.assertEqual(len(outputs.past_key_values.key_cache), num_hidden_layers)
+            self.assertListEqual(list(outputs.past_key_values.key_cache[0].shape), cache_shape)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
