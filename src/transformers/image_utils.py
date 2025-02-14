@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import base64
+import math
 import os
 from contextlib import redirect_stdout
 from dataclasses import dataclass
@@ -453,8 +454,8 @@ def get_image_size_for_max_height_width(
     height_scale = max_height / height
     width_scale = max_width / width
     min_scale = min(height_scale, width_scale)
-    new_height = int(height * min_scale)
-    new_width = int(width * min_scale)
+    new_height = math.ceil(height * min_scale)
+    new_width = math.ceil(width * min_scale)
     return new_height, new_width
 
 
