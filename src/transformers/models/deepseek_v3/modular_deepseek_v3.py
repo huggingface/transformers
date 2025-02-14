@@ -13,14 +13,15 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
+    LlamaForCausalLM,
     LlamaForSequenceClassification,
+    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from .configuration_deepseek_v3 import DeepseekV3Config
 
 
@@ -67,37 +68,42 @@ class DeepseekV3TopkRouter(nn.Module):
         self.routed_scaling_factor = config.routed_scaling_factor
         self.n_group = config.n_group
         self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.e_score_correction_bias = nn.Parameter(torch.empty((self.n_routed_experts)))
 
     def forward(self, hidden_states):
-        batch_size, seq_length = hidden_states.shape[:-1]
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-
         scores = router_logits.sigmoid()
+        topk_indices = self.get_topk_indices(scores)
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights, router_logits
+
+    @torch.no_grad()
+    def get_topk_indices(self, scores):
         scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
         group_scores = (
             scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
             .topk(2, dim=-1)[0]
             .sum(dim=-1)
-        )  # [n, n_group]
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]  # [n, top_k_group]
-        group_mask = torch.zeros_like(group_scores)  # [n, n_group]
-        group_mask.scatter_(1, group_idx, 1)  # [n, n_group]
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
         score_mask = (
             group_mask.unsqueeze(-1)
-            .expand(batch_size * seq_length, self.n_group, self.n_routed_experts // self.n_group)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
-        )  # [n, e]
-        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
-        _, topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)
-        topk_weights = scores.gather(1, topk_indices)
-        denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-        topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor  # must multiply the scaling factor
-        return topk_indices, topk_weights, router_logits
+        )
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return topk_indices
 
 
 class DeepseekV3MoE(nn.Module):
@@ -115,67 +121,36 @@ class DeepseekV3MoE(nn.Module):
             ]
         )
         self.gate = DeepseekV3TopkRouter(config)
-        self.shared_experts = DeepseekV3MLP(config=config, intermediate_size=config.moe_intermediate_size)
+        self.shared_experts = DeepseekV3MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
         topk_indices, topk_weights, router_logits = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe_infer(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states, router_logits
 
-    def moe_infer(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        """
-        Perform inference using a Mixture of Experts (MoE) model.
-        Args:
-            hidden_states (torch.Tensor): Input hidden states.
-            topk_indices (torch.Tensor): Indices of the top-k experts for each token.
-            topk_weights (torch.Tensor): Weights associated with the top-k experts.
+    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
+        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
+        expert_mask = expert_mask.permute(2, 0, 1)
 
-        Returns:
-            torch.Tensor: Output of the MoE model.
-        """
-        num_experts = len(self.experts)
-        batch_size, num_topk = topk_indices.shape
-        with torch.no_grad():
-            # Count the number of tokens assigned to each expert
-            expert_counts = topk_indices.new_zeros((batch_size, num_experts))
-            expert_counts.scatter_(1, topk_indices, 1)
-            tokens_per_expert = expert_counts.sum(dim=0)
-
-            # Sort tokens by their assigned expert
-            sorted_indices = topk_indices.view(-1).argsort()
-            sorted_tokens = hidden_states[sorted_indices // num_topk]
-            tokens_per_expert = tokens_per_expert.cpu().numpy()
-
-            # Process tokens through their assigned experts
-            expert_outputs = []
-            current_pos = 0
-
-        for expert_idx, num_tokens in enumerate(tokens_per_expert):
-            if num_tokens == 0:
-                continue
-
-            next_pos = current_pos + num_tokens
+        for expert_idx in range(len(self.experts)):
             expert = self.experts[expert_idx]
-            expert_tokens = sorted_tokens[current_pos:next_pos]
-            expert_outputs.append(expert(expert_tokens))
-            current_pos = next_pos
+            mask = expert_mask[expert_idx]
+            token_indices, weight_indices = torch.where(mask)
 
-        # Combine the outputs from all experts
-        expert_outputs = torch.cat(expert_outputs, dim=0) if expert_outputs else sorted_tokens.new_empty(0)
-
-        # Reorder the outputs to match the original token sequence
-        reordered_outputs = torch.empty_like(expert_outputs)
-        reordered_outputs[sorted_indices] = expert_outputs
-
-        # Reshape and apply the expert weights
-        reordered_outputs = reordered_outputs.view(batch_size, num_topk, -1).type(topk_weights.dtype)
-        moe_output = torch.matmul(topk_weights.unsqueeze(1), reordered_outputs)
-        moe_output = moe_output.sum(dim=1).type(hidden_states.dtype)
-        return moe_output
+            if token_indices.numel() > 0:
+                expert_weights = topk_weights[token_indices, weight_indices]
+                expert_input = hidden_states[token_indices]
+                expert_output = expert(expert_input)
+                weighted_output = expert_output * expert_weights.unsqueeze(-1)
+                final_hidden_states.index_add_(0, token_indices, weighted_output)
+        return final_hidden_states.type(hidden_states.dtype)
 
 
 class DeepseekV3Attention(nn.Module):
@@ -194,12 +169,12 @@ class DeepseekV3Attention(nn.Module):
         self.kv_lora_rank = config.kv_lora_rank
         self.v_head_dim = config.v_head_dim
         self.qk_nope_head_dim = config.qk_nope_head_dim
-        self.q_head_dim = config.q_head_dim
+        self.qk_head_dim = config.qk_head_dim
 
         self.is_causal = True
         self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=config.attention_bias)
         self.q_a_layernorm = DeepseekV3RMSNorm(config.q_lora_rank)
-        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.q_head_dim, bias=False)
+        self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.qk_head_dim, bias=False)
 
         self.kv_a_proj_with_mqa = nn.Linear(
             config.hidden_size,
@@ -209,7 +184,7 @@ class DeepseekV3Attention(nn.Module):
         self.kv_a_layernorm = DeepseekV3RMSNorm(self.kv_lora_rank)
         self.kv_b_proj = nn.Linear(
             self.kv_lora_rank,
-            self.num_heads * (self.q_head_dim - self.qk_rope_head_dim + self.v_head_dim),
+            self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
             bias=False,
         )
 
@@ -219,7 +194,7 @@ class DeepseekV3Attention(nn.Module):
             bias=config.attention_bias,
         )
 
-        self.scaling = self.q_head_dim ** (-0.5)
+        self.scaling = self.qk_head_dim ** (-0.5)
         if self.config.rope_scaling is not None:
             mscale_all_dim = self.config.rope_scaling.get("mscale_all_dim", 0)
             scaling_factor = self.config.rope_scaling["factor"]
@@ -236,29 +211,30 @@ class DeepseekV3Attention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, self.num_heads, -1)
-        batch_size, seq_length = input_shape
+        batch_size, seq_length = hidden_states.shape[:-1]
+        query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
+        key_shape = (batch_size, seq_length, -1, self.qk_nope_head_dim + self.v_head_dim)
 
-        q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(hidden_shape).transpose(1, 2)
-        q_rot, q_pass = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(query_shape).transpose(1, 2)
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
 
-        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(hidden_shape).transpose(1, 2)
+        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(key_shape).transpose(1, 2)
         k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
 
-        k_rot = k_rot.view(*input_shape, 1, self.qk_rope_head_dim).transpose(1, 2)
+        k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
-        query_states = torch.cat(q_rot, q_pass, dim=-1)
-        key_states = torch.cat(k_rot, k_pass, dim=-1)
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
-        if self.config._attn_implementation == "flash_attention_2" and self.q_head_dim != self.v_head_dim:
-            value_states = F.pad(value_states, [0, self.q_head_dim - self.v_head_dim])
+        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
+            value_states = F.pad(value_states, [0, self.qk_head_dim - self.v_head_dim])
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
@@ -286,10 +262,10 @@ class DeepseekV3Attention(nn.Module):
             **kwargs,
         )
 
-        if self.config._attn_implementation == "flash_attention_2" and self.q_head_dim != self.v_head_dim:
+        if self.config._attn_implementation == "flash_attention_2" and self.qk_head_dim != self.v_head_dim:
             attn_output = attn_output[:, :, :, : self.v_head_dim]
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -365,38 +341,61 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
-def permute_for_rope(input_tensor, n_heads, dim1, dim2):
-    """
-    When you go from the complex ROPE formulation to sin and cos one, you need
-    to permute the query and key weights (to avoid doing it on the fly)
-    """
-    input_tensor = input_tensor.reshape(dim1, dim2)
-    input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
-    input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
-    return input_tensor
-
-
-class DeepseekV3Model(MixtralModel):
+class DeepseekV3Model(LlamaModel):
     def __init__(self, config):
         super().__init__(config)
-        self._register_load_state_dict_pre_hook(self.load_hook)
+        self._register_load_state_dict_pre_hook(self.load_pre_hook)
+        self._register_state_dict_hook(self.load_hook)
         self.post_init()
 
-    def load_hook(self, state_dict, prefix, *args):
+    def load_pre_hook(self, state_dict, prefix, *args):
         """
-        Weights have to be permutted for correct rope formulation. We can't do this in the weights
-        as every other framework already uses the `Llama` orginal function (which is copyrighted btw).
+        Weights have to be permuted for correct rope formulation. We can't do this in the weights
+        as every other framework already uses the `Llama` original function (which is copyrighted btw).
         And I am not even sure it's better.... anyways end of my rant
         """
+
+        def permute_for_rope(input_tensor):
+            """
+            When you go from the complex ROPE formulation to sin and cos one, you need
+            to permute the query and key weights (to avoid doing it on the fly)
+            """
+            n_heads, dim1, dim2 = input_tensor.shape[0], input_tensor.shape[1], input_tensor.shape[2]
+            input_tensor = input_tensor.reshape(n_heads * dim1, dim2)
+            input_tensor = input_tensor.view(n_heads, dim1 // 2, 2, dim2)
+            input_tensor = input_tensor.transpose(1, 2).reshape(n_heads, dim1, dim2)
+            return input_tensor
+
+        def permute_layer_for_rope(key, num_heads, head_dim, rope_dim):
+            weight = state_dict[key]
+            weight = weight.view(num_heads, head_dim, -1)
+            weight_rot = weight[:, -rope_dim:]
+            weight_rot = permute_for_rope(weight_rot)
+            weight[:, -rope_dim:] = weight_rot
+            weight = weight.view(-1, weight.shape[-1])
+            state_dict[key] = weight
+
         for k in state_dict:
             if "q_b_proj." in k:
-                weight = state_dict.pop(k[: self.qk_nope_head_dim])
-            if "k_b_proj." in k:
-                weight = state_dict.pop(k[self.qk_nope_head_dim :])
-            state_dict[k] = permute_for_rope(weight, weight.shape[0], weight.shape[1], weight.shape[2])
+                permute_layer_for_rope(
+                    k,
+                    num_heads=self.config.num_attention_heads,
+                    head_dim=self.config.qk_head_dim,
+                    rope_dim=self.config.qk_rope_head_dim,
+                )
+            if "kv_a_proj_with_mqa." in k:
+                permute_layer_for_rope(
+                    k,
+                    num_heads=1,
+                    head_dim=self.config.kv_lora_rank + self.config.qk_rope_head_dim,
+                    rope_dim=self.config.qk_rope_head_dim,
+                )
+
+    def load_hook(self, module, state_dict, prefix, *args):
+        self.load_pre_hook(state_dict, prefix, *args)
 
 
-class DeepseekV3ForCausalLM(MixtralForCausalLM):
+class DeepseekV3ForCausalLM(LlamaForCausalLM):
     pass
 
 

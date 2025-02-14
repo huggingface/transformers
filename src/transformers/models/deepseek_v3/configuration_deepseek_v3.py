@@ -135,11 +135,18 @@ class DeepseekV3Config(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `DeepseekV3Model`
     base_model_tp_plan = {
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.gate_proj": "colwise",
         "layers.*.up_proj": "colwise",
         "layers.*.down_proj": "rowwise",
     }
-
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
     def __init__(
         self,
         vocab_size=129280,
@@ -194,7 +201,7 @@ class DeepseekV3Config(PretrainedConfig):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
-        self.q_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
         self.head_dim = qk_rope_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
