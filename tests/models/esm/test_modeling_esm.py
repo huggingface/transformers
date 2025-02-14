@@ -195,7 +195,6 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": EsmModel,
