@@ -175,7 +175,7 @@ Not all models sample frames **uniformly** — some require more complex logic t
 🔹 If provided, this function **overrides** standard `num_frames` and `fps` methods.  
 🔹 It receives all the arguments passed to `load_video` and must return **valid frame indices** to sample.  
 
-When to Use `sample_indices_fn`?  
+You should use `sample_indices_fn` when:
 
 - If you need a custom sampling strategy (e.g., **adaptive frame selection** instead of uniform sampling).  
 - If your model prioritizes **key moments** in a video rather than evenly spaced frames.  
