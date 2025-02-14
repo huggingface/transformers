@@ -2104,7 +2104,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
 
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
