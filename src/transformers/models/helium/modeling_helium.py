@@ -385,6 +385,7 @@ class HeliumPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["HeliumDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
+    _supports_flash_attn_3 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True

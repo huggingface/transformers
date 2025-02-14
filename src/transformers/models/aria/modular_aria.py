@@ -1208,6 +1208,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = False
+    _supports_flash_attn_3 = False
     _supports_sdpa = True
     _supports_cache_class = True
 
@@ -1348,6 +1349,7 @@ ARIA_START_DOCSTRING = r"""
 class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaConfig
     _supports_flash_attn_2 = False
+    _supports_flash_attn_3 = False
     _supports_sdpa = False
     _tied_weights_keys = ["language_model.lm_head.weight"]
 

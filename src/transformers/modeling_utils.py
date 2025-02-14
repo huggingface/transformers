@@ -1299,6 +1299,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # Flash Attention 2 support
     _supports_flash_attn_2 = False
 
+    # Flash Attention 3 support
+    _supports_flash_attn_3 = False
+
     # SDPA support
     _supports_sdpa = False
 
