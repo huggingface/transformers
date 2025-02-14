@@ -74,7 +74,7 @@ RUN python3 -m pip install --no-cache-dir optimum-quanto
 RUN python3 -m pip install git+https://github.com/NetEase-FuXi/EETQ.git
 
 # Add flute-kernel and fast_hadamard_transform for quantization testing
-RUN python3 -m pip install --no-cache-dir flute-kernel==0.3.0 -i https://flute-ai.github.io/whl/cu118
+RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
 RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
 
 # Add compressed-tensors for quantization testing
