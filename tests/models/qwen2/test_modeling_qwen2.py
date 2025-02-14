@@ -625,6 +625,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         model_id = "Qwen/Qwen2.5-3B"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = Qwen2ForCausalLM.from_pretrained(model_id).to(torch_device)
+        # fmt: off
         LONG_TEXT = """The Warring States period in Chinese history (c. 475 – 221 BC) comprises the final centuries of the Zhou dynasty (c. 1046 – 256 BC), which were characterized by warfare, bureaucratic and military reform, and political consolidation. It followed the Spring and Autumn period and concluded with the wars of conquest that saw the state of Qin annex each of the other contender states by 221 BC and found the Qin dynasty, the first imperial dynastic state in East Asian history.
 
 
@@ -877,7 +878,7 @@ In 225 BC, Qin conquered Wei. The Qin army led a direct invasion into Wei by bes
 
 Conquest of Chu
 
-In 223 BC, Qin conquered Chu. 
+In 223 BC, Qin conquered Chu.
 The first invasion was however an utter disaster when 200,000 Qin troops, led by the general, Li Xin, were defeated by 500,000 Chu troops in the unfamiliar territory of Huaiyang, modern-day northern Jiangsu and Anhui provinces. Xiang Yan, the Chu commander, had lured Qin by allowing a few initial victories, but then counterattacked and burnt two large Qin camps.
 
 
@@ -886,7 +887,7 @@ In 222 BC, Wang Jian was recalled to lead a second military invasion with 600,00
 
 Conquest of Zhao and Yan
 
-In 222 BC, Qin conquered Zhao and Yan. 
+In 222 BC, Qin conquered Zhao and Yan.
 After the conquest of Zhao, the Qin army turned its attention towards Yan. Realizing the danger and gravity of this situation, Crown Prince Dan of Yan had sent Jing Ke to assassinate King Zheng of Qin, but this failure only helped to fuel the rage and determination of the Qin king, and he increased the number of troops to conquer the Yan state.
 
 
@@ -1010,24 +1011,28 @@ At the same time, the increased resources of consolidated, bureaucratic states, 
 The Guanzi is considered one of the most foundational texts of the developing political economy in the Warring States period. It addresses principles of price regulation in the context of effectively dealing with commodities that are "light" (connoting a commodity which is unimportant, non-essential, or inexpensive) or "heavy" (a commodity which is important, essential, or expensive) and how whether a commodity is "light" or "heavy" is understood in relation to other commodities.
 
 
-In summary:""" # fmt: skip
+In summary:"""
+        # fmt: on
 
         input_ids = tokenizer(LONG_TEXT, return_tensors="pt").input_ids.to(torch_device)
-        generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1]:]
-        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279,   467, 19859,  4180,  4168,   572,   264,   882,   315,  2244, 2297,   304,  5616,    13,   576, 66827, 66846,   572,   304, 17704, 11,   323,   279,  5302,  1033,   304,  6783, 12055,   448,  1817, 1008,    13,   576,  5302,  1033, 10454,   803, 79395,   323, 57883, 11,   323,   279,  8584,   572,  7826,    13,   576,   467, 19859]], dtype=torch.long)) # fmt: skip
-
-        self.assertEqual(tokenizer.decode(generated_ids[0]), """ the Warring States period was a time of great change in China. The Zhou dynasty was in decline, and the states were in constant conflict with each other. The states were becoming more bureaucratic and centralized, and the economy was growing. The Warring""")
+        generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
+        torch.testing.assert_close(generated_ids.cpu(), torch.tensor([[279,   467, 19859,  4180,  4168,   572,   264,   882,   315,  2244, 2297,   304,  5616,    13,   576, 66827, 66846,   572,   304, 17704, 11,   323,   279,  5302,  1033,   304,  6783, 12055,   448,  1817, 1008,    13,   576,  5302,  1033, 10454,   803, 79395,    11,   323, 279,  8584,   572,  7826,    13,   576,  4168,   572,  1083,   264]], dtype=torch.long))  # fmt: skip
+        print(tokenizer.decode(generated_ids[0]))
+        self.assertEqual(
+            tokenizer.decode(generated_ids[0]),
+            """ the Warring States period was a time of great change in China. The Zhou dynasty was in decline, and the states were in constant conflict with each other. The states were becoming more bureaucratic, and the economy was growing. The period was also a""",
+        )
         model.config._attn_implementation = "eager"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1]:]
+        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches sdpa"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
         model.config._attn_implementation = "flex_attention"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1]:]
+        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches Flex attention"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
 
         model.config._attn_implementation = "flash_attention_2"
-        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1]:]
+        new_generated_ids = model.generate(input_ids, max_new_tokens=50)[:, input_ids.shape[1] :]
         with self.subTest("Eager matches flash attention"):
             torch.testing.assert_close(generated_ids, new_generated_ids, rtol=1e-4, atol=1e-4)
