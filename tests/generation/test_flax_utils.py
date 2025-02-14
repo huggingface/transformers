@@ -66,7 +66,6 @@ def random_attention_mask(shape, rng=None):
 @require_flax
 class FlaxGenerationTesterMixin:
     model_tester = None
-    all_generative_model_classes = ()
 
     def _get_input_ids_and_config(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -100,6 +99,10 @@ class FlaxGenerationTesterMixin:
             pt_model_class = getattr(transformers, pt_model_class_name)
             pt_model = pt_model_class(config).eval()
             pt_model = load_flax_weights_in_pytorch_model(pt_model, flax_model.params)
+
+            # Generate max 5 tokens only otherwise seems to be numerical error accumulation
+            pt_model.generation_config.max_length = 5
+            flax_model.generation_config.max_length = 5
 
             flax_generation_outputs = flax_model.generate(input_ids).sequences
             pt_generation_outputs = pt_model.generate(torch.tensor(input_ids, dtype=torch.long))

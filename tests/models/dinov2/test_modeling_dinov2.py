@@ -65,6 +65,8 @@ class Dinov2ModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
+        attn_implementation="eager",
+        mask_ratio=0.5,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,10 +85,14 @@ class Dinov2ModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
+        self.attn_implementation = attn_implementation
+        self.mask_ratio = mask_ratio
 
         # in Dinov2, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
+        self.num_masks = int(self.mask_ratio * self.seq_length)
+        self.mask_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -113,6 +119,7 @@ class Dinov2ModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -204,6 +211,8 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     Here we also overwrite some of the tests of test_modeling_common.py, as Dinov2 does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
+
+    test_torch_exportable = True
 
     all_model_classes = (
         (
@@ -320,10 +329,10 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-2.1747, -0.4729, 1.0936], [-3.2780, -0.8269, -0.9210], [-2.9129, 1.1284, -0.7306]],
+            [[-2.2005, -0.4495, 1.0964], [-3.3959, -0.8942, -1.0315], [-2.9355, 1.1564, -0.7656]],
             device=torch_device,
         )
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
 
 @require_torch

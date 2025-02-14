@@ -547,6 +547,13 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = XCLIPModelTester(self)
+        common_properties = ["projection_dim", "prompt_layers", "prompt_num_attention_heads"]
+        self.config_tester = ConfigTester(
+            self, config_class=XCLIPConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -730,4 +737,40 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[14.0181, 20.2771, 14.4776]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.logits_per_video, expected_logits, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_inference_interpolate_pos_encoding(self):
+        # XCLIP models have an `interpolate_pos_encoding` argument in their forward method,
+        # allowing to interpolate the pre-trained position embeddings in order to use
+        # the model on higher resolutions. The DINO model by Facebook AI leverages this
+        # to visualize self-attention on higher resolution images.
+        model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32").to(torch_device)
+
+        processor = XCLIPProcessor.from_pretrained(
+            "microsoft/xclip-base-patch32", size=180, crop_size={"height": 180, "width": 180}
+        )
+
+        video = prepare_video()
+        inputs = processor(text="what's in the video", videos=video, return_tensors="pt").to(torch_device)
+
+        # interpolate_pos_encodiung false should return value error
+        with self.assertRaises(ValueError, msg="doesn't match model"):
+            with torch.no_grad():
+                model(**inputs, interpolate_pos_encoding=False)
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        # verify the logits
+        expected_shape = torch.Size((8, 26, 768))
+
+        self.assertEqual(outputs.vision_model_output.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.0126, 0.2109, 0.0609], [0.0448, 0.5862, -0.1688], [-0.0881, 0.8525, -0.3044]]
+        ).to(torch_device)
+
+        torch.testing.assert_close(
+            outputs.vision_model_output.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

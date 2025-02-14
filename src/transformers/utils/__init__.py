@@ -15,6 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from functools import lru_cache
+from typing import FrozenSet
+
 from huggingface_hub import get_full_repo_name  # for backward compatibility
 from huggingface_hub.constants import HF_HUB_DISABLE_TELEMETRY as DISABLE_TELEMETRY  # for backward compatibility
 from packaging import version
@@ -34,6 +37,7 @@ from .doc import (
 from .generic import (
     ContextManagers,
     ExplicitEnum,
+    LossKwargs,
     ModelOutput,
     PaddingStrategy,
     TensorType,
@@ -51,6 +55,8 @@ from .generic import (
     is_tensor,
     is_tf_symbolic_tensor,
     is_tf_tensor,
+    is_timm_config_dict,
+    is_timm_local_checkpoint,
     is_torch_device,
     is_torch_dtype,
     is_torch_tensor,
@@ -85,13 +91,11 @@ from .hub import (
     define_sagemaker_information,
     download_url,
     extract_commit_hash,
-    get_cached_models,
     get_file_from_repo,
     has_file,
     http_user_agent,
     is_offline_mode,
     is_remote_url,
-    move_cache,
     send_example_telemetry,
     try_to_load_from_cache,
 )
@@ -113,13 +117,16 @@ from .import_utils import (
     get_torch_version,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_av_available,
     is_bitsandbytes_available,
+    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
     is_coloredlogs_available,
+    is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
     is_datasets_available,
@@ -133,12 +140,15 @@ from .import_utils import (
     is_flash_attn_greater_or_equal,
     is_flash_attn_greater_or_equal_2_10,
     is_flax_available,
+    is_flute_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
+    is_hadamard_available,
     is_hqq_available,
     is_in_notebook,
     is_ipex_available,
@@ -158,6 +168,7 @@ from .import_utils import (
     is_onnx_available,
     is_openai_available,
     is_optimum_available,
+    is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
@@ -169,7 +180,6 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
-    is_quanto_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -180,9 +190,10 @@ from .import_utils import (
     is_sentencepiece_available,
     is_seqio_available,
     is_sklearn_available,
-    is_soundfile_availble,
+    is_soundfile_available,
     is_spacy_available,
     is_speech_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -200,9 +211,11 @@ from .import_utils import (
     is_torch_compile_available,
     is_torch_cuda_available,
     is_torch_deterministic,
+    is_torch_flex_attn_available,
     is_torch_fp16_available_on_device,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_greater_or_equal,
     is_torch_mlu_available,
     is_torch_mps_available,
     is_torch_musa_available,
@@ -220,9 +233,12 @@ from .import_utils import (
     is_torchdynamo_available,
     is_torchdynamo_compiling,
     is_torchvision_available,
+    is_torchvision_v2_available,
     is_training_run_on_sagemaker,
     is_uroman_available,
     is_vision_available,
+    is_vptq_available,
+    is_yt_dlp_available,
     requires_backends,
     torch_only_method,
 )
@@ -277,3 +293,31 @@ def check_min_version(min_version):
             + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )
+
+
+@lru_cache()
+def get_available_devices() -> FrozenSet[str]:
+    """
+    Returns a frozenset of devices available for the current PyTorch installation.
+    """
+    devices = {"cpu"}  # `cpu` is always supported as a device in PyTorch
+
+    if is_torch_cuda_available():
+        devices.add("cuda")
+
+    if is_torch_mps_available():
+        devices.add("mps")
+
+    if is_torch_xpu_available():
+        devices.add("xpu")
+
+    if is_torch_npu_available():
+        devices.add("npu")
+
+    if is_torch_mlu_available():
+        devices.add("mlu")
+
+    if is_torch_musa_available():
+        devices.add("musa")
+
+    return frozenset(devices)

@@ -22,9 +22,9 @@ logger = logging.get_logger(__name__)
 
 class PixtralVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PixtralModel`]. It is used to instantiate an
-    Pixtral model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Pixtral-9B.
+    This is the configuration class to store the configuration of a [`PixtralVisionModel`]. It is used to instantiate an
+    Pixtral vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to the vision encoder used by Pixtral-12B.
 
     e.g. [pixtral-hf/pixtral-9b](https://huggingface.co/pixtral-hf/pixtral-9b)
 
@@ -52,19 +52,19 @@ class PixtralVisionConfig(PretrainedConfig):
             Dropout probability for the attention layers.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings with the input embeddings.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
     ```python
-    >>> from transformers import PixtralModel, PixtralVisionConfig, CLIPVisionConfig, LlamaConfig
+    >>> from transformers import PixtralVisionModel, PixtralVisionConfig
 
-    >>> # Initializing a Pixtral 12B style configuration
+    >>> # Initializing a Pixtral-12B style configuration
     >>> config = PixtralVisionConfig()
 
-    >>> # Initializing a model from the pixtral 12B style configuration
-    >>> model = PixtralModel(configuration)
+    >>> # Initializing a model (with randomly initialized weights) from the configuration
+    >>> model = PixtralVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -84,7 +84,7 @@ class PixtralVisionConfig(PretrainedConfig):
         hidden_act="gelu",
         attention_dropout=0.0,
         rope_theta=10000.0,
-        tie_word_embeddings=False,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -99,5 +99,8 @@ class PixtralVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.hidden_act = hidden_act
         self.rope_theta = rope_theta
-        self.tie_word_embeddings = tie_word_embeddings
         self.head_dim = hidden_size // num_attention_heads
+        self.initializer_range = initializer_range
+
+
+__all__ = ["PixtralVisionConfig"]

@@ -14,13 +14,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch SAM model."""
 
-import gc
+import tempfile
 import unittest
 
 import requests
 
 from transformers import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, pipeline
-from transformers.testing_utils import backend_empty_cache, require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, require_torch_sdpa, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -296,31 +296,30 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_torchscript = False
+    _is_composite = True
 
     # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
     def setUp(self):
         self.model_tester = SamModelTester(self)
-        self.vision_config_tester = ConfigTester(self, config_class=SamVisionConfig, has_text_modality=False)
-        self.prompt_encoder_config_tester = ConfigTester(
-            self,
-            config_class=SamPromptEncoderConfig,
-            has_text_modality=False,
-            num_attention_heads=12,
-            num_hidden_layers=2,
-        )
-        self.mask_decoder_config_tester = ConfigTester(
-            self, config_class=SamMaskDecoderConfig, has_text_modality=False
+        common_properties = ["initializer_range"]
+        self.config_tester = ConfigTester(
+            self, config_class=SamConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):
-        self.vision_config_tester.run_common_tests()
-        self.prompt_encoder_config_tester.run_common_tests()
-        self.mask_decoder_config_tester.run_common_tests()
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -444,6 +443,68 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = SamModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @require_torch_sdpa
+    def test_sdpa_can_compile_dynamic(self):
+        self.skipTest(reason="SAM model can't be compiled dynamic yet")
+
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        """
+        Tests if composite models dispatch correctly on SDPA/eager when requested so when loading the model.
+        This tests only by looking at layer names, as usually SDPA layers are calles "SDPAAttention".
+        In contrast to the above test, this one checks if the "config._attn_implamentation" is a dict after the model
+        is loaded, because we manually replicate requested attn implementation on each sub-config when loading.
+        See https://github.com/huggingface/transformers/pull/32238 for more info
+
+        The test tries to cover most general cases of composite models, VLMs with vision and text configs. Any model
+        that has a different set of sub-configs has to overwrite this test.
+        """
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+
+                # Root model determines SDPA support
+                attn_impl = "sdpa" if model._supports_sdpa else "eager"
+
+                # Check config propagation to submodels that support it
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model_sdpa.vision_encoder.config._attn_implementation == attn_impl)
+                self.assertTrue(model_sdpa.mask_decoder.config._attn_implementation == attn_impl)
+
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.vision_encoder.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.mask_decoder.config._attn_implementation == "eager")
+
+                # Verify SDPA/eager layer presence
+                has_sdpa = False
+                for name, submodule in model_sdpa.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        has_sdpa = True
+                        break
+
+                if not has_sdpa and attn_impl == "sdpa":
+                    raise ValueError("The SDPA model should have SDPA attention layers")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
 
 def prepare_image():
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
@@ -462,8 +523,7 @@ class SamModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def test_inference_mask_generation_no_point(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -479,8 +539,10 @@ class SamModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4515), atol=2e-4))
-        self.assertTrue(torch.allclose(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), atol=2e-4))
+        torch.testing.assert_close(scores[-1], torch.tensor(0.4515), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(
+            masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), rtol=2e-4, atol=2e-4
+        )
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -501,9 +563,9 @@ class SamModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
-        self.assertTrue(
-            torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
+        torch.testing.assert_close(scores[-1], torch.tensor(0.9566), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(
+            masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), rtol=2e-4, atol=2e-4
         )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
@@ -545,8 +607,8 @@ class SamModelIntegrationTest(unittest.TestCase):
             ]
         )
         EXPECTED_MASKS = torch.tensor([-2.8550, -2.7988, -2.9625])
-        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
-        self.assertTrue(torch.allclose(masks, EXPECTED_MASKS, atol=1e-3))
+        torch.testing.assert_close(scores, EXPECTED_SCORES, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(masks, EXPECTED_MASKS, rtol=1e-3, atol=1e-3)
 
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -572,7 +634,7 @@ class SamModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7894), atol=1e-4))
+        torch.testing.assert_close(scores[-1], torch.tensor(0.7894), rtol=1e-4, atol=1e-4)
 
     def test_inference_mask_generation_one_point(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -593,7 +655,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
+        torch.testing.assert_close(scores[-1], torch.tensor(0.9675), rtol=1e-4, atol=1e-4)
 
         # With no label
         input_points = [[[400, 650]]]
@@ -603,7 +665,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
+        torch.testing.assert_close(scores[-1], torch.tensor(0.9675), rtol=1e-4, atol=1e-4)
 
     def test_inference_mask_generation_two_points(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -624,7 +686,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9762), atol=1e-4))
+        torch.testing.assert_close(scores[-1], torch.tensor(0.9762), rtol=1e-4, atol=1e-4)
 
         # no labels
         inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
@@ -633,7 +695,7 @@ class SamModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9762), atol=1e-4))
+        torch.testing.assert_close(scores[-1], torch.tensor(0.9762), rtol=1e-4, atol=1e-4)
 
     def test_inference_mask_generation_two_points_batched(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -654,8 +716,8 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.9762), atol=1e-4))
-        self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9637), atol=1e-4))
+        torch.testing.assert_close(scores[0][-1], torch.tensor(0.9762), rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(scores[1][-1], torch.tensor(0.9637), rtol=1e-4, atol=1e-4)
 
     def test_inference_mask_generation_one_box(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -673,7 +735,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7937), atol=1e-4))
+        torch.testing.assert_close(scores[-1], torch.tensor(0.7937), rtol=1e-4, atol=1e-4)
 
     def test_inference_mask_generation_batched_image_one_point(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -702,7 +764,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores_single = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
+        torch.testing.assert_close(scores_batched[1, :], scores_single, rtol=1e-4, atol=1e-4)
 
     def test_inference_mask_generation_two_points_point_batch(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -752,7 +814,7 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 3, 3))
-        torch.testing.assert_close(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(iou_scores, EXPECTED_IOU, rtol=1e-4, atol=1e-4)
 
     def test_dummy_pipeline_generation(self):
         generator = pipeline("mask-generation", model="facebook/sam-vit-base", device=torch_device)

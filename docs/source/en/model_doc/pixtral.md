@@ -18,79 +18,83 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Pixtral model was released by the Mistral AI team on [Vllm](https://github.com/vllm-project/vllm/pull/8377), where a version of the code can be found!
+The Pixtral model was released by the Mistral AI team in a [blog post](https://mistral.ai/news/pixtral-12b/). Pixtral is a multimodal version of [Mistral](mistral), incorporating a 400 million parameter vision encoder trained from scratch.
 
+The intro from the blog says the following:
+
+*Pixtral is trained to understand both natural images and documents, achieving 52.5% on the MMMU reasoning benchmark, surpassing a number of larger models. The model shows strong abilities in tasks such as chart and figure understanding, document question answering, multimodal reasoning and instruction following. Pixtral is able to ingest images at their natural resolution and aspect ratio, giving the user flexibility on the number of tokens used to process an image. Pixtral is also able to process any number of images in its long context window of 128K tokens. Unlike previous open-source models, Pixtral does not compromise on text benchmark performance to excel in multimodal tasks.*
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/pixtral_architecture.webp"
+alt="drawing" width="600"/>
+
+<small> Pixtral architecture. Taken from the <a href="https://mistral.ai/news/pixtral-12b/">blog post.</a> </small>
 
 Tips:
 
-- Pixtral is a multimodal model, the main contribution is the 2d ROPE on the images, and support for arbitrary image size (the images are not padded together nor are they resized)
-- This model follows the `Llava` familiy, meaning image embeddings are placed instead of the `[IMG]` token placeholders. 
-- The format for one or mulitple prompts is the following:
+- Pixtral is a multimodal model, taking images and text as input, and producing text as output.
+- This model follows the [Llava](llava) architecture. The model uses [`PixtralVisionModel`] for its vision encoder, and [`MistralForCausalLM`] for its language decoder.
+- The main contribution is the 2d ROPE (rotary position embeddings) on the images, and support for arbitrary image sizes (the images are not padded together nor are they resized).
+- Similar to [Llava](llava), the model internally replaces the `[IMG]` token placeholders by image embeddings from the vision encoder. The format for one or multiple prompts is the following:
 ```
 "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
 ```
-Then, the processor will replace each `[IMG]` token with  a number of `[IMG]` token that depends on the height and the width of the image. Each *row* of the image is separated by a `[IMG_BREAK]` token, and each image is separated by a  `[IMG_END]` token.
+Then, the processor will replace each `[IMG]` token with a number of `[IMG]` tokens that depend on the height and the width of each image. Each *row* of the image is separated by an `[IMG_BREAK]` token, and each image is separated by an `[IMG_END]` token. It's advised to use the `apply_chat_template` method of the processor, which takes care of all of this and formats the text for you. If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the [usage section](#usage) for more info.
 
-This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ)
 
-Here is an example of how to run it:
+This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ). The original code can be found [here](https://github.com/vllm-project/vllm/pull/8377).
 
-```python 
-from transformers import LlavaForConditionalGeneration, AutoProcessor
-from PIL import Image
 
-model_id = "hf-internal-testing/pixtral-12b"
-model = LlavaForConditionalGeneration.from_pretrained(model_id).to("cuda")
+## Usage
+
+At inference time, it's advised to use the processor's `apply_chat_template` method, which correctly formats the prompt for the model:
+
+```python
+from transformers import AutoProcessor, LlavaForConditionalGeneration
+
+model_id = "mistral-community/pixtral-12b"
 processor = AutoProcessor.from_pretrained(model_id)
+model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="cuda")
 
-IMG_URLS = [
-    "https://picsum.photos/id/237/400/300",
-    "https://picsum.photos/id/231/200/300",
-    "https://picsum.photos/id/27/500/500",
-    "https://picsum.photos/id/17/150/600",
+chat = [
+    {
+      "role": "user", "content": [
+        {"type": "text", "content": "Can this animal"}, 
+        {"type": "image", "ur": "https://picsum.photos/id/237/200/300"}, 
+        {"type": "text", "content": "live here?"}, 
+        {"type": "image", "url": "https://picsum.photos/seed/picsum/200/300"}
+      ]
+    }
 ]
-PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
-inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
+inputs = processor.apply_chat_template(
+    chat,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
+
 generate_ids = model.generate(**inputs, max_new_tokens=500)
-ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-
-EXPECTED_GENERATION = """
-Describe the images.
-Sure, let's break down each image description:
-
-1. **Image 1:**
-   - **Description:** A black dog with a glossy coat is sitting on a wooden floor. The dog has a focused expression and is looking directly at the camera.
-   - **Details:** The wooden floor has a rustic appearance with visible wood grain patterns. The dog's eyes are a striking color, possibly brown or amber, which contrasts with its black fur.
-
-2. **Image 2:**
-   - **Description:** A scenic view of a mountainous landscape with a winding road cutting through it. The road is surrounded by lush green vegetation and leads to a distant valley.
-   - **Details:** The mountains are rugged with steep slopes, and the sky is clear, indicating good weather. The winding road adds a sense of depth and perspective to the image.
-
-3. **Image 3:**
-   - **Description:** A beach scene with waves crashing against the shore. There are several people in the water and on the beach, enjoying the waves and the sunset.
-   - **Details:** The waves are powerful, creating a dynamic and lively atmosphere. The sky is painted with hues of orange and pink from the setting sun, adding a warm glow to the scene.
-
-4. **Image 4:**
-   - **Description:** A garden path leading to a large tree with a bench underneath it. The path is bordered by well-maintained grass and flowers.
-   - **Details:** The path is made of small stones or gravel, and the tree provides a shaded area with the bench invitingly placed beneath it. The surrounding area is lush and green, suggesting a well-kept garden.
-
-Each image captures a different scene, from a close-up of a dog to expansive natural landscapes, showcasing various elements of nature and human interaction with it.
-"""
-
+output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 ```
+
 ## PixtralVisionConfig
 
 [[autodoc]] PixtralVisionConfig
 
-## PixtralModel
+## PixtralVisionModel
 
-[[autodoc]] PixtralModel
+[[autodoc]] PixtralVisionModel
     - forward
 
 ## PixtralImageProcessor
 
 [[autodoc]] PixtralImageProcessor
+    - preprocess
+
+## PixtralImageProcessorFast
+
+[[autodoc]] PixtralImageProcessorFast
     - preprocess
 
 ## PixtralProcessor

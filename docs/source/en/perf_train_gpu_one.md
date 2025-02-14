@@ -186,7 +186,7 @@ If you prefer to use 🤗 Accelerate, find the 🤗 Accelerate example [further 
 
 If you have access to an Ampere or newer hardware you can use bf16 for mixed precision training and evaluation. While 
 bf16 has a worse precision than fp16, it has a much bigger dynamic range. In fp16 the biggest number you can have 
-is `65535` and any number above that will result in an overflow. A bf16 number can be as large as `3.39e+38` (!) which 
+is `65504` and any number above that will result in an overflow. A bf16 number can be as large as `3.39e+38` (!) which 
 is about the same as fp32 - because both have 8-bits used for the numerical range.
 
 You can enable BF16 in the 🤗 Trainer with:
@@ -284,7 +284,7 @@ training_args = TrainingArguments(per_device_train_batch_size=4, optim="adamw_bn
 
 However, we can also use a third-party implementation of the 8-bit optimizer for demonstration purposes to see how that can be integrated.
 
-First, follow the installation guide in the GitHub [repo](https://github.com/TimDettmers/bitsandbytes) to install the `bitsandbytes` library 
+First, follow the installation guide in the GitHub [repo](https://github.com/bitsandbytes-foundation/bitsandbytes) to install the `bitsandbytes` library 
 that implements the 8-bit Adam optimizer.
 
 Next you need to initialize the optimizer. This involves two steps: 
@@ -298,8 +298,7 @@ from transformers.trainer_pt_utils import get_parameter_names
 
 training_args = TrainingArguments(per_device_train_batch_size=4, **default_args)
 
-decay_parameters = get_parameter_names(model, [nn.LayerNorm])
-decay_parameters = [name for name in decay_parameters if "bias" not in name]
+decay_parameters = get_parameter_names(model, [nn.LayerNorm], ["bias", "layernorm", "rmsnorm"])
 optimizer_grouped_parameters = [
     {
         "params": [p for n, p in model.named_parameters() if n in decay_parameters],

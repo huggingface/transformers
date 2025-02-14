@@ -18,9 +18,38 @@ Processor class for Pix2Struct.
 
 from typing import List, Optional, Union
 
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...feature_extraction_utils import BatchFeature
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
+from ...utils import logging
+
+
+class Pix2StructImagesKwargs(ImagesKwargs, total=False):
+    max_patches: Optional[int]
+    header_text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+
+
+class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: Pix2StructImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "return_length": False,
+            "verbose": True,
+        },
+        "images_kwargs": {
+            "max_patches": 2048,
+        },
+    }
+
+
+logger = logging.get_logger(__name__)
 
 
 class Pix2StructProcessor(ProcessorMixin):
@@ -50,85 +79,56 @@ class Pix2StructProcessor(ProcessorMixin):
         self,
         images=None,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        max_patches: Optional[int] = 2048,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_token_type_ids: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
-    ) -> BatchEncoding:
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[Pix2StructProcessorKwargs],
+    ) -> Union[BatchEncoding, BatchFeature]:
         """
         This method uses [`Pix2StructImageProcessor.preprocess`] method to prepare image(s) for the model, and
         [`T5TokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
         """
+        legacy = kwargs.pop("legacy", True)
+        if legacy:
+            logger.warning_once(
+                "Legacy behavior is being used. The current behavior will be deprecated in version 5.0.0. "
+                "In the new behavior, If both images and text are provided, image_processor is not a VQA processor, and `add_special_tokens` is unset, "
+                "the default value of `add_special_tokens` will be changed to `False` when calling the tokenizer. "
+                "To test the new behavior, set `legacy=False`as a processor call argument."
+            )
+
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
+        output_kwargs = self._merge_kwargs(
+            Pix2StructProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        add_special_tokens = output_kwargs["text_kwargs"].pop("add_special_tokens", None)
         # Get only text
         if images is None and not self.image_processor.is_vqa:
-            self.current_processor = self.tokenizer
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
+            output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                add_special_tokens if add_special_tokens is not None else True
             )
+            self.current_processor = self.tokenizer
+            text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             return text_encoding
 
         if not self.image_processor.is_vqa:
             # add pixel_values
-            encoding_image_processor = self.image_processor(
-                images, return_tensors=return_tensors, max_patches=max_patches, **kwargs
-            )
+            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
         else:
             # add pixel_values and bbox
-            encoding_image_processor = self.image_processor(
-                images, return_tensors=return_tensors, max_patches=max_patches, header_text=text, **kwargs
-            )
+            output_kwargs["images_kwargs"].setdefault("header_text", text)
+            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
 
         if text is not None and not self.image_processor.is_vqa:
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
+            output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                add_special_tokens if add_special_tokens is not None else legacy
             )
+            text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
 
             if "attention_mask" in text_encoding:
                 text_encoding["decoder_attention_mask"] = text_encoding.pop("attention_mask")
@@ -161,3 +161,6 @@ class Pix2StructProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["Pix2StructProcessor"]

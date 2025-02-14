@@ -27,7 +27,7 @@ _import_structure = {
     "agents": ["Agent", "CodeAgent", "ManagedAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
     "llm_engine": ["HfApiEngine", "TransformersEngine"],
     "monitoring": ["stream_to_gradio"],
-    "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool"],
+    "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool", "tool"],
 }
 
 try:
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .agents import Agent, CodeAgent, ManagedAgent, ReactAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
     from .llm_engine import HfApiEngine, TransformersEngine
     from .monitoring import stream_to_gradio
-    from .tools import PipelineTool, Tool, ToolCollection, launch_gradio_demo, load_tool
+    from .tools import PipelineTool, Tool, ToolCollection, launch_gradio_demo, load_tool, tool
 
     try:
         if not is_torch_available():

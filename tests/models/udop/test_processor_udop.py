@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import shutil
 import tempfile
 import unittest
@@ -34,7 +32,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available, is_torch_available
+from transformers.utils import cached_property, is_pytesseract_available, is_torch_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
@@ -55,20 +53,19 @@ if is_pytesseract_available():
 class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tokenizer_class = UdopTokenizer
     rust_tokenizer_class = UdopTokenizerFast
-    maxDiff = None
     processor_class = UdopProcessor
+    maxDiff = None
 
     def setUp(self):
-        image_processor_map = {
-            "do_resize": True,
-            "size": 224,
-            "apply_ocr": True,
-        }
-
         self.tmpdirname = tempfile.mkdtemp()
-        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
-        with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
-            fp.write(json.dumps(image_processor_map) + "\n")
+        image_processor = LayoutLMv3ImageProcessor(
+            do_resize=True,
+            size=224,
+            apply_ocr=True,
+        )
+        tokenizer = UdopTokenizer.from_pretrained("microsoft/udop-large")
+        processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor.save_pretrained(self.tmpdirname)
 
         self.tokenizer_pretrained_name = "microsoft/udop-large"
 
@@ -80,14 +77,14 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
+    def get_image_processor(self, **kwargs):
+        return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
+
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:
         return self.rust_tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
     def get_tokenizers(self, **kwargs) -> List[PreTrainedTokenizerBase]:
         return [self.get_tokenizer(**kwargs), self.get_rust_tokenizer(**kwargs)]
-
-    def get_image_processor(self, **kwargs):
-        return LayoutLMv3ImageProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -153,7 +150,7 @@ class UdopProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input)
+        inputs = processor(images=image_input, text=input_str)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
 
@@ -472,7 +469,7 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             question = "What's his name?"
             words = ["hello", "world"]
             boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            input_processor = processor(images[0], question, words, boxes, return_tensors="pt")
+            input_processor = processor(images[0], question, text_pair=words, boxes=boxes, return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]
@@ -488,7 +485,9 @@ class UdopProcessorIntegrationTests(unittest.TestCase):
             questions = ["How old is he?", "what's the time"]
             words = [["hello", "world"], ["my", "name", "is", "niels"]]
             boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            input_processor = processor(images, questions, words, boxes, padding=True, return_tensors="pt")
+            input_processor = processor(
+                images, questions, text_pair=words, boxes=boxes, padding=True, return_tensors="pt"
+            )
 
             # verify keys
             expected_keys = ["attention_mask", "bbox", "input_ids", "pixel_values"]

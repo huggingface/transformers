@@ -27,6 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import gelu
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -485,6 +486,7 @@ class XLMModel(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,  # Dummy kwargs for now
     ) -> Union[Tuple, BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -657,7 +659,7 @@ class XLMPredLayer(nn.Module):
     """,
     XLM_START_DOCSTRING,
 )
-class XLMWithLMHeadModel(XLMPreTrainedModel):
+class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["pred_layer.proj.weight"]
 
     def __init__(self, config):
@@ -675,6 +677,8 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         self.pred_layer.proj = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
+        # Overwritten -- this model uses config options to prepare inputs
+
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id
 
@@ -709,6 +713,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, MaskedLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -731,6 +736,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         output = transformer_outputs[0]
@@ -1259,3 +1265,15 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "XLMForMultipleChoice",
+    "XLMForQuestionAnswering",
+    "XLMForQuestionAnsweringSimple",
+    "XLMForSequenceClassification",
+    "XLMForTokenClassification",
+    "XLMModel",
+    "XLMPreTrainedModel",
+    "XLMWithLMHeadModel",
+]

@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Clvp model."""
 
-import gc
 import tempfile
 import unittest
 
@@ -23,6 +22,7 @@ import numpy as np
 
 from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     slow,
     torch_device,
@@ -174,8 +174,7 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_config(self):
         self.encoder_config_tester.run_common_tests()
@@ -282,7 +281,6 @@ class ClvpDecoderTester:
 @require_torch
 class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModel, ClvpForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (ClvpForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": ClvpModelForConditionalGeneration} if is_torch_available() else {}
 
     test_pruning = False
@@ -294,8 +292,7 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -335,6 +332,10 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         loss = model(**inputs).loss
         loss.backward()
+
+    @unittest.skip(reason="Clvp `prepare_inputs_for_generation` function doesn't have cache position.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
 
 
 class ClvpModelForConditionalGenerationTester:
@@ -416,13 +417,18 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
-        self.clvp_config_tester = ConfigTester(self, config_class=ClvpConfig, hidden_size=32)
+        common_properties = ["projection_dim", "logit_scale_init_value"]
+        self.clvp_config_tester = ConfigTester(
+            self, config_class=ClvpConfig, has_text_modality=False, common_properties=common_properties, hidden_size=32
+        )
+
+    def test_config(self):
+        self.clvp_config_tester.run_common_tests()
 
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -571,8 +577,7 @@ class ClvpIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def test_conditional_encoder(self):
         with torch.no_grad():
@@ -589,14 +594,14 @@ class ClvpIntegrationTest(unittest.TestCase):
             [[-0.8582, 0.5228, 1.9944], [-0.0465, -1.1017, -0.0093], [-0.0466, -0.6030, -0.1280]]
         )
 
-        self.assertTrue(torch.allclose(conditioning_encoder_outputs[0, :3, :3], EXPECTED_OUTPUTS, atol=1e-4))
+        torch.testing.assert_close(conditioning_encoder_outputs[0, :3, :3], EXPECTED_OUTPUTS, rtol=1e-4, atol=1e-4)
 
     def test_decoder_model_generate(self):
         autoregressive_model_output = self.model.speech_decoder_model.generate(input_ids=self.text_tokens).cpu()
 
         EXPECTED_OUTPUTS = torch.tensor([[147, 2, 54, 2, 43, 2, 169, 122, 29, 64, 2, 136, 37, 33, 9, 8193]])
 
-        self.assertTrue(torch.allclose(autoregressive_model_output, EXPECTED_OUTPUTS))
+        torch.testing.assert_close(autoregressive_model_output, EXPECTED_OUTPUTS)
 
     def test_text_and_speech_encoder_models(self):
         # check for text embeds
@@ -606,7 +611,7 @@ class ClvpIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_EMBEDS = torch.tensor([1.4798, -2.0005, 2.3902, -0.5042, 1.6401, -2.4135, -1.4800, 3.0118, -2.4422, 1.3266, 2.2339, 1.4761, -4.8983, -1.3592, 6.0251, 6.7364, 2.2576, 3.7229, -10.0436, 4.6676])
         # fmt: on
 
-        self.assertTrue(torch.allclose(text_embeds[0, :20], EXPECTED_TEXT_EMBEDS, atol=1e-4))
+        torch.testing.assert_close(text_embeds[0, :20], EXPECTED_TEXT_EMBEDS, rtol=1e-4, atol=1e-4)
 
         # check for speech embeds
         speech_embeds = self.model.speech_encoder_model(input_ids=self.text_tokens, return_dict=True)[0].cpu()
@@ -615,7 +620,7 @@ class ClvpIntegrationTest(unittest.TestCase):
         EXPECTED_SPEECH_EMBEDS = torch.tensor([3.1202, -3.1183, -1.4264, -6.1339, 1.8885, -0.1983, 0.9461, -1.7414, 0.3320, -3.8400, -1.5715, 1.5096, -1.7576, 0.2387, 4.9758, 5.8450, -6.2534, 2.8587, -5.5816, 4.7821])
         # fmt: on
 
-        self.assertTrue(torch.allclose(speech_embeds[0, :20], EXPECTED_SPEECH_EMBEDS, atol=1e-4))
+        torch.testing.assert_close(speech_embeds[0, :20], EXPECTED_SPEECH_EMBEDS, rtol=1e-4, atol=1e-4)
 
     def test_full_model_integration(self):
         full_model_output = self.model.generate(
@@ -630,5 +635,5 @@ class ClvpIntegrationTest(unittest.TestCase):
         EXPECTED_SPEECH_IDS = torch.tensor([[1953, 1080, 612], [1953, 612, 493], [1953, 612, 716]])
         EXPECTED_SIMILARITY_SCORES = torch.tensor([[14.7660, 14.4569, 13.6472, 13.5683]])
 
-        self.assertTrue(torch.allclose(full_model_output.speech_ids.cpu()[-3:, -3:], EXPECTED_SPEECH_IDS))
-        self.assertTrue(torch.allclose(full_model_output.logits_per_text.cpu(), EXPECTED_SIMILARITY_SCORES))
+        torch.testing.assert_close(full_model_output.speech_ids.cpu()[-3:, -3:], EXPECTED_SPEECH_IDS)
+        torch.testing.assert_close(full_model_output.logits_per_text.cpu(), EXPECTED_SIMILARITY_SCORES)

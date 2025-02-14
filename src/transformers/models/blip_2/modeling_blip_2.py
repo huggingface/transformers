@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -199,7 +200,6 @@ class Blip2VisionEmbeddings(nn.Module):
 
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -211,14 +211,14 @@ class Blip2VisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = self.position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = self.position_embedding[:, :1]
+        patch_pos_embed = self.position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
@@ -410,6 +410,7 @@ class Blip2PreTrainedModel(PreTrainedModel):
     config_class = Blip2Config
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+
     _no_split_modules = [
         "Blip2Attention",
         "Blip2QFormerMultiHeadAttention",
@@ -578,6 +579,9 @@ BLIP_2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
             Whether to interpolate the pre-trained position encodings.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 """
 
 BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
@@ -1455,13 +1459,9 @@ class Blip2Model(Blip2PreTrainedModel):
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
-            )
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
-            )
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
         # Update _tied_weights_keys using the base model used.
         if language_model._tied_weights_keys is not None:
@@ -1771,11 +1771,12 @@ class Blip2Model(Blip2PreTrainedModel):
                 decoder_attention_mask=decoder_attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
             )
-            loss = outputs.loss if return_dict else outputs[0]
-            logits = outputs.logits if return_dict else outputs[1]
+            loss = outputs.loss
+            logits = outputs.logits
+            outputs = outputs.to_tuple() if not return_dict else outputs
 
         if not return_dict:
             output = (logits, vision_outputs, query_outputs, outputs)
@@ -1812,6 +1813,12 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(BLIP_2_TEXT_WITH_PROJECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2TextModelOutput, config_class=Blip2Config)
@@ -2006,7 +2013,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
     """,
     BLIP_2_START_DOCSTRING,
 )
-class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
+class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
     config_class = Blip2Config
     main_input_name = "pixel_values"
 
@@ -2020,13 +2027,9 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
         if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
-            )
+            language_model = AutoModelForCausalLM.from_config(config.text_config)
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(
-                config.text_config, attn_implementation=config._attn_implementation
-            )
+            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
         # Update _tied_weights_keys using the base model used.
         if language_model._tied_weights_keys is not None:
@@ -2094,6 +2097,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        use_cache: Optional[bool] = None,
     ) -> Union[Tuple, Blip2ForConditionalGenerationModelOutput]:
         r"""
         Returns:
@@ -2203,7 +2207,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             logger.warning_once(
                 "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
             )
             inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
             attention_mask = torch.cat(
@@ -2217,6 +2221,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                use_cache=use_cache,
             )
             logits = outputs.logits if return_dict else outputs[0]
             loss = None
@@ -2240,11 +2245,13 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 decoder_attention_mask=decoder_attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                return_dict=True,  # toggle for easier access to loss/logits below
                 labels=labels,
+                use_cache=use_cache,
             )
-            loss = outputs.loss if return_dict else outputs[0]
-            logits = outputs.logits if return_dict else outputs[1]
+            loss = outputs.loss
+            logits = outputs.logits
+            outputs = outputs.to_tuple() if not return_dict else outputs
 
         if not return_dict:
             output = (logits, vision_outputs, query_outputs, outputs)
@@ -2306,12 +2313,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         language_attention_mask = torch.ones(
             language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
         )
+
         if input_ids is None:
-            input_ids = (
-                torch.LongTensor([[self.config.text_config.bos_token_id]])
-                .repeat(batch_size, 1)
-                .to(image_embeds.device)
-            )
+            start_tokens = [self.config.text_config.bos_token_id]
+            if getattr(self.config, "image_token_index", None) is not None:
+                start_tokens = [self.config.image_token_index] * self.config.num_query_tokens + start_tokens
+            input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
+            input_ids = input_ids.repeat(batch_size, 1)
+
         inputs_embeds = self.get_input_embeddings()(input_ids)
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
@@ -2325,7 +2334,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             logger.warning_once(
                 "Expanding inputs for image tokens in BLIP-2 should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your BLIP-2 model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
             )
             inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
             attention_mask = torch.cat(
@@ -2341,24 +2350,11 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
                 )
                 generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
 
-        outputs = self.language_model.generate(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            **generate_kwargs,
-        )
-
-        # this is a temporary workaround to be consistent with other generation models and
-        # have BOS as the first token, even though under the hood we are calling LM with embeds
+        inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:
-            bos_tokens = (
-                torch.LongTensor([[self.config.text_config.bos_token_id]])
-                .repeat(batch_size, 1)
-                .to(image_embeds.device)
-            )
-            if not isinstance(outputs, torch.Tensor):
-                outputs.sequences = torch.cat([bos_tokens, outputs.sequences], dim=-1)
-            else:
-                outputs = torch.cat([bos_tokens, outputs], dim=-1)
+            inputs["input_ids"] = input_ids
+
+        outputs = self.language_model.generate(**inputs, **generate_kwargs)
         return outputs
 
 
@@ -2395,6 +2391,12 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(BLIP2_IMAGE_TEXT_RETRIEVAL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ImageTextMatchingModelOutput, config_class=Blip2Config)
@@ -2537,3 +2539,15 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+
+__all__ = [
+    "Blip2Model",
+    "Blip2VisionModelWithProjection",
+    "Blip2QFormerModel",
+    "Blip2PreTrainedModel",
+    "Blip2ForConditionalGeneration",
+    "Blip2ForImageTextRetrieval",
+    "Blip2VisionModel",
+    "Blip2TextModelWithProjection",
+]

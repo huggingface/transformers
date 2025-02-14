@@ -61,7 +61,7 @@ pip install -q pytorchvideo transformers evaluate
 ```
 
 데이터 세트의 하위 집합이 다운로드 되면, 압축된 파일의 압축을 해제해야 합니다:
-```py 
+```py
 >>> import tarfile
 
 >>> with tarfile.open(file_path) as t:
@@ -124,9 +124,9 @@ UCF101_subset/
 그 다음으로, 데이터 세트에 존재하는 라벨을 추출합니다. 또한, 모델을 초기화할 때 도움이 될 딕셔너리(dictionary data type)를 생성합니다.
 
 * `label2id`: 클래스 이름을 정수에 매핑합니다.
-* `id2label`: 정수를 클래스 이름에 매핑합니다. 
+* `id2label`: 정수를 클래스 이름에 매핑합니다.
 
-```py 
+```py
 >>> class_labels = sorted({str(path).split("/")[2] for path in all_video_file_paths})
 >>> label2id = {label: i for i, label in enumerate(class_labels)}
 >>> id2label = {i: label for label, i in label2id.items()}
@@ -142,7 +142,7 @@ UCF101_subset/
 
 사전 훈련된 체크포인트와 체크포인트에 연관된 이미지 프로세서를 사용하여 영상 분류 모델을 인스턴스화합니다. 모델의 인코더에는 미리 학습된 매개변수가 제공되며, 분류 헤드(데이터를 분류하는 마지막 레이어)는 무작위로 초기화됩니다. 데이터 세트의 전처리 파이프라인을 작성할 때는 이미지 프로세서가 유용합니다.
 
-```py 
+```py
 >>> from transformers import VideoMAEImageProcessor, VideoMAEForVideoClassification
 
 >>> model_ckpt = "MCG-NJU/videomae-base"
@@ -174,7 +174,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 영상 전처리를 위해 [PyTorchVideo 라이브러리](https://pytorchvideo.org/)를 활용할 것입니다. 필요한 종속성을 가져오는 것으로 시작하세요.
 
-```py 
+```py
 >>> import pytorchvideo.data
 
 >>> from pytorchvideo.transforms import (
@@ -223,7 +223,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 이제 데이터 세트에 특화된 전처리(transform)과 데이터 세트 자체를 정의합니다. 먼저 훈련 데이터 세트로 시작합니다:
 
-```py 
+```py
 >>> train_transform = Compose(
 ...     [
 ...         ApplyTransformToKey(
@@ -252,7 +252,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 같은 방식의 작업 흐름을 검증과 평가 세트에도 적용할 수 있습니다.
 
-```py 
+```py
 >>> val_transform = Compose(
 ...     [
 ...         ApplyTransformToKey(
@@ -296,7 +296,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 ## 더 나은 디버깅을 위해 전처리 영상 시각화하기[[visualize-the-preprocessed-video-for-better-debugging]]
 
-```py 
+```py
 >>> import imageio
 >>> import numpy as np
 >>> from IPython.display import Image
@@ -309,7 +309,7 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 >>> def create_gif(video_tensor, filename="sample.gif"):
 ...     """Prepares a GIF from a video tensor.
-...     
+...
 ...     The video tensor is expected to have the following shape:
 ...     (num_frames, num_channels, height, width).
 ...     """
@@ -336,13 +336,13 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/sample_gif.gif" alt="Person playing basketball"/>
 </div>
 
-## 모델 훈련하기[[train-the-model]] 
+## 모델 훈련하기[[train-the-model]]
 
 🤗 Transformers의 [`Trainer`](https://huggingface.co/docs/transformers/main_classes/trainer)를 사용하여 모델을 훈련시켜보세요. `Trainer`를 인스턴스화하려면 훈련 설정과 평가 지표를 정의해야 합니다.  가장 중요한 것은 [`TrainingArguments`](https://huggingface.co/transformers/main_classes/trainer.html#transformers.TrainingArguments)입니다. 이 클래스는 훈련을 구성하는 모든 속성을 포함하며, 훈련 중 체크포인트를 저장할 출력 폴더 이름을 필요로 합니다. 또한 🤗 Hub의 모델 저장소의 모든 정보를 동기화하는 데 도움이 됩니다.
 
 대부분의 훈련 인수는 따로 설명할 필요는 없습니다. 하지만 여기에서 중요한 인수는 `remove_unused_columns=False` 입니다. 이 인자는 모델의 호출 함수에서 사용되지 않는 모든 속성 열(columns)을 삭제합니다. 기본값은 일반적으로 True입니다. 이는 사용되지 않는 기능 열을 삭제하는 것이 이상적이며, 입력을 모델의 호출 함수로 풀기(unpack)가 쉬워지기 때문입니다. 하지만 이 경우에는 `pixel_values`(모델의 입력으로 필수적인 키)를 생성하기 위해 사용되지 않는 기능('video'가 특히 그렇습니다)이 필요합니다. 따라서 remove_unused_columns을 False로 설정해야 합니다.
 
-```py 
+```py
 >>> from transformers import TrainingArguments, Trainer
 
 >>> model_name = model_ckpt.split("/")[-1]
@@ -387,7 +387,7 @@ def compute_metrics(eval_pred):
 
 또한, 예제를 묶어서 배치를 형성하는 `collate_fn`을 정의해야합니다. 각 배치는 `pixel_values`와 `labels`라는 2개의 키로 구성됩니다.
 
-```py 
+```py
 >>> def collate_fn(examples):
 ...     # permute to (num_frames, num_channels, height, width)
 ...     pixel_values = torch.stack(
@@ -399,13 +399,13 @@ def compute_metrics(eval_pred):
 
 그런 다음 이 모든 것을 데이터 세트와 함께 `Trainer`에 전달하기만 하면 됩니다:
 
-```py 
+```py
 >>> trainer = Trainer(
 ...     model,
 ...     args,
 ...     train_dataset=train_dataset,
 ...     eval_dataset=val_dataset,
-...     tokenizer=image_processor,
+...     processing_class=image_processor,
 ...     compute_metrics=compute_metrics,
 ...     data_collator=collate_fn,
 ... )
@@ -415,7 +415,7 @@ def compute_metrics(eval_pred):
 
 `train` 메소드를 호출하여 모델을 미세 조정하세요:
 
-```py 
+```py
 >>> train_results = trainer.train()
 ```
 
@@ -429,7 +429,7 @@ def compute_metrics(eval_pred):
 좋습니다. 이제 미세 조정된 모델을 추론하는 데 사용할 수 있습니다.
 
 추론에 사용할 영상을 불러오세요:
-```py 
+```py
 >>> sample_test_video = next(iter(test_dataset))
 ```
 
@@ -485,7 +485,7 @@ def compute_metrics(eval_pred):
 
 `logits`을 디코딩하면, 우리는 다음 결과를 얻을 수 있습니다:
 
-```py 
+```py
 >>> predicted_class_idx = logits.argmax(-1).item()
 >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
 # Predicted class: BasketballDunk

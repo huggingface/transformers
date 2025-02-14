@@ -147,7 +147,7 @@ Let's call it now for the next experiment.
 ```python
 flush()
 ```
-In the recent version of the accelerate library, you can also use a utility method called `release_memory()`
+From the Accelerate library, you can also use a device-agnostic utility method called [release_memory](https://github.com/huggingface/accelerate/blob/29be4788629b772a3b722076e433b5b3b5c85da3/src/accelerate/utils/memory.py#L63), which takes various hardware backends like XPU, MLU, NPU, MPS, and more into account.
 
 ```python
 from accelerate.utils import release_memory
@@ -181,7 +181,7 @@ for every matrix multiplication. Dequantization and re-quantization is performed
 
 Therefore, inference time is often **not** reduced when using quantized weights, but rather increases.
 Enough theory, let's give it a try! To quantize the weights with Transformers, you need to make sure that
-the [`bitsandbytes`](https://github.com/TimDettmers/bitsandbytes) library is installed.
+the [`bitsandbytes`](https://github.com/bitsandbytes-foundation/bitsandbytes) library is installed.
 
 ```bash
 !pip install bitsandbytes

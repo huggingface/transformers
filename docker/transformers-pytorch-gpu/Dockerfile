@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu20.04
+FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -11,7 +11,7 @@ ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
 # If set to nothing, will install the latest version
-ARG PYTORCH='2.4.0'
+ARG PYTORCH='2.6.0'
 ARG TORCH_VISION=''
 ARG TORCH_AUDIO=''
 # Example: `cu102`, `cu113`, etc.

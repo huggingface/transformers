@@ -328,9 +328,11 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(self) -> Tokenizer:
-        vocab = self.original_tokenizer.encoder
-        merges = list(self.original_tokenizer.bpe_ranks.keys())
+    def converted(self, vocab: Dict[str, int] = None, merges: List[Tuple[str, str]] = None) -> Tokenizer:
+        if not vocab:
+            vocab = self.original_tokenizer.encoder
+        if not merges:
+            merges = list(self.original_tokenizer.bpe_ranks)
 
         tokenizer = Tokenizer(
             BPE(
@@ -343,9 +345,10 @@ class GPT2Converter(Converter):
             )
         )
 
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
+        add_prefix_space = getattr(self.original_tokenizer, "add_prefix_space", False)
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        if self.original_tokenizer.add_bos_token:
+        if getattr(self.original_tokenizer, "add_bos_token", False):
             bos = self.original_tokenizer.bos_token
             bos_token_id = self.original_tokenizer.bos_token_id
             tokenizer.post_processor = processors.TemplateProcessing(
@@ -609,33 +612,12 @@ class SpmConverter(Converter):
             for id, p in enumerate(proto.pieces)
             if p.type in [3, 4]
         ]
-        tokens_to_add = [
-            AddedToken(token, normalized=False, special=special)
-            for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
-        ]
-
-        if len(tokens_to_add) > 0:
-            # super hack: if a token.special is set, tokenizer ignores it for now so FIXME @ArthurZ
-            # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
-            # individual tokens would repeatedly rebuild a trie, which can be slow.
-            is_last_special = None
-            tokens = []
-            for token in tokens_to_add:
-                is_special = token.special
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
-                else:
-                    if is_last_special:
-                        tokenizer.add_special_tokens(tokens)
-                    else:
-                        tokenizer.add_tokens(tokens)
-                    tokens = [token]
-                is_last_special = is_special
-            if tokens:
-                if is_last_special:
-                    tokenizer.add_special_tokens(tokens)
-                else:
-                    tokenizer.add_tokens(tokens)
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
 
         return tokenizer
 
@@ -1289,7 +1271,7 @@ class XGLMConverter(SpmConverter):
         )
 
 
-class GemmaConvert(SpmConverter):
+class GemmaConverter(SpmConverter):
     handle_byte_fallback = True
     SpmExtractor = GemmaSentencePieceExtractor
     # start and end of turn tokens must be marked as special
@@ -1421,6 +1403,136 @@ class MarkupLMConverter(Converter):
         )
 
         return tokenizer
+
+
+class MoshiConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file, model_max_length=None, **kwargs):
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        # from .utils import sentencepiece_model_pb2 as model_pb2
+        model_pb2 = import_protobuf()
+
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def normalizer(self, proto):
+        precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
+        _normalizers = [
+            normalizers.Replace(" ", "▁"),
+        ]
+        if not precompiled_charsmap:
+            return normalizers.Sequence(_normalizers)
+        else:
+            return normalizers.Sequence([normalizers.Precompiled(precompiled_charsmap)] + _normalizers)
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        prepend_scheme = "first"
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme=prepend_scheme, split=False)
+
+
+class HeliumConverter(SpmConverter):
+    handle_byte_fallback = True
+
+    def __init__(self, vocab_file=None, *args):
+        requires_backends(self, "protobuf")
+
+        Converter.__init__(self, vocab_file)
+
+        model_pb2 = import_protobuf()
+
+        m = model_pb2.ModelProto()
+        with open(vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
+        self.proto = m
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(proto)
+        tokenizer = Tokenizer(
+            Unigram(
+                vocab_scores,
+                unk_id=self.unk_id(proto),
+                byte_fallback=self.handle_byte_fallback,
+            )
+        )
+        # control tokens are special
+        # user defined symbols are not
+        # both user and control tokens are AddedTokens
+        # Add user defined symbols (type == 4) from sentencepiece (https://github.com/google/sentencepiece/blob/6225e08edb2577757163b3f5dbba4c0b670ef445/src/sentencepiece_model.proto#L299C29-L299C33)
+        spm_added_tokens = [
+            (id, p.piece, p.type == 3 or p.piece in self.special_tokens)
+            for id, p in enumerate(proto.pieces)
+            if p.type in [3, 4]
+        ]
+        tokenizer.add_tokens(
+            [
+                AddedToken(token, normalized=False, special=special, single_word=True)
+                for id, token, special in sorted(spm_added_tokens, key=lambda x: x[0])
+            ]
+        )
+        tokenizer.add_tokens([AddedToken("\n", normalized=False, special=False)])
+        tokenizer.enable_padding(pad_token="<pad>", pad_id=3)
+        return tokenizer
+
+    def vocab(self, proto):
+        vocab = []
+        for piece in proto.pieces:
+            if piece.piece == "<0x0A>":
+                vocab += [("\n", piece.score)]
+            else:
+                vocab += [(piece.piece, piece.score)]
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 0
+        return unk_id
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+        sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def normalizer(self, proto):
+        return normalizers.Sequence([normalizers.Prepend(" "), normalizers.Replace(r" ", "▁")])
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Sequence([pre_tokenizers.Split("\n", "contiguous")])
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=[
+                "<s>",
+                "$A",
+            ],
+            pair=[
+                "<s>",
+                "$A",
+                "<s>",
+                "$B",
+            ],
+            special_tokens=[
+                ("<s>", 1),
+            ],
+        )
 
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
@@ -1578,7 +1690,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "XGLMTokenizer": XGLMConverter,
     "LlamaTokenizer": LlamaConverter,
     "CodeLlamaTokenizer": LlamaConverter,
-    "GemmaTokenizer": GemmaConvert,
+    "GemmaTokenizer": GemmaConverter,
     "Phi3Tokenizer": LlamaConverter,
 }
 

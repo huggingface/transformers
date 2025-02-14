@@ -124,7 +124,7 @@ class LlamaConfig(PretrainedConfig):
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
-            The attention head dimension. If None, it will default to hidden_size // num_heads
+            The attention head dimension. If None, it will default to hidden_size // num_attention_heads
 
     ```python
     >>> from transformers import LlamaModel, LlamaConfig
@@ -141,6 +141,21 @@ class LlamaConfig(PretrainedConfig):
 
     model_type = "llama"
     keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `LlamaModel`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -192,7 +207,7 @@ class LlamaConfig(PretrainedConfig):
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
+        # BC: if there is a 'type' field, copy it it to 'rope_type'.
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
@@ -204,3 +219,6 @@ class LlamaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["LlamaConfig"]

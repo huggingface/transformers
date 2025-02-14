@@ -35,7 +35,7 @@ if is_flax_available():
     )
 
 
-class FlaxRoFormerModelTester(unittest.TestCase):
+class FlaxRoFormerModelTester:
     def __init__(
         self,
         parent,

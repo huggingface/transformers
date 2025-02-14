@@ -37,7 +37,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
+    make_flat_list_of_images,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -51,29 +51,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     from PIL import Image
-
-
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched video from {images}")
 
 
 def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
@@ -186,7 +163,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "image_sizes"]
 
     def __init__(
         self,
@@ -670,7 +647,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_batched_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -697,7 +674,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -715,7 +692,9 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             image_patches = self.get_image_patches(
                 image,
                 image_grid_pinpoints,
-                size=(size["shortest_edge"], size["shortest_edge"]),
+                size=(size["shortest_edge"], size["shortest_edge"])
+                if "shortest_edge" in size
+                else (min(size["height"], size["width"]), min(size["height"], size["width"])),
                 patch_size=crop_size["height"],
                 resample=resample,
                 data_format=input_data_format,
@@ -747,3 +726,6 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
         )
+
+
+__all__ = ["LlavaNextImageProcessor"]

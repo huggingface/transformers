@@ -476,7 +476,7 @@ And GPU1 does the same by enlisting GPU3 to its aid.
 Since each dimension requires at least 2 GPUs, here you'd need at least 4 GPUs.
 
 Implementations:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -497,7 +497,7 @@ This diagram is from a blog post [3D parallelism: Scaling to trillion-parameter 
 Since each dimension requires at least 2 GPUs, here you'd need at least 8 GPUs.
 
 Implementations:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -553,7 +553,7 @@ It performs a sort of 4D Parallelism over Sample-Operator-Attribute-Parameter.
 Examples:
 * Sample
 
-Let's take 10 batches of sequence length 512. If we parallelize them by sample dimension into 2 devices, we get 10 x 512 which becomes be 5 x 2 x 512.
+Let's take 10 batches of sequence length 512. If we parallelize them by sample dimension into 2 devices, we get 10 x 512 which becomes 5 x 2 x 512.
 
 * Operator
 

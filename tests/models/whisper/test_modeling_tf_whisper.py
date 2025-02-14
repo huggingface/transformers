@@ -17,14 +17,22 @@
 from __future__ import annotations
 
 import inspect
+import os
 import tempfile
 import traceback
 import unittest
 
 import numpy as np
 
-from transformers import WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
-from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, run_test_in_subprocess, slow
+from transformers import GenerationConfig, WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
+from transformers.testing_utils import (
+    is_tf_available,
+    require_read_token,
+    require_tf,
+    require_tokenizers,
+    run_test_in_subprocess,
+    slow,
+)
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
@@ -519,68 +527,6 @@ class TFWhisperModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_generate_without_input_ids(self):
         pass
 
-    @staticmethod
-    def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
-    ):
-        encoder = model.get_encoder()
-        encoder_outputs = encoder(
-            input_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
-            num_interleave, dim=0
-        )
-        input_ids = input_ids[:, :, 0]
-        input_ids = tf.zeros_like(input_ids[:, :1], dtype=tf.int64) + tf.convert_to_tensor(
-            [model._get_decoder_start_token_id()]
-        )
-        attention_mask = None
-        return encoder_outputs, input_ids, attention_mask
-
-    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
-        batch_size, mel, seq_length = input_ids.shape
-        subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
-        num_sequences_in_output = batch_size * num_return_sequences
-        gen_len = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
-        )
-
-        # scores
-        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
-
-        # Attentions
-        # encoder
-        self._check_encoder_attention_for_generate(
-            output.encoder_attentions, batch_size, config, subsampled_seq_length
-        )
-        # decoder
-        self._check_attentions_for_generate(
-            num_sequences_in_output,
-            output.decoder_attentions,
-            min_length=1,
-            max_length=output.sequences.shape[-1],
-            config=config,
-            use_cache=use_cache,
-        )
-
-        # Hidden States
-        # encoder
-        self._check_encoder_hidden_states_for_generate(
-            output.encoder_hidden_states, batch_size, config, subsampled_seq_length
-        )
-
-        # decoder
-        self._check_hidden_states_for_generate(
-            num_sequences_in_output,
-            output.decoder_hidden_states,
-            min_length=1,
-            max_length=output.sequences.shape[-1],
-            config=config,
-            use_cache=use_cache,
-        )
-
     # overwritten from parent due to the inability to work when non-text inputs are not passed AND because the input is
     # `input_features`
     def test_lm_head_model_random_no_beam_search_generate(self):
@@ -769,7 +715,9 @@ def _test_large_generation(in_queue, out_queue, timeout):
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
+            input_features,
+            do_sample=False,
+            max_length=20,
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -792,13 +740,29 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
-        ds = load_dataset("legacy-datasets/common_voice", "ja", split="test", streaming=True, trust_remote_code=True)
+        # update generation config
+        generation_config = GenerationConfig.from_pretrained("openai/whisper-large-v2")
+
+        token = os.getenv("HF_HUB_READ_TOKEN", True)
+        ds = load_dataset(
+            "mozilla-foundation/common_voice_6_1",
+            "ja",
+            split="test",
+            streaming=True,
+            trust_remote_code=True,
+            token=token,
+        )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
         input_speech = next(iter(ds))["audio"]["array"]
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|ja|>", task="transcribe"
+            input_features,
+            do_sample=False,
+            max_length=20,
+            language="<|ja|>",
+            task="transcribe",
+            generation_config=generation_config,
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -806,7 +770,12 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|en|>", task="transcribe"
+            input_features,
+            do_sample=False,
+            max_length=20,
+            language="<|en|>",
+            task="transcribe",
+            generation_config=generation_config,
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -814,7 +783,12 @@ def _test_large_generation_multilingual(in_queue, out_queue, timeout):
         unittest.TestCase().assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         generated_ids = model.generate(
-            input_features, do_sample=False, max_length=20, language="<|ja|>", task="translate"
+            input_features,
+            do_sample=False,
+            max_length=20,
+            language="<|ja|>",
+            task="translate",
+            generation_config=generation_config,
         )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
@@ -845,10 +819,10 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
 
         # fmt: off
         EXPECTED_IDS = [
-            [50258, 50358, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281],
-            [50258, 50358, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257],
-            [50258, 50358, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256],
-            [50258, 50358, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439, 11]
+            [50258, 50259, 50359, 50363, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404],
+            [50258, 50259, 50359, 50363, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257],
+            [50258, 50259, 50359, 50363, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904],
+            [50258, 50259, 50359, 50363, 634, 575, 12525, 22618, 1968, 6144, 35617, 20084, 1756, 311, 589, 307, 534, 10281, 934, 439]
         ]
         # fmt: on
 
@@ -856,10 +830,10 @@ def _test_large_batched_generation(in_queue, out_queue, timeout):
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            " Mr. Quilter is the apostle of the middle classes and we are glad to",
+            " Mr. Quilter is the apostle of the middle classes and we are glad",
             " Nor is Mr. Quilter's manner less interesting than his matter.",
-            " He tells us that at this festive season of the year, with Christmas and roast beef",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
+            " He tells us that at this festive season of the year, with Christmas and roast",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all"
         ]
         # fmt: on
 
@@ -1029,6 +1003,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         run_test_in_subprocess(test_case=self, target_func=_test_large_generation, inputs=None)
 
     @slow
+    @require_read_token
     def test_large_generation_multilingual(self):
         run_test_in_subprocess(test_case=self, target_func=_test_large_generation_multilingual, inputs=None)
 

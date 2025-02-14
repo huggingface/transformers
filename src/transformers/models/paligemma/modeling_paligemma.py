@@ -21,7 +21,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache, HybridCache, StaticCache
+from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -31,6 +32,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_paligemma import PaliGemmaConfig
 
 
@@ -43,6 +45,75 @@ from ..auto import AutoModel, AutoModelForCausalLM
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PaliGemmaConfig"
+
+
+# Adapted from transformers.models.llama.modeling_llama.LlamaModel._prepare_4d_causal_attention_mask_with_cache_position
+# But Paligemma has no causal mask on prefix
+def _prepare_4d_causal_attention_mask_with_cache_position(
+    attention_mask: torch.Tensor,
+    sequence_length: int,
+    target_length: int,
+    dtype: torch.dtype,
+    device: torch.device,
+    min_dtype: float,
+    cache_position: torch.Tensor,
+    batch_size: int,
+    is_training: bool = False,
+    token_type_ids: torch.Tensor = None,
+    **kwargs,
+):
+    """
+    Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+    `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+    Args:
+        attention_mask (`torch.Tensor`):
+            A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape `(batch_size, 1, query_length, key_value_length)`.
+        sequence_length (`int`):
+            The sequence length being processed.
+        target_length (`int`):
+            The target length: when generating with static cache, the mask should be as long as the static cache, to account for the 0 padding, the part of the cache that is not filled yet.
+        dtype (`torch.dtype`):
+            The dtype to use for the 4D attention mask.
+        device (`torch.device`):
+            The device to plcae the 4D attention mask on.
+        min_dtype (`float`):
+            The minimum value representable with the dtype `dtype`.
+        cache_position (`torch.Tensor`):
+            Indices depicting the position of the input sequence tokens in the sequence.
+        batch_size (`torch.Tensor`):
+            Batch size.
+        is_training (`bool`):
+            Whether the model is in training mode or in inference. The condition is checked by presence/absence of `token_type_ids/labels`
+    """
+    if attention_mask is not None and attention_mask.dim() == 4:
+        # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+        causal_mask = attention_mask
+    else:
+        causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+        # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
+        if sequence_length != 1:
+            if is_training:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            else:
+                causal_mask[:, :sequence_length] = 0.0
+
+        causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+        if attention_mask is not None:
+            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            mask_length = attention_mask.shape[-1]
+            padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
+            padding_mask = padding_mask == 0
+            causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                padding_mask, min_dtype
+            )
+            # we are training thus we need to create a full mask on the image + prefix but causal on suffix
+            if is_training:
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
+                )
+    return causal_mask
 
 
 @dataclass
@@ -123,12 +194,11 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["PaliGemmaMultiModalProjector"]
     _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = False
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_cache_class = True
 
     def _init_weights(self, module):
         # important: this ported version of PaliGemmaisn't meant for training from scratch - only
@@ -150,14 +220,6 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def _supports_sdpa(self):
-        """
-        Retrieve language_model's attribute to check whether the model supports
-        SDPA or not.
-        """
-        return self.language_model._supports_sdpa
 
 
 PALIGEMMA_INPUTS_DOCSTRING = r"""
@@ -234,17 +296,14 @@ PALIGEMMA_INPUTS_DOCSTRING = r"""
     """The PALIGEMMA model which consists of a vision backbone and a language model.""",
     PALIGEMMA_START_DOCSTRING,
 )
-class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
+class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixin):
     def __init__(self, config: PaliGemmaConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config=config.vision_config)
         self.multi_modal_projector = PaliGemmaMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
-        self._attn_implementation = config._attn_implementation
 
-        language_model = AutoModelForCausalLM.from_config(
-            config=config.text_config, attn_implementation=self._attn_implementation
-        )
+        language_model = AutoModelForCausalLM.from_config(config=config.text_config)
 
         if language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
@@ -277,19 +336,27 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.tie_weights with Llava->PaliGemma
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
     def _update_causal_mask(
-        self, attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training: bool = False
+        self,
+        attention_mask,
+        token_type_ids,
+        past_key_values,
+        cache_position,
+        input_tensor,
+        is_training: bool = False,
     ):
+        if self.config.text_config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and 0.0 in attention_mask:
+                return attention_mask
+            return None
+
         using_static_cache = isinstance(past_key_values, StaticCache)
-        dtype, device = inputs_embeds.dtype, inputs_embeds.device
-        min_dtype = torch.finfo(dtype).min
-        sequence_length = inputs_embeds.shape[1]
+        min_dtype = torch.finfo(self.dtype).min
+        inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
+        elif isinstance(past_key_values, HybridCache):
+            target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = (
                 attention_mask.shape[-1]
@@ -299,35 +366,56 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
         if attention_mask is not None and attention_mask.dim() == 4:
             # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
-            causal_mask = attention_mask
-        else:
-            causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
-            )
-            # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
-            if sequence_length != 1:
-                if is_training:
-                    causal_mask = torch.triu(causal_mask, diagonal=1)
-                else:
-                    causal_mask = torch.zeros_like(causal_mask)
+            return attention_mask
 
-        causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
-        causal_mask = causal_mask[None, None, :, :].expand(inputs_embeds.shape[0], 1, -1, -1)
+        causal_mask = torch.full(
+            (sequence_length, target_length), fill_value=min_dtype, dtype=self.dtype, device=cache_position.device
+        )
+        # Causal diagonal mask only if training, otherwise attend to the whole prefix. Training-specific attn for prefix is handled below
+        if sequence_length != 1:
+            if is_training:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            else:
+                causal_mask[:, :sequence_length] = 0.0
+
+        causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
+        causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
+
+            # First unmask prefix tokens during training
+            if is_training:
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
+                )
+
+            # Then apply padding mask (will mask pad tokens)
             padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
             padding_mask = padding_mask == 0
             causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                 padding_mask, min_dtype
             )
-            # we are training thus we need to create a full mask on the image + prefix but causal on suffix
-            if is_training:
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
-                )
+
         return causal_mask
 
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
+        image_outputs = self.vision_tower(pixel_values)
+        selected_image_feature = image_outputs.last_hidden_state
+        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = image_features / (self.config.text_config.hidden_size**0.5)
+        return image_features
+
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(PALIGEMMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -345,7 +433,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
     ) -> Union[Tuple, PaliGemmaCausalLMOutputWithPast]:
         r"""
         Args:
@@ -354,10 +443,12 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
                 config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -375,7 +466,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         >>> url = "https://huggingface.co/gv-hf/PaliGemma-test-224px-hf/resolve/main/cow_beach_1.png"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(**inputs, max_length=30)
@@ -384,9 +475,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         ```"""
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -415,12 +504,10 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_outputs = self.vision_tower(pixel_values.to(inputs_embeds.dtype))
-            selected_image_feature = image_outputs.last_hidden_state
-            image_features = self.multi_modal_projector(selected_image_feature)
-            image_features = image_features / (self.config.hidden_size**0.5)
+            image_features = self.get_image_features(pixel_values)
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1).expand_as(inputs_embeds)
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             if inputs_embeds[special_image_mask].numel() != image_features.numel():
                 image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
                 raise ValueError(
@@ -434,15 +521,14 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         # mask out pad-token-ids in labels for BC
         if labels is not None and self.pad_token_id in labels:
             logger.warning_once(
-                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. ",
+                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. "
                 "You have to mask out `pad_token_id` when preparing `labels`, this behavior will be removed in v.4.46.",
             )
             labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, token_type_ids, inputs_embeds, past_key_values, cache_position, is_training
+            attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
         )
-
         outputs = self.language_model(
             attention_mask=causal_mask,
             position_ids=position_ids,
@@ -453,18 +539,21 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
+            **lm_kwargs,
         )
 
         logits = outputs.logits
-        logits = logits.float()
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             shift_logits = logits[..., :-1, :]
             shift_labels = labels[..., 1:]
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
-                shift_attention_mask = attention_mask[..., 1:]
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
                 shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
                 shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
             else:
@@ -500,28 +589,40 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel):
         attention_mask=None,
         token_type_ids=None,
         use_cache=True,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
+        labels=None,
         **kwargs,
     ):
+        # Overwritten -- custom `position_ids` and `pixel_values` handling
         model_inputs = self.language_model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            token_type_ids=token_type_ids,
             **kwargs,
         )
-
-        model_inputs["token_type_ids"] = token_type_ids
 
         # position_ids in Paligemma are 1-indexed
         if model_inputs.get("position_ids") is not None:
             model_inputs["position_ids"] += 1
-
         # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
         # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
         if cache_position[0] == 0:
             model_inputs["pixel_values"] = pixel_values
+        is_training = token_type_ids is not None and labels is not None
+        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+            input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
+            causal_mask = self._update_causal_mask(
+                attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
+            )
+            model_inputs["attention_mask"] = causal_mask
 
         return model_inputs
+
+
+__all__ = ["PaliGemmaForConditionalGeneration", "PaliGemmaPreTrainedModel"]

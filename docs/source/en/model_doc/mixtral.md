@@ -93,7 +93,7 @@ As can be seen, the instruction-tuned model requires a [chat template](../chat_t
 
 ## Speeding up Mixtral by using Flash Attention
 
-The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one.md#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
+The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 
@@ -141,7 +141,7 @@ The Flash Attention-2 model uses also a more memory efficient cache slicing mech
 
 As the Mixtral model has 45 billion parameters, that would require about 90GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter), a single A100 with 40GB of RAM is enough to fit the entire model, as in that case only about 27 GB of RAM is required.
 
-Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the BitsAndyBytes quantization (but refer to [this page](../quantization.md) for other quantization methods):
+Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization.md) for alternative quantization methods):
 
 ```python
 >>> import torch
@@ -208,4 +208,8 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## MixtralForTokenClassification
 
 [[autodoc]] MixtralForTokenClassification
+    - forward
+
+## MixtralForQuestionAnswering
+[[autodoc]] MixtralForQuestionAnswering
     - forward

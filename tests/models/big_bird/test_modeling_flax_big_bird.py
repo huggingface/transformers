@@ -35,7 +35,7 @@ if is_flax_available():
     )
 
 
-class FlaxBigBirdModelTester(unittest.TestCase):
+class FlaxBigBirdModelTester:
     def __init__(
         self,
         parent,

@@ -29,10 +29,15 @@ from ...utils import (
     extract_commit_hash,
     find_adapter_config_file,
     is_peft_available,
+    is_torch_available,
     logging,
     requires_backends,
 )
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+
+
+if is_torch_available():
+    from ...generation import GenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -428,6 +433,7 @@ class _BaseAutoModelClass:
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
             cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
+            model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
@@ -549,6 +555,7 @@ class _BaseAutoModelClass:
             )
             _ = hub_kwargs.pop("code_revision", None)
             cls.register(config.__class__, model_class, exist_ok=True)
+            model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -573,7 +580,7 @@ class _BaseAutoModelClass:
             model_class ([`PreTrainedModel`]):
                 The model to register.
         """
-        if hasattr(model_class, "config_class") and str(model_class.config_class) != str(config_class):
+        if hasattr(model_class, "config_class") and model_class.config_class.__name__ != config_class.__name__:
             raise ValueError(
                 "The model class you are passing has a `config_class` attribute that is not consistent with the "
                 f"config class you passed (model has {model_class.config_class} and you passed {config_class}. Fix "
@@ -696,6 +703,34 @@ def getattribute_from_module(module, attr):
             raise ValueError(f"Could not find {attr} neither in {module} nor in {transformers_module}!")
     else:
         raise ValueError(f"Could not find {attr} in {transformers_module}!")
+
+
+def add_generation_mixin_to_remote_model(model_class):
+    """
+    Adds `GenerationMixin` to the inheritance of `model_class`, if `model_class` is a PyTorch model.
+
+    This function is used for backwards compatibility purposes: in v4.45, we've started a deprecation cycle to make
+    `PreTrainedModel` stop inheriting from `GenerationMixin`. Without this function, older models dynamically loaded
+    from the Hub may not have the `generate` method after we remove the inheritance.
+    """
+    # 1. If it is not a PT model (i.e. doesn't inherit Module), do nothing
+    if "torch.nn.modules.module.Module" not in str(model_class.__mro__):
+        return model_class
+
+    # 2. If it already **directly** inherits from GenerationMixin, do nothing
+    if "GenerationMixin" in str(model_class.__bases__):
+        return model_class
+
+    # 3. Prior to v4.45, we could detect whether a model was `generate`-compatible if it had its own `generate` and/or
+    # `prepare_inputs_for_generation` method.
+    has_custom_generate = "GenerationMixin" not in str(getattr(model_class, "generate"))
+    has_custom_prepare_inputs = "GenerationMixin" not in str(getattr(model_class, "prepare_inputs_for_generation"))
+    if has_custom_generate or has_custom_prepare_inputs:
+        model_class_with_generation_mixin = type(
+            model_class.__name__, (model_class, GenerationMixin), {**model_class.__dict__}
+        )
+        return model_class_with_generation_mixin
+    return model_class
 
 
 class _LazyAutoMapping(OrderedDict):

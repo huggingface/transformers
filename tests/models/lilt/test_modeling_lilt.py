@@ -245,7 +245,14 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -319,4 +326,4 @@ class LiltModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(outputs.last_hidden_state.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :, :3], expected_slice, rtol=1e-3, atol=1e-3)

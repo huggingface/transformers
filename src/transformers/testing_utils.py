@@ -14,8 +14,10 @@
 
 import collections
 import contextlib
+import copy
 import doctest
 import functools
+import gc
 import importlib
 import inspect
 import logging
@@ -27,10 +29,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import MISSING, fields
 from functools import wraps
 from io import StringIO
 from pathlib import Path
@@ -38,7 +42,9 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
+import huggingface_hub.utils
 import urllib3
+from huggingface_hub import delete_repo
 
 from transformers import logging as transformers_logging
 
@@ -56,15 +62,17 @@ from .utils import (
     GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
     is_av_available,
     is_bitsandbytes_available,
+    is_bitsandbytes_multi_backend_available,
     is_bs4_available,
+    is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
-    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -72,12 +80,16 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flax_available,
+    is_flute_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
+    is_hadamard_available,
+    is_hqq_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -91,6 +103,7 @@ from .utils import (
     is_nltk_available,
     is_onnx_available,
     is_optimum_available,
+    is_optimum_quanto_available,
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
@@ -99,7 +112,6 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
-    is_quanto_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -107,8 +119,9 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_availble,
+    is_soundfile_available,
     is_spacy_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -124,6 +137,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
+    is_torch_greater_or_equal,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -136,12 +150,14 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    is_vptq_available,
     strtobool,
 )
 
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
+    from accelerate.utils.imports import is_fp8_available
 
 
 if is_pytest_available():
@@ -222,6 +238,17 @@ _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
+
+
+def get_device_count():
+    import torch
+
+    if is_torch_xpu_available():
+        num_devices = torch.xpu.device_count()
+    else:
+        num_devices = torch.cuda.device_count()
+
+    return num_devices
 
 
 def is_pt_tf_cross_test(test_case):
@@ -331,6 +358,29 @@ def tooslow(test_case):
     return unittest.skip(reason="test is too slow")(test_case)
 
 
+def skip_if_not_implemented(test_func):
+    @functools.wraps(test_func)
+    def wrapper(*args, **kwargs):
+        try:
+            return test_func(*args, **kwargs)
+        except NotImplementedError as e:
+            raise unittest.SkipTest(f"Test skipped due to NotImplementedError: {e}")
+
+    return wrapper
+
+
+def apply_skip_if_not_implemented(cls):
+    """
+    Class decorator to apply @skip_if_not_implemented to all test methods.
+    """
+    for attr_name in dir(cls):
+        if attr_name.startswith("test_"):
+            attr = getattr(cls, attr_name)
+            if callable(attr):
+                setattr(cls, attr_name, skip_if_not_implemented(attr))
+    return cls
+
+
 def custom_tokenizers(test_case):
     """
     Decorator marking a test for a custom tokenizer.
@@ -354,6 +404,14 @@ def require_galore_torch(test_case):
     https://github.com/jiaweizzhao/GaLore
     """
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
+
+
+def require_apollo_torch(test_case):
+    """
+    Decorator marking a test that requires GaLore. These tests are skipped when APOLLO isn't installed.
+    https://github.com/zhuhanqing/APOLLO
+    """
+    return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
 
 
 def require_lomo(test_case):
@@ -507,6 +565,21 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_torch_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PyTorch version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_flash_attn(test_case):
@@ -721,13 +794,6 @@ def require_spacy(test_case):
     return unittest.skipUnless(is_spacy_available(), "test requires spacy")(test_case)
 
 
-def require_decord(test_case):
-    """
-    Decorator marking a test that requires decord. These tests are skipped when decord isn't installed.
-    """
-    return unittest.skipUnless(is_decord_available(), "test requires decord")(test_case)
-
-
 def require_torch_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
@@ -738,9 +804,9 @@ def require_torch_multi_gpu(test_case):
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    import torch
+    device_count = get_device_count()
 
-    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple GPUs")(test_case)
+    return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
 
 
 def require_torch_multi_accelerator(test_case):
@@ -798,8 +864,9 @@ def require_torch_up_to_2_accelerators(test_case):
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")
-    (test_case)
+    return unittest.skipUnless(backend_device_count(torch_device) < 3, "test requires 0 or 1 or 2 accelerators")(
+        test_case
+    )
 
 
 def require_torch_xla(test_case):
@@ -847,6 +914,13 @@ def require_torch_xpu(test_case):
     must match match current PyTorch version.
     """
     return unittest.skipUnless(is_torch_xpu_available(), "test requires XPU device")(test_case)
+
+
+def require_non_xpu(test_case):
+    """
+    Decorator marking a test that should be skipped for XPU.
+    """
+    return unittest.skipUnless(torch_device != "xpu", "test requires a non-XPU")(test_case)
 
 
 def require_torch_multi_xpu(test_case):
@@ -940,6 +1014,26 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_large_gpu(test_case, memory: float = 20):
+    """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
+    if torch_device != "cuda":
+        return unittest.skip(reason=f"test requires a CUDA GPU with more than {memory} GiB of memory")(test_case)
+
+    return unittest.skipUnless(
+        torch.cuda.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
+def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
+    """
+    Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
+    """
+    if is_bitsandbytes_available() and is_bitsandbytes_multi_backend_available():
+        return test_case
+    return require_torch_gpu(test_case)
+
+
 def require_torch_accelerator(test_case):
     """Decorator marking a test that requires an accessible accelerator and PyTorch."""
     return unittest.skipUnless(torch_device is not None and torch_device != "cpu", "test requires accelerator")(
@@ -952,6 +1046,13 @@ def require_torch_fp16(test_case):
     return unittest.skipUnless(
         is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
     )(test_case)
+
+
+def require_fp8(test_case):
+    """Decorator marking a test that requires supports for fp8"""
+    return unittest.skipUnless(is_accelerate_available() and is_fp8_available(), "test requires fp8 support")(
+        test_case
+    )
 
 
 def require_torch_bf16(test_case):
@@ -1060,7 +1161,7 @@ def require_soundfile(test_case):
     These tests are skipped when soundfile isn't installed.
 
     """
-    return unittest.skipUnless(is_soundfile_availble(), "test requires soundfile")(test_case)
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -1084,11 +1185,35 @@ def require_aqlm(test_case):
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
 
 
+def require_vptq(test_case):
+    """
+    Decorator marking a test that requires vptq
+    """
+    return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
+
+
+def require_spqr(test_case):
+    """
+    Decorator marking a test that requires spqr
+    """
+    return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
+
+
 def require_eetq(test_case):
     """
     Decorator marking a test that requires eetq
     """
-    return unittest.skipUnless(is_eetq_available(), "test requires eetq")(test_case)
+    eetq_available = is_eetq_available()
+    if eetq_available:
+        try:
+            import eetq  # noqa: F401
+        except ImportError as exc:
+            if "shard_checkpoint" in str(exc):
+                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
+                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
+                # TODO: Remove once eetq releases a fix and this release is used in CI
+                eetq_available = False
+    return unittest.skipUnless(eetq_available, "test requires eetq")(test_case)
 
 
 def require_av(test_case):
@@ -1127,11 +1252,20 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_auto_gptq(test_case):
+def require_gptq(test_case):
     """
     Decorator for auto_gptq dependency
     """
-    return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+    return unittest.skipUnless(
+        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
+    )(test_case)
+
+
+def require_hqq(test_case):
+    """
+    Decorator for hqq dependency
+    """
+    return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
 
 
 def require_auto_awq(test_case):
@@ -1141,11 +1275,18 @@ def require_auto_awq(test_case):
     return unittest.skipUnless(is_auto_awq_available(), "test requires autoawq")(test_case)
 
 
-def require_quanto(test_case):
+def require_optimum_quanto(test_case):
     """
     Decorator for quanto dependency
     """
-    return unittest.skipUnless(is_quanto_available(), "test requires quanto")(test_case)
+    return unittest.skipUnless(is_optimum_quanto_available(), "test requires optimum-quanto")(test_case)
+
+
+def require_compressed_tensors(test_case):
+    """
+    Decorator for compressed_tensors dependency
+    """
+    return unittest.skipUnless(is_compressed_tensors_available(), "test requires compressed_tensors")(test_case)
 
 
 def require_fbgemm_gpu(test_case):
@@ -1153,6 +1294,15 @@ def require_fbgemm_gpu(test_case):
     Decorator for fbgemm_gpu dependency
     """
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
+
+
+def require_flute_hadamard(test_case):
+    """
+    Decorator marking a test that requires higgs and hadamard
+    """
+    return unittest.skipUnless(
+        is_flute_available() and is_hadamard_available(), "test requires flute and fast_hadamard_transform"
+    )(test_case)
 
 
 def require_phonemizer(test_case):
@@ -1311,6 +1461,94 @@ def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
+
+
+def set_model_tester_for_less_flaky_test(test_case):
+    target_num_hidden_layers = 1
+    # TODO (if possible): Avoid exceptional cases
+    exceptional_classes = [
+        "ZambaModelTester",
+        "Zamba2ModelTester",
+        "RwkvModelTester",
+        "AriaVisionText2TextModelTester",
+        "GPTNeoModelTester",
+        "DPTModelTester",
+    ]
+    if test_case.model_tester.__class__.__name__ in exceptional_classes:
+        target_num_hidden_layers = None
+    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
+        target_num_hidden_layers = None
+
+    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
+        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
+    if (
+        hasattr(test_case.model_tester, "vision_config")
+        and "num_hidden_layers" in test_case.model_tester.vision_config
+        and target_num_hidden_layers is not None
+    ):
+        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
+        if isinstance(test_case.model_tester.vision_config, dict):
+            test_case.model_tester.vision_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.vision_config.num_hidden_layers = 1
+    if (
+        hasattr(test_case.model_tester, "text_config")
+        and "num_hidden_layers" in test_case.model_tester.text_config
+        and target_num_hidden_layers is not None
+    ):
+        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
+        if isinstance(test_case.model_tester.text_config, dict):
+            test_case.model_tester.text_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.text_config.num_hidden_layers = 1
+
+    # A few model class specific handling
+
+    # For Albert
+    if hasattr(test_case.model_tester, "num_hidden_groups"):
+        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
+
+
+def set_config_for_less_flaky_test(config):
+    target_attrs = [
+        "rms_norm_eps",
+        "layer_norm_eps",
+        "norm_eps",
+        "norm_epsilon",
+        "layer_norm_epsilon",
+        "batch_norm_eps",
+    ]
+    for target_attr in target_attrs:
+        setattr(config, target_attr, 1.0)
+
+    # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
+    # (We don't need the original epsilon values to check eager/sdpa matches)
+    attrs = ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]
+    for attr in attrs:
+        if hasattr(config, attr):
+            for target_attr in target_attrs:
+                setattr(getattr(config, attr), target_attr, 1.0)
+
+
+def set_model_for_less_flaky_test(model):
+    # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
+    target_names = (
+        "LayerNorm",
+        "GroupNorm",
+        "BatchNorm",
+        "RMSNorm",
+        "BatchNorm2d",
+        "BatchNorm1d",
+        "BitGroupNormActivation",
+        "WeightStandardizedConv2d",
+    )
+    target_attrs = ["eps", "epsilon", "variance_epsilon"]
+    if is_torch_available() and isinstance(model, torch.nn.Module):
+        for module in model.modules():
+            if type(module).__name__.endswith(target_names):
+                for attr in target_attrs:
+                    if hasattr(module, attr):
+                        setattr(module, attr, 1.0)
 
 
 class CaptureStd:
@@ -1496,6 +1734,38 @@ def LoggingLevel(level):
         yield
     finally:
         transformers_logging.set_verbosity(orig_level)
+
+
+class TemporaryHubRepo:
+    """Create a temporary Hub repository and return its `RepoUrl` object. This is similar to
+    `tempfile.TemporaryDirectory` and can be used as a context manager. For example:
+
+        with TemporaryHubRepo(token=self._token) as temp_repo:
+            ...
+
+    Upon exiting the context, the repository and everything contained in it are removed.
+
+    Example:
+
+    ```python
+    with TemporaryHubRepo(token=self._token) as temp_repo:
+        model.push_to_hub(tmp_repo.repo_id, token=self._token)
+    ```
+    """
+
+    def __init__(self, namespace: Optional[str] = None, token: Optional[str] = None) -> None:
+        self.token = token
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_id = Path(tmp_dir).name
+            if namespace is not None:
+                repo_id = f"{namespace}/{repo_id}"
+            self.repo_url = huggingface_hub.create_repo(repo_id, token=self.token)
+
+    def __enter__(self):
+        return self.repo_url
+
+    def __exit__(self, exc, value, tb):
+        delete_repo(repo_id=self.repo_url.repo_id, token=self.token, missing_ok=True)
 
 
 @contextlib.contextmanager
@@ -1933,7 +2203,7 @@ def pytest_terminal_summary_main(tr, id):
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
                 if rep.duration < durations_min:
-                    f.write(f"{len(dlist)-i} durations < {durations_min} secs were omitted")
+                    f.write(f"{len(dlist) - i} durations < {durations_min} secs were omitted")
                     break
                 f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
@@ -2136,7 +2406,7 @@ def nested_simplify(obj, decimals=3):
         return nested_simplify(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
-    elif isinstance(obj, (np.int32, np.float32)):
+    elif isinstance(obj, (np.int32, np.float32, np.float16)):
         return nested_simplify(obj.item(), decimals)
     else:
         raise Exception(f"Not supported: {type(obj)}")
@@ -2205,12 +2475,28 @@ class RequestCounter:
 
     def __enter__(self):
         self._counter = defaultdict(int)
-        self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=urllib3.connectionpool.log.debug)
+        self._thread_id = threading.get_ident()
+        self._extra_info = []
+
+        def patched_with_thread_info(func):
+            def wrap(*args, **kwargs):
+                self._extra_info.append(threading.get_ident())
+                return func(*args, **kwargs)
+
+            return wrap
+
+        self.patcher = patch.object(
+            urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
+        )
         self.mock = self.patcher.start()
         return self
 
     def __exit__(self, *args, **kwargs) -> None:
-        for call in self.mock.call_args_list:
+        assert len(self.mock.call_args_list) == len(self._extra_info)
+
+        for thread_id, call in zip(self._extra_info, self.mock.call_args_list):
+            if thread_id != self._thread_id:
+                continue
             log = call.args[0] % call.args[1:]
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
                 if method in log:
@@ -2302,7 +2588,67 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     process.join(timeout=timeout)
 
     if results["error"] is not None:
-        test_case.fail(f'{results["error"]}')
+        test_case.fail(f"{results['error']}")
+
+
+def run_test_using_subprocess(func):
+    """
+    To decorate a test to run in a subprocess using the `subprocess` module. This could avoid potential GPU memory
+    issues (GPU OOM or a test that causes many subsequential failing with `CUDA error: device-side assert triggered`).
+    """
+    import pytest
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
+            func(*args, **kwargs)
+        else:
+            test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
+            try:
+                import copy
+
+                env = copy.deepcopy(os.environ)
+                env["_INSIDE_SUB_PROCESS"] = "1"
+                # This prevents the entries in `short test summary info` given by the subprocess being truncated. so the
+                # full information can be passed to the parent pytest process.
+                # See: https://docs.pytest.org/en/stable/explanation/ci.html
+                env["CI"] = "true"
+
+                # If not subclass of `unitTest.TestCase` and `pytestconfig` is used: try to grab and use the arguments
+                if "pytestconfig" in kwargs:
+                    command = list(kwargs["pytestconfig"].invocation_params.args)
+                    for idx, x in enumerate(command):
+                        if x in kwargs["pytestconfig"].args:
+                            test = test.split("::")[1:]
+                            command[idx] = "::".join([f"{func.__globals__['__file__']}"] + test)
+                    command = [f"{sys.executable}", "-m", "pytest"] + command
+                    command = [x for x in command if x not in ["--no-summary"]]
+                # Otherwise, simply run the test with no option at all
+                else:
+                    command = [f"{sys.executable}", "-m", "pytest", f"{test}"]
+
+                subprocess.run(command, env=env, check=True, capture_output=True)
+            except subprocess.CalledProcessError as e:
+                exception_message = e.stdout.decode()
+                lines = exception_message.split("\n")
+                # Add a first line with more informative information instead of just `= test session starts =`.
+                # This makes the `short test summary info` section more useful.
+                if "= test session starts =" in lines[0]:
+                    text = ""
+                    for line in lines[1:]:
+                        if line.startswith("FAILED "):
+                            text = line[len("FAILED ") :]
+                            text = "".join(text.split(" - ")[1:])
+                        elif line.startswith("=") and line.endswith("=") and " failed in " in line:
+                            break
+                        elif len(text) > 0:
+                            text += f"\n{line}"
+                    text = "(subprocess) " + text
+                    lines = [text] + lines
+                exception_message = "\n".join(lines)
+                raise pytest.fail(exception_message, pytrace=False)
+
+    return wrapper
 
 
 """
@@ -2551,3 +2897,37 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
+
+
+def compare_pipeline_output_to_hub_spec(output, hub_spec):
+    missing_keys = []
+    unexpected_keys = []
+    all_field_names = {field.name for field in fields(hub_spec)}
+    matching_keys = sorted([key for key in output.keys() if key in all_field_names])
+
+    # Fields with a MISSING default are required and must be in the output
+    for field in fields(hub_spec):
+        if field.default is MISSING and field.name not in output:
+            missing_keys.append(field.name)
+
+    # All output keys must match either a required or optional field in the Hub spec
+    for output_key in output:
+        if output_key not in all_field_names:
+            unexpected_keys.append(output_key)
+
+    if missing_keys or unexpected_keys:
+        error = ["Pipeline output does not match Hub spec!"]
+        if matching_keys:
+            error.append(f"Matching keys: {matching_keys}")
+        if missing_keys:
+            error.append(f"Missing required keys in pipeline output: {missing_keys}")
+        if unexpected_keys:
+            error.append(f"Keys in pipeline output that are not in Hub spec: {unexpected_keys}")
+        raise KeyError("\n".join(error))
+
+
+@require_torch
+def cleanup(device: str, gc_collect=False):
+    if gc_collect:
+        gc.collect()
+    backend_empty_cache(device)

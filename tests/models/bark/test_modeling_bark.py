@@ -22,6 +22,7 @@ import unittest
 import pytest
 
 from transformers import (
+    BarkCausalModel,
     BarkCoarseConfig,
     BarkConfig,
     BarkFineConfig,
@@ -53,7 +54,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        BarkCausalModel,
         BarkCoarseModel,
         BarkFineModel,
         BarkModel,
@@ -527,6 +527,8 @@ class BarkModelTester:
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
+    # `BarkSemanticModel` inherits from `BarkCausalModel`, but requires an advanced generation config.
+    # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
@@ -599,7 +601,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
             with torch.no_grad():
                 out_embeds = model(**inputs)[0]
 
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     @require_torch_fp16
     def test_generate_fp16(self):
@@ -614,8 +616,9 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
 @require_torch
 class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    # Same tester as BarkSemanticModelTest, except for model_class and config_class
     all_model_classes = (BarkCoarseModel,) if is_torch_available() else ()
+    # `BarkCoarseModel` inherits from `BarkCausalModel`, but requires an advanced generation config.
+    # `BarkCausalModel` does not, so we run generation tests there.
     all_generative_model_classes = (BarkCausalModel,) if is_torch_available() else ()
 
     is_encoder_decoder = False
@@ -688,7 +691,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             with torch.no_grad():
                 out_embeds = model(**inputs)[0]
 
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     @require_torch_fp16
     def test_generate_fp16(self):
@@ -1252,8 +1255,8 @@ class BarkModelIntegrationTests(unittest.TestCase):
         self.assertEqual(tuple(audio_lengths), (output1.shape[1], output2.shape[1]))
 
         # then assert almost equal
-        self.assertTrue(torch.allclose(outputs[0, : audio_lengths[0]], output1.squeeze(), atol=2e-3))
-        self.assertTrue(torch.allclose(outputs[1, : audio_lengths[1]], output2.squeeze(), atol=2e-3))
+        torch.testing.assert_close(outputs[0, : audio_lengths[0]], output1.squeeze(), rtol=2e-3, atol=2e-3)
+        torch.testing.assert_close(outputs[1, : audio_lengths[1]], output2.squeeze(), rtol=2e-3, atol=2e-3)
 
         # now test single input with return_output_lengths = True
         outputs, _ = self.model.generate(**s1, **args, return_output_lengths=True)

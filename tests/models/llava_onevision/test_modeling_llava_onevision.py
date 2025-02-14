@@ -14,12 +14,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
-import gc
 import unittest
 
 import numpy as np
 import requests
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -29,6 +29,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     slow,
@@ -48,8 +49,6 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -60,7 +59,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=0,
+        image_token_index=1,
         projector_hidden_act="gelu",
         seq_length=7,
         vision_feature_select_strategy="full",
@@ -92,7 +91,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         is_training=True,
         vision_config={
             "image_size": 16,
-            "patch_size": 2,
+            "patch_size": 8,
             "num_channels": 3,
             "is_training": True,
             "hidden_size": 32,
@@ -113,7 +112,9 @@ class LlavaOnevisionVisionText2TextModelTester:
         self.vision_feature_layer = vision_feature_layer
         self.text_config = text_config
         self.vision_config = vision_config
-        self.seq_length = seq_length
+        self.pad_token_id = text_config["pad_token_id"]
+        self.num_image_tokens = 10
+        self.seq_length = seq_length + self.num_image_tokens
 
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.vocab_size = text_config["vocab_size"]
@@ -124,8 +125,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 7
-        self.image_grid_pinpoints = [[32, 32]]
+        self.image_grid_pinpoints = [[16, 16]]
 
     def get_config(self):
         return LlavaOnevisionConfig(
@@ -143,7 +143,7 @@ class LlavaOnevisionVisionText2TextModelTester:
         pixel_values = floats_tensor(
             [
                 self.batch_size,
-                9,
+                3,
                 self.vision_config["num_channels"],
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
@@ -158,16 +158,16 @@ class LlavaOnevisionVisionText2TextModelTester:
         config, pixel_values = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        # we are giving 3 images let's make sure we pass in 3 image tokens
-        input_ids[:, 1] = config.image_token_index
+
+        input_ids[input_ids == config.image_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = config.image_token_index
+
         labels = torch.zeros((self.batch_size, self.seq_length), dtype=torch.long, device=torch_device)
-        # maskout where the image token is
-        labels[:, 1] == self.ignore_index
+        labels[:, : self.num_image_tokens] == self.ignore_index
+
         inputs_dict = {
             "pixel_values": pixel_values,
-            "image_sizes": torch.tensor(
-                [[self.vision_config["image_size"], self.vision_config["image_size"]]] * self.batch_size
-            ),
+            "image_sizes": torch.tensor([[45, 45]] * self.batch_size),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": labels,
@@ -215,13 +215,22 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
 
     all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
+    )
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = LlavaOnevisionVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaOnevisionConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaOnevisionConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -281,7 +290,33 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
+
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layer):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layer = vision_feature_layer
+
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
@@ -301,8 +336,14 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip("VLMs can't do assisted decoding yet!")
-    def test_assisted_decoding_with_num_logits_to_keep(self):
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
+    )
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
 
@@ -324,8 +365,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt_video = "user\n<video>\nWhat do you see in this video?<|im_end|>\n<|im_start|>assistant\n"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes
@@ -343,20 +383,10 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         # verify single forward pass
         inputs = inputs.to(torch_device)
-        with torch.no_grad():
-            output = model(**inputs)
-
-        expected_slice = torch.tensor(
-            [[-12.3125, -14.5625, -12.8750], [3.4023, 5.0508, 9.5469], [3.5762, 4.4922, 7.8906]],
-            dtype=torch.float32,
-            device=torch_device,
-        )
-        self.assertTrue(torch.allclose(output.logits[0, :3, :3], expected_slice, atol=1e-3))
 
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
-        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VIZ," "TextVQA," "SQA-IMG," and "MQE." The radar chart shows'  # fmt: skip
-
+        EXPECTED_DECODED_TEXT = 'user\n\nWhat do you see in this image?\nassistant\nThe image is a radar chart that compares the performance of different models in a specific task, likely related to natural language processing or machine learning. The chart is divided into several axes, each representing a different model or method. The models are color-coded and labeled with their respective names. The axes are labeled with terms such as "VQA," "GQA," "MQA," "VQAv2," "MM-Vet," "LLaVA-Bench," "LLaVA-1'  # fmt: skip
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

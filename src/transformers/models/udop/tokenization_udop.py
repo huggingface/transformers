@@ -412,7 +412,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         return state
 
     def __setstate__(self, d):
-        self.__dict__ = d
+        self.__dict__.update(d)
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
@@ -1483,3 +1483,6 @@ class UdopTokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["UdopTokenizer"]

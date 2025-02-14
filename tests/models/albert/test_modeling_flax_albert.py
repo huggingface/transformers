@@ -36,7 +36,7 @@ if is_flax_available():
     )
 
 
-class FlaxAlbertModelTester(unittest.TestCase):
+class FlaxAlbertModelTester:
     def __init__(
         self,
         parent,

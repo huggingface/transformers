@@ -30,7 +30,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -322,9 +322,9 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             # loss is at first position
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
-            # Object Detection model returns pred_logits and pred_boxes
+            # Object Detection model returns pred_logits and pred_boxes and input_ids
             if model_class.__name__ == "GroundingDinoForObjectDetection":
-                correct_outlen += 2
+                correct_outlen += 3
 
             self.assertEqual(out_len, correct_outlen)
 
@@ -645,38 +645,38 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
 
         # verify postprocessing
         results = processor.image_processor.post_process_object_detection(
-            outputs, threshold=0.35, target_sizes=[image.size[::-1]]
+            outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
         expected_scores = torch.tensor([0.4526, 0.4082]).to(torch_device)
         expected_slice_boxes = torch.tensor([344.8143, 23.1796, 637.4004, 373.8295]).to(torch_device)
 
         self.assertEqual(len(results["scores"]), 2)
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
 
         # verify grounded postprocessing
         expected_labels = ["a cat", "a cat"]
         results = processor.post_process_grounded_object_detection(
             outputs=outputs,
             input_ids=encoding.input_ids,
-            box_threshold=0.35,
+            threshold=0.35,
             text_threshold=0.3,
-            target_sizes=[image.size[::-1]],
+            target_sizes=[(image.height, image.width)],
         )[0]
 
-        self.assertTrue(torch.allclose(results["scores"], expected_scores, atol=1e-3))
-        self.assertTrue(torch.allclose(results["boxes"][0, :], expected_slice_boxes, atol=1e-2))
-        self.assertListEqual(results["labels"], expected_labels)
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(results["boxes"][0, :], expected_slice_boxes, rtol=1e-2, atol=1e-2)
+        self.assertListEqual(results["text_labels"], expected_labels)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
         processor = self.default_processor
         image = prepare_img()
@@ -690,31 +690,31 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             cpu_outputs = model(**encoding)
 
         # 2. run model on GPU
-        model.to("cuda")
-        encoding = encoding.to("cuda")
+        model.to(torch_device)
+        encoding = encoding.to(torch_device)
         with torch.no_grad():
             gpu_outputs = model(**encoding)
 
         # 3. assert equivalence
         for key in cpu_outputs.keys():
-            self.assertTrue(torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-3))
+            torch.testing.assert_close(cpu_outputs[key], gpu_outputs[key].cpu(), rtol=1e-3, atol=1e-3)
 
         expected_logits = torch.tensor(
             [[-4.8915, -0.1900, -0.2161], [-4.9658, -0.3716, -0.3948], [-5.9596, -3.3763, -3.3103]]
         )
-        self.assertTrue(torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-3))
+        torch.testing.assert_close(cpu_outputs.logits[0, :3, :3], expected_logits, rtol=1e-3, atol=1e-3)
 
         # assert postprocessing
         results_cpu = processor.image_processor.post_process_object_detection(
-            cpu_outputs, threshold=0.35, target_sizes=[image.size[::-1]]
+            cpu_outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
 
         result_gpu = processor.image_processor.post_process_object_detection(
-            gpu_outputs, threshold=0.35, target_sizes=[image.size[::-1]]
+            gpu_outputs, threshold=0.35, target_sizes=[(image.height, image.width)]
         )[0]
 
-        self.assertTrue(torch.allclose(results_cpu["scores"], result_gpu["scores"].cpu(), atol=1e-3))
-        self.assertTrue(torch.allclose(results_cpu["boxes"], result_gpu["boxes"].cpu(), atol=1e-3))
+        torch.testing.assert_close(results_cpu["scores"], result_gpu["scores"].cpu(), rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(results_cpu["boxes"], result_gpu["boxes"].cpu(), rtol=1e-3, atol=1e-3)
 
     def test_cross_attention_mask(self):
         model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny").to(torch_device)
@@ -738,6 +738,6 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
             outputs2 = model(**encoding2)
             outputs_batched = model(**encoding_batched)
 
-        self.assertTrue(torch.allclose(outputs1.logits, outputs_batched.logits[:1], atol=1e-3))
+        torch.testing.assert_close(outputs1.logits, outputs_batched.logits[:1], rtol=1e-3, atol=1e-3)
         # For some reason 12 elements are > 1e-3, but the rest are fine
-        self.assertTrue(torch.allclose(outputs2.logits, outputs_batched.logits[1:], atol=1.8e-3))
+        torch.testing.assert_close(outputs2.logits, outputs_batched.logits[1:], rtol=1.8e-3, atol=1.8e-3)

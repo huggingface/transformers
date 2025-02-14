@@ -13,13 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
-import gc
 import math
 import unittest
 
 from transformers import XGLMConfig, is_torch_available
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -29,7 +28,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -123,26 +122,6 @@ class XGLMModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
         )
 
     def create_and_check_xglm_model(self, config, input_ids, input_mask, head_mask, *args):
@@ -304,7 +283,6 @@ class XGLMModelTester:
 @require_torch
 class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XGLMModel, XGLMForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (XGLMForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
     )
@@ -363,8 +341,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def _test_lm_generate_xglm_helper(
         self,
@@ -454,47 +431,6 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
             "Today is a nice day and the water is still cold. We just stopped off for some fresh",
         ]
         self.assertIn(output_str, EXPECTED_OUTPUT_STRS)
-
-    @slow
-    def test_xglm_sample_max_time(self):
-        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
-        model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")
-        model.to(torch_device)
-
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt")
-        input_ids = tokenized.input_ids.to(torch_device)
-
-        MAX_TIME = 0.15
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=1.25 * MAX_TIME))
 
     @require_torch_accelerator
     @require_torch_fp16

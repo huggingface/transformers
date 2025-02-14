@@ -328,7 +328,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
 
-    all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BloomModel,
@@ -388,10 +387,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_bloom_weight_initialization(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_bloom_weight_initialization(*config_and_inputs)
-
-    @unittest.skip(reason="Bloom has a non-standard KV cache format.")
-    def test_past_key_values_format(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

@@ -37,22 +37,31 @@ FlashAttention-2 is experimental and may change considerably in future versions.
 2. partitioning the work between GPU threads to reduce communication and shared memory reads/writes between them
 
 FlashAttention-2 is currently supported for the following architectures:
+* [Aria](https://huggingface.co/docs/transformers/model_doc/aria#transformers.AriaForConditionalGeneration)
 * [Bark](https://huggingface.co/docs/transformers/model_doc/bark#transformers.BarkModel)
+* [Bamba](https://huggingface.co/docs/transformers/model_doc/bamba#transformers.BambaModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
 * [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)
 * [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
 * [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
+* [Cohere2](https://huggingface.co/docs/transformers/model_doc/cohere2#transformers.Cohere2Model)
+* [GLM](https://huggingface.co/docs/transformers/model_doc/glm#transformers.GLMModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
+* [DiffLlama](https://huggingface.co/docs/transformers/model_doc/diffllama#transformers.DiffLlamaModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
+* [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
 * [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
 * [GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj#transformers.GPTJModel)
 * [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
+* [GraniteMoe](https://huggingface.co/docs/transformers/model_doc/granitemoe#transformers.GraniteMoeModel)
 * [Idefics2](https://huggingface.co/docs/transformers/model_doc/idefics2#transformers.Idefics2Model)
+* [Idefics3](https://huggingface.co/docs/transformers/model_doc/idefics3#transformers.Idefics3Model)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
 * [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
@@ -61,27 +70,39 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
+* [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
 * [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100)
 * [MBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
+* [ModernBert](https://huggingface.co/docs/transformers/model_doc/modernbert#transformers.ModernBert)
+* [Moshi](https://huggingface.co/docs/transformers/model_doc/moshi#transformers.MoshiModel)
 * [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
 * [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
 * [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
 * [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [OLMo2](https://huggingface.co/docs/transformers/model_doc/olmo2#transformers.Olmo2Model)
 * [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
 * [OPT](https://huggingface.co/docs/transformers/model_doc/opt#transformers.OPTModel)
+* [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
+* [PhiMoE](https://huggingface.co/docs/transformers/model_doc/phimoe#transformers.PhimoeModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
 * [Starcoder2](https://huggingface.co/docs/transformers/model_doc/starcoder2#transformers.Starcoder2Model)
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 * [Qwen2Audio](https://huggingface.co/docs/transformers/model_doc/qwen2_audio#transformers.Qwen2AudioEncoder)
 * [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
 * [Qwen2VL](https://huggingface.co/docs/transformers/model_doc/qwen2_vl#transformers.Qwen2VLModel)
+* [Qwen2.5VL](https://huggingface.co/docs/transformers/model_doc/qwen2_5_vl#transformers.Qwen2_5_VLModel)
+* [RAG](https://huggingface.co/docs/transformers/model_doc/rag#transformers.RagModel)
+* [SpeechEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/speech_encoder_decoder#transformers.SpeechEncoderDecoderModel)
+* [VisionEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/vision_encoder_decoder#transformers.VisionEncoderDecoderModel)
+* [VisionTextDualEncoder](https://huggingface.co/docs/transformers/model_doc/vision_text_dual_encoder#transformers.VisionTextDualEncoderModel)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 * [Wav2Vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
 * [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
@@ -90,6 +111,8 @@ FlashAttention-2 is currently supported for the following architectures:
 * [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
 * [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
 * [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
+* [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
+* [Zamba2](https://huggingface.co/docs/transformers/model_doc/zamba2)
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
@@ -204,42 +227,74 @@ PyTorch's [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.o
 
 For now, Transformers supports SDPA inference and training for the following architectures:
 * [Albert](https://huggingface.co/docs/transformers/model_doc/albert#transformers.AlbertModel)
+* [Aria](https://huggingface.co/docs/transformers/model_doc/aria#transformers.AriaForConditionalGeneration)
 * [Audio Spectrogram Transformer](https://huggingface.co/docs/transformers/model_doc/audio-spectrogram-transformer#transformers.ASTModel)
+* [Bamba](https://huggingface.co/docs/transformers/model_doc/bamba#transformers.BambaModel)
 * [Bart](https://huggingface.co/docs/transformers/model_doc/bart#transformers.BartModel)
+* [Beit](https://huggingface.co/docs/transformers/model_doc/beit#transformers.BeitModel)
 * [Bert](https://huggingface.co/docs/transformers/model_doc/bert#transformers.BertModel)
+* [BioGpt](https://huggingface.co/docs/transformers/model_doc/biogpt#transformers.BioGptModel)
 * [CamemBERT](https://huggingface.co/docs/transformers/model_doc/camembert#transformers.CamembertModel)
 * [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon#transformers.Chameleon)
 * [CLIP](https://huggingface.co/docs/transformers/model_doc/clip#transformers.CLIPModel)
+* [GLM](https://huggingface.co/docs/transformers/model_doc/glm#transformers.GLMModel)
 * [Cohere](https://huggingface.co/docs/transformers/model_doc/cohere#transformers.CohereModel)
+* [Cohere2](https://huggingface.co/docs/transformers/model_doc/cohere2#transformers.Cohere2Model)
 * [data2vec_audio](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecAudioModel)
+* [data2vec_vision](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecVisionModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [DeiT](https://huggingface.co/docs/transformers/model_doc/deit#transformers.DeiTModel)
+* [DepthPro](https://huggingface.co/docs/transformers/model_doc/depth_pro#transformers.DepthProModel)
+* [DiffLlama](https://huggingface.co/docs/transformers/model_doc/diffllama#transformers.DiffLlamaModel)
+* [Dinov2](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
+* [Dinov2_with_registers](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
+* [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
 * [Dpr](https://huggingface.co/docs/transformers/model_doc/dpr#transformers.DprReader)
+* [EncoderDecoder](https://huggingface.co/docs/transformers/model_doc/encoder_decoder#transformers.EncoderDecoderModel)
+* [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
+* [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox#transformers.GPTNeoXModel)
 * [Hubert](https://huggingface.co/docs/transformers/model_doc/hubert#transformers.HubertModel)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
-* [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
+* [Idefics2](https://huggingface.co/docs/transformers/model_doc/idefics2#transformers.Idefics2Model)
+* [Idefics3](https://huggingface.co/docs/transformers/model_doc/idefics3#transformers.Idefics3Model)
+* [I-JEPA](https://huggingface.co/docs/transformers/model_doc/ijepa#transformers.IJepaModel)
+* [GraniteMoe](https://huggingface.co/docs/transformers/model_doc/granitemoe#transformers.GraniteMoeModel)
 * [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
 * [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
+* [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
+* [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
+* [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
+* [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100#transformers.M2M100Model)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
+* [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
+* [Mllama](https://huggingface.co/docs/transformers/model_doc/mllama#transformers.MllamaForConditionalGeneration)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
+* [ModernBert](https://huggingface.co/docs/transformers/model_doc/modernbert#transformers.ModernBert)
+* [Moshi](https://huggingface.co/docs/transformers/model_doc/moshi#transformers.MoshiModel)
 * [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
 * [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
+* [NLLB](https://huggingface.co/docs/transformers/model_doc/nllb)
 * [OLMo](https://huggingface.co/docs/transformers/model_doc/olmo#transformers.OlmoModel)
+* [OLMo2](https://huggingface.co/docs/transformers/model_doc/olmo2#transformers.Olmo2Model)
 * [OLMoE](https://huggingface.co/docs/transformers/model_doc/olmoe#transformers.OlmoeModel)
+* [OPT](https://huggingface.co/docs/transformers/en/model_doc/opt)
 * [PaliGemma](https://huggingface.co/docs/transformers/model_doc/paligemma#transformers.PaliGemmaForConditionalGeneration)
 * [Phi](https://huggingface.co/docs/transformers/model_doc/phi#transformers.PhiModel)
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
+* [PhiMoE](https://huggingface.co/docs/transformers/model_doc/phimoe#transformers.PhimoeModel)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
-* [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 * [mBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
@@ -247,6 +302,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 * [Qwen2Audio](https://huggingface.co/docs/transformers/model_doc/qwen2_audio#transformers.Qwen2AudioEncoder)
 * [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
+* [Qwen2.5VL](https://huggingface.co/docs/transformers/model_doc/qwen2_5_vl#transformers.Qwen2_5_VLModel)
 * [RoBERTa](https://huggingface.co/docs/transformers/model_doc/roberta#transformers.RobertaModel)
 * [Sew](https://huggingface.co/docs/transformers/main/en/model_doc/sew#transformers.SEWModel)
 * [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
@@ -259,17 +315,24 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Musicgen](https://huggingface.co/docs/transformers/model_doc/musicgen#transformers.MusicgenModel)
 * [MusicGen Melody](https://huggingface.co/docs/transformers/model_doc/musicgen_melody#transformers.MusicgenMelodyModel)
 * [Nemotron](https://huggingface.co/docs/transformers/model_doc/nemotron)
+* [SpeechEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/speech_encoder_decoder#transformers.SpeechEncoderDecoderModel)
+* [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
+* [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
+* [VisionEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/vision_encoder_decoder#transformers.VisionEncoderDecoderModel)
 * [ViT](https://huggingface.co/docs/transformers/model_doc/vit#transformers.ViTModel)
 * [ViTHybrid](https://huggingface.co/docs/transformers/model_doc/vit_hybrid#transformers.ViTHybridModel)
 * [ViTMAE](https://huggingface.co/docs/transformers/model_doc/vit_mae#transformers.ViTMAEModel)
 * [ViTMSN](https://huggingface.co/docs/transformers/model_doc/vit_msn#transformers.ViTMSNModel)
+* [VisionTextDualEncoder](https://huggingface.co/docs/transformers/model_doc/vision_text_dual_encoder#transformers.VisionTextDualEncoderModel)
 * [VideoMAE](https://huggingface.co/docs/transformers/model_doc/videomae#transformers.VideoMAEModell)
+* [ViViT](https://huggingface.co/docs/transformers/model_doc/vivit#transformers.VivitModel)
 * [wav2vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 * [XLM-RoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
-
+* [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
+* [Zamba2](https://huggingface.co/docs/transformers/model_doc/zamba2)
 
 <Tip>
 
@@ -284,19 +347,20 @@ In that case, you should see a warning message and we will fall back to the (slo
 
 </Tip>
 
-By default, SDPA selects the most performant kernel available but you can check whether a backend is available in a given setting (hardware, problem size) with [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
+By default, SDPA selects the most performant kernel available but you can check whether a backend is available in a given setting (hardware, problem size) with [`torch.nn.attention.sdpa_kernel`](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) as a context manager:
 
 ```diff
 import torch
++ from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to("cuda")
 
 input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
-+ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
++ with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -368,17 +432,17 @@ To load a model in 4-bit for inference, use the `load_in_4bit` parameter. The `d
 ```py
 from transformers import AutoModelForCausalLM
 
-model_name = "bigscience/bloom-2b5"
-model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
+model_name = "bigscience/bloom-1b7"
+model_4bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True)
 ```
 
-To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 600MB of memory to the first GPU and 1GB of memory to the second GPU:
+To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 2GB of memory to the first GPU and 5GB of memory to the second GPU:
 
 ```py
-max_memory_mapping = {0: "600MB", 1: "1GB"}
+max_memory_mapping = {0: "2GB", 1: "5GB"}
 model_name = "bigscience/bloom-3b"
 model_4bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
+    model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
 )
 ```
 
@@ -395,8 +459,8 @@ To load a model in 8-bit for inference, use the `load_in_8bit` parameter. The `d
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
+model_name = "bigscience/bloom-1b7"
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
 If you're loading a model in 8-bit for text generation, you should use the [`~transformers.GenerationMixin.generate`] method instead of the [`Pipeline`] function which is not optimized for 8-bit models and will be slower. Some sampling strategies, like nucleus sampling, are also not supported by the [`Pipeline`] for 8-bit models. You should also place all inputs on the same device as the model:
@@ -404,23 +468,23 @@ If you're loading a model in 8-bit for text generation, you should use the [`~tr
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-model_name = "bigscience/bloom-2b5"
+model_name = "bigscience/bloom-1b7"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True))
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 
 prompt = "Hello, my llama is cute"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-generated_ids = model.generate(**inputs)
+inputs = tokenizer(prompt, return_tensors="pt").to(model_8bit.device)
+generated_ids = model_8bit.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
 
-To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 1GB of memory to the first GPU and 2GB of memory to the second GPU:
+To load a model in 8-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 2GB of memory to the first GPU and 5GB of memory to the second GPU:
 
 ```py
-max_memory_mapping = {0: "1GB", 1: "2GB"}
+max_memory_mapping = {0: "2GB", 1: "5GB"}
 model_name = "bigscience/bloom-3b"
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
+    model_name, torch_dtype="auto", device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
 )
 ```
 
@@ -470,6 +534,7 @@ It is often possible to combine several of the optimization techniques described
 
 ```py
 import torch
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 # load model in 4-bit
@@ -479,16 +544,13 @@ quantization_config = BitsAndBytesConfig(
 )
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", quantization_config=quantization_config)
-
-# enable BetterTransformer
-model = model.to_bettertransformer()
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype="auto", quantization_config=quantization_config)
 
 input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # enable FlashAttention
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))

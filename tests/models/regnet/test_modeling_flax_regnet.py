@@ -36,7 +36,7 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
-class FlaxRegNetModelTester(unittest.TestCase):
+class FlaxRegNetModelTester:
     def __init__(
         self,
         parent,

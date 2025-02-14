@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
 import inspect
 import random
 import unittest
@@ -21,9 +20,10 @@ from datasets import Audio, load_dataset
 
 from transformers import UnivNetConfig, UnivNetFeatureExtractor
 from transformers.testing_utils import (
+    cleanup,
     is_torch_available,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -117,8 +117,6 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     has_attentions = False
 
-    input_name = "input_features"
-
     def setUp(self):
         self.model_tester = UnivNetModelTester(self)
         self.config_tester = ConfigTester(
@@ -207,13 +205,12 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(outputs.shape[0] == 1, msg="Unbatched input should create batched output with bsz = 1")
 
 
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class UnivNetModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def _load_datasamples(self, num_samples, sampling_rate=24000):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -279,9 +276,9 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         EXPECTED_STDDEV = torch.tensor(0.35230172)
         EXPECTED_SLICE = torch.tensor([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
 
-        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=5e-4, rtol=1e-5)
+        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, rtol=5e-4, atol=5e-4)
 
     def test_model_inference_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
@@ -303,9 +300,9 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         EXPECTED_STDDEV = torch.tensor(0.33986747)
         EXPECTED_SLICE = torch.tensor([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 
-        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=1e-3, rtol=1e-5)
+        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, rtol=1e-3, atol=1e-3)
 
     def test_integration(self):
         feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
@@ -334,6 +331,6 @@ class UnivNetModelIntegrationTests(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-4.3934e-04, -1.8203e-04, -3.3033e-04, -3.8716e-04, -1.6125e-04, 3.5389e-06, -3.3149e-04, -3.7613e-04, -2.3331e-04])
         # fmt: on
 
-        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, atol=5e-6, rtol=1e-5)
-        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, atol=1e-4, rtol=1e-5)
-        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, atol=5e-6, rtol=1e-5)
+        torch.testing.assert_close(waveform_mean, EXPECTED_MEAN, rtol=5e-6, atol=5e-6)
+        torch.testing.assert_close(waveform_stddev, EXPECTED_STDDEV, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(waveform_slice, EXPECTED_SLICE, rtol=5e-6, atol=5e-6)

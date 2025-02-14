@@ -21,93 +21,16 @@ with extra methods beings exposed
 from array import array
 
 import numpy as np
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
-from tokenizers.models import BPE
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import BPE, Unigram
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import LlamaConverter, Qwen2Converter
+from ..convert_slow_tokenizer import GemmaConverter, GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
 
 logger = logging.get_logger(__name__)
-
-
-GGUF_TENSOR_MAPPING = {
-    "llama": {
-        "token_embd": "model.embed_tokens",
-        "blk": "model.layers",
-        "ffn_up": "mlp.up_proj",
-        "ffn_down": "mlp.down_proj",
-        "ffn_gate": "mlp.gate_proj",
-        "ffn_norm": "post_attention_layernorm",
-        "attn_norm": "input_layernorm",
-        "attn_q": "self_attn.q_proj",
-        "attn_v": "self_attn.v_proj",
-        "attn_k": "self_attn.k_proj",
-        "attn_output": "self_attn.o_proj",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.norm",
-    },
-    "mistral": {
-        "token_embd": "model.embed_tokens",
-        "blk": "model.layers",
-        "ffn_up": "mlp.up_proj",
-        "ffn_down": "mlp.down_proj",
-        "ffn_gate": "mlp.gate_proj",
-        "ffn_norm": "post_attention_layernorm",
-        "attn_norm": "input_layernorm",
-        "attn_q": "self_attn.q_proj",
-        "attn_v": "self_attn.v_proj",
-        "attn_k": "self_attn.k_proj",
-        "attn_output": "self_attn.o_proj",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.norm",
-    },
-    "qwen2": {
-        "token_embd": "model.embed_tokens",
-        "blk": "model.layers",
-        "ffn_up": "mlp.up_proj",
-        "ffn_down": "mlp.down_proj",
-        "ffn_gate": "mlp.gate_proj",
-        "ffn_norm": "post_attention_layernorm",
-        "attn_norm": "input_layernorm",
-        "attn_q": "self_attn.q_proj",
-        "attn_v": "self_attn.v_proj",
-        "attn_k": "self_attn.k_proj",
-        "attn_output": "self_attn.o_proj",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.norm",
-    },
-    "qwen2moe": {
-        "token_embd": "model.embed_tokens",
-        "blk": "model.layers",
-        "ffn_up": "mlp.up_proj",
-        "ffn_down": "mlp.down_proj",
-        "ffn_gate": "mlp.gate_proj",
-        "ffn_norm": "post_attention_layernorm",
-        "attn_norm": "input_layernorm",
-        "attn_q": "self_attn.q_proj",
-        "attn_v": "self_attn.v_proj",
-        "attn_k": "self_attn.k_proj",
-        "attn_output": "self_attn.o_proj",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.norm",
-    },
-    "phi3": {
-        "token_embd": "model.embed_tokens",
-        "blk": "model.layers",
-        "ffn_up": "mlp.gate_up_proj",
-        "ffn_down": "mlp.down_proj",
-        "ffn_gate": "mlp.gate_up_proj",
-        "ffn_norm": "post_attention_layernorm",
-        "attn_norm": "input_layernorm",
-        "attn_qkv": "self_attn.qkv_proj",
-        "attn_output": "self_attn.o_proj",
-        "output.weight": "lm_head.weight",
-        "output_norm": "model.norm",
-    },
-}
 
 
 GGUF_CONFIG_MAPPING = {
@@ -120,7 +43,8 @@ GGUF_CONFIG_MAPPING = {
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
         "embedding_length": "hidden_size",
-        "rope.dimension_count": None,
+        # NOTE: rope.dimension_count==head_dim only suitable for llama/mistral
+        "rope.dimension_count": "head_dim",
         "rope.freq_base": "rope_theta",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
@@ -132,7 +56,8 @@ GGUF_CONFIG_MAPPING = {
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
         "embedding_length": "hidden_size",
-        "rope.dimension_count": None,
+        # NOTE: rope.dimension_count==head_dim only suitable for llama/mistral
+        "rope.dimension_count": "head_dim",
         "rope.freq_base": "rope_theta",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
@@ -152,6 +77,20 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
     },
     "qwen2moe": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+        "expert_count": "num_experts",
+        "expert_used_count": "num_experts_per_tok",
+    },
+    "falcon": {
         "context_length": "max_position_embeddings",
         "block_count": "num_hidden_layers",
         "feed_forward_length": "intermediate_size",
@@ -176,6 +115,92 @@ GGUF_CONFIG_MAPPING = {
         "embedding_length": "hidden_size",
         "rope.dimension_count": None,
         "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "rms_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "bloom": {
+        "block_count": "n_layer",
+        "embedding_length": "hidden_size",
+        "attention.head_count": "n_head",
+        "vocab_size": "vocab_size",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "t5": {
+        "context_length": "n_positions",
+        "block_count": "num_layers",
+        "feed_forward_length": "d_ff",
+        "embedding_length": "d_model",
+        "attention.key_length": "d_kv",
+        "attention.head_count": "num_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+        "attention.relative_buckets_count": "relative_attention_num_buckets",
+        "decoder_start_token_id": "decoder_start_token_id",
+        "vocab_size": "vocab_size",
+    },
+    "stablelm": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "layer_norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "gpt2": {
+        "block_count": "n_layer",
+        "context_length": "n_ctx",
+        "embedding_length": "n_embd",
+        "feed_forward_length": "feed_forward_length",
+        "attention.head_count": "n_head",
+        "attention.layer_norm_epsilon": "layer_norm_epsilon",
+    },
+    "starcoder2": {
+        "block_count": "num_hidden_layers",
+        "context_length": "max_position_embeddings",
+        "embedding_length": "hidden_size",
+        "feed_forward_length": "intermediate_size",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_epsilon": "norm_epsilon",
+    },
+    "mamba": {
+        "vocab_size": "vocab_size",
+        "context_length": "max_position_embeddings",
+        "embedding_length": "hidden_size",
+        "attention.layer_norm_rms_epsilon": "layer_norm_epsilon",
+        "block_count": "num_hidden_layers",
+        "ssm.conv_kernel": "conv_kernel",
+        "ssm.state_size": "state_size",
+        "ssm.time_step_rank": "time_step_rank",
+        "ssm.inner_size": "intermediate_size",
+    },
+    "nemotron": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "norm_eps",
+        "vocab_size": "vocab_size",
+    },
+    "gemma2": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        # NOTE: Gemma2 has key_length==value_length==head_dim
+        # See: https://github.com/ggerganov/llama.cpp/blob/2e2f8f093cd4fb6bbb87ba84f6b9684fa082f3fa/convert_hf_to_gguf.py#L3293-L3294
+        "attention.key_length": "head_dim",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",
@@ -490,11 +515,160 @@ class GGUFPhi3Converter(LlamaConverter):
         return tokenizer
 
 
+class GGUFGPTConverter(GPT2Converter):
+    def __init__(self, tokenizer_dict):
+        self.original_tokenizer = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.additional_kwargs = {}
+
+    def converted(self) -> Tokenizer:
+        vocab = {word: i for i, word in enumerate(self.original_tokenizer.tokens)}
+        merges = self.original_tokenizer.merges
+        tokenizer = super().converted(vocab, merges)
+        return tokenizer
+
+
+class GGUFT5Converter(T5Converter):
+    def __init__(self, tokenizer_dict):
+        # set dummy data to avoid unnecessary merges calculation
+        tokenizer_dict["merges"] = ["dummy text"]
+
+        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.token2id = {k: v for v, k in enumerate(self.proto.tokens)}
+        self.original_tokenizer = self.proto
+        self.additional_kwargs = {}
+
+    def vocab(self, proto):
+        return list(zip(proto.tokens, proto.scores))
+
+    def normalizer(self, proto):
+        if getattr(self.original_tokenizer, "legacy", True):
+            sequence = []
+            if getattr(self.original_tokenizer, "add_prefix_space", True):
+                sequence += [normalizers.Prepend(prepend="▁")]
+            sequence += [normalizers.Replace(pattern=" ", content="▁")]
+            return normalizers.Sequence(sequence)
+        return None  # non-legacy, no normalizer
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single=["$A", "</s>"],
+            pair=["$A", "</s>", "$B", "</s>"],
+            special_tokens=[
+                ("</s>", self.token2id["</s>"]),
+            ],
+        )
+
+    def converted(self) -> Tokenizer:
+        vocab_scores = self.vocab(self.proto)
+        tokenizer = Tokenizer(
+            Unigram(
+                vocab_scores,
+                unk_id=self.proto.unk_token_id,
+                byte_fallback=False,
+            )
+        )
+
+        # Tokenizer assemble
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+        post_processor = self.post_processor()
+        if post_processor:
+            tokenizer.post_processor = post_processor
+
+        return tokenizer
+
+
+class GGUFGemmaConverter(GemmaConverter):
+    def __init__(self, tokenizer_dict):
+        # set dummy data to avoid unnecessary merges calculation
+        tokenizer_dict["merges"] = ["dummy text"]
+
+        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
+        self.original_tokenizer = self.proto
+        self.additional_kwargs = {}
+
+    def vocab(self, proto):
+        original_vocab = list(zip(proto.tokens, proto.scores))
+        updated_vocab = []
+
+        for token, score in original_vocab:
+            if token == "<0x09>":
+                updated_vocab.append(("\t", score))
+            elif " " in token and len(token.strip()) == 0:
+                underscores = "▁" * len(token)
+                updated_vocab.append((underscores, score))
+            else:
+                updated_vocab.append((token, score))
+
+        return updated_vocab
+
+    def normalizer(self, proto):
+        return normalizers.Replace(" ", "▁")
+
+    def decoder(self, replacement, add_prefix_space):
+        sequence = [
+            decoders.Replace("▁", " "),
+            decoders.ByteFallback(),
+            decoders.Fuse(),
+        ]
+
+        if add_prefix_space:
+            sequence += [decoders.Strip(content=" ", left=1)]
+        return decoders.Sequence(sequence)
+
+    def converted(self) -> Tokenizer:
+        vocab_scores = self.vocab(self.proto)
+        tokenizer = Tokenizer(
+            Unigram(
+                vocab_scores,
+                unk_id=self.proto.unk_token_id,
+                byte_fallback=self.handle_byte_fallback,
+            )
+        )
+
+        normalizer = self.normalizer(self.proto)
+        if normalizer is not None:
+            tokenizer.normalizer = normalizer
+
+        replacement = "▁"
+        add_prefix_space = True
+        if hasattr(self.original_tokenizer, "add_prefix_space"):
+            add_prefix_space = self.original_tokenizer.add_prefix_space
+
+        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
+        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
+        if pre_tokenizer is not None:
+            tokenizer.pre_tokenizer = pre_tokenizer
+
+        return tokenizer
+
+
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
     "qwen2": GGUFQwen2Converter,
     "qwen2_moe": GGUFQwen2Converter,
     "phi3": GGUFPhi3Converter,
+    "bloom": GGUFGPTConverter,
+    "falcon": GGUFGPTConverter,
+    "stablelm": GGUFGPTConverter,
+    "gpt2": GGUFGPTConverter,
+    "starcoder2": GGUFGPTConverter,
+    "t5": GGUFT5Converter,
+    "mamba": GGUFGPTConverter,
+    "nemotron": GGUFGPTConverter,
+    "gemma2": GGUFGemmaConverter,
 }
 
 

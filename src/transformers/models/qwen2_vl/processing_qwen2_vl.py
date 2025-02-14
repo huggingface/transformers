@@ -23,18 +23,9 @@ Processor class for Qwen2-VL.
 
 from typing import List, Union
 
-
-try:
-    from typing import Unpack
-except ImportError:
-    from typing_extensions import Unpack
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
-from ...processing_utils import (
-    ProcessingKwargs,
-    ProcessorMixin,
-)
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
@@ -66,10 +57,12 @@ class Qwen2VLProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
-    image_processor_class = "Qwen2VLImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -141,25 +134,24 @@ class Qwen2VLProcessor(ProcessorMixin):
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
-                while "<|image_pad|>" in text[i]:
+                while self.image_token in text[i]:
                     text[i] = text[i].replace(
-                        "<|image_pad|>", "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
+                        self.image_token, "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length), 1
                     )
                     index += 1
-                text[i] = text[i].replace("<|placeholder|>", "<|image_pad|>")
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if video_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
-                while "<|video_pad|>" in text[i]:
+                while self.video_token in text[i]:
                     text[i] = text[i].replace(
-                        "<|video_pad|>", "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
+                        self.video_token, "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length), 1
                     )
                     index += 1
-                text[i] = text[i].replace("<|placeholder|>", "<|video_pad|>")
+                text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
-        _ = output_kwargs["text_kwargs"].pop("padding_side", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
@@ -178,8 +170,27 @@ class Qwen2VLProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(
+            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
+
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["Qwen2VLProcessor"]

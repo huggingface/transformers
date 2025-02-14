@@ -111,7 +111,7 @@ Load an audio dataset (see the 🤗 Datasets [Quick Start](https://huggingface.c
 >>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")  # doctest: +IGNORE_RESULT
 ```
 
-You need to make sure the sampling rate of the dataset matches the sampling 
+You need to make sure the sampling rate of the dataset matches the sampling
 rate [`facebook/wav2vec2-base-960h`](https://huggingface.co/facebook/wav2vec2-base-960h) was trained on:
 
 ```py
@@ -174,7 +174,7 @@ If you can't find a model for your use-case, you'll need to finetune a pretraine
 
 <Youtube id="AhChOFRegn4"/>
 
-Under the hood, the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] classes work together to power the [`pipeline`] you used above. An [AutoClass](./model_doc/auto) is a shortcut that automatically retrieves the architecture of a pretrained model from its name or path. You only need to select the appropriate `AutoClass` for your task and it's associated preprocessing class. 
+Under the hood, the [`AutoModelForSequenceClassification`] and [`AutoTokenizer`] classes work together to power the [`pipeline`] you used above. An [AutoClass](./model_doc/auto) is a shortcut that automatically retrieves the architecture of a pretrained model from its name or path. You only need to select the appropriate `AutoClass` for your task and it's associated preprocessing class.
 
 Let's return to the example from the previous section and see how you can use the `AutoClass` to replicate the results of the [`pipeline`].
 
@@ -245,13 +245,15 @@ Check out the [preprocess](./preprocessing) tutorial for more details about toke
 
 <frameworkcontent>
 <pt>
-🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. For text (or sequence) classification, you should load [`AutoModelForSequenceClassification`]:
+🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. For text (or sequence) classification, you should load [`AutoModelForSequenceClassification`].
+
+By default, the weights are loaded in full precision (torch.float32) regardless of the actual data type the weights are stored in such as torch.float16. Set `torch_dtype="auto"` to load the weights in the data type defined in a model's `config.json` file to automatically load the most memory-optimal data type.
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name, torch_dtype="auto")
 ```
 
 <Tip>
@@ -360,8 +362,8 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 ```py
 >>> from transformers import AutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
 ```
 </pt>
 <tf>
@@ -369,8 +371,8 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 ```py
 >>> from transformers import TFAutoModel
 
->>> tokenizer = AutoTokenizer.from_pretrained(pt_save_directory)
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(pt_save_directory, from_pt=True)
+>>> tokenizer = AutoTokenizer.from_pretrained(tf_save_directory)
+>>> tf_model = TFAutoModelForSequenceClassification.from_pretrained(tf_save_directory, from_tf=True)
 ```
 </tf>
 </frameworkcontent>
@@ -416,12 +418,12 @@ All models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn
 
 Depending on your task, you'll typically pass the following parameters to [`Trainer`]:
 
-1. You'll start with a [`PreTrainedModel`] or a [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module):
+1. You'll start with a [`PreTrainedModel`] or a [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module). Set `torch_dtype="auto"` to automatically load the most memory-efficient data type the weights are stored in.
 
    ```py
    >>> from transformers import AutoModelForSequenceClassification
 
-   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
+   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased", torch_dtype="auto")
    ```
 
 2. [`TrainingArguments`] contains the model hyperparameters you can change like learning rate, batch size, and the number of epochs to train for. The default values are used if you don't specify any training arguments:
@@ -485,7 +487,7 @@ Now gather all these classes in [`Trainer`]:
 ...     args=training_args,
 ...     train_dataset=dataset["train"],
 ...     eval_dataset=dataset["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ... )  # doctest: +SKIP
 ```
@@ -502,7 +504,7 @@ For tasks - like translation or summarization - that use a sequence-to-sequence 
 
 </Tip>
 
-You can customize the training loop behavior by subclassing the methods inside [`Trainer`]. This allows you to customize features such as the loss function, optimizer, and scheduler. Take a look at the [`Trainer`] reference for which methods can be subclassed. 
+You can customize the training loop behavior by subclassing the methods inside [`Trainer`]. This allows you to customize features such as the loss function, optimizer, and scheduler. Take a look at the [`Trainer`] reference for which methods can be subclassed.
 
 The other way to customize the training loop is by using [Callbacks](./main_classes/callback). You can use callbacks to integrate with other libraries and inspect the training loop to report on progress or stop the training early. Callbacks do not modify anything in the training loop itself. To customize something like the loss function, you need to subclass the [`Trainer`] instead.
 
@@ -550,6 +552,32 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> model.compile(optimizer='adam')  # No loss argument!
    >>> model.fit(tf_dataset)  # doctest: +SKIP
    ```
+
+
+## Chat with text generation models
+
+If you're working with a model that generates text as an output, you can also engage in a multi-turn conversation with
+it through the `transformers-cli chat` command. This is the fastest way to interact with a model, e.g. for a
+qualitative assessment (aka vibe check).
+
+This CLI is implemented on top of our `AutoClass` abstraction, leveraging our [text generation](llm_tutorial.md) and
+[chat](chat_templating.md) tooling, and thus will be compatible with any 🤗 Transformers model. If you have the library
+[installed](installation.md), you can launch the chat session on your terminal with
+
+```bash
+transformers-cli chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+```
+
+For a full list of options to launch the chat, type
+
+```bash
+transformers-cli chat -h
+```
+
+After the chat is launched, you will enter an interactive session with the model. There are special commands for this
+session as well, such as `clear` to reset the conversation. Type `help` at any moment to display all special chat
+commands, and `exit` to terminate the session.
+
 
 ## What's next?
 

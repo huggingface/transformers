@@ -105,9 +105,17 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     if model_id in ["lmms-lab/llava-onevision-qwen2-0.5b-ov", "lmms-lab/llava-onevision-qwen2-0.5b-si"]:
         text_model_id = "Qwen/Qwen2-0.5B-Instruct"
-    elif model_id in ["lmms-lab/llava-onevision-qwen2-7b-ov", "lmms-lab/llava-onevision-qwen2-7b-si"]:
+    elif model_id in [
+        "lmms-lab/llava-onevision-qwen2-7b-ov",
+        "lmms-lab/llava-onevision-qwen2-7b-si",
+        "lmms-lab/llava-onevision-qwen2-7b-ov-chat",
+    ]:
         text_model_id = "Qwen/Qwen2-7B-Instruct"
-    elif model_id in ["lmms-lab/llava-onevision-qwen2-72b-ov", "lmms-lab/llava-onevision-qwen2-72b-si"]:
+    elif model_id in [
+        "lmms-lab/llava-onevision-qwen2-72b-ov",
+        "lmms-lab/llava-onevision-qwen2-72b-si",
+        "lmms-lab/llava-onevision-qwen2-72b-ov-chat",
+    ]:
         text_model_id = "Qwen/Qwen2-72B-Instruct"
 
     vision_model_id = data["mm_vision_tower"]
@@ -260,6 +268,20 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
                 dtype=torch.float32,
                 device=device,
             )
+        elif model_id == "lmms-lab/llava-onevision-qwen2-7b-ov-chat":
+            # Not yet checked against reference
+            expected_slice = torch.tensor(
+                [[1.8662, 3.4316, 1.3174], [2.7109, 2.5488, 3.0117], [4.4648, 4.9648, 10.3359]],
+                dtype=torch.float32,
+                device=device,
+            )
+        elif model_id == "lmms-lab/llava-onevision-qwen2-72b-ov-chat":
+            # Not yet checked against reference
+            expected_slice = torch.tensor(
+                [[4.3086, 4.7344, 2.6953], [1.7090, 5.1719, 4.0234], [1.3057, 6.3438, 9.5469]],
+                dtype=torch.float32,
+                device=device,
+            )
         else:
             raise ValueError(f"Model {model_id} not supported")
 
@@ -288,6 +310,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     elif model_id == "lmms-lab/llava-onevision-qwen2-72b-si":
         expected_text = "system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image shows a radar chart, which is a graphical method of displaying multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point. The chart is used to compare the performance of different models or systems across various benchmarks or metrics.\n\nIn this specific radar chart, there are multiple axes, each representing a different benchmark or metric, such as VQA2, GQA, TextVQA, and others. The chart includes several colored lines"
     elif model_id == "lmms-lab/llava-onevision-qwen2-72b-ov":
+        expected_text = "system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image is a radar chart comparing the performance of different models on various multimodal benchmarks. The models compared are BLIP-2, InstructBLIP, POPE, QWen-VL-Chat, and LLava-1.5. The benchmarks include VQAv2, GQA, TextVQA, SQA-IMG, VizWiz, MM-IMDb, MM-VQA, MM-IMDb-CN, MM-IMDb-EN, MM-"
+    elif model_id == "lmms-lab/llava-onevision-qwen2-7b-ov-chat":
+        expected_text = "system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image shows a radar chart, also known as a spider chart or a star chart, which is used to display multivariate data in the form of a two-dimensional chart of three or more quantitative variables represented on axes starting from the same point. Each axis represents a different variable, and the values are plotted along these axes.\n\nIn this particular radar chart, there are multiple lines representing different models or systems, each distinguished by a different color and labeled with a name such as BLIP-2, In"
+    elif model_id == "lmms-lab/llava-onevision-qwen2-72b-ov-chat":
         expected_text = "system\nYou are a helpful assistant.\nuser\n\nWhat is shown in this image?\nassistant\nThe image is a radar chart comparing the performance of different models on various multimodal benchmarks. The models compared are BLIP-2, InstructBLIP, POPE, QWen-VL-Chat, and LLava-1.5. The benchmarks include VQAv2, GQA, TextVQA, SQA-IMG, VizWiz, MM-IMDb, MM-VQA, MM-IMDb-CN, MM-IMDb-EN, MM-"
     else:
         raise ValueError(f"Model {model_id} not supported")
@@ -346,6 +372,8 @@ if __name__ == "__main__":
             "lmms-lab/llava-onevision-qwen2-7b-ov",
             "lmms-lab/llava-onevision-qwen2-72b-si",
             "lmms-lab/llava-onevision-qwen2-72b-ov",
+            "lmms-lab/llava-onevision-qwen2-7b-ov-chat",
+            "lmms-lab/llava-onevision-qwen2-72b-ov-chat",
         ],
         required=False,
     )

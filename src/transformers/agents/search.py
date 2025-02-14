@@ -26,7 +26,7 @@ class DuckDuckGoSearchTool(Tool):
     name = "web_search"
     description = """Perform a web search based on your query (think a Google search) then returns the top search results as a list of dict elements.
     Each result has keys 'title', 'href' and 'body'."""
-    inputs = {"query": {"type": "text", "description": "The search query to perform."}}
+    inputs = {"query": {"type": "string", "description": "The search query to perform."}}
     output_type = "any"
 
     def forward(self, query: str) -> str:
@@ -42,14 +42,14 @@ class DuckDuckGoSearchTool(Tool):
 
 class VisitWebpageTool(Tool):
     name = "visit_webpage"
-    description = "Visits a wbepage at the given url and returns its content as a markdown string."
+    description = "Visits a webpage at the given url and returns its content as a markdown string."
     inputs = {
         "url": {
-            "type": "text",
+            "type": "string",
             "description": "The url of the webpage to visit.",
         }
     }
-    output_type = "text"
+    output_type = "string"
 
     def forward(self, url: str) -> str:
         try:

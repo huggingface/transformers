@@ -570,7 +570,6 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RoCBertForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RoCBertModel,
@@ -587,9 +586,16 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name in [
+        if pipeline_test_case_name in [
             "FillMaskPipelineTests",
             "FeatureExtractionPipelineTests",
             "TextClassificationPipelineTests",

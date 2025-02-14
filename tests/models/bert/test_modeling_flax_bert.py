@@ -35,7 +35,7 @@ if is_flax_available():
     )
 
 
-class FlaxBertModelTester(unittest.TestCase):
+class FlaxBertModelTester:
     def __init__(
         self,
         parent,

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 the HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 Mistral and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 # limitations under the License.
 """PyTorch Pixtral model."""
 
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -48,18 +48,16 @@ def position_ids_in_meshgrid(patch_embeds_list, max_width):
 class PixtralRotaryEmbedding(nn.Module):
     """
     The key with pixtral embedding is just that you have a frequency for each pixel positions.
-    If you have height x width pixels (or embedding pixels)
+    If you have height x width pixels (or embedding pixels), then the frequency used for ROPE
+    is given by indexing the pre_computed frequency on the width and height.
 
-    then the frequency used for ROPE is given by indexing the pre_computed frequency on the
-    width and height.
+    What you output is of dimension (batch, height * width, dim) with dim the embed dim.
 
-    What you output is of dimension batch, height * width, dim with dim the embed dim.
-
-    This simply means that for each image hidden states, you are going to add
-    a corresponding positional embedding, based on it's index in the grid.
+    This simply means that for each image hidden state, you are going to add
+    a corresponding positional embedding, based on its index in the grid.
     """
 
-    def __init__(self, config, device):
+    def __init__(self, config, device=None):
         super().__init__()
         self.rope_type = "default"
         self.dim = config.head_dim
@@ -91,7 +89,6 @@ class PixtralRotaryEmbedding(nn.Module):
 
         # Core RoPE block
         freqs = self.inv_freq[position_ids]
-        # position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
@@ -128,7 +125,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -178,7 +174,7 @@ class PixtralAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
@@ -218,6 +214,7 @@ class PixtralAttention(nn.Module):
 class PixtralMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
@@ -225,8 +222,9 @@ class PixtralMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Pixtral
@@ -262,8 +260,8 @@ class PixtralAttentionLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -311,7 +309,7 @@ class PixtralTransformer(nn.Module):
         self,
         inputs_embeds,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -319,9 +317,7 @@ class PixtralTransformer(nn.Module):
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
+                Embeddings which serve as input to the Transformer.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -378,7 +374,7 @@ class PixtralTransformer(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=[hidden_states], attentions=all_attentions
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
 
@@ -392,33 +388,25 @@ PIXTRAL_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`PixtralVisionConfig`] or [`PixtralVisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
+        config ([`PixtralVisionConfig`]):
+            Model configuration class with all the parameters of the vision encoder. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
-@add_start_docstrings(
-    "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
-    PIXTRAL_START_DOCSTRING,
-)
 class PixtralPreTrainedModel(PreTrainedModel):
     config_class = PixtralVisionConfig
     base_model_prefix = "model"
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["PixtralVisionAttention"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_cache_class = True
+    _no_split_modules = ["PixtralAttentionLayer"]
 
     def _init_weights(self, module):
-        # important: this ported version of Pixtral isn't meant for training from scratch - only
-        # inference and fine-tuning - so the proper init weights code has been removed - the original codebase
-        # https://github.com/haotian-liu/LLaVA/tree/main/pixtral should serve for that purpose
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
+            else self.config.initializer_range
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -433,8 +421,11 @@ class PixtralPreTrainedModel(PreTrainedModel):
 
 PIXTRAL_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values: list of N_img images of variable sizes,
-                each of shape (C, H, W)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`AutoImageProcessor.__call__`]
+            for details.
+        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`, *optional*):
+            The sizes of the images in the batch, being (height, width) for each image.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -463,10 +454,10 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
 
 
 @add_start_docstrings(
-    """The PIXTRAL model which consists of a vision backbone and a language model.""",
+    "The bare Pixtral vision encoder outputting raw hidden-states without any specific head on top.",
     PIXTRAL_START_DOCSTRING,
 )
-class PixtralModel(PixtralPreTrainedModel):
+class PixtralVisionModel(PixtralPreTrainedModel):
     base_model_prefix = "vision_encoder"
 
     def __init__(self, config):
@@ -479,15 +470,22 @@ class PixtralModel(PixtralPreTrainedModel):
             stride=config.patch_size,
             bias=False,
         )
+        self.patch_size = config.patch_size
         self.ln_pre = PixtralRMSNorm(config.hidden_size, eps=1e-5)
         self.transformer = PixtralTransformer(config)
-        self.patch_positional_embedding = PixtralRotaryEmbedding(config, device=self.device)
+        self.patch_positional_embedding = PixtralRotaryEmbedding(config)
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.patch_conv
 
     @add_start_docstrings_to_model_forward(PIXTRAL_INPUTS_DOCSTRING)
     def forward(
         self,
-        pixel_values: List[torch.Tensor],
-        output_hidden_states: Optional[bool] = False,
+        pixel_values: torch.Tensor,
+        image_sizes: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         *args,
@@ -499,19 +497,36 @@ class PixtralModel(PixtralPreTrainedModel):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in pixel_values]
+        patch_embeds = self.patch_conv(pixel_values)
+        patch_embeds_list = [
+            embed[..., : (size[0] // self.patch_size), : (size[1] // self.patch_size)]
+            for embed, size in zip(patch_embeds, image_sizes)
+        ]
 
         # flatten to a single sequence
-        patch_embeds = torch.cat([p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
+        patch_embeds = torch.cat([p.flatten(1).T for p in patch_embeds_list], dim=0).unsqueeze(0)
         patch_embeds = self.ln_pre(patch_embeds)
 
         # positional embeddings
         position_ids = position_ids_in_meshgrid(
             patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
-        ).to(self.device)
+        )
+        position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
-        position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
         attention_mask = generate_block_attention_mask(
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
         )
-        return self.transformer(patch_embeds, attention_mask, position_embedding)
+
+        out = self.transformer(
+            patch_embeds,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
+        )
+
+        return out
+
+
+__all__ = ["PixtralVisionModel", "PixtralPreTrainedModel"]

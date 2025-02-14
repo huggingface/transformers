@@ -297,7 +297,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         return state
 
     def __setstate__(self, d):
-        self.__dict__ = d
+        self.__dict__.update(d)
 
         # for backward compatibility
         if not hasattr(self, "sp_model_kwargs"):
@@ -1184,3 +1184,6 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
         return encoded_inputs
+
+
+__all__ = ["LayoutXLMTokenizer"]

@@ -167,9 +167,16 @@ class ASTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "AudioClassificationPipelineTests":
+        if pipeline_test_case_name == "AudioClassificationPipelineTests":
             return True
 
         return False
@@ -259,4 +266,4 @@ class ASTModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

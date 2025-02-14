@@ -14,16 +14,15 @@
 # limitations under the License.
 
 
-import datetime
 import unittest
 
 from transformers import CodeGenConfig, is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import backend_manual_seed, is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import backend_manual_seed, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -148,35 +147,6 @@ class CodeGenModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             rotary_dim=self.rotary_dim,
-        )
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
         )
 
     def create_and_check_codegen_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
@@ -352,7 +322,6 @@ class CodeGenModelTester:
 @require_torch
 class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CodeGenModel, CodeGenForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (CodeGenForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": CodeGenModel, "text-generation": CodeGenForCausalLM} if is_torch_available() else {}
     )
@@ -522,45 +491,3 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
         self.assertTrue(
             all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
-
-    @is_flaky(max_attempts=3, description="measure of timing is somehow flaky.")
-    @slow
-    def test_codegen_sample_max_time(self):
-        tokenizer = self.cached_tokenizer
-        model = self.cached_model
-        model.to(torch_device)
-
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-
-        MAX_TIME = 0.05
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=2 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=2 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=2 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
-        self.assertLess(duration, datetime.timedelta(seconds=2 * MAX_TIME))
-
-        start = datetime.datetime.now()
-        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
-        duration = datetime.datetime.now() - start
-        self.assertGreater(duration, datetime.timedelta(seconds=2 * MAX_TIME))
