@@ -2225,8 +2225,13 @@ class GenerationTesterMixin:
                 **inputs_dict,
             )
 
-            # Sanity check: compilation has happened
-            self.assertTrue(hasattr(model, "_compiled_call"))
+            # BLIP is the only exception with custom generate which call `self.lm.generate()`
+            # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
+            # compatible with multimodality
+            if "blip" in model.__class__.__name__.lower():
+                self.assertTrue(hasattr(model.language_model, "_compiled_call"))
+            else:
+                self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
 
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
