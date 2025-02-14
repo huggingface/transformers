@@ -204,10 +204,9 @@ _import_structure = {
     ],
     "models.style_text_to_speech_2": [
         "StyleTextToSpeech2Config",
-        "StyleTextToSpeech2AcousticTextEncoder",
-        "StyleTextToSpeech2ProsodicEncoder",
-        "StyleTextToSpeech2DurationEncoder",
-        "StyleTextToSpeech2ForConditionalGeneration",
+        "StyleTextToSpeech2AcousticTextEncoderConfig",
+        "StyleTextToSpeech2PredictorConfig",
+        "StyleTextToSpeech2DecoderConfig",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
@@ -1586,12 +1585,11 @@ else:
     )
     _import_structure["models.style_text_to_speech_2"].extend(
         [
-            "StyleTextToSpeech2CausalModel",
-            "StyleTextToSpeech2CoarseModel",
-            "StyleTextToSpeech2FineModel",
+            "StyleTextToSpeech2AcousticTextEncoder",
+            "StyleTextToSpeech2Predictor",
+            "StyleTextToSpeech2Decoder",
             "StyleTextToSpeech2Model",
             "StyleTextToSpeech2PreTrainedModel",
-            "StyleTextToSpeech2SemanticModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -5237,7 +5235,9 @@ if TYPE_CHECKING:
     )
     from .models.style_text_to_speech_2 import (
         StyleTextToSpeech2Config,
-        StyleTextToSpeech2AcousticTextEncoder,
+        StyleTextToSpeech2AcousticTextEncoderConfig,
+        StyleTextToSpeech2PredictorConfig,
+        StyleTextToSpeech2DecoderConfig,
     )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BeitConfig
@@ -6649,12 +6649,10 @@ if TYPE_CHECKING:
             BarkSemanticModel,
         )
         from .models.style_text_to_speech_2 import (
-            StyleTextToSpeech2CausalModel,
-            StyleTextToSpeech2CoarseModel,
-            StyleTextToSpeech2FineModel,
             StyleTextToSpeech2Model,
-            StyleTextToSpeech2PreTrainedModel,
-            StyleTextToSpeech2SemanticModel,
+            StyleTextToSpeech2AcousticTextEncoder,
+            StyleTextToSpeech2Predictor,
+            StyleTextToSpeech2Decoder,
         )
         from .models.bart import (
             BartForCausalLM,

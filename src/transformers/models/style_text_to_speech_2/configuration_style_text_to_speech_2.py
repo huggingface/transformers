@@ -23,32 +23,22 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class StyleTextToSpeech2SubModelConfig(PretrainedConfig):
-    def __init__(
-        self, 
-        vocab_size=178,
-        hidden_size=512,
-        style_hidden_size=128,
-        **kwargs
-    ):
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.style_hidden_size = style_hidden_size
-        super().__init__(**kwargs)
-
-
-class StyleTextToSpeech2AcousticTextEncoderConfig(StyleTextToSpeech2SubModelConfig):
+class StyleTextToSpeech2AcousticTextEncoderConfig(PretrainedConfig):
     model_type = "acoustic_text_encoder"
     base_config_key = "acoustic_text_encoder_config"
 
     def __init__(
         self,
+        hidden_size=512,
+        vocab_size=178,
         num_hidden_layers=3,
         dropout=0.2,
         kernel_size=5,
         leaky_relu_slope=0.2,
         **kwargs
     ):
+        self.hidden_size = hidden_size
+        self.vocab_size = vocab_size
         self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.kernel_size = kernel_size
@@ -57,92 +47,61 @@ class StyleTextToSpeech2AcousticTextEncoderConfig(StyleTextToSpeech2SubModelConf
         super().__init__(**kwargs)
 
 
-class StyleTextToSpeech2ProsodicTextEncoderConfig(StyleTextToSpeech2SubModelConfig):
-    model_type = "prosodic_encoder"
-    base_config_key = "prosodic_encoder_config"
+class StyleTextToSpeech2PredictorConfig(PretrainedConfig):
+    model_type = "predictor"
+    base_config_key = "predictor_config"
 
     def __init__(
         self,
-        sub_model_type="albert",
-        bert_vocab_size=178,
-        bert_hidden_size=768,
-        num_attention_heads=12,
-        intermediate_size=2048,
-        max_position_embeddings=512,
-        dropout=0.1,
-        bert_config=None,
-        **kwargs
+        hidden_size=512,
+        style_hidden_size=128,
+        vocab_size=178,
+        prosodic_text_encoder_sub_model_type="albert",
+        prosodic_text_encoder_sub_model_config=None,
+        prosodic_text_encoder_hidden_size=768,
+        prosodic_text_encoder_num_attention_heads=12,
+        prosodic_text_encoder_intermediate_size=2048,
+        prosodic_text_encoder_max_position_embeddings=512,
+        prosodic_text_encoder_dropout=0.1,
+        prosody_encoder_num_layers=3,
+        prosody_encoder_dropout=0.2,
+        duration_projector_max_duration=50,
+        prosody_predictor_dropout=0.2,
+        **kwargs,
     ):
-        if bert_config is None:
-            self.bert_config = CONFIG_MAPPING[sub_model_type](
-                vocab_size = bert_vocab_size,
-                hidden_size = bert_hidden_size,
-                num_attention_heads = num_attention_heads,
-                intermediate_size = intermediate_size,
-                max_position_embeddings = max_position_embeddings,
-                dropout = dropout,
+        self.hidden_size = hidden_size
+        self.style_hidden_size = style_hidden_size
+        self.vocab_size = vocab_size
+
+        if prosodic_text_encoder_sub_model_config is None:
+            self.prosodic_text_encoder_sub_model_config = CONFIG_MAPPING[prosodic_text_encoder_sub_model_type](
+                vocab_size=vocab_size,
+                hidden_size=prosodic_text_encoder_hidden_size,
+                num_attention_heads=prosodic_text_encoder_num_attention_heads,
+                intermediate_size=prosodic_text_encoder_intermediate_size,
+                max_position_embeddings=prosodic_text_encoder_max_position_embeddings,
+                dropout=prosodic_text_encoder_dropout,
             )
         else:
-            self.bert_config = CONFIG_MAPPING[sub_model_type](**bert_config)
-    
-        self.bert_hidden_size = bert_hidden_size
-        self.dropout = dropout
+            self.prosodic_text_encoder_sub_model_config = CONFIG_MAPPING[prosodic_text_encoder_sub_model_type](**prosodic_text_encoder_sub_model_config)
+
+        self.prosody_encoder_num_layers = prosody_encoder_num_layers
+        self.prosody_encoder_dropout = prosody_encoder_dropout
+        self.duration_projector_max_duration = duration_projector_max_duration
+        self.prosody_predictor_dropout = prosody_predictor_dropout
 
         super().__init__(**kwargs)
 
 
-class StyleTextToSpeech2DurationEncoderConfig(StyleTextToSpeech2SubModelConfig):
-    model_type = "duration_encoder"
-    base_config_key = "duration_encoder_config"
-
-    def __init__(
-        self,
-        num_layers=3,
-        dropout=0.2,
-        max_duration=50,
-        **kwargs
-    ):
-        self.num_layers = num_layers
-        self.dropout = dropout
-        self.max_duration = max_duration
-
-        super().__init__(**kwargs)
-
-
-class StyleTextToSpeech2DurationPredictorConfig(StyleTextToSpeech2SubModelConfig):
-    model_type = "duration_predictor"
-    base_config_key = "duration_predictor_config"
-
-    def __init__(
-        self,
-        max_duration=50,
-        **kwargs
-    ):
-        self.max_duration = max_duration
-        
-        super().__init__(**kwargs)
-
-
-class StyleTextToSpeech2ProsodyPredictorConfig(StyleTextToSpeech2SubModelConfig):
-    model_type = "prosody_predictor"
-    base_config_key = "prosody_predictor_config"
-
-    def __init__(
-        self,
-        dropout=0.2,
-        **kwargs
-    ):
-        self.dropout = dropout
-
-        super().__init__(**kwargs)
-
-
-class StyleTextToSpeech2DecoderConfig(StyleTextToSpeech2SubModelConfig):
+class StyleTextToSpeech2DecoderConfig(PretrainedConfig):
     model_type = "decoder"
     base_config_key = "decoder_config"
 
     def __init__(
         self,
+        hidden_size=512,
+        vocab_size=178,
+        style_hidden_size=128,
         resblock_kernel_sizes=[3, 7, 11],
         upsample_rates=[10, 6],
         upsample_initial_channel=512,
@@ -153,6 +112,9 @@ class StyleTextToSpeech2DecoderConfig(StyleTextToSpeech2SubModelConfig):
         sampling_rate=24000,
         **kwargs
     ):
+        self.hidden_size = hidden_size
+        self.vocab_size = vocab_size
+        self.style_hidden_size = style_hidden_size
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.upsample_rates = upsample_rates
         self.upsample_initial_channel = upsample_initial_channel
@@ -161,60 +123,38 @@ class StyleTextToSpeech2DecoderConfig(StyleTextToSpeech2SubModelConfig):
         self.gen_istft_n_fft = gen_istft_n_fft
         self.gen_istft_hop_size = gen_istft_hop_size
         self.sampling_rate = sampling_rate
+    
         super().__init__(**kwargs)
 
 
 class StyleTextToSpeech2Config(PretrainedConfig):
     model_type = "style_text_to_speech_2"
-    sub_configs = {
-        "acoustic_text_encoder_config": StyleTextToSpeech2AcousticTextEncoderConfig,
-        "prosodic_text_encoder_config": StyleTextToSpeech2ProsodicTextEncoderConfig,
-        "duration_encoder_config": StyleTextToSpeech2DurationEncoderConfig,
-        "duration_predictor_config": StyleTextToSpeech2DurationPredictorConfig,
-        "prosody_predictor_config": StyleTextToSpeech2ProsodyPredictorConfig,
-        "decoder_config": StyleTextToSpeech2DecoderConfig,
-    }
 
     def __init__(
         self,
+        style_size=256,
         acoustic_text_encoder_config: Dict=None,
-        prosodic_text_encoder_config: Dict=None,
-        duration_encoder_config: Dict=None,
-        duration_predictor_config: Dict=None,
-        prosody_predictor_config: Dict=None,
+        predictor_config: Dict=None,
         decoder_config: Dict=None,
         initializer_range=0.02,
         **kwargs,
     ):
         if acoustic_text_encoder_config is None:
             acoustic_text_encoder_config = {}
-            logger.info("acoustic_text_encoder_config is None. initializing the acoustic text encoder with default values.")
+            logger.info("acoustic_text_encoder_config is None. Initializing the acoustic text encoder with default values.")
 
-        if prosodic_text_encoder_config is None:
-            prosodic_text_encoder_config = {}
-            logger.info("prosodic_text_encoder_config is None. initializing the prosodic text encoder with default values.")
-
-        if duration_encoder_config is None:
-            duration_encoder_config = {}
-            logger.info("duration_encoder_config is None. initializing the duration encoder with default values.")
-
-        if duration_predictor_config is None:
-            duration_predictor_config = {}
-            logger.info("duration_predictor_config is None. initializing the duration predictor with default values.")
-        
-        if prosody_predictor_config is None:
-            prosody_predictor_config = {}
-            logger.info("prosody_predictor_config is None. initializing the prosody predictor with default values.")
+        if predictor_config is None:
+            predictor_config = {}
+            logger.info("predictor_config is None. Initializing the predictor with default values.")
 
         if decoder_config is None:
             decoder_config = {}
-            logger.info("decoder_config is None. initializing the decoder with default values.")
+            logger.info("decoder_config is None. Initializing the decoder with default values.")
+
+        self.style_size = style_size
 
         self.acoustic_text_encoder_config = StyleTextToSpeech2AcousticTextEncoderConfig(**acoustic_text_encoder_config)
-        self.prosodic_text_encoder_config = StyleTextToSpeech2ProsodicTextEncoderConfig(**prosodic_text_encoder_config)
-        self.duration_encoder_config = StyleTextToSpeech2DurationEncoderConfig(**duration_encoder_config)
-        self.duration_predictor_config = StyleTextToSpeech2DurationPredictorConfig(**duration_predictor_config)
-        self.prosody_predictor_config = StyleTextToSpeech2ProsodyPredictorConfig(**prosody_predictor_config)
+        self.predictor_config = StyleTextToSpeech2PredictorConfig(**predictor_config)
         self.decoder_config = StyleTextToSpeech2DecoderConfig(**decoder_config)
 
         self.initializer_range = initializer_range
@@ -225,10 +165,7 @@ class StyleTextToSpeech2Config(PretrainedConfig):
     def from_sub_model_configs(
         cls,
         acoustic_text_encoder_config: StyleTextToSpeech2AcousticTextEncoderConfig,
-        prosodic_text_encoder_config: StyleTextToSpeech2ProsodicTextEncoderConfig,
-        duration_encoder_config: StyleTextToSpeech2DurationEncoderConfig,
-        duration_predictor_config: StyleTextToSpeech2DurationPredictorConfig,
-        prosody_predictor_config: StyleTextToSpeech2ProsodyPredictorConfig,
+        predictor_config: StyleTextToSpeech2PredictorConfig,
         decoder_config: StyleTextToSpeech2DecoderConfig,
         **kwargs,
     ):
@@ -240,13 +177,15 @@ class StyleTextToSpeech2Config(PretrainedConfig):
         """
         return cls(
             acoustic_text_encoder_config=acoustic_text_encoder_config.to_dict(),
-            prosodic_text_encoder_config=prosodic_text_encoder_config.to_dict(),
-            duration_encoder_config=duration_encoder_config.to_dict(),
-            duration_predictor_config=duration_predictor_config.to_dict(),
-            prosody_predictor_config=prosody_predictor_config.to_dict(),
+            predictor_config=predictor_config.to_dict(),
             decoder_config=decoder_config.to_dict(),
             **kwargs,
         )
 
 
-__all__ = ["StyleTextToSpeech2AcousticTextEncoderConfig", "StyleTextToSpeech2ProsodicTextEncoderConfig", "StyleTextToSpeech2DurationEncoderConfig", "StyleTextToSpeech2DurationPredictorConfig", "StyleTextToSpeech2ProsodyPredictorConfig", "StyleTextToSpeech2DecoderConfig", "StyleTextToSpeech2Config"]
+__all__ = [
+    "StyleTextToSpeech2AcousticTextEncoderConfig",
+    "StyleTextToSpeech2PredictorConfig",
+    "StyleTextToSpeech2DecoderConfig",
+    "StyleTextToSpeech2Config"
+]
