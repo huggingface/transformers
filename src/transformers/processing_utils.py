@@ -1117,62 +1117,17 @@ class ProcessorMixin(PushToHubMixin):
                         f"Only the `tokenizer_class` attribute can have a tuple of classes. "
                         f" Got {attribute_name} with {class_name}."
                     )
-                classes = tuple(
-                    cls._get_class_from_class_name(attribute_name, n) if n is not None else None for n in class_name
-                )
+                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = cls._get_class_from_class_name(attribute_name, class_name)
+                attribute_class = getattr(transformers_module, class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
-
-    @staticmethod
-    def _get_class_from_class_name(attribute_name, class_name):
-        """
-        This method converts a class name, like "BertTokenizer", to the relevant class. It does that by looking the
-        name up in the root `transformers` module, and if it can't find it there then it checks the autoclass
-        mappings, where custom code classes should be registered. If it can't find it in either place,
-        it raises an error.
-        """
-        if hasattr(transformers_module, class_name):
-            obj_class = getattr(transformers_module, class_name)
-        else:
-            if attribute_name == "tokenizer":
-                mapping = getattr(transformers_module.models.auto.tokenization_auto, "TOKENIZER_MAPPING")
-            elif attribute_name == "feature_extractor":
-                mapping = getattr(transformers_module.models.auto.feature_extraction_auto, "FEATURE_EXTRACTOR_MAPPING")
-            elif attribute_name == "image_processor":
-                mapping = getattr(transformers_module.models.auto.image_processing_auto, "IMAGE_PROCESSOR_MAPPING")
-            else:
-                raise ValueError(
-                    f"Could not figure out the relevant autoclass for {attribute_name} {class_name}! "
-                    "This is probably an internal Transformers bug, so unless you're doing "
-                    "something really weird, please open an issue at "
-                    "https://github.com/huggingface/transformers/"
-                )
-            extra_content = mapping._extra_content  # Contains extra registered custom classes
-            extra_classes = []
-            for extra_class in extra_content.values():
-                if isinstance(extra_class, tuple):
-                    extra_classes.extend([c for c in extra_class if c is not None])
-                elif extra_class is not None:
-                    extra_classes.append(extra_class)
-            custom_class_name_mapping = {c.__name__.split(".")[-1]: c for c in extra_classes}
-            if class_name in custom_class_name_mapping:
-                obj_class = custom_class_name_mapping[class_name]
-            else:
-                breakpoint()
-                raise ValueError(
-                    f"{class_name} is not a valid {attribute_name} class name. "
-                    f"You may need to pass {class_name} to the the `register()` method of the "
-                    f"{attribute_name} autoclass."
-                )
-        return obj_class
 
     @property
     def model_input_names(self):
