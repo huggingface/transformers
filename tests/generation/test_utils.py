@@ -2756,6 +2756,7 @@ class UtilsFunctionsTest(unittest.TestCase):
 global_rng = random.Random()
 
 
+# Copied from tests.test_modeling_common.ids_tensor
 def ids_tensor(shape, vocab_size, rng=None, name=None):
     #  Creates a random int32 tensor of the shape within the vocab size
     if rng is None:
@@ -2772,6 +2773,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None):
     return torch.tensor(data=values, dtype=torch.long, device=torch_device).view(shape).contiguous()
 
 
+# Copied from tests.test_modeling_common.floats_tensor
 def floats_tensor(shape, scale=1.0, rng=None, name=None):
     """Creates a random float32 tensor"""
     if rng is None:
