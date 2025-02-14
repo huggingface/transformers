@@ -29,6 +29,7 @@ from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 import numpy as np
 import typing_extensions
 
+from .audio_utils import load_audio
 from .dynamic_module_utils import custom_object_save
 from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image, load_video
 
@@ -382,6 +383,8 @@ class ChatTemplateKwargs(TypedDict, total=False):
     video_fps (`int`, *optional*):
         Number of frames to sample per second. Should be passed only when `num_frames=None`.
         If not specified and `num_frames==None`, all frames are sampled.
+    sampling_rate (`int`, *optional*, defaults to `16_000`):
+        The sampling rate at which the given audio file should be loaded. Defaults to `16_000`.
     """
 
     tokenize: Optional[bool] = False
@@ -394,6 +397,7 @@ class ChatTemplateKwargs(TypedDict, total=False):
     num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
+    sampling_rate: Optional[int] = 16_000
 
 
 class AllKwargsForChatTemplate(
@@ -928,6 +932,7 @@ class ProcessorMixin(PushToHubMixin):
                         if hasattr(self.tokenizer, modality_key)
                         else tokenizer_init_kwargs[modality_key]
                     )
+                    print(modality_key, modality, value)
                     default_kwargs[modality][modality_key] = value
         # now defaults kwargs are updated with the tokenizers defaults.
         # pass defaults to output dictionary
@@ -1218,6 +1223,7 @@ class ProcessorMixin(PushToHubMixin):
         num_frames = chat_template_kwargs.pop("num_frames")
         video_fps = chat_template_kwargs.pop("video_fps")
         video_load_backend = chat_template_kwargs.pop("video_load_backend")
+        sampling_rate = chat_template_kwargs.pop("sampling_rate")
 
         prompt = self.tokenizer.apply_chat_template(
             conversation,
@@ -1238,10 +1244,17 @@ class ProcessorMixin(PushToHubMixin):
 
         if tokenize:
             batch_images, batch_videos = [], []
+            batch_audios = []
             for conversation in conversations:
                 images, videos = [], []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    audio_fnames = [
+                        content[key]
+                        for content in message["content"]
+                        for key in ["audio", "url", "path"]
+                        if key in content and content["type"] == "audio"
+                    ]
                     image_fnames = [
                         vision_info[key]
                         for vision_info in visuals
@@ -1254,6 +1267,10 @@ class ProcessorMixin(PushToHubMixin):
                         for key in ["video", "url", "path"]
                         if key in vision_info and vision_info["type"] == "video"
                     ]
+
+                    # Audio models do not accept nested list of audios (yet!)
+                    for fname in audio_fnames:
+                        batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
                     for fname in image_fnames:
                         images.append(load_image(fname))
                     for fname in video_fnames:
@@ -1286,6 +1303,7 @@ class ProcessorMixin(PushToHubMixin):
                 text=prompt,
                 images=batch_images if batch_images else None,
                 videos=batch_videos if batch_videos else None,
+                audios=batch_audios if batch_audios else None,
                 **kwargs,
             )
             if return_dict:
