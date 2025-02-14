@@ -2195,7 +2195,7 @@ class GenerateCDNQueries(nn.Module):
         self.label_encoder = nn.Embedding(num_classes, label_embed_dim)
 
     @staticmethod
-    def apply_label_noise(labels: torch.Tensor, label_noise_ratio: float = 0.2, num_classes: int = 80):
+    def apply_label_noise(labels: torch.Tensor, label_noise_ratio: float = 0.2, num_classes: int = 80) -> torch.Tensor:
         if label_noise_ratio > 0:
             mask = torch.rand_like(labels.float()) < label_noise_ratio
             noised_labels = torch.randint_like(labels, 0, num_classes)
@@ -2204,7 +2204,7 @@ class GenerateCDNQueries(nn.Module):
         else:
             return labels
 
-    def generate_query_masks(self, max_gt_num_per_image: int, device: torch.device):
+    def generate_query_masks(self, max_gt_num_per_image: int, device: torch.device) -> torch.Tensor:
         noised_query_nums = max_gt_num_per_image * self.denoising_groups
         tgt_size = noised_query_nums + self.num_queries
         attn_mask = torch.zeros(tgt_size, tgt_size, device=device, dtype=torch.bool)
@@ -2217,7 +2217,7 @@ class GenerateCDNQueries(nn.Module):
             attn_mask[start_row:end_row, end_col:noised_query_nums] = True
         return attn_mask
 
-    def apply_box_noise(self, boxes: torch.FloatTensor, box_noise_scale: float = 0.4):
+    def apply_box_noise(self, boxes: torch.FloatTensor, box_noise_scale: float = 0.4) -> torch.Tensor:
         """
         Args:
             boxes (`torch.FloatTensor` of shape `(num_boxes, 4)`):
