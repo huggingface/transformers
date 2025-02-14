@@ -35,6 +35,8 @@ class SpQRHfQuantizer(HfQuantizer):
     Quantizer of the SpQR method. Enables the loading of prequantized models.
     """
 
+    requires_calibration = True
+
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
         self.quantization_config = quantization_config
