@@ -1593,6 +1593,30 @@ class PositionRelationEmbedding(nn.Module):
         return pos_embed.clone()
 
 
+# Modified from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
+class RelationDetrMLPPredictionHead(nn.Module):
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+
+    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+
+    """
+
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
+        super().__init__()
+        self.num_layers = num_layers
+        hidden_dim = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(
+            nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip([input_dim] + hidden_dim, hidden_dim + [output_dim])
+        )
+
+    def forward(self, tensor: torch.FloatTensor) -> torch.Tensor:
+        for i, layer in enumerate(self.layers):
+            tensor = nn.functional.relu(layer(tensor)) if i < self.num_layers - 1 else layer(tensor)
+        return tensor
+
+
 class RelationDetrDecoder(RelationDetrPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`RelationDetrDecoderLayer`].
@@ -2293,30 +2317,6 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             enc_outputs_class=topk_class,
             enc_outputs_coord=topk_coords,
         )
-
-
-# Modified from transformers.models.detr.modeling_detr.DetrMLPPredictionHead
-class RelationDetrMLPPredictionHead(nn.Module):
-    """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-
-    """
-
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int):
-        super().__init__()
-        self.num_layers = num_layers
-        hidden_dim = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(
-            nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip([input_dim] + hidden_dim, hidden_dim + [output_dim])
-        )
-
-    def forward(self, tensor: torch.FloatTensor) -> torch.Tensor:
-        for i, layer in enumerate(self.layers):
-            tensor = nn.functional.relu(layer(tensor)) if i < self.num_layers - 1 else layer(tensor)
-        return tensor
 
 
 class GenerateDNQueries(nn.Module):
