@@ -110,7 +110,7 @@ else:
             ("mask2former", ("Mask2FormerImageProcessor",)),
             ("maskformer", ("MaskFormerImageProcessor",)),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("mlcd_vision_model", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
+            ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor",)),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor",)),
