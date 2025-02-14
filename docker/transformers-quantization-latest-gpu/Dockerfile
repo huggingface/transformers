@@ -52,7 +52,7 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/pef
 RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 
 # Add vptq for quantization testing
-pip install git+https://github.com/microsoft/VPTQ.git --no-build-isolation
+RUN pip install git+https://github.com/microsoft/VPTQ.git --no-build-isolation
 
 # Add spqr for quantization testing
 # RUN python3 -m pip install --no-cache-dir spqr_quant[gpu]
