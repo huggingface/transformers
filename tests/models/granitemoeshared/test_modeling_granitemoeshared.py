@@ -283,7 +283,6 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GraniteMoeSharedForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GraniteMoeSharedModel,
