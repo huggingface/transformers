@@ -1,3 +1,4 @@
+Trainer.py
 # coding=utf-8
 # Copyright 2020-present the HuggingFace Inc. team.
 #
@@ -2952,13 +2953,7 @@ class Trainer:
                     if (hasattr(model, "active_adapter") or hasattr(model, "active_adapters")) and hasattr(
                         model, "load_adapter"
                     ):
-                        # For BC for older PEFT versions
-                        if hasattr(model, "active_adapters"):
-                            active_adapter = model.active_adapters[0]
-                            if len(model.active_adapters) > 1:
-                                logger.warning("Detected multiple active adapters, will only consider the first one")
-                        else:
-                            active_adapter = model.active_adapter
+                        active_adapter = self._active_adapter_bc(model)
 
                         if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
                             try:
@@ -3021,6 +3016,17 @@ class Trainer:
                 f"Could not locate the best model at {best_model_path}, if you are running a distributed training "
                 "on multiple nodes, you should activate `--save_on_each_node`."
             )
+
+    @staticmethod
+    def _active_adapter_bc(model):
+        # For BC for older PEFT versions
+        if hasattr(model, "active_adapters"):
+            active_adapter = model.active_adapters[0]
+            if len(model.active_adapters) > 1:
+                logger.warning("Detected multiple active adapters, will only consider the first one")
+        else:
+            active_adapter = model.active_adapter
+        return active_adapter
 
     def _issue_warnings_after_load(self, load_result):
         if len(load_result.missing_keys) != 0:
@@ -3168,6 +3174,12 @@ class Trainer:
                 output_dir = os.path.join(run_dir, checkpoint_folder)
 
                 self.state.best_metric = metric_value
+                if _is_peft_model(self.model):
+                    if (hasattr(self.model, "active_adapter") or hasattr(self.model, "active_adapters")) and hasattr(
+                        self.model, "load_adapter"
+                    ):
+                        active_adapter = self._active_adapter_bc(self.model)
+                        output_dir = str(os.path.join(output_dir, active_adapter)) if active_adapter != "default" else output_dir
                 self.state.best_model_checkpoint = output_dir
 
                 is_new_best_metric = True
