@@ -174,7 +174,7 @@ class Qwen2Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window # we check `use_sliding_window` in the modeling code
+        self.sliding_window = sliding_window  # we check `use_sliding_window` in the modeling code
         self.max_window_layers = max_window_layers
 
         # for backward compatibility

@@ -626,7 +626,9 @@ class Qwen2IntegrationTest(unittest.TestCase):
     def test_3b_generation(self):
         model_id = "Qwen/Qwen2.5-3B"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = Qwen2ForCausalLM.from_pretrained(model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048).to(torch_device)
+        model = Qwen2ForCausalLM.from_pretrained(
+            model_id, use_sliding_window=True, max_window_layers=28, sliding_window=2048
+        ).to(torch_device)
         # we need a long text to test sliding window
         # fmt: off
         LONG_TEXT = """The Warring States period in Chinese history (c. 475 – 221 BC) comprises the final centuries of the Zhou dynasty (c. 1046 – 256 BC), which were characterized by warfare, bureaucratic and military reform, and political consolidation. It followed the Spring and Autumn period and concluded with the wars of conquest that saw the state of Qin annex each of the other contender states by 221 BC and found the Qin dynasty, the first imperial dynastic state in East Asian history.
