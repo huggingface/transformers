@@ -55,12 +55,17 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 ## SiglipImageProcessor
 
-[[autodoc]] SiglipImageProcessor
+[[autodoc]] Siglip2ImageProcessor
+    - preprocess
+
+## SiglipImageProcessorFast
+
+[[autodoc]] Siglip2ImageProcessorFast
     - preprocess
 
 ## SiglipProcessor
 
-[[autodoc]] SiglipProcessor
+[[autodoc]] Siglip2Processor
 
 ## Siglip2Model
 
