@@ -621,6 +621,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
+    @require_flash_attn
     def test_3b_generation(self):
         model_id = "Qwen/Qwen2.5-3B"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
