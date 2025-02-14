@@ -1324,7 +1324,7 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
     @staticmethod
     def get_reference_points(spatial_shapes, valid_ratios, device):
         """
-        Get reference points for each feature map. Used in decoder.
+        Get reference points for each feature map.
 
         Args:
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
@@ -1339,8 +1339,8 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         reference_points_list = []
         for level, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
                 indexing="ij",
             )
             # TODO: valid_ratios could be useless here. check https://github.com/fundamentalvision/Deformable-DETR/issues/36
@@ -1361,7 +1361,6 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         level_start_index: torch.LongTensor,
         valid_ratios: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        reference_points: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1385,8 +1384,6 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
                 - 1 for pixel features that are real (i.e. **not masked**),
                 - 0 for pixel features that are padding (i.e. **masked**).
                 [What are attention masks?](../glossary#attention-mask)
-            reference_points (`torch.FloatTensor`, *optional*):
-                Reference points for `RelationDetrMultiscaleDeformableAttention`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1406,11 +1403,7 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         spatial_shapes_tuple = tuple(spatial_shapes_list)
-
-        if reference_points is None:
-            reference_points = self.get_reference_points(
-                spatial_shapes_tuple, valid_ratios, device=inputs_embeds.device
-            )
+        reference_points = self.get_reference_points(spatial_shapes_tuple, valid_ratios, device=inputs_embeds.device)
 
         encoder_states = ()
         all_attentions = () if output_attentions else None
@@ -1985,72 +1978,9 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             multi_level_elements.transpose_(1, 2)
         return multi_level_elements
 
-    def multi_level_misc(self, multi_level_masks):
-        spatial_shapes = [m.shape[-2:] for m in multi_level_masks]
-        spatial_shapes = multi_level_masks[0].new_tensor(spatial_shapes, dtype=torch.int64)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = self.multi_level_valid_ratios(multi_level_masks)
-        return spatial_shapes, level_start_index, valid_ratios
-
-    @staticmethod
-    def get_valid_ratios(mask: torch.BoolTensor):
-        b, h, w = mask.shape
-        if h == 0 or w == 0:  # for empty Tensor
-            return mask.new_ones((b, 2)).float()
-        valid_h = torch.sum(~mask[:, :, 0], 1)
-        valid_w = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_h = valid_h.float() / h
-        valid_ratio_w = valid_w.float() / w
-        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)  # [n, 2]
-        return valid_ratio
-
-    def multi_level_valid_ratios(self, multi_level_masks: List[torch.BoolTensor]):
-        # note that True is valid and False is invalid for multi_level_masks
-        # which is opposite to the official implementation
-        return torch.stack([self.get_valid_ratios(~m) for m in multi_level_masks], 1)
-
-    @staticmethod
-    def get_full_reference_points(spatial_shapes: torch.LongTensor, valid_ratios: torch.FloatTensor):
-        reference_points_list = []
-        for lvl, (h, w) in enumerate(spatial_shapes):
-            ref_y, ref_x = torch.meshgrid(
-                torch.arange(0.5, h + 0.5, device=spatial_shapes.device),
-                torch.arange(0.5, w + 0.5, device=spatial_shapes.device),
-                indexing="ij",
-            )
-            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * h)
-            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * w)
-            ref = torch.stack((ref_x, ref_y), -1)  # [n, h*w, 2]
-            reference_points_list.append(ref)
-        reference_points = torch.cat(reference_points_list, 1)  # [n, s, 2]
-        return reference_points
-
-    def get_reference(self, spatial_shapes: torch.LongTensor, valid_ratios: torch.FloatTensor):
-        # get full_reference_points, should be transferred using valid_ratios
-        full_reference_points = self.get_full_reference_points(spatial_shapes, valid_ratios)
-        reference_points = full_reference_points[:, :, None] * valid_ratios[:, None]
-        # get proposals, reuse full_reference_points to speed up
-        level_wh = full_reference_points.new_tensor([[i] for i in range(spatial_shapes.shape[0])])
-        level_wh = 0.05 * 2.0 ** level_wh.repeat_interleave(spatial_shapes.prod(-1), 0)
-        level_wh = level_wh.expand_as(full_reference_points)
-        proposals = torch.cat([full_reference_points, level_wh], -1)
-        return reference_points, proposals
-
     def get_lvl_pos_embed(self, multi_level_pos_embeds: List[torch.FloatTensor]):
         multi_level_pos_embeds = [p + l.view(1, -1, 1, 1) for p, l in zip(multi_level_pos_embeds, self.level_embed)]
         return self.flatten_multi_level(multi_level_pos_embeds)
-
-    def get_encoder_output(
-        self, memory: torch.FloatTensor, proposals: torch.FloatTensor, memory_padding_mask: torch.BoolTensor
-    ):
-        output_proposals_valid = ((proposals > 0.01) & (proposals < 0.99)).all(-1, keepdim=True)
-        proposals = torch.log(proposals / (1 - proposals))  # inverse_sigmoid
-        invalid = memory_padding_mask.unsqueeze(-1) | ~output_proposals_valid
-        proposals.masked_fill_(invalid, float("inf"))
-
-        output_memory = memory * (~memory_padding_mask.unsqueeze(-1)) * (output_proposals_valid)
-        output_memory = self.encoder_output_norm(self.encoder_output(output_memory))
-        return output_memory, proposals
 
     def get_multi_levels(self, pixel_values: torch.FloatTensor, pixel_mask: torch.LongTensor):
         # extract higher features matching proto_levels
@@ -2069,6 +1999,81 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         multi_level_pos_embeds = [self.position_embeddings(m) for m in multi_level_masks]
 
         return multi_level_feats, multi_level_masks, multi_level_pos_embeds
+
+    @staticmethod
+    def get_valid_ratios(mask: torch.BoolTensor):
+        b, h, w = mask.shape
+        if h == 0 or w == 0:  # for empty Tensor
+            return mask.new_ones((b, 2)).float()
+        valid_h = torch.sum(~mask[:, :, 0], 1)
+        valid_w = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_h = valid_h.float() / h
+        valid_ratio_w = valid_w.float() / w
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)  # [n, 2]
+        return valid_ratio
+
+    def multi_level_valid_ratios(self, multi_level_masks: List[torch.BoolTensor]):
+        # note that True is valid and False is invalid for multi_level_masks
+        # which is opposite to the official implementation
+        return torch.stack([self.get_valid_ratios(~m) for m in multi_level_masks], 1)
+
+    def get_deformable_attention_params(self, multi_level_masks):
+        spatial_shapes_list = [m.shape[-2:] for m in multi_level_masks]
+        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=multi_level_masks[0].device)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        valid_ratios = self.multi_level_valid_ratios(multi_level_masks)
+        return spatial_shapes, spatial_shapes_list, level_start_index, valid_ratios
+
+    # Modified from transformers.models.grounding_dino.modeling_grounding_dino.GroundingDinoModel.generate_encoder_output_proposals
+    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
+        """Generate the encoder output proposals from encoded enc_output.
+
+        Args:
+            enc_output (`torch.Tensor[batch_size, sequence_length, hidden_size]`): Output of the encoder.
+            padding_mask (`torch.Tensor[batch_size, sequence_length]`): Padding mask for `enc_output`.
+            spatial_shapes (`torch.Tensor[num_feature_levels, 2]`): Spatial shapes of the feature maps.
+
+        Returns:
+            `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
+                - object_query (Tensor[batch_size, sequence_length, hidden_size]): Object query features. Later used to
+                  directly predict a bounding box. (without the need of a decoder)
+                - output_proposals (Tensor[batch_size, sequence_length, 4]): Normalized proposals, after an inverse
+                  sigmoid.
+        """
+        batch_size = enc_output.shape[0]
+        proposals = []
+        current_position = 0
+        for level, (height, width) in enumerate(spatial_shapes):
+            mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)]
+            mask_flatten_ = mask_flatten_.view(batch_size, height, width, 1)
+            valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
+            valid_width = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
+            grid_y, grid_x = meshgrid(
+                torch.linspace(0, height - 1, height, dtype=torch.float32, device=enc_output.device),
+                torch.linspace(0, width - 1, width, dtype=torch.float32, device=enc_output.device),
+                indexing="ij",
+            )
+            grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
+
+            scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
+            grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
+            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
+            proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
+            proposals.append(proposal)
+            current_position += height * width
+
+        output_proposals = torch.cat(proposals, 1)
+        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
+        output_proposals = torch.log(output_proposals / (1 - output_proposals))  # inverse sigmoid
+        output_proposals = output_proposals.masked_fill(padding_mask.unsqueeze(-1), float("inf"))
+        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+
+        # assign each pixel as an object query
+        object_query = enc_output
+        object_query = object_query.masked_fill(padding_mask.unsqueeze(-1), float(0))
+        object_query = object_query.masked_fill(~output_proposals_valid, float(0))
+        object_query = self.encoder_output_norm(self.encoder_output(object_query))
+        return object_query, output_proposals
 
     @add_start_docstrings_to_model_forward(RELATION_DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RelationDetrModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -2129,9 +2134,9 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         source_flatten = self.flatten_multi_level(sources)
         mask_flatten = self.flatten_multi_level(masks)
         lvl_pos_embed_flatten = self.get_lvl_pos_embed(position_embeddings_list)
-        spatial_shapes, level_start_index, valid_ratios = self.multi_level_misc(masks)
-        reference_points, proposals = self.get_reference(spatial_shapes, valid_ratios)
-        spatial_shapes_list = spatial_shapes.tolist()
+        spatial_shapes, spatial_shapes_list, level_start_index, valid_ratios = self.get_deformable_attention_params(
+            masks
+        )
 
         # Sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -2139,7 +2144,6 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
             encoder_outputs = self.encoder(
                 inputs_embeds=source_flatten,
                 attention_mask=mask_flatten,
-                reference_points=reference_points,
                 position_embeddings=lvl_pos_embed_flatten,
                 spatial_shapes=spatial_shapes,
                 spatial_shapes_list=spatial_shapes_list,
@@ -2161,8 +2165,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         batch_size, _, num_channels = encoder_outputs[0].shape
         enc_outputs_class = None
         enc_outputs_coord_logits = None
-        object_query_embedding, output_proposals = self.get_encoder_output(
-            encoder_outputs[0], proposals, ~mask_flatten
+        object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
+            encoder_outputs[0], ~mask_flatten, spatial_shapes
         )
 
         # Linear projection for bounding box binary classification (i.e. foreground and background)
