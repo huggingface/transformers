@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 In this section, we'll explore how to use chat templates with multimodal models, enabling your templates to handle a variety of inputs such as text, images, and audio. Multimodal models provide richer, more interactive experiences, and understanding how to effectively combine these inputs within your templates is key. We’ll walk through how to work with different modalities, configure your templates for optimal performance, and tackle common challenges along the way.
 
-Just like with text-only LLMs, multimodal models expect a chat with **messages** each of which includes a **role** and **content**. However for multimodal models chat templates are a part of the [Processor](./main_cllasses/processors). Let's see how we can format our prompts when there are images or videos in the input along with text.
+Just like with text-only LLMs, multimodal models expect a chat with **messages**, each of which includes a **role** and **content**. However, for multimodal models, chat templates are a part of the [Processor](./main_cllasses/processors) class. Let's see how we can format our prompts when there are images or videos in the input along with text.
 
 
 ## How to use chat templates with image inputs
