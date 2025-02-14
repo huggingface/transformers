@@ -1786,14 +1786,15 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     """
     Data collator used for padding free approach. Does the following:
 
-    - concatate the entire mini batch into single long sequence [1, total_tokens]
+    - concatates the entire mini batch into single long sequence of shape [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
     """
 
-    def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
+    def __init__(self, *args, return_position_ids=True, return_flash_attn_kwargs=False, separator_id=-100, **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
+        self.return_flash_attn_kwargs = return_flash_attn_kwargs
         self.separator_id = separator_id
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
@@ -1809,12 +1810,27 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         ret = {"input_ids": [], "labels": []}
         if self.return_position_ids:
             ret.update({"position_ids": []})
-        for idx in range(0, len(features)):
-            ret["input_ids"] += features[idx]["input_ids"]
+        if self.return_flash_attn_kwargs:
+            ret.update({"cu_seq_lens_k": [0]})
+            ret.update({"cu_seq_lens_q": [0]})
+            max_len_k = 0
+            max_len_q = 0
+        for sample in features:
+            input_ids = sample["input_ids"]
+            ret["input_ids"] += input_ids
             if is_labels_provided:
-                ret["labels"] += [separator_id] + features[idx]["labels"][1:]
+                ret["labels"] += [separator_id] + sample["labels"][1:]
             else:
-                ret["labels"] += [separator_id] + features[idx]["input_ids"][1:]
+                ret["labels"] += [separator_id] + input_ids[1:]
             if self.return_position_ids:
-                ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
+                ret["position_ids"] += list(range(len(input_ids)))
+            if self.return_flash_attn_kwargs:
+                len_input_ids = len(input_ids)
+                ret["cu_seq_lens_q"].append(ret["cu_seq_lens_q"][-1] + len_input_ids)
+                ret["cu_seq_lens_k"].append(ret["cu_seq_lens_q"][-1] + len_input_ids)
+                max_len_k = max(max_len_k, len_input_ids)
+                max_len_q = max(max_len_k, len_input_ids)
+        if self.return_flash_attn_kwargs:
+            ret["max_len_k"] = max_len_k
+            ret["max_len_q"] = max_len_q
         return default_data_collator([ret], return_tensors)
