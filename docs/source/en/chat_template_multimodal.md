@@ -211,7 +211,6 @@ You can pass a list of image file paths, and the processor will automatically co
 
 
 ```python
-
 frames_paths = ["/path/to/frame0.png", "/path/to/frame5.png", "/path/to/frame10.png"]
 messages = [
     {
