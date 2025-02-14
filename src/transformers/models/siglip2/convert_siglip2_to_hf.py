@@ -165,6 +165,7 @@ def get_siglip2_tokenizer() -> GemmaTokenizerFast:
         add_bos_token=False,
         add_eos_token=True,
         padding_side="right",
+        do_lower_case=True,
         # important: make tokenizer NOT return attention_mask since original one doesn't require it
         model_input_names=["input_ids"],
     )
