@@ -472,7 +472,7 @@ class ProcessorMixin(PushToHubMixin):
             if isinstance(class_name, tuple):
                 proper_class = tuple(getattr(transformers_module, n) for n in class_name if n is not None)
             else:
-                proper_class = getattr(transformers_module, class_name)
+                proper_class = self._get_class_from_class_name(attribute_name, class_name)
 
             if not isinstance(arg, proper_class):
                 raise TypeError(
@@ -1104,18 +1104,47 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
-                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                classes = tuple(
+                    cls._get_class_from_class_name(attribute_name, n) if n is not None else None for n in class_name
+                )
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = getattr(transformers_module, class_name)
+                attribute_class = cls._get_class_from_class_name(attribute_name, class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
-
+        
+    @staticmethod
+    def _get_class_from_class_name(attribute_name, class_name):
+        if hasattr(transformers_module, class_name):
+            obj_class = getattr(transformers_module, class_name)
+        else:
+            if attribute_name == "tokenizer":
+                map_func = transformers_module.models.auto.tokenization_auto.tokenizer_class_from_name
+            elif attribute_name == "feature_extractor":
+                map_func = transformers_module.models.auto.feature_extraction_auto.feature_extractor_class_from_name
+            elif attribute_name == "image_processor":
+                map_func = transformers_module.models.auto.image_processing_auto.get_image_processor_class_from_name
+            else:
+                raise ValueError(
+                    f"Unsupported attribute name: {attribute_name}"
+                    "This is probably an internal Transformers bug, so unless you're doing "
+                    "something really weird, please open an issue at "
+                    "https://github.com/huggingface/transformers/"
+                )
+            obj_class = map_func(class_name)
+            if obj_class == None:
+                raise ValueError(
+                    f"{class_name} is not a valid {attribute_name} class name. "
+                    f"You may need to pass {class_name} to the the `register()` method of the "
+                    f"autoclass for {attribute_name}."
+                )
+        return obj_class
+    
     @property
     def model_input_names(self):
         first_attribute = getattr(self, self.attributes[0])
