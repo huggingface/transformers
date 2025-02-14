@@ -316,7 +316,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
 
     def test_from_pretrained_dynamic_processor_with_extra_attributes(self):
-        # TODO ??? How does this work ???
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
             pass
 
