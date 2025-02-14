@@ -922,7 +922,6 @@ class ZambaPreTrainedModel(PreTrainedModel):
         return config
 
 
-
 ZAMBA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
