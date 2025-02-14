@@ -198,6 +198,8 @@ class Qwen2_5_VLVisionFlashAttention2(nn.Module):
             sin = emb.sin().float()
         else:
             cos, sin = position_embeddings
+            cos = cos.to(torch.float)
+            sin = sin.to(torch.float)
         q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
         q = q.squeeze(0)
         k = k.squeeze(0)

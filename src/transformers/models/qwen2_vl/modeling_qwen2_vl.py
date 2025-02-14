@@ -322,6 +322,8 @@ class VisionAttention(nn.Module):
             sin = emb.sin().float()
         else:
             cos, sin = position_embeddings
+            cos = cos.to(torch.float)
+            sin = sin.to(torch.float)
         q, k = apply_rotary_pos_emb_vision(q, k, cos, sin)
 
         attention_mask = torch.full(
