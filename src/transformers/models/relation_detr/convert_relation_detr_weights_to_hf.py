@@ -39,6 +39,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_EXCEPT_BACKBONE = {
     r"transformer.tgt_embed.weight":                                                                                                r"transformer.target_embed.weight",
     r"transformer.hybrid_tgt_embed.weight":                                                                                         r"transformer.hybrid_target_embed.weight",
     r"transformer.level_embeds":                                                                                                    r"transformer.level_embed",
+    # output layer
+    r"transformer.enc_output":                                                                                                      r"transformer.encoder_output",
+    r"transformer.enc_output_norm":                                                                                                 r"transformer.encoder_output_norm",
     r"transformer.(.*)":                                                                                                            r"model.\1",
     r"neck.(.*)":                                                                                                                   r"model.neck.\1",
 }

@@ -2060,7 +2060,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         proposals.masked_fill_(invalid, float("inf"))
 
         output_memory = memory * (~memory_padding_mask.unsqueeze(-1)) * (output_proposals_valid)
-        output_memory = self.enc_output_norm(self.enc_output(output_memory))
+        output_memory = self.encoder_output_norm(self.encoder_output(output_memory))
         return output_memory, proposals
 
     def get_multi_levels(self, pixel_values: torch.FloatTensor, pixel_mask: torch.LongTensor):
