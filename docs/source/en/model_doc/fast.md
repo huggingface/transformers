@@ -38,9 +38,3 @@ than most networks that are searched for image classification.
 
 [[autodoc]] FastForSceneTextRecognition
 - forward
-
-## FASTForImageCaptioningOutput
-
-
-
-
