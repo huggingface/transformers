@@ -1,7 +1,7 @@
 import argparse
 import os
-import shutil
 import re
+import shutil
 
 import numpy as np
 import timesfm
@@ -68,7 +68,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
 
     # copy the weights from the original model to the new model making
     original_model = tfm._model
-    
+
     # mapping of the layers from the original model to the transformer model
     MODEL_LAYER_MAPPING = {
         "input_ff_layer.hidden_layer[0].weight":    "decoder.input_ff_layer.hidden_layer[0].weight",
@@ -88,7 +88,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
         "horizon_ff_layer.residual_layer.bias":     "horizon_ff_layer.residual_layer.bias",
     }
 
-    
+
     TRANSFORMER_LAYER_MAPPING = {
         "stacked_transformer.layers[{i}].self_attn.qkv_proj.weight":    "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.weight",
         "stacked_transformer.layers[{i}].self_attn.qkv_proj.bias":      "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.bias",
