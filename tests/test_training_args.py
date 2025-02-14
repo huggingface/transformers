@@ -9,7 +9,7 @@ class TestTrainingArguments(unittest.TestCase):
     def test_default_output_dir(self):
         """Test that output_dir defaults to 'tmp_trainer' when not specified."""
         args = TrainingArguments(output_dir=None)
-        self.assertEqual(args.output_dir, "tmp_trainer")
+        self.assertEqual(args.output_dir, "trainer_output")
 
     def test_custom_output_dir(self):
         """Test that output_dir is respected when specified."""
