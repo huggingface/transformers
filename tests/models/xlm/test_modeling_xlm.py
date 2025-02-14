@@ -374,9 +374,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (XLMWithLMHeadModel,) if is_torch_available() else ()
-    )  # TODO (PVP): Check other models whether language generation is also applicable
     pipeline_model_mapping = (
         {
             "feature-extraction": XLMModel,
@@ -473,50 +470,24 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        # adds PAD dummy token, expected shape is off by 1
+        prompt_length += 1
+        output_length += 1
+        super()._check_attentions_for_generate(
+            batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            # adds PAD dummy token
-            tgt_len = min_length + idx + 1
-            src_len = min_length + idx + 1
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
+        # adds PAD dummy token, expected shape is off by 1
+        prompt_length += 1
+        output_length += 1
+        super()._check_hidden_states_for_generate(
+            batch_size, hidden_states, prompt_length, output_length, config, use_cache
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            # adds PAD dummy token
-            seq_len = min_length + idx + 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-        pass
 
     @slow
     def test_model_from_pretrained(self):

@@ -1066,6 +1066,8 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "FastImageProcessorInitKwargs": "image_processing*_fast",
+    "FastImageProcessorPreprocessKwargs": "image_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
     "ImagesKwargs": "processing",
@@ -1714,7 +1716,7 @@ if __name__ == "__main__":
     if args.files_to_parse == ["examples"]:
         args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
 
-    priority_list = find_priority_list(args.files_to_parse)
+    priority_list, _ = find_priority_list(args.files_to_parse)
     assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
 
     for file_name in priority_list:

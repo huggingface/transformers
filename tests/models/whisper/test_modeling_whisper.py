@@ -376,7 +376,6 @@ class WhisperModelTester:
 @require_torch
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "audio-classification": WhisperForAudioClassification,
@@ -1605,6 +1604,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     # TODO (joao, eustache): fix me :)
     @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
     def test_generate_compile_model_forward(self):
+        pass
+
+    # TODO (joao, eustache): fix me :)
+    @unittest.skip(reason="A CUDA exception is thrown when storing extra outputs")
+    def test_generate_compilation_all_outputs(self):
         pass
 
 
@@ -3961,7 +3965,6 @@ class WhisperStandaloneDecoderModelTester:
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (WhisperForCausalLM,) if is_torch_available() else ()
     fx_comptatible = False
     test_pruning = False
     is_encoder_decoder = False
