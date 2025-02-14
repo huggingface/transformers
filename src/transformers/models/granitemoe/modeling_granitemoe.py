@@ -248,6 +248,12 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Adjust the rotary embedding dimensions if they don't match q's last dimension.
+    if cos.shape[-1] != q.shape[-1]:
+        cos = cos[..., : q.shape[-1]]
+        sin = sin[..., : q.shape[-1]]
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
