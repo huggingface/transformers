@@ -1282,7 +1282,6 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
-    _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.relation_detr"].extend(["RelationDetrImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
@@ -6455,7 +6454,6 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
-        from .models.qwen2_5_vl import Qwen2_5_VLImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.relation_detr import RelationDetrImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
