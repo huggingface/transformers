@@ -205,7 +205,7 @@ By using `sample_indices_fn`, you gain **full control** over frame selection, ma
 
 ### List of image frames as video
 
-Sometimes, instead of having a full video file, you might only have a set of sampled frames stored as images. No worries—we've got you covered!
+Sometimes, instead of having a full video file, you might only have a set of sampled frames stored as images.
 
 You can pass a list of image file paths, and the processor will automatically concatenate them into a video. Just make sure that all images have the same size, as they are assumed to be from the same video.
 
