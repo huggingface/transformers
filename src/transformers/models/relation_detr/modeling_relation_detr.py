@@ -1958,17 +1958,6 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         self.encoder_bbox_head = RelationDetrMLPPredictionHead(config.d_model, config.d_model, 4, 3)
         self.hybrid_bbox_head = RelationDetrMLPPredictionHead(config.d_model, config.d_model, 4, 3)
 
-        # initilize encoder and hybrid classification layers
-        prior_prob = 0.01
-        bias_value = -math.log((1 - prior_prob) / prior_prob)
-        nn.init.constant_(self.encoder_class_head.bias, bias_value)
-        nn.init.constant_(self.hybrid_class_head.bias, bias_value)
-        # initiailize encoder and hybrid regression layers
-        nn.init.constant_(self.encoder_bbox_head.layers[-1].weight, 0.0)
-        nn.init.constant_(self.encoder_bbox_head.layers[-1].bias, 0.0)
-        nn.init.constant_(self.hybrid_bbox_head.layers[-1].weight, 0.0)
-        nn.init.constant_(self.hybrid_bbox_head.layers[-1].bias, 0.0)
-
         self.two_stage_num_proposals = config.num_queries
         self.hybrid_num_proposals = config.hybrid_queries
         self.num_labels = config.num_labels
