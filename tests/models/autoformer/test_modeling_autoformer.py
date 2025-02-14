@@ -205,7 +205,6 @@ class AutoformerModelTester:
 @require_torch
 class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AutoformerModel, AutoformerForPrediction) if is_torch_available() else ()
-    all_generative_model_classes = (AutoformerForPrediction,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": AutoformerModel} if is_torch_available() else {}
     test_pruning = False
     test_head_masking = False
@@ -481,4 +480,4 @@ class AutoformerModelIntegrationTests(unittest.TestCase):
 
         expected_slice = torch.tensor([3130.6763, 4056.5293, 7053.0786], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1)
+        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1)

@@ -17,10 +17,10 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaMLP,
-    LlamaModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralModel
 from .configuration_qwen2 import Qwen2Config
 
 
@@ -114,7 +114,7 @@ class Qwen2DecoderLayer(LlamaDecoderLayer):
             )
 
 
-class Qwen2Model(LlamaModel):
+class Qwen2Model(MistralModel):
     pass
 
 

@@ -208,7 +208,8 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 model_id = "bigscience/bloom-1b7"
 
 quantization_config = BitsAndBytesConfig(
-    llm_int8_threshold=10,
+    llm_int8_threshold=10.0,
+    llm_int8_enable_fp32_cpu_offload=True
 )
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
@@ -285,7 +286,7 @@ For inference, the `bnb_4bit_quant_type` does not have a huge impact on performa
 
 ### Nested quantization
 
-Nested quantization is a technique that can save additional memory at no additional performance cost. This feature performs a second quantization of the already quantized weights to save an additional 0.4 bits/parameter. For example, with nested quantization, you can finetune a [Llama-13b](https://huggingface.co/meta-llama/Llama-2-13b) model on a 16GB NVIDIA T4 GPU with a sequence length of 1024, a batch size of 1, and enabling gradient accumulation with 4 steps.
+Nested quantization is a technique that can save additional memory at no additional performance cost. This feature performs a second quantization of the already quantized weights to save an additional 0.4 bits/parameter. For example, with nested quantization, you can finetune a [Llama-13b](https://huggingface.co/meta-llama/Llama-2-13b-chat-hf) model on a 16GB NVIDIA T4 GPU with a sequence length of 1024, a batch size of 1, and enabling gradient accumulation with 4 steps.
 
 ```py
 from transformers import BitsAndBytesConfig
@@ -295,7 +296,7 @@ double_quant_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", torch_dtype="auto", quantization_config=double_quant_config)
+model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", torch_dtype="auto", quantization_config=double_quant_config)
 ```
 
 ## Dequantizing `bitsandbytes` models
@@ -307,7 +308,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 
 model_id = "facebook/opt-125m"
 
-model = AutoModelForCausalLM.from_pretrained(model_id, BitsAndBytesConfig(load_in_4bit=True))
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model.dequantize()
