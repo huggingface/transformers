@@ -113,25 +113,13 @@ class TimesFmRMSNorm(nn.Module):
 
 class TimesFmPositionalEmbedding(nn.Module):
     """Generates position embedding for a given 1-d sequence.
-
-    Attributes:
-        embedding_dims: Dimension of the embedding to be generated.
-        min_timescale: Start of the geometric index. Determines the periodicity of
-          the added signal. Defaults to 1.
-        max_timescale: End of the geometric index. Determines the frequency of the
-          added signal. Defaults to 10_000.
     """
 
-    def __init__(
-        self,
-        embedding_dims: int,
-        min_timescale: int = 1,
-        max_timescale: int = 10_000,
-    ) -> None:
+    def __init__(self, config: TimesFmConfig) -> None:
         super().__init__()
-        self.min_timescale = min_timescale
-        self.max_timescale = max_timescale
-        self.embedding_dims = embedding_dims
+        self.min_timescale = config.min_timescale
+        self.max_timescale = config.max_timescale
+        self.embedding_dims = config.model_dim
 
     def forward(self, seq_length=None, position=None):
         """Generates a Tensor of sinusoids with different frequencies.
@@ -695,9 +683,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.model_dim)
         self.stacked_transformer = TimesFmStackedDecoder(config=config)
         if self.config.use_positional_embedding:
-            self.position_emb = TimesFmPositionalEmbedding(
-                embedding_dims=self.config.model_dim,
-            )
+            self.position_emb = TimesFmPositionalEmbedding(config=config)
 
         # Initialize weights and apply final processing
         self.post_init()

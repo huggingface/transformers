@@ -68,6 +68,12 @@ class TimesFmConfig(PretrainedConfig):
             Whether to add positional embeddings.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        min_timescale (`int`, *optional*, defaults to 1):
+            The start of the geometric positional index. Determines the periodicity of
+            the added signal.
+        max_timescale (`int`, *optional*, defaults to 10_000):
+            The end of the geometric positional index. Determines the frequency of the
+            added signal.
     """
 
     model_type = "timesfm"
@@ -97,6 +103,8 @@ class TimesFmConfig(PretrainedConfig):
         attention_dropout: float = 0.0,
         use_positional_embedding: bool = True,
         initializer_range: float = 0.02,
+        min_timescale: int = 1,
+        max_timescale: int = 10_000,
         **kwargs,
     ):
         self.patch_len = patch_len
@@ -115,6 +123,8 @@ class TimesFmConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.use_positional_embedding = use_positional_embedding
         self.initializer_range = initializer_range
+        self.min_timescale = min_timescale
+        self.max_timescale = max_timescale
 
         super().__init__(
             is_encoder_decoder=self.is_encoder_decoder,
