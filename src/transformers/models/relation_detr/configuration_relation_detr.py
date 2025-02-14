@@ -292,13 +292,5 @@ class RelationDetrConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
 
 __all__ = ["RelationDetrConfig"]
