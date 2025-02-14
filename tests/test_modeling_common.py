@@ -212,7 +212,6 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
 class ModelTesterMixin:
     model_tester = None
     all_model_classes = ()
-    all_generative_model_classes = ()
     fx_compatible = False
     test_torchscript = True
     test_pruning = True
@@ -229,6 +228,10 @@ class ModelTesterMixin:
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
+
+    @property
+    def all_generative_model_classes(self):
+        return tuple(model_class for model_class in self.all_model_classes if model_class.can_generate())
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

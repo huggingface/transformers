@@ -28,7 +28,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoConfig, is_torch_available, pipeline
+from transformers import AutoConfig, AutoProcessor, AutoTokenizer, is_torch_available, pipeline
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
@@ -61,8 +61,6 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
-        AutoProcessor,
-        AutoTokenizer,
         BartForConditionalGeneration,
         BartTokenizer,
         GPT2LMHeadModel,
@@ -119,7 +117,6 @@ from transformers.utils import is_sklearn_available
 class GenerationTesterMixin:
     input_name = "input_ids"
     model_tester = None
-    all_generative_model_classes = ()
     max_new_tokens = 3
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):

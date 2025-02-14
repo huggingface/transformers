@@ -477,7 +477,6 @@ class InstructBlipForConditionalGenerationDecoderOnlyModelTester:
 @require_torch
 class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (InstructBlipForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": InstructBlipForConditionalGeneration}
     fx_compatible = False
     test_head_masking = False

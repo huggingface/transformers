@@ -472,7 +472,6 @@ class Blip2ForConditionalGenerationDecoderOnlyModelTester:
 @require_torch
 class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Blip2ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -999,6 +998,8 @@ class Blip2ModelTester:
 @require_torch
 class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (Blip2ForConditionalGeneration, Blip2Model) if is_torch_available() else ()
+    # Doesn't run generation tests. TODO: fix generation tests for Blip2ForConditionalGeneration
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Blip2Model,

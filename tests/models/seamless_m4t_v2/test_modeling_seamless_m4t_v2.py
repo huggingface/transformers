@@ -374,7 +374,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4Tv2ForSpeechToText,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="speech")
@@ -615,7 +614,8 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4Tv2ForTextToText,) if is_torch_available() else ()
+    # Doesn't run generation tests. Has custom generation method with a different interface
+    all_generative_model_classes = ()
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="text")

@@ -192,7 +192,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     """
 
     all_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
