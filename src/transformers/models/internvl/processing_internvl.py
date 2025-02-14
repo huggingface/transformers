@@ -150,16 +150,19 @@ class InternVLProcessor(ProcessorMixin):
             video_index = 0
             processed_text = []
             image_video_patches = []  # List to store processed image/video patches
-            # Support interlaced image and video in prompts
+            # Support interlaced image and video in prompts:
+            # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
             for prompt in text:
                 new_prompt = prompt
                 while "<image>" in new_prompt or "<video>" in new_prompt:
                     if "<image>" in new_prompt and (
                         "<video>" not in new_prompt or new_prompt.index("<image>") < new_prompt.index("<video>")
                     ):
+                        # Get the slice of patches corresponding to the current image
                         start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
                         end_index = image_num_patches_indices[image_index]
                         image_video_patches.append(image_pixel_values[start_index:end_index])
+                        # Replace the corresponding image placeholder with the correct number of image tokens
                         new_prompt = new_prompt.replace(
                             "<image>",
                             f"<img>{'<IMG_CONTEXT>' * self.image_seq_length * image_num_patches[image_index]}</img>",
@@ -167,11 +170,15 @@ class InternVLProcessor(ProcessorMixin):
                         )
                         image_index += 1
                     else:
+                        # Get the slice of patches corresponding to the current video
+                        # Here we need to account for both the multiple video frames and the potential multiple patches per frame
+                        # As of now, InternVL only supports one patch per frame, but we keep the code flexible for future updates
                         current_patch_index = patch_indices[video_index - 1] if video_index > 0 else 0
                         end_patch_index = patch_indices[video_index]
                         start_index = video_num_patches_indices[current_patch_index] if video_index > 0 else 0
                         end_index = video_num_patches_indices[end_patch_index - 1]
                         image_video_patches.append(video_pixel_values[start_index:end_index])
+                        # Get the number of patches per frame and replace the video placeholder with the correct number of image tokens
                         num_patches = list(video_num_patches[current_patch_index:end_patch_index])
                         video_prompt = "\n".join(
                             f"Frame{i+1}: <img>{'<IMG_CONTEXT>'*self.image_seq_length* num_patches[i]}</img>"
@@ -180,6 +187,7 @@ class InternVLProcessor(ProcessorMixin):
                         new_prompt = new_prompt.replace("<video>", video_prompt, 1)
                         video_index += 1
                 processed_text.append(new_prompt)
+            # Concatenate the interlaced image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
             image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
             text = processed_text
 
