@@ -6494,8 +6494,8 @@ if TYPE_CHECKING:
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
-        from .models.relation_detr import RelationDetrImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
+        from .models.relation_detr import RelationDetrImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.siglip import SiglipImageProcessorFast
         from .models.vit import ViTImageProcessorFast
