@@ -3742,7 +3742,7 @@ else:
     )
     _import_structure["models.timesfm"].extend(
         [
-            "TimesFmDecoder",
+            "TimesFmModel",
             "TimesFmModelForPrediction",
             "TimesFmPreTrainedModel",
         ]
@@ -8455,7 +8455,7 @@ if TYPE_CHECKING:
             TimeSeriesTransformerPreTrainedModel,
         )
         from .models.timesfm import (
-            TimesFmDecoder,
+            TimesFmModel,
             TimesFmModelForPrediction,
             TimesFmPreTrainedModel,
         )

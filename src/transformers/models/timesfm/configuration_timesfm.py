@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 
 class TimesFmConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`TimesFmModelForPrediction`] or a [`TFTimesFmDecoder`]. It is used to
+    This is the configuration class to store the configuration of a [`TimesFmModelForPrediction`] or a [`TFTimesFmModel`]. It is used to
     instantiate a TimesFM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the TimesFM
     [google/timesfm-1.0-200m](https://huggingface.co/google/timesfm-1.0-200m) architecture.
