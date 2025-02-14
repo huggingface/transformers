@@ -995,7 +995,7 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             processed_annotations.append(annotation)
 
         images = processed_images
-        annotations = processed_annotations
+        annotations = processed_annotations if annotations is not None else None
         del processed_images, processed_annotations
 
         if do_pad:
