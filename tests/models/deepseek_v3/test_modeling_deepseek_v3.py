@@ -735,9 +735,7 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained(
-            "bzantium/deepseek-v3-test", pad_token="</s>", padding_side="right"
-        )
+        tokenizer = AutoTokenizer.from_pretrained("bzantium/deepseek-v3-test", pad_token="</s>", padding_side="right")
         model = DeepseekV3ForCausalLM.from_pretrained(
             "bzantium/deepseek-v3-test", device_map=torch_device, torch_dtype=torch.float16
         )

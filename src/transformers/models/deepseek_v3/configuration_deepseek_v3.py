@@ -147,6 +147,7 @@ class DeepseekV3Config(PretrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     def __init__(
         self,
         vocab_size=129280,
