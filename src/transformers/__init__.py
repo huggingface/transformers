@@ -1989,7 +1989,6 @@ else:
     _import_structure["models.deepseek_v3"].extend(
         [
             "DeepseekV3ForCausalLM",
-            "DeepseekV3ForSequenceClassification",
             "DeepseekV3Model",
             "DeepseekV3PreTrainedModel",
         ]
@@ -7058,7 +7057,6 @@ if TYPE_CHECKING:
         )
         from .models.deepseek_v3 import (
             DeepseekV3ForCausalLM,
-            DeepseekV3ForSequenceClassification,
             DeepseekV3Model,
             DeepseekV3PreTrainedModel,
         )

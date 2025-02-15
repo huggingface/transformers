@@ -39,8 +39,3 @@ The model uses Multi-head Latent Attention (MLA) and DeepSeekMoE architectures f
 
 [[autodoc]] DeepseekV3ForCausalLM
     - forward
-
-## DeepseekV3ForSequenceClassification
-
-[[autodoc]] DeepseekV3ForSequenceClassification
-    - forward

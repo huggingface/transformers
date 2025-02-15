@@ -14,7 +14,6 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
-    LlamaForSequenceClassification,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
@@ -399,13 +398,8 @@ class DeepseekV3ForCausalLM(LlamaForCausalLM):
     pass
 
 
-class DeepseekV3ForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
 __all__ = [
     "DeepseekV3PreTrainedModel",
     "DeepseekV3Model",
     "DeepseekV3ForCausalLM",
-    "DeepseekV3ForSequenceClassification",
 ]
