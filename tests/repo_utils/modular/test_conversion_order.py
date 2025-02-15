@@ -48,7 +48,7 @@ def appear_after(model1: str, model2: str, priority_list: list[str]) -> bool:
 class ConversionOrderTest(unittest.TestCase):
     def test_conversion_order(self):
         # Find the order
-        priority_list = create_dependency_mapping.find_priority_list(FILES_TO_PARSE)
+        priority_list, _ = create_dependency_mapping.find_priority_list(FILES_TO_PARSE)
         # Extract just the model names
         model_priority_list = [file.rsplit("modular_")[-1].replace(".py", "") for file in priority_list]
 
