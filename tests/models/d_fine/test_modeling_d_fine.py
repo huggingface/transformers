@@ -183,7 +183,7 @@ class DFineModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
-        hidden_sizes = [10, 20, 30, 40]
+        hidden_sizes = [64, 128, 256, 512]
         backbone_config = DFineResNetConfig(
             stage_config=DFineResNetStageConfig(
                 stage1=[16, 16, 64, 1, False, False, 3, 3],

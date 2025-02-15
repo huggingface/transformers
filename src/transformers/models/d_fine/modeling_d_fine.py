@@ -21,7 +21,6 @@
 import functools
 import math
 from dataclasses import dataclass
-from functools import lru_cache, wraps
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -33,6 +32,7 @@ from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -46,80 +46,82 @@ from .configuration_d_fine import DFineConfig
 _CONFIG_FOR_DOC = "DFineConfig"
 
 
-def deformable_attention_core_func_v2(
-    value: torch.Tensor,
-    value_spatial_shapes,
-    sampling_locations: torch.Tensor,
-    attention_weights: torch.Tensor,
+def multi_scale_deformable_attention_v2(
+    value: Tensor,
+    value_spatial_shapes: Tensor,
+    sampling_locations: Tensor,
+    attention_weights: Tensor,
     num_points_list: List[int],
     method="default",
-):
-    """
-    Args:
-        value (Tensor): [bs, value_length, n_head, c]
-        value_spatial_shapes (Tensor|List): [n_levels, 2]
-        value_level_start_index (Tensor|List): [n_levels]
-        sampling_locations (Tensor): [bs, query_length, n_head, n_levels * n_points, 2]
-        attention_weights (Tensor): [bs, query_length, n_head, n_levels * n_points]
-
-    Returns:
-        output (Tensor): [bs, Length_{query}, C]
-    """
-    bs, n_head, c, _ = value[0].shape
-    _, Len_q, _, _, _ = sampling_locations.shape
-
+) -> Tensor:
+    batch_size, _, num_heads, hidden_dim = value.shape
+    _, num_queries, num_heads, num_levels, num_points = sampling_locations.shape
+    value_list = (
+        value.permute(0, 2, 3, 1)
+        .flatten(0, 1)
+        .split([height * width for height, width in value_spatial_shapes], dim=-1)
+    )
     # sampling_offsets [8, 480, 8, 12, 2]
     if method == "default":
         sampling_grids = 2 * sampling_locations - 1
-
     elif method == "discrete":
         sampling_grids = sampling_locations
-
     sampling_grids = sampling_grids.permute(0, 2, 1, 3, 4).flatten(0, 1)
-    sampling_locations_list = sampling_grids.split(num_points_list, dim=-2)
-
+    sampling_grids = sampling_grids.split(num_points_list, dim=-2)
     sampling_value_list = []
-    for level, (h, w) in enumerate(value_spatial_shapes):
-        value_l = value[level].reshape(bs * n_head, c, h, w)
-        sampling_grid_l: torch.Tensor = sampling_locations_list[level]
-
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+        # batch_size, height*width, num_heads, hidden_dim
+        # -> batch_size, height*width, num_heads*hidden_dim
+        # -> batch_size, num_heads*hidden_dim, height*width
+        # -> batch_size*num_heads, hidden_dim, height, width
+        value_l_ = value_list[level_id].reshape(batch_size * num_heads, hidden_dim, height, width)
+        # batch_size, num_queries, num_heads, num_points, 2
+        # -> batch_size, num_heads, num_queries, num_points, 2
+        # -> batch_size*num_heads, num_queries, num_points, 2
+        sampling_grid_l_ = sampling_grids[level_id]
+        # batch_size*num_heads, hidden_dim, num_queries, num_points
         if method == "default":
-            sampling_value_l = F.grid_sample(
-                value_l, sampling_grid_l, mode="bilinear", padding_mode="zeros", align_corners=False
+            sampling_value_l_ = nn.functional.grid_sample(
+                value_l_, sampling_grid_l_, mode="bilinear", padding_mode="zeros", align_corners=False
+            )
+        elif method == "discrete":
+            sampling_coord = (sampling_grid_l_ * torch.tensor([[width, height]], device=value.device) + 0.5).to(
+                torch.int64
             )
 
-        elif method == "discrete":
-            # n * m, seq, n, 2
-            sampling_coord = (sampling_grid_l * torch.tensor([[w, h]], device=value_l.device) + 0.5).to(torch.int64)
+            # Separate clamping for x and y coordinates
+            sampling_coord_x = sampling_coord[..., 0].clamp(0, width - 1)
+            sampling_coord_y = sampling_coord[..., 1].clamp(0, height - 1)
 
-            # FIX ME? for rectangle input
-            sampling_coord = sampling_coord.clamp(0, h - 1)
-            sampling_coord = sampling_coord.reshape(bs * n_head, Len_q * num_points_list[level], 2)
-
-            s_idx = (
-                torch.arange(sampling_coord.shape[0], device=value_l.device)
+            # Combine the clamped coordinates
+            sampling_coord = torch.stack([sampling_coord_x, sampling_coord_y], dim=-1)
+            sampling_coord = sampling_coord.reshape(batch_size * num_heads, num_queries * num_points_list[level_id], 2)
+            sampling_idx = (
+                torch.arange(sampling_coord.shape[0], device=value.device)
                 .unsqueeze(-1)
                 .repeat(1, sampling_coord.shape[1])
             )
-            sampling_value_l: torch.Tensor = value_l[s_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]  # n l c
-
-            sampling_value_l = sampling_value_l.permute(0, 2, 1).reshape(bs * n_head, c, Len_q, num_points_list[level])
-
-        sampling_value_list.append(sampling_value_l)
-
-    attn_weights = attention_weights.permute(0, 2, 1, 3).reshape(bs * n_head, 1, Len_q, sum(num_points_list))
-    weighted_sample_locs = torch.concat(sampling_value_list, dim=-1) * attn_weights
-    output = weighted_sample_locs.sum(-1).reshape(bs, n_head * c, Len_q)
-
-    return output.permute(0, 2, 1)
+            sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
+            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+                batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
+            )
+        sampling_value_list.append(sampling_value_l_)
+    # (batch_size, num_queries, num_heads, num_levels, num_points)
+    # -> (batch_size, num_heads, num_queries, num_levels, num_points)
+    # -> (batch_size, num_heads, 1, num_queries, num_levels*num_points)
+    attention_weights = attention_weights.permute(0, 2, 1, 3).reshape(
+        batch_size * num_heads, 1, num_queries, sum(num_points_list)
+    )
+    output = (
+        (torch.concat(sampling_value_list, dim=-1) * attention_weights)
+        .sum(-1)
+        .view(batch_size, num_heads * hidden_dim, num_queries)
+    )
+    return output.transpose(1, 2).contiguous()
 
 
 class DFineMultiscaleDeformableAttention(nn.Module):
-    def __init__(
-        self,
-        config: DFineConfig,
-        method="default",
-    ):
+    def __init__(self, config: DFineConfig):
         """
         D-Fine version of multiscale deformable attention
         """
@@ -129,6 +131,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         self.n_heads = config.decoder_attention_heads
         self.n_points = config.decoder_n_points
         self.offset_scale = config.decoder_offset_scale
+        self.decoder_method = config.decoder_method
 
         if isinstance(self.n_points, list):
             assert len(self.n_points) == self.n_levels, ""
@@ -142,7 +145,6 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         self.register_buffer("num_points_scale", torch.tensor(num_points_scale, dtype=torch.float32))
 
         self.total_points = self.n_heads * sum(num_points_list)
-        self.method = method
 
         self.head_dim = self.d_model // self.n_heads
         assert self.head_dim * self.n_heads == self.d_model, "embed_dim must be divisible by num_heads"
@@ -150,43 +152,37 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         self.sampling_offsets = nn.Linear(self.d_model, self.total_points * 2)
         self.attention_weights = nn.Linear(self.d_model, self.total_points)
 
-        self.ms_deformable_attn_core = functools.partial(deformable_attention_core_func_v2, method=self.method)
+        self.ms_deformable_attn_core = functools.partial(
+            multi_scale_deformable_attention_v2, method=self.decoder_method
+        )
 
-        self._reset_parameters()
-
-        if method == "discrete":
+        if self.decoder_method == "discrete":
             for p in self.sampling_offsets.parameters():
                 p.requires_grad = False
-
-    def _reset_parameters(self):
-        # sampling_offsets
-        init.constant_(self.sampling_offsets.weight, 0)
-        thetas = torch.arange(self.n_heads, dtype=torch.float32) * (2.0 * math.pi / self.n_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = grid_init / grid_init.abs().max(-1, keepdim=True).values
-        grid_init = grid_init.reshape(self.n_heads, 1, 2).tile([1, sum(self.num_points_list), 1])
-        scaling = torch.concat([torch.arange(1, n + 1) for n in self.num_points_list]).reshape(1, -1, 1)
-        grid_init *= scaling
-        self.sampling_offsets.bias.data[...] = grid_init.flatten()
-
-        # attention_weights
-        init.constant_(self.attention_weights.weight, 0)
-        init.constant_(self.attention_weights.bias, 0)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        reference_points: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-        spatial_shapes: List[int],
-    ):
-        bs, Len_q = hidden_states.shape[:2]
+        attention_mask: Optional[torch.Tensor] = None,
+        reference_points=None,
+        encoder_hidden_states=None,
+        spatial_shapes=None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size, num_queries, _ = hidden_states.shape
+        batch_size, sequence_length, _ = encoder_hidden_states.shape
+
+        # Reshape for multi-head attention
+        value = encoder_hidden_states.reshape(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+        if attention_mask is not None:
+            value = value.masked_fill(~attention_mask[..., None], float(0))
 
         sampling_offsets: torch.Tensor = self.sampling_offsets(hidden_states)
-        sampling_offsets = sampling_offsets.reshape(bs, Len_q, self.n_heads, sum(self.num_points_list), 2)
+        sampling_offsets = sampling_offsets.reshape(
+            batch_size, num_queries, self.n_heads, sum(self.num_points_list), 2
+        )
 
         attention_weights = self.attention_weights(hidden_states).reshape(
-            bs, Len_q, self.n_heads, sum(self.num_points_list)
+            batch_size, num_queries, self.n_heads, sum(self.num_points_list)
         )
         attention_weights = F.softmax(attention_weights, dim=-1)
 
@@ -194,7 +190,8 @@ class DFineMultiscaleDeformableAttention(nn.Module):
             offset_normalizer = torch.tensor(spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.n_levels, 1, 2)
             sampling_locations = (
-                reference_points.reshape(bs, Len_q, 1, self.n_levels, 1, 2) + sampling_offsets / offset_normalizer
+                reference_points.reshape(batch_size, sequence_length, 1, self.n_levels, 1, 2)
+                + sampling_offsets / offset_normalizer
             )
         elif reference_points.shape[-1] == 4:
             # reference_points [8, 480, None, 1,  4]
@@ -208,7 +205,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
             )
 
         output = self.ms_deformable_attn_core(
-            encoder_hidden_states, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+            value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
         )
 
         return output, attention_weights
@@ -218,21 +215,14 @@ class DFineGate(nn.Module):
     def __init__(self, d_model):
         super(DFineGate, self).__init__()
         self.gate = nn.Linear(2 * d_model, 2 * d_model)
-        bias = self._bias_init_with_prob(0.5)
-        init.constant_(self.gate.bias, bias)
-        init.constant_(self.gate.weight, 0)
         self.norm = nn.LayerNorm(d_model)
 
-    def forward(self, x1, x2):
-        gate_input = torch.cat([x1, x2], dim=-1)
+    def forward(self, second_residual: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
+        gate_input = torch.cat([second_residual, hidden_states], dim=-1)
         gates = torch.sigmoid(self.gate(gate_input))
         gate1, gate2 = gates.chunk(2, dim=-1)
-        return self.norm(gate1 * x1 + gate2 * x2)
-
-    def _bias_init_with_prob(self, prior_prob=0.01):
-        """initialize conv/fc bias value according to a given probability value."""
-        bias_init = float(-math.log((1 - prior_prob) / prior_prob))
-        return bias_init
+        hidden_states = self.norm(gate1 * second_residual + gate2 * hidden_states)
+        return hidden_states
 
 
 class DFineMultiheadAttention(nn.Module):
@@ -375,7 +365,6 @@ class DFineDecoderLayer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # gate
         self.gateway = DFineGate(config.d_model)
-        self._reset_parameters()
 
     def forward(
         self,
@@ -426,16 +415,16 @@ class DFineDecoderLayer(nn.Module):
 
         # Cross-Attention
         cross_attn_weights = None
+        hidden_states = hidden_states if position_embeddings is None else hidden_states + position_embeddings
         hidden_states, cross_attn_weights = self.encoder_attn(
-            hidden_states=self.with_pos_embed(hidden_states, position_embeddings),
+            hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
         )
 
-        hidden_states = self.gateway(
-            second_residual, nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.gateway(second_residual, hidden_states)
 
         # Fully Connected
         residual = hidden_states
@@ -452,108 +441,6 @@ class DFineDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
-
-    def with_pos_embed(self, tensor, pos):
-        return tensor if pos is None else tensor + pos
-
-    def _reset_parameters(self):
-        init.xavier_uniform_(self.fc1.weight)
-        init.xavier_uniform_(self.fc2.weight)
-
-
-class DFineFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `DFineFrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = DFineFrozenBatchNorm2d(module.num_features)
-
-            if not module.weight.device == torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class DFineConvEncoder(nn.Module):
-    """
-    Convolutional backbone using the modeling_d_fine_resnet.py.
-
-    nn.BatchNorm2d layers are replaced by DFineFrozenBatchNorm2d as defined above.
-    https://github.com/lyuwenyu/RT-DETR/blob/main/DFine_pytorch/src/nn/backbone/presnet.py#L142
-    """
-
-    def __init__(self, config: DFineConfig):
-        super().__init__()
-
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            with torch.no_grad():
-                replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = config.encoder_in_channels
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
-
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
 
 
 @dataclass
@@ -718,6 +605,101 @@ class DFineObjectDetectionOutput(ModelOutput):
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     denoising_meta_values: Optional[Dict] = None
+
+
+class DFineFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `DFineFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = DFineFrozenBatchNorm2d(module.num_features)
+
+            if not module.weight.device == torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class DFineConvEncoder(nn.Module):
+    """
+    Convolutional backbone using the modeling_d_fine_resnet.py.
+
+    nn.BatchNorm2d layers are replaced by DFineFrozenBatchNorm2d as defined above.
+    https://github.com/lyuwenyu/RT-DETR/blob/main/DFine_pytorch/src/nn/backbone/presnet.py#L142
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = self.model.channels
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values).feature_maps
+
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
 
 
 class DFineEncoderLayer(nn.Module):
@@ -987,27 +969,6 @@ DFine_INPUTS_DOCSTRING = r"""
 """
 
 
-def compile_compatible_lru_cache(*lru_args, **lru_kwargs):
-    def decorator(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            if not torch.compiler.is_compiling():
-                # Cache the function only if the model is not being compiled
-                # check if the function is already cached, otherwise create it
-                if not hasattr(self, f"_cached_{func.__name__}"):
-                    self.__setattr__(
-                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
-                    )
-                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
-            else:
-                # Otherwise, just call the original function
-                return func(self, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 def _get_clones(partial_module, N):
     return nn.ModuleList([partial_module() for i in range(N)])
 
@@ -1064,6 +1025,15 @@ initialize linear layer bias value according to a given probability value."""
             if module.bias is not None:
                 module.bias.data.zero_()
 
+        if isinstance(module, DFineGate):
+            bias = float(-math.log((1 - 0.5) / 0.5))
+            init.constant_(module.gate.bias, bias)
+            init.constant_(module.gate.weight, 0)
+
+        if isinstance(module, DFineLQE):
+            init.constant_(module.reg_conf.layers[-1].bias, 0)
+            init.constant_(module.reg_conf.layers[-1].weight, 0)
+
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             nn.init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
@@ -1083,18 +1053,59 @@ class DFineIntegral(nn.Module):
                        It can be adjusted based on the dataset or task requirements.
     """
 
-    def __init__(self, reg_max=32):
+    def __init__(self, config: DFineConfig):
         super(DFineIntegral, self).__init__()
-        self.reg_max = reg_max
+        self.reg_max = config.reg_max
 
-    def forward(self, x, project):
-        shape = x.shape
-        x = F.softmax(x.reshape(-1, self.reg_max + 1), dim=1)
-        x = F.linear(x, project.to(x.device)).reshape(-1, 4)
-        return x.reshape(list(shape[:-1]) + [-1])
+    def forward(self, pred_corners: torch.Tensor, project: torch.Tensor) -> torch.Tensor:
+        shape = pred_corners.shape
+        pred_corners = F.softmax(pred_corners.reshape(-1, self.reg_max + 1), dim=1)
+        pred_corners = F.linear(pred_corners, project.to(pred_corners.device)).reshape(-1, 4)
+        pred_corners = pred_corners.reshape(list(shape[:-1]) + [-1])
+        return pred_corners
 
 
-def weighting_function(reg_max, up, reg_scale):
+@dataclass
+class DFineDecoderOutput(ModelOutput):
+    """
+    Base class for outputs of the DFineDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+            Stacked intermediate hidden states (output of each layer of the decoder).
+        intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
+            Stacked intermediate logits (logits of each layer of the decoder).
+        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
+            Stacked intermediate reference points (reference points of each layer of the decoder).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
+            plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the cross-attention heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    intermediate_hidden_states: torch.FloatTensor = None
+    intermediate_logits: torch.FloatTensor = None
+    intermediate_reference_points: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+def weighting_function(reg_max: int, up: torch.Tensor, reg_scale: int) -> torch.Tensor:
     """
     Generates the non-uniform Weighting Function W(n) for bounding box regression.
 
@@ -1114,39 +1125,33 @@ def weighting_function(reg_max, up, reg_scale):
     left_values = [-((step) ** i) + 1 for i in range(reg_max // 2 - 1, 0, -1)]
     right_values = [(step) ** i - 1 for i in range(1, reg_max // 2)]
     values = [-upper_bound2] + left_values + [torch.zeros_like(up[0][None])] + right_values + [upper_bound2]
-    return torch.cat(values, 0)
+    values = torch.cat(values, 0)
+    return values
 
 
-def box_xyxy_to_cxcywh(x: torch.Tensor) -> torch.Tensor:
-    x0, y0, x1, y1 = x.unbind(-1)
-    b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
-    return torch.stack(b, dim=-1)
-
-
-def distance2bbox(points, distance, reg_scale):
+def distance2bbox(points, distance: torch.Tensor, reg_scale: float) -> torch.Tensor:
     """
     Decodes edge-distances into bounding box coordinates.
 
     Args:
-        points (Tensor): (B, N, 4) or (N, 4) format, representing [x, y, w, h],
-                         where (x, y) is the center and (w, h) are width and height.
-        distance (Tensor): (B, N, 4) or (N, 4), representing distances from the
-                           point to the left, top, right, and bottom boundaries.
-
-        reg_scale (float): Controls the curvature of the Weighting Function.
-
+        points (`torch.Tensor`):
+            (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
+        distance (`torch.Tensor`):
+            (batch_size, num_boxes, 4) or (num_boxes, 4), representing distances from the point to the left, top, right, and bottom boundaries.
+        reg_scale (`float`):
+            Controls the curvature of the Weighting Function.
     Returns:
-        Tensor: Bounding boxes in (N, 4) or (B, N, 4) format [cx, cy, w, h].
+        `torch.Tensor`: Bounding boxes in (batch_size, num_boxes, 4) or (num_boxes, 4) format, representing [x_center, y_center, width, height]
     """
     reg_scale = abs(reg_scale)
-    x1 = points[..., 0] - (0.5 * reg_scale + distance[..., 0]) * (points[..., 2] / reg_scale)
-    y1 = points[..., 1] - (0.5 * reg_scale + distance[..., 1]) * (points[..., 3] / reg_scale)
-    x2 = points[..., 0] + (0.5 * reg_scale + distance[..., 2]) * (points[..., 2] / reg_scale)
-    y2 = points[..., 1] + (0.5 * reg_scale + distance[..., 3]) * (points[..., 3] / reg_scale)
+    top_left_x = points[..., 0] - (0.5 * reg_scale + distance[..., 0]) * (points[..., 2] / reg_scale)
+    top_left_y = points[..., 1] - (0.5 * reg_scale + distance[..., 1]) * (points[..., 3] / reg_scale)
+    bottom_right_x = points[..., 0] + (0.5 * reg_scale + distance[..., 2]) * (points[..., 2] / reg_scale)
+    bottom_right_y = points[..., 1] + (0.5 * reg_scale + distance[..., 3]) * (points[..., 3] / reg_scale)
 
-    bboxes = torch.stack([x1, y1, x2, y2], -1)
+    bboxes = torch.stack([top_left_x, top_left_y, bottom_right_x, bottom_right_y], -1)
 
-    return box_xyxy_to_cxcywh(bboxes)
+    return corners_to_center_format(bboxes)
 
 
 class DFineDecoder(DFinePreTrainedModel):
@@ -1177,19 +1182,19 @@ class DFineDecoder(DFinePreTrainedModel):
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
         self.pre_bbox_head = DFineMLP(config.hidden_size, config.hidden_size, 4, 3)
-        self.integral = DFineIntegral(self.reg_max)
+        self.integral = DFineIntegral(config)
         self.num_head = config.decoder_attention_heads
         self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
-        self.lqe_layers = nn.ModuleList([DFineLQE(4, 64, 2, config.reg_max) for _ in range(config.decoder_layers)])
+        self.lqe_layers = nn.ModuleList([DFineLQE(config) for _ in range(config.decoder_layers)])
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
         self,
-        encoder_hidden_states,
-        reference_points,
-        inputs_embeds,
+        encoder_hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        inputs_embeds: torch.Tensor,
         spatial_shapes,
         level_start_index=None,
         spatial_shapes_list=None,
@@ -1249,7 +1254,6 @@ class DFineDecoder(DFinePreTrainedModel):
         intermediate_logits = ()
 
         output_detach = pred_corners_undetach = 0
-        value = self.value_op(encoder_hidden_states, None, None, memory_mask, spatial_shapes_list)
 
         project = weighting_function(self.reg_max, self.up, self.reg_scale)
         ref_points_detach = F.sigmoid(reference_points)
@@ -1266,7 +1270,7 @@ class DFineDecoder(DFinePreTrainedModel):
                 position_embeddings=query_pos_embed,
                 reference_points=ref_points_input,
                 spatial_shapes=spatial_shapes_list,
-                encoder_hidden_states=value,
+                encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
@@ -1339,18 +1343,6 @@ class DFineDecoder(DFinePreTrainedModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-    def value_op(self, memory, value_proj, value_scale, memory_mask, memory_spatial_shapes):
-        """
-        Preprocess values for MSDeformableAttention.
-        """
-        value = value_proj(memory) if value_proj is not None else memory
-        value = F.interpolate(memory, size=value_scale) if value_scale is not None else value
-        if memory_mask is not None:
-            value = value * memory_mask.to(value.dtype).unsqueeze(-1)
-        value = value.reshape(value.shape[0], value.shape[1], self.num_head, -1)
-        split_shape = [h * w for h, w in memory_spatial_shapes]
-        return value.permute(0, 2, 3, 1).split(split_shape, dim=-1)
 
 
 @add_start_docstrings(
@@ -1459,7 +1451,7 @@ class DFineModel(DFinePreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
-    @compile_compatible_lru_cache(maxsize=32)
+    @compile_compatible_method_lru_cache(maxsize=32)
     def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
         if spatial_shapes is None:
             spatial_shapes = [
@@ -1927,68 +1919,27 @@ class DFineMLP(nn.Module):
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
         self.act = ACT2CLS[act]()
 
-    def forward(self, x):
+    def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
         for i, layer in enumerate(self.layers):
-            x = self.act(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
+            stat_features = self.act(layer(stat_features)) if i < self.num_layers - 1 else layer(stat_features)
+        return stat_features
 
 
 class DFineLQE(nn.Module):
-    def __init__(self, k, hidden_dim, num_layers, reg_max):
+    def __init__(self, config: DFineConfig):
         super(DFineLQE, self).__init__()
-        self.k = k
-        self.reg_max = reg_max
-        self.reg_conf = DFineMLP(4 * (k + 1), hidden_dim, 1, num_layers)
-        init.constant_(self.reg_conf.layers[-1].bias, 0)
-        init.constant_(self.reg_conf.layers[-1].weight, 0)
+        self.top_prob_values = config.top_prob_values
+        self.reg_max = config.reg_max
+        self.reg_conf = DFineMLP(4 * (self.top_prob_values + 1), config.lqe_hidden_dim, 1, config.lqe_layers)
 
     def forward(self, scores, pred_corners):
-        B, L, _ = pred_corners.size()
-        prob = F.softmax(pred_corners.reshape(B, L, 4, self.reg_max + 1), dim=-1)
-        prob_topk, _ = prob.topk(self.k, dim=-1)
+        batch_size, length, _ = pred_corners.size()
+        prob = F.softmax(pred_corners.reshape(batch_size, length, 4, self.reg_max + 1), dim=-1)
+        prob_topk, _ = prob.topk(self.top_prob_values, dim=-1)
         stat = torch.cat([prob_topk, prob_topk.mean(dim=-1, keepdim=True)], dim=-1)
-        quality_score = self.reg_conf(stat.reshape(B, L, -1))
-        return scores + quality_score
-
-
-@dataclass
-class DFineDecoderOutput(ModelOutput):
-    """
-    Base class for outputs of the DFineDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-            Stacked intermediate hidden states (output of each layer of the decoder).
-        intermediate_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, config.num_labels)`):
-            Stacked intermediate logits (logits of each layer of the decoder).
-        intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, sequence_length, hidden_size)`):
-            Stacked intermediate reference points (reference points of each layer of the decoder).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
-            used to compute the weighted average in the cross-attention heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    intermediate_hidden_states: torch.FloatTensor = None
-    intermediate_logits: torch.FloatTensor = None
-    intermediate_reference_points: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+        quality_score = self.reg_conf(stat.reshape(batch_size, length, -1))
+        scores = scores + quality_score
+        return scores
 
 
 class DFineVggBlock(nn.Module):
@@ -2043,9 +1994,10 @@ class DFineRepVggBlock(nn.Module):
         self.conv2 = DFineConvNormLayer(config, in_channels, out_channels, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
-    def forward(self, x):
-        y = self.conv1(x) + self.conv2(x)
-        return self.activation(y)
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.conv1(hidden_state) + self.conv2(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        return hidden_state
 
 
 class DFineCSPRepLayer(nn.Module):
@@ -2062,61 +2014,68 @@ class DFineCSPRepLayer(nn.Module):
         hidden_channels = int(out_channels * expansion)
         self.conv1 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.conv2 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.Sequential(
-            *[DFineRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
+        self.bottlenecks = nn.ModuleList(
+            [DFineRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
         )
         if hidden_channels != out_channels:
             self.conv3 = DFineConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
         else:
             self.conv3 = nn.Identity()
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         device = hidden_state.device
         hidden_state_1 = self.conv1(hidden_state)
-        hidden_state_1 = self.bottlenecks(hidden_state_1).to(device)
+        for bottleneck in self.bottlenecks:
+            hidden_state_1 = bottleneck(hidden_state_1).to(device)
         hidden_state_2 = self.conv2(hidden_state).to(device)
-        return self.conv3(hidden_state_1 + hidden_state_2)
+        hidden_state_3 = self.conv3(hidden_state_1 + hidden_state_2)
+        return hidden_state_3
 
 
 class DFineRepNCSPELAN4(nn.Module):
     # csp-elan
     def __init__(self, config: DFineConfig, act="silu", numb_blocks=3):
         super().__init__()
-        c1 = config.encoder_hidden_dim * 2
-        c2 = config.encoder_hidden_dim
-        c3 = config.encoder_hidden_dim * 2
-        c4 = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
-        self.c = c3 // 2
-        self.cv1 = DFineConvNormLayer(config, c1, c3, 1, 1, activation=act)
-        self.cv2 = nn.Sequential(
-            DFineCSPRepLayer(config, c3 // 2, c4, num_blocks=numb_blocks),
-            DFineConvNormLayer(config, c4, c4, 3, 1, activation=act),
-        )
-        self.cv3 = nn.Sequential(
-            DFineCSPRepLayer(config, c4, c4, num_blocks=numb_blocks),
-            DFineConvNormLayer(config, c4, c4, 3, 1, activation=act),
-        )
-        self.cv4 = DFineConvNormLayer(config, c3 + (2 * c4), c2, 1, 1, activation=act)
+        conv1_dim = config.encoder_hidden_dim * 2
+        conv2_dim = config.encoder_hidden_dim
+        conv3_dim = config.encoder_hidden_dim * 2
+        conv4_dim = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
+        self.conv_dim = conv3_dim // 2
+        self.conv1 = DFineConvNormLayer(config, conv1_dim, conv3_dim, 1, 1, activation=act)
+        self.csp_rep1 = DFineCSPRepLayer(config, conv3_dim // 2, conv4_dim, num_blocks=numb_blocks)
+        self.conv2 = DFineConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
+        self.csp_rep2 = DFineCSPRepLayer(config, conv4_dim, conv4_dim, num_blocks=numb_blocks)
+        self.conv3 = DFineConvNormLayer(config, conv4_dim, conv4_dim, 3, 1, activation=act)
+        self.conv4 = DFineConvNormLayer(config, conv3_dim + (2 * conv4_dim), conv2_dim, 1, 1, activation=act)
 
-    def forward_chunk(self, x):
-        y = list(self.cv1(x).chunk(2, 1))
-        y.extend((m(y[-1])) for m in [self.cv2, self.cv3])
-        return self.cv4(torch.cat(y, 1))
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        # Split initial features into two branches after first convolution
+        split_features = list(self.conv1(input_features).split((self.conv_dim, self.conv_dim), 1))
 
-    def forward(self, x):
-        y = list(self.cv1(x).split((self.c, self.c), 1))
-        y.extend(m(y[-1]) for m in [self.cv2, self.cv3])
-        return self.cv4(torch.cat(y, 1))
+        # Process branches sequentially
+        branch1 = self.csp_rep1(split_features[-1])
+        branch1 = self.conv2(branch1)
+        branch2 = self.csp_rep2(branch1)
+        branch2 = self.conv3(branch2)
+
+        split_features.extend([branch1, branch2])
+        merged_features = torch.cat(split_features, 1)
+        merged_features = self.conv4(merged_features)
+        return merged_features
 
 
 class DFineSCDown(nn.Module):
-    def __init__(self, config: DFineConfig, c1, c2, k, s):
+    def __init__(self, config: DFineConfig, k, s):
         super().__init__()
-        self.cv1 = DFineConvNormLayer(config, c1, c2, 1, 1)
-        self.cv2 = DFineConvNormLayer(config, c2, c2, k, s, c2)
+        self.conv1 = DFineConvNormLayer(config, config.encoder_hidden_dim, config.encoder_hidden_dim, 1, 1)
+        self.conv2 = DFineConvNormLayer(
+            config, config.encoder_hidden_dim, config.encoder_hidden_dim, k, s, config.encoder_hidden_dim
+        )
 
-    def forward(self, x):
-        return self.cv2(self.cv1(x))
+    def forward(self, input_features: torch.Tensor) -> torch.Tensor:
+        input_features = self.conv1(input_features)
+        input_features = self.conv2(input_features)
+        return input_features
 
 
 class DFineEncoder(nn.Module):
@@ -2175,7 +2134,7 @@ class DFineHybridEncoder(nn.Module):
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
                 nn.Sequential(
-                    DFineSCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
+                    DFineSCDown(config, 3, 2),
                 )
             )
             self.pan_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
