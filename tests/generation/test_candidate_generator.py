@@ -39,7 +39,7 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
 
     def test_get_assistant_to_target_input_ids(self):
         """Test the mapping from assistant tokens to target tokens."""
-        expected_mapping = [0, 1, 2, self.translator.suppress_tokens_id, self.translator.suppress_tokens_id]
+        expected_mapping = [0, 1, 2, self.translator.SUPPRESS_TOKEN_ID, self.translator.SUPPRESS_TOKEN_ID]
         actual_mapping = self.translator._assistant_to_target_input_ids.tolist()
         self.assertEqual(actual_mapping, expected_mapping)
 
@@ -56,7 +56,7 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
         assistant_candidate_ids = torch.LongTensor([[0, 1, 2, 4]])  # 'hello world foo baz' in assistant tokenizer
 
         expected_target_ids = torch.LongTensor(
-            [[0, 1, 2, self.translator.suppress_tokens_id]]
+            [[0, 1, 2, self.translator.SUPPRESS_TOKEN_ID]]
         )  # 'hello world foo baz' in target tokenizer (baz is mapped to self.translator.suppress_tokens_id since it does not exist in target vocab)
 
         actual_target_ids = self.translator.get_target_ids(
@@ -67,10 +67,10 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
     def test_get_target_logits(self):
         """Test the conversion of assistant logits to target logits."""
         # Assistant logits for IDs 0, 1, 2
-        assistant_logits = torch.FloatTensor([[[0.1, 0.2, 0.3, 0.4, self.translator.filter_value]]])  # Shape (1, 1, 5)
+        assistant_logits = torch.FloatTensor([[[0.1, 0.2, 0.3, 0.4, self.translator.FILTER_VALUE]]])  # Shape (1, 1, 5)
 
         # Expected target logits (target_vocab_size = 4)
-        expected_target_logits = torch.full((1, 1, self.target_vocab_size), self.translator.filter_value)
+        expected_target_logits = torch.full((1, 1, self.target_vocab_size), self.translator.FILTER_VALUE)
         expected_target_logits[0, 0, 0] = 0.1  # 'hello'
         expected_target_logits[0, 0, 1] = 0.2  # 'world'
         expected_target_logits[0, 0, 2] = 0.3  # 'foo'

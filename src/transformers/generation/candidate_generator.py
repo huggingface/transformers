@@ -619,8 +619,24 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
 class AssistantToTargetTranslator:
     """
-    Translate the assistant into the target universe.
+    Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
+    vocabulary mismatches when using different tokenizers for the assistant and target models in speculative decoding,
+    as introduced in the paper "Lossless Speculative Decoding Algorithms for Heterogeneous Vocabularies"
+    (https://www.arxiv.org/abs/2502.05202).
+    It maintains mappings between the two vocabularies and handles token/logit conversion.
+
+    Args:
+        target_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used by the target (main) model.
+        assistant_tokenizer (`PreTrainedTokenizerBase`):
+            The tokenizer used by the assistant model.
+        assistant_model_device (`str`, defaults to "cpu"):
+            The device where the assistant model is located. Used for placing tensors.
+        target_vocab_size (`int`, *optional*):
+            The size of the target model's vocabulary. If not provided, will be inferred from the target tokenizer.
     """
+    FILTER_VALUE: float = -float("Inf")  # The value used to filter out unmapped tokens in the logits.
+    SUPPRESS_TOKEN_ID: int = -1  # The ID used to mark suppressed tokens in the mapping.
 
     def __init__(
         self,
@@ -628,8 +644,6 @@ class AssistantToTargetTranslator:
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model_device: str = "cpu",
         target_vocab_size: Optional[int] = None,
-        filter_value: float = -float("Inf"),
-        suppress_tokens_id: int = -1,
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
@@ -638,8 +652,6 @@ class AssistantToTargetTranslator:
             self.target_vocab_size: int = len(self._target_tokenizer.get_vocab())
         else:
             self.target_vocab_size: int = target_vocab_size
-        self.filter_value: float = filter_value
-        self.suppress_tokens_id: int = suppress_tokens_id
         self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
             self._get_assistant_to_target_input_ids()
         )
@@ -677,7 +689,7 @@ class AssistantToTargetTranslator:
                     }
 
         max_assistant_index = max(assistant_vocab.values())
-        assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.suppress_tokens_id, dtype=int)
+        assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.SUPPRESS_TOKEN_ID, dtype=int)
         target_to_assistant_input_ids: Dict[int, int] = {}
         for tok, assistant_id in assistant_vocab.items():
             target_id = target_vocab.get(tok)
@@ -690,7 +702,7 @@ class AssistantToTargetTranslator:
         """
         Get the input ids that are in the assistant vocab but not in the target vocab.
         """
-        return torch.where(self._assistant_to_target_input_ids == self.suppress_tokens_id)[0]
+        return torch.where(self._assistant_to_target_input_ids == self.SUPPRESS_TOKEN_ID)[0]
 
     def get_target_ids(
         self, assistant_input_ids, target_input_ids, assistant_candidate_ids: torch.LongTensor
@@ -714,9 +726,9 @@ class AssistantToTargetTranslator:
         """
 
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
-        target_logits: torch.FloatTensor = torch.full(target_shape, self.filter_value).to(self._assistant_model_device)
+        target_logits: torch.FloatTensor = torch.full(target_shape, self.FILTER_VALUE).to(self._assistant_model_device)
         # Mask for valid indices
-        assistant_indices_mask = self._assistant_to_target_input_ids != self.suppress_tokens_id
+        assistant_indices_mask = self._assistant_to_target_input_ids != self.SUPPRESS_TOKEN_ID
         # Exclude invalid indices
         target_logits_supported_indices = self._assistant_to_target_input_ids[assistant_indices_mask]
         valid_assistant_logits = assistant_logits[..., : self._assistant_to_target_input_ids.shape[0]]

@@ -855,33 +855,32 @@ class GenerationMixin:
                 max_length=generation_config.max_length,
             )
         elif different_tokenizers:
-            match generation_config.do_sample:
-                case True:
-                    candidate_generator = UniversalSpeculativeDecodingGenerator(
-                        input_ids=input_ids,
-                        assistant_model=assistant_model,
-                        generation_config=generation_config,
-                        model_kwargs=model_kwargs,
-                        inputs_tensor=inputs_tensor,
-                        logits_processor=logits_processor,
-                        target_tokenizer=target_tokenizer,
-                        assistant_tokenizer=assistant_tokenizer,
-                        # required in the case that self.config.vocab_size is different from the length of target_tokenizer.get_vocab()
-                        target_vocab_size=self.config.vocab_size,
-                    )
-                case False:
-                    candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
-                        input_ids=input_ids,
-                        assistant_model=assistant_model,
-                        generation_config=generation_config,
-                        model_kwargs=model_kwargs,
-                        inputs_tensor=inputs_tensor,
-                        logits_processor=logits_processor,
-                        target_tokenizer=target_tokenizer,
-                        assistant_tokenizer=assistant_tokenizer,
-                    )
-                case _:
-                    raise ValueError(f"Invalid value for `do_sample`: {generation_config.do_sample}")
+            if generation_config.do_sample is True:
+                candidate_generator = UniversalSpeculativeDecodingGenerator(
+                    input_ids=input_ids,
+                    assistant_model=assistant_model,
+                    generation_config=generation_config,
+                    model_kwargs=model_kwargs,
+                    inputs_tensor=inputs_tensor,
+                    logits_processor=logits_processor,
+                    target_tokenizer=target_tokenizer,
+                    assistant_tokenizer=assistant_tokenizer,
+                    # required in the case that self.config.vocab_size is different from the length of target_tokenizer.get_vocab()
+                    target_vocab_size=self.config.vocab_size,
+                )
+            elif generation_config.do_sample is False:
+                candidate_generator = AssistedCandidateGeneratorDifferentTokenizers(
+                    input_ids=input_ids,
+                    assistant_model=assistant_model,
+                    generation_config=generation_config,
+                    model_kwargs=model_kwargs,
+                    inputs_tensor=inputs_tensor,
+                    logits_processor=logits_processor,
+                    target_tokenizer=target_tokenizer,
+                    assistant_tokenizer=assistant_tokenizer,
+                )
+            else:
+                raise ValueError(f"Invalid value for `do_sample`: expected a boolean, got {type(generation_config.do_sample).__name__}")
         else:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,
