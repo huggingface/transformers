@@ -1194,7 +1194,7 @@ class SamHQMaskDecoder(nn.Module):
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
 
-        print("maskdecoder", len(intermediate_embeddings))
+        print("maskdecoder", intermediate_embeddings[0].shape)
 
         if intermediate_embeddings is not None:
             if len(intermediate_embeddings) == 0:
