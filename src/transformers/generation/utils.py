@@ -1457,15 +1457,12 @@ class GenerationMixin:
         inputs_tensor,
     ):
         """Prepares `max_length` and `min_length` in generation config to avoid clashes between similar attributes"""
-        max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
-
         # Default: Use `max_new_tokens` to set `max_length`
         # Exception 1: if `max_new_tokens` has its default value and `max_length` is set, use `max_length`.
         # Exception 2: If both `inputs_embeds` and `input_ids` are passed and contain different length, then
         #     `inputs_embeds` contains new data. If the length was originally set through `max_length`, we have to
         #     subtract the length of the `inputs_embeds` to generate the correct length, as we use `input_ids` to
         #     check the current length.
-        # Exception 3: We don't want to go beyond `max_position_embeddings`
         if not has_default_max_new_tokens or generation_config.max_length is None:  # Default
             if generation_config.max_length is not None:
                 logger.warning(
@@ -1482,9 +1479,6 @@ class GenerationMixin:
         ):  # Exception 2
             generation_config.max_length -= inputs_tensor.shape[1]
         # else: Do nothing to `max_length`, Exception 1
-
-        if max_position_embeddings is not None:  # Exception 3
-            generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # Same for min length, except that we have no defaults for `min_length` or `min_new_tokens`
         if generation_config.min_new_tokens is not None:
