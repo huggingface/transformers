@@ -124,12 +124,12 @@ class GenerationConfig(PushToHubMixin):
     Arg:
         > Parameters that control the length of the output
 
-        max_length (`int`, *optional*, defaults to 20):
+        max_length (`int`, *optional*):
             The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
             `max_new_tokens`. Its effect is overridden by `max_new_tokens`, if also set.
-        max_new_tokens (`int`, *optional*):
+        max_new_tokens (`int`, *optional*, defaults to 20):
             The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
-        min_length (`int`, *optional*, defaults to 0):
+        min_length (`int`, *optional*):
             The minimum length of the sequence to be generated. Corresponds to the length of the input prompt +
             `min_new_tokens`. Its effect is overridden by `min_new_tokens`, if also set.
         min_new_tokens (`int`, *optional*):
@@ -393,9 +393,9 @@ class GenerationConfig(PushToHubMixin):
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
-        self.max_length = kwargs.pop("max_length", 20)
-        self.max_new_tokens = kwargs.pop("max_new_tokens", None)
-        self.min_length = kwargs.pop("min_length", 0)
+        self.max_length = kwargs.pop("max_length", None)
+        self.max_new_tokens = kwargs.pop("max_new_tokens", 20)
+        self.min_length = kwargs.pop("min_length", None)
         self.min_new_tokens = kwargs.pop("min_new_tokens", None)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.max_time = kwargs.pop("max_time", None)

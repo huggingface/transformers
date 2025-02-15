@@ -2289,12 +2289,12 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         inputs = inputs_embeds if input_ids is None else input_ids
 
         input_ids_length = inputs.shape[-1] + 1 if concat_unconditional_inputs else inputs.shape[-1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
+        has_default_max_new_tokens = (
+            kwargs.get("max_new_tokens") is None and generation_config.max_new_tokens is not None
+        )
         generation_config = self._prepare_generated_length(
             generation_config=generation_config,
-            has_default_max_length=has_default_max_length,
-            has_default_min_length=has_default_min_length,
+            has_default_max_new_tokens=has_default_max_new_tokens,
             model_input_name="inputs_embeds" if input_ids is None else "input_ids",
             inputs_tensor=inputs,
             input_ids_length=input_ids_length,

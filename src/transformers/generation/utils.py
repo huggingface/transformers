@@ -1399,7 +1399,7 @@ class GenerationMixin:
                 " generate arguments will also show up in this list)"
             )
 
-    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
+    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_new_tokens):
         """Performs validation related to the resulting generated length"""
 
         # Can't throw warnings/exceptions during compilation
@@ -1407,12 +1407,16 @@ class GenerationMixin:
             return
 
         # 1. Max length warnings related to poor parameterization
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
+        if (
+            has_default_max_new_tokens
+            and generation_config.max_length is None
+            and generation_config.max_new_tokens == 20
+        ):
             # 20 is the default max_length of the generation config
             warnings.warn(
-                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the "
-                "generation length. We recommend setting `max_new_tokens` to control the maximum length of the "
-                "generation.",
+                f"Using the model-agnostic default `max_new_tokens` (={generation_config.max_new_tokens}) to "
+                "control the generation length. We recommend explicitly setting `max_new_tokens` to control the "
+                "maximum length of the generation.",
                 UserWarning,
             )
         if input_ids_length >= generation_config.max_length:
@@ -1428,10 +1432,6 @@ class GenerationMixin:
             " Generation will stop at the defined maximum length. You should decrease the minimum length and/or "
             "increase the maximum length."
         )
-        if has_default_max_length:
-            min_length_error_suffix += (
-                f" Note that `max_length` is set to {generation_config.max_length}, its default value."
-            )
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
             warnings.warn(
                 f"Unfeasible length constraints: `min_length` ({generation_config.min_length}) is larger than"
@@ -1451,16 +1451,23 @@ class GenerationMixin:
     def _prepare_generated_length(
         self,
         generation_config,
-        has_default_max_length,
-        has_default_min_length,
+        has_default_max_new_tokens,
         model_input_name,
         input_ids_length,
         inputs_tensor,
     ):
-        """Prepared max and min length in generation configs to avoid clashes between similar attributes"""
+        """Prepares `max_length` and `min_length` in generation config to avoid clashes between similar attributes"""
+        max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
 
-        if generation_config.max_new_tokens is not None:
-            if not has_default_max_length and generation_config.max_length is not None:
+        # Default: Use `max_new_tokens` to set `max_length`
+        # Exception 1: if `max_new_tokens` has its default value and `max_length` is set, use `max_length`.
+        # Exception 2: If both `inputs_embeds` and `input_ids` are passed and contain different length, then
+        #     `inputs_embeds` contains new data. If the length was originally set through `max_length`, we have to
+        #     subtract the length of the `inputs_embeds` to generate the correct length, as we use `input_ids` to
+        #     check the current length.
+        # Exception 3: We don't want to go beyond `max_position_embeddings`
+        if not has_default_max_new_tokens or generation_config.max_length is None:  # Default
+            if generation_config.max_length is not None:
                 logger.warning(
                     f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
                     f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
@@ -1468,25 +1475,20 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-
-        # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
-        # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
             and not self.config.is_encoder_decoder
-        ):
+        ):  # Exception 2
             generation_config.max_length -= inputs_tensor.shape[1]
-        elif has_default_max_length:  # by default let's always generate 20 new tokens
-            if generation_config.max_length == GenerationConfig().max_length:
-                generation_config.max_length = generation_config.max_length + input_ids_length
-                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
-                if max_position_embeddings is not None:
-                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+        # else: Do nothing to `max_length`, Exception 1
 
-        # same for min length
+        if max_position_embeddings is not None:  # Exception 3
+            generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+
+        # Same for min length, except that we have no defaults for `min_length` or `min_new_tokens`
         if generation_config.min_new_tokens is not None:
-            if not has_default_min_length:
+            if generation_config.min_length is not None:
                 logger.warning(
                     f"Both `min_new_tokens` (={generation_config.min_new_tokens}) and `min_length`(="
                     f"{generation_config.min_length}) seem to have been set. `min_new_tokens` will take precedence. "
@@ -1494,9 +1496,9 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.min_length = generation_config.min_new_tokens + input_ids_length
-
         elif (
-            model_input_name == "inputs_embeds"
+            generation_config.min_length is not None
+            and model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
             and not self.config.is_encoder_decoder
         ):
@@ -2063,12 +2065,12 @@ class GenerationMixin:
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[-1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
+        has_default_max_new_tokens = (
+            kwargs.get("max_new_tokens") is None and generation_config.max_new_tokens is not None
+        )
         generation_config = self._prepare_generated_length(
             generation_config=generation_config,
-            has_default_max_length=has_default_max_length,
-            has_default_min_length=has_default_min_length,
+            has_default_max_new_tokens=has_default_max_new_tokens,
             model_input_name=model_input_name,
             inputs_tensor=inputs_tensor,
             input_ids_length=input_ids_length,
@@ -2080,7 +2082,7 @@ class GenerationMixin:
         if self._supports_logits_to_keep() and "logits_to_keep" not in model_kwargs:
             model_kwargs["logits_to_keep"] = 1
 
-        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
+        self._validate_generated_length(generation_config, input_ids_length, has_default_max_new_tokens)
 
         # 7. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
