@@ -71,8 +71,9 @@ class DFineResNetLearnableAffineBlock(nn.Module):
         self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
         self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
 
-    def forward(self, hidden_state):
-        return self.scale * hidden_state + self.bias
+    def forward(self, hidden_state: Tensor) -> Tensor:
+        hidden_state = self.scale * hidden_state + self.bias
+        return hidden_state
 
 
 class DFineResNetConvLayer(nn.Module):
@@ -117,7 +118,7 @@ class DFineResNetConvLayerLight(nn.Module):
         self.conv1 = DFineResNetConvLayer(in_chs, out_chs, kernel_size=1, activation=None, use_lab=use_lab)
         self.conv2 = DFineResNetConvLayer(out_chs, out_chs, kernel_size=kernel_size, groups=out_chs, use_lab=use_lab)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: Tensor) -> Tensor:
         hidden_state = self.conv1(hidden_state)
         hidden_state = self.conv2(hidden_state)
         return hidden_state
@@ -135,12 +136,13 @@ class DFineResNetEseModule(nn.Module):
         )
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: Tensor) -> Tensor:
         identity = hidden_state
         hidden_state = hidden_state.mean((2, 3), keepdim=True)
         hidden_state = self.conv(hidden_state)
         hidden_state = self.sigmoid(hidden_state)
-        return torch.mul(identity, hidden_state)
+        hidden_state = torch.mul(identity, hidden_state)
+        return hidden_state
 
 
 class DFineResNetEmbeddings(nn.Module):
@@ -263,7 +265,7 @@ class DFineResNetBasicLayer(nn.Module):
             )
         self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: Tensor) -> Tensor:
         identity = hidden_state
         output = [hidden_state]
         for layer in self.layers:
@@ -317,7 +319,7 @@ class DFineResNetStage(nn.Module):
             )
         self.blocks = nn.Sequential(*blocks_list)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state: Tensor) -> Tensor:
         hidden_state = self.downsample(hidden_state)
         hidden_state = self.blocks(hidden_state)
         return hidden_state
