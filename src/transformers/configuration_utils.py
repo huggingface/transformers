@@ -1043,6 +1043,9 @@ class PretrainedConfig(PushToHubMixin):
         # Explicitly coded here to avoid circular imports. TODO joao: refactor to avoid this
         return {
             "max_new_tokens": 20,
+            "min_new_tokens": None,
+            "max_length": None,
+            "min_length": None,
             "do_sample": False,
             "early_stopping": False,
             "num_beams": 1,

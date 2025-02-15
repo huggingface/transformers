@@ -2882,13 +2882,13 @@ class GenerationIntegrationTests(unittest.TestCase):
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
-        output = generator(prompt)
+        output = generator(prompt, max_length=20)
         self.assertEqual(
             output,
             [{"generated_text": ("Hello I believe in we we we we we we we we we")}],
         )
 
-        output = generator(prompt, stop_sequence=" we")
+        output = generator(prompt, max_length=20, stop_sequence=" we")
         self.assertEqual(output, [{"generated_text": "Hello I believe in we"}])
 
     def test_generate_non_nlp_input_ids_as_kwarg(self):
@@ -3455,6 +3455,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             "top_p": 0.7,
             "top_k": 10,
             "temperature": 0.7,
+            "max_length": 20,
         }
         expectation = 20
 

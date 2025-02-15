@@ -1407,10 +1407,7 @@ class GenerationMixin:
             return
 
         # 1. Max length warnings related to poor parameterization
-        if (
-            has_default_max_new_tokens
-            and generation_config.max_length == 20 + input_ids_length
-        ):
+        if has_default_max_new_tokens and generation_config.max_length == 20 + input_ids_length:
             # 20 is the default max_length of the generation config
             warnings.warn(
                 f"Using the model-agnostic default `max_new_tokens` (={generation_config.max_new_tokens}) to "
