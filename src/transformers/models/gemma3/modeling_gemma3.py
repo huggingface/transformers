@@ -19,7 +19,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, List, Optional, Tuple, Union
+from collections.abc import Callable
+from typing import Literal, Optional, Tuple, Union, cast
 
 import torch
 import torch.nn as nn
@@ -28,17 +29,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
@@ -50,13 +45,9 @@ from .configuration_gemma3 import Gemma3Config
 
 
 logger = logging.get_logger(__name__)
-
-
-_CHECKPOINT_FOR_DOC = "gg-hf/gemma-3-4b"
 _CONFIG_FOR_DOC = "Gemma3Config"
 
 
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2RMSNorm with Gemma2->Gemma3
 class Gemma3RMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
@@ -77,7 +68,6 @@ class Gemma3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2MLP with Gemma2->Gemma3
 class Gemma3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -140,6 +130,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+AttentionType = Literal["global_sliding", "local_sliding"]
+
+
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -148,9 +141,8 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
-    softcap: Optional[float] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
         scaling = module.head_dim**-0.5
 
@@ -159,10 +151,6 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
 
-    if softcap is not None:
-        attn_weights = attn_weights / softcap
-        attn_weights = torch.tanh(attn_weights)
-        attn_weights = attn_weights * softcap
     if attention_mask is not None:  # no matter the length, we just slice it
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
@@ -175,7 +163,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2Attention with Gemma2->Gemma3
 class Gemma3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -185,7 +172,8 @@ class Gemma3Attention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = config.query_pre_attn_scalar**-0.5
+        self.scaling = config.text_config.query_pre_attn_scalar**-0.5
+
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
 
@@ -201,13 +189,20 @@ class Gemma3Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
+        self.attention_type: AttentionType = config.text_config.attention_pattern[
+            layer_idx % len(config.text_config.attention_pattern)
+        ]
+        self.sliding_window = config.text_config.sliding_window if not bool(layer_idx % 2) else None
+
+        self.qk_norm = Gemma3RMSNorm(
+            config.text_config.head_dim,
+            config.text_config.rms_norm_eps,
+        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -219,6 +214,9 @@ class Gemma3Attention(nn.Module):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        query_states = self.qk_norm(query_states)
+        key_states = self.qk_norm(key_states)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -246,7 +244,10 @@ class Gemma3Attention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = cast(
+                    Callable[..., tuple[torch.Tensor, torch.Tensor]],
+                    ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation],
+                )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -257,7 +258,6 @@ class Gemma3Attention(nn.Module):
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            softcap=self.attn_logit_softcapping,
             **kwargs,
         )
 
@@ -266,26 +266,24 @@ class Gemma3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2DecoderLayer with Gemma2->Gemma3
 class Gemma3DecoderLayer(nn.Module):
     def __init__(self, config: Gemma3Config, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
         self.config = config
+        self.hidden_size = config.text_config.hidden_size
         self.is_sliding = not bool(layer_idx % 2)
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
-        self.input_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.pre_feedforward_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.sliding_window = config.sliding_window
+        self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.sliding_window = config.text_config.sliding_window
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -294,7 +292,7 @@ class Gemma3DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: int = 0,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
             # In prefill, we may be larger than sliding window
             effective_seq_len = max(cache_position.shape[0], self.sliding_window)
@@ -350,7 +348,6 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2RotaryEmbedding with Gemma2->Gemma3
 class Gemma3RotaryEmbedding(nn.Module):
     def __init__(self, config: Gemma3Config, device=None):
         super().__init__()
@@ -433,7 +430,6 @@ GEMMA3_START_DOCSTRING = r"""
     "The bare Gemma3 Model outputting raw hidden-states without any specific head on top.",
     GEMMA3_START_DOCSTRING,
 )
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2PreTrainedModel with Gemma2->Gemma3
 class Gemma3PreTrainedModel(PreTrainedModel):
     config_class = Gemma3Config
     base_model_prefix = "model"
@@ -539,7 +535,6 @@ GEMMA3_INPUTS_DOCSTRING = r"""
     "The bare Gemma3 Model outputting raw hidden-states without any specific head on top.",
     GEMMA3_START_DOCSTRING,
 )
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2Model with GEMMA2->GEMMA3,Gemma2->Gemma3
 class Gemma3Model(Gemma3PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Gemma3DecoderLayer`]
@@ -560,6 +555,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         self.norm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.config = config
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -573,7 +569,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
     @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
@@ -646,14 +642,14 @@ class Gemma3Model(Gemma3PreTrainedModel):
         # normalized
         # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
+        normalizer = torch.tensor(self.config.text_config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for decoder_layer in self.layers[: self.config.text_config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -794,16 +790,16 @@ class Gemma3Model(Gemma3PreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2ForCausalLM with GEMMA2->GEMMA3,Gemma2->Gemma3
 class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
 
-    def __init__(self, config):
+    def __init__(self, config: Gemma3Config):
         super().__init__(config)
         self.model = Gemma3Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.config = config
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -831,7 +827,7 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
@@ -907,10 +903,10 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
+        if self.config.text_config.final_logit_softcapping is not None:
+            logits = logits / self.config.text_config.final_logit_softcapping
             logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
+            logits = logits * self.config.text_config.final_logit_softcapping
 
         loss = None
         if labels is not None:
@@ -1016,207 +1012,4 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-@add_start_docstrings(
-    """
-    The Gemma3 Model transformer with a sequence classification head on top (linear layer).
-
-    [`Gemma3ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    GEMMA3_START_DOCSTRING,
-)
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2ForSequenceClassification with GEMMA2->GEMMA3,Gemma2->Gemma3
-class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.model = Gemma3Model(config)
-        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        transformer_outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            last_non_pad_token = -1
-        elif input_ids is not None:
-            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
-            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
-            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
-        else:
-            last_non_pad_token = -1
-            logger.warning_once(
-                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
-            )
-
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
-
-        if not return_dict:
-            output = (pooled_logits,) + transformer_outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=transformer_outputs.past_key_values,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    The Gemma3 Model transformer with a token classification head on top (a linear layer on top of the hidden-states
-    output) e.g. for Named-Entity-Recognition (NER) tasks.
-    """,
-    GEMMA3_START_DOCSTRING,
-)
-# Copied from transformers.models.gemma2.modeling_gemma2.Gemma2ForTokenClassification with GEMMA2->GEMMA3,Gemma2->Gemma3
-class Gemma3ForTokenClassification(Gemma3PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.model = Gemma3Model(config)
-        if getattr(config, "classifier_dropout", None) is not None:
-            classifier_dropout = config.classifier_dropout
-        elif getattr(config, "hidden_dropout", None) is not None:
-            classifier_dropout = config.hidden_dropout
-        else:
-            classifier_dropout = 0.1
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.score = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = outputs[0]
-        sequence_output = self.dropout(sequence_output)
-        logits = self.score(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-__all__ = [
-    "Gemma3ForCausalLM",
-    "Gemma3Model",
-    "Gemma3PreTrainedModel",
-    "Gemma3ForSequenceClassification",
-    "Gemma3ForTokenClassification",
-]
+__all__ = ["Gemma3ForCausalLM", "Gemma3Model", "Gemma3PreTrainedModel"]

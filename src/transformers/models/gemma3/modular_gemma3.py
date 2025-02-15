@@ -17,7 +17,7 @@ from collections.abc import Callable, Sequence
 import enum
 import itertools
 import math
-from typing import Optional, Union, cast
+from typing import Literal, Optional, Union, cast
 
 import PIL
 import torch
@@ -45,15 +45,12 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import (
     AddedToken,
-    PreTokenizedInput,
     TextInput,
 )
 from ...utils import is_torchdynamo_compiling, logging
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaForCausalLM,
-    GemmaForSequenceClassification,
-    GemmaForTokenClassification,
     GemmaMLP,
     GemmaModel,
     GemmaRMSNorm,
@@ -75,8 +72,7 @@ EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i i
 #   * No image      --> None
 #   * Single-image  --> PIL.Image.Image
 #   * Multi-image   --> Sequence[PIL.Image.Image]
-#
-# The single-image case
+#   * Batch         --> Sequence[Sequence[PIL.Image.Image]]
 BatchedImageInput = Sequence[PIL.Image.Image]
 BatchedMultiImageInput = Sequence[BatchedImageInput]
 Gemma3ProcessorImageInput = Union[PIL.Image.Image, BatchedImageInput, BatchedMultiImageInput]
@@ -88,7 +84,16 @@ MutableBatchedPanAndScannedImage = list[list[MutablePanAndScannedImage]]
 
 ATTENTION_TYPE_GLOBAL = "global_sliding"
 ATTENTION_TYPE_LOCAL = "local_sliding"
-AttentionTypes = Union[ATTENTION_TYPE_GLOBAL, ATTENTION_TYPE_LOCAL]
+AttentionType = Literal["global_sliding", "local_sliding"]
+AttentionPattern = Sequence[AttentionType]
+DEFAULT_ATTENION_PATTERN = cast(AttentionPattern, (
+    ATTENTION_TYPE_LOCAL,
+    ATTENTION_TYPE_LOCAL,
+    ATTENTION_TYPE_LOCAL,
+    ATTENTION_TYPE_LOCAL,
+    ATTENTION_TYPE_LOCAL,
+    ATTENTION_TYPE_GLOBAL,
+))
 
 TextInputTypes = Union[TextInput, Sequence[TextInput]]
 
@@ -190,61 +195,38 @@ class Gemma3TextConfig(PretrainedConfig):
     def __init__(
         self,
         # Config parameters found in all implementations, name differences noted
-        vocab_size=256000,                      # num_embed in FLAX
-        hidden_size=2304,                       # embed_dim in FLAX
-        intermediate_size=9216,
-        num_hidden_layers=26,                   # num_layers in FLAX
-        num_attention_heads=8,                  # num_heads in FLAX
-        num_key_value_heads=4,                  # num_kv_heads in FLAX
-        head_dim=256,
-        sliding_window=4096,                    # sliding_window_size in FLAX
-        final_logit_softcapping=30.0,
-        attn_logit_softcapping=50.0,
-        query_pre_attn_scalar=256,
-        attention_pattern: Sequence[str] = (    # attn_types in PyTorch, attention_types in FLAX
-            ATTENTION_TYPE_LOCAL,
-            ATTENTION_TYPE_LOCAL,
-            ATTENTION_TYPE_LOCAL,
-            ATTENTION_TYPE_LOCAL,
-            ATTENTION_TYPE_LOCAL,
-            ATTENTION_TYPE_GLOBAL,
-        ),
-        rope_theta=10_000.0,                    # Consolidated in rope_wave_length Mapping in PyTorch
-        rope_global_base_freq=10_000.0,
-        rope_local_base_freq=10_000.0,
+        vocab_size: int = 256000,                      # num_embed in FLAX
+        hidden_size: int = 2304,                       # embed_dim in FLAX
+        intermediate_size: int = 9216,                 # hidden_dim in FLAX
+        num_hidden_layers: int = 26,                   # num_layers in FLAX
+        num_attention_heads: int = 8,                  # num_heads in FLAX
+        num_key_value_heads: int = 4,                  # num_kv_heads in FLAX
+        head_dim: int = 256,
+        sliding_window: int = 4096,                    # sliding_window_size in FLAX
+        final_logit_softcapping: float = 30.0,
+        query_pre_attn_scalar: int = 256,
+        attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
+        rope_theta: float = 10_000.0,                    # Consolidated in rope_wave_length Mapping in PyTorch
+        rope_global_base_freq: float = 1_000_000.0,
+        rope_local_base_freq: float = 10_000.0,
+        rms_norm_eps: float = 1e-6,
+        hidden_activation: str = "gelu_pytorch_tanh",
+        pad_token_id: int = 0,
+        eos_token_id: int = 1,
+        bos_token_id: int = 2,
+        tie_word_embeddings: bool = True,
+        max_position_embeddings: int = 8192,
+        initializer_range: float = 0.02,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
+        use_cache: bool = True,
+        cache_implementation: str = "hybrid",
 
-        # Config parameters NOT in FLAX but in others
-        rms_norm_eps=1e-6,
-
-        # Config parameters NOT in PyTorch but in others
-
-        # Config parameters NOT in Transformers but in others
+        # Config parameters still to be adjudicated
         use_pre_ffw_norm: bool = False,         # use_post_attn_norm in FLAX
         use_post_ffw_norm: bool = False,
-
-
-        # Config parameters in Transformers but not others
-        hidden_activation="gelu_pytorch_tanh",
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        attention_bias=False,
-        attention_dropout=0.0,
-        use_cache=True,
-        cache_implementation="hybrid",
-
-        # Config parameters in FLAX but not others
-        query_pre_attn_norm: enum.Enum = None,
-        v3_compression_type: enum.Enum = None,
-        transpose_gating_einsum: bool = False,
-
-        # Config parameters in PyTorch but not others
-        architecture: str = "",
-        quant: bool = False,
-        use_qk_norm: bool = False,
+        query_pre_attn_norm: Optional[enum.Enum] = None,
+        compression_type: Optional[enum.Enum] = None,       # uant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
         super().__init__(
@@ -266,39 +248,71 @@ class Gemma3TextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.rope_global_base_freq = rope_global_base_freq
+        self.rope_local_base_freq = rope_local_base_freq
+        self.attention_pattern = attention_pattern
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
-        self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
 
 
 class Gemma3VisionConfig(SiglipVisionConfig):
-    # Config parameters found in all implementations, name differences noted
-    hidden_size: int                        # width in FLAX
-    intermediate_size: int                  # mlp_dim in FLAX
-    num_attention_heads: int                # num_heads in FLAX
-    num_hidden_layers: int                  # depth in FLAX
-    attention_dropout: float                # dropout in FLAX
-    patch_size: int                         # Same in FLAX
 
-    # Config parameters in Transformers but not in FLAX
-    image_size: int                         # Defaults to 896
-    num_channels: int                       # Defaults to 3
-    hidden_act: str                         # Defaults to "gelu_pytorch_tanh"
-    layer_norm_eps: float                   # Defaults to 1e-06
+    def __init__(
+        self,
+        # SigLIP Vision Config Params
+        hidden_size: int = 1152,                # width in FLAX
+        intermediate_size: int = 4304,          # mlp_dim in FLAX
+        num_hidden_layers: int = 27,            # depth in FLAX
+        num_attention_heads: int = 16,          # num_heads in FLAX
+        num_channels: int = 3,                  # image_channels in FLAX
+        image_size: int = 896,                  # Split into image_height and image_width in FLAX
+        attention_dropout: float = 0.0,         # dropout in FLAX
+        patch_size: int = 14,
+        # Config parameters in Transformers but not FLAX
+        hidden_act: str = "gelu_pytorch_tanh",
+        layer_norm_eps: float = 0.000001,
+        # Config parameters in FLAX but not Transformers
+        position_embedding: str = "learn",
+        representation_size: Union[int, bool] = False,
+        pool_type: Optional[str] = "none",
+        head_zeroinit: bool = True,
+        scan: bool = False,
+        remat_policy: str = "nothing_savable",
+        output_length: int = 256,
+        num_mm_tokens_per_image_prepool: int = 4096,
+        num_mm_tokens_per_image: int = 256,
+        apply_stop_gradient: bool = True,
+        **kwargs
+    ):
+        super().__init__(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_channels=num_channels,
+            image_size=image_size,
+            patch_size=patch_size,
+            hidden_act=hidden_act,
+            layer_norm_eps=layer_norm_eps,
+            attention_dropout=attention_dropout,
+            **kwargs,
+        )
 
-    # Config parameters not in Transformers but in FLAX
-    position_embedding: str
-    representation_size: Union[int, bool]
-    pool_type: Optional[str]
-    head_zeroinit: bool
-    scan: bool
-    remat_policy: str
-    output_length: int
+        self.position_embedding = position_embedding
+        self.representation_size = representation_size
+        self.pool_type = pool_type
+        self.head_zeroinit = head_zeroinit
+        self.scan = scan
+        self.remat_policy = remat_policy
+        self.output_length = output_length
+        self.num_mm_tokens_per_image_prepool = num_mm_tokens_per_image_prepool
+        self.num_mm_tokens_per_image = num_mm_tokens_per_image
+        self.apply_stop_gradient = apply_stop_gradient
 
 
 class Gemma3Config(PretrainedConfig):
@@ -571,7 +585,6 @@ def eager_attention_forward(
     attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
-    softcap: Optional[float] = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
@@ -582,10 +595,6 @@ def eager_attention_forward(
 
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
 
-    if softcap is not None:
-        attn_weights = attn_weights / softcap
-        attn_weights = torch.tanh(attn_weights)
-        attn_weights = attn_weights * softcap
     if attention_mask is not None:  # no matter the length, we just slice it
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
@@ -600,12 +609,21 @@ def eager_attention_forward(
 
 class Gemma3Attention(GemmaAttention):
     def __init__(self, config: Gemma3Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.attn_logit_softcapping = self.config.attn_logit_softcapping
+
+        super().__init__(config.text_config, layer_idx)
+
         self.attention_dropout = self.config.attention_dropout
+        self.attention_type: AttentionType = config.text_config.attention_pattern[
+            layer_idx % len(config.text_config.attention_pattern)
+        ]
         self.is_causal = True
-        self.scaling = config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
+        self.scaling = config.text_config.query_pre_attn_scalar**-0.5
+        self.sliding_window = config.text_config.sliding_window if not bool(layer_idx % 2) else None
+
+        self.qk_norm = Gemma3RMSNorm(
+            config.text_config.head_dim,
+            config.text_config.rms_norm_eps,
+        )
 
     def forward(
         self,
@@ -622,6 +640,9 @@ class Gemma3Attention(GemmaAttention):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        query_states = self.qk_norm(query_states)
+        key_states = self.qk_norm(key_states)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -649,7 +670,10 @@ class Gemma3Attention(GemmaAttention):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = cast(
+                    Callable[..., tuple[torch.Tensor, torch.Tensor]],
+                    ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation],
+                )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -660,7 +684,6 @@ class Gemma3Attention(GemmaAttention):
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            softcap=self.attn_logit_softcapping,
             **kwargs,
         )
 
@@ -672,17 +695,16 @@ class Gemma3Attention(GemmaAttention):
 class Gemma3DecoderLayer(nn.Module):
     def __init__(self, config: Gemma3Config, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
         self.config = config
+        self.hidden_size = config.text_config.hidden_size
         self.is_sliding = not bool(layer_idx % 2)
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
-        self.input_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.pre_feedforward_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.sliding_window = config.sliding_window
+        self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
+        self.sliding_window = config.text_config.sliding_window
 
     def forward(
         self,
@@ -709,7 +731,8 @@ class Gemma3DecoderLayer(nn.Module):
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
-                    torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
+                    torch.ones_like(attention_mask, dtype=torch.bool),
+                    diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
@@ -755,13 +778,14 @@ class Gemma3DecoderLayer(nn.Module):
 class Gemma3Model(GemmaModel):
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
+        self.config = config
         self.layers = nn.ModuleList(
             [Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
@@ -834,14 +858,14 @@ class Gemma3Model(GemmaModel):
         # normalized
         # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
+        normalizer = torch.tensor(self.config.text_config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for decoder_layer in self.layers[: self.config.text_config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -927,14 +951,15 @@ class Gemma3Model(GemmaModel):
 
 
 class Gemma3ForCausalLM(GemmaForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: Gemma3Config):
         super().__init__(config)
         self.model = Gemma3Model(config)
         self.post_init()
+        self.config = config
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[HybridCache] = None,
@@ -993,10 +1018,10 @@ class Gemma3ForCausalLM(GemmaForCausalLM):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        if self.config.final_logit_softcapping is not None:
-            logits = logits / self.config.final_logit_softcapping
+        if self.config.text_config.final_logit_softcapping is not None:
+            logits = logits / self.config.text_config.final_logit_softcapping
             logits = torch.tanh(logits)
-            logits = logits * self.config.final_logit_softcapping
+            logits = logits * self.config.text_config.final_logit_softcapping
 
         loss = None
         if labels is not None:
@@ -1102,25 +1127,9 @@ class Gemma3ForCausalLM(GemmaForCausalLM):
         return model_inputs
 
 
-class Gemma3ForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Gemma3Model(config)
-        self.post_init()
-
-
-class Gemma3ForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = Gemma3Model(config)
-        self.post_init()
-
-
 __all__ = [
     "Gemma3Config",
     "Gemma3ForCausalLM",
     "Gemma3Model",
     "Gemma3PreTrainedModel",  # noqa: F822
-    "Gemma3ForSequenceClassification",
-    "Gemma3ForTokenClassification",
 ]

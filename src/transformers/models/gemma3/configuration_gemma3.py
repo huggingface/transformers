@@ -19,27 +19,54 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import enum
+from collections.abc import Sequence
+from typing import Literal, Optional, Union, cast
+
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
-class Gemma3Config(PretrainedConfig):
+logger = logging.get_logger(__name__)
+
+ATTENTION_TYPE_GLOBAL = "global_sliding"
+ATTENTION_TYPE_LOCAL = "local_sliding"
+AttentionType = Literal["global_sliding", "local_sliding"]
+AttentionPattern = Sequence[AttentionType]
+DEFAULT_ATTENION_PATTERN = cast(
+    AttentionPattern,
+    (
+        ATTENTION_TYPE_LOCAL,
+        ATTENTION_TYPE_LOCAL,
+        ATTENTION_TYPE_LOCAL,
+        ATTENTION_TYPE_LOCAL,
+        ATTENTION_TYPE_LOCAL,
+        ATTENTION_TYPE_GLOBAL,
+    ),
+)
+
+
+class Gemma3TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Gemma3Model`]. It is used to instantiate an Gemma3
+    This is the configuration class to store the configuration of a [`Gemma3Model`]. It is used to instantiate a Gemma3
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Gemma3-7B.
-    e.g. [gg-hf/gemma-3-4b](https://huggingface.co/gg-hf/gemma-3-4b)
+    e.g. [google/gemma-3-4b](https://huggingface.co/google/gemma-3-4b)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 256000):
             Vocabulary size of the Gemma3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Gemma3Model`]
+        num_hidden_layers (`int`, *optional*, defaults to 26):
+            Number of hidden layers in the Transformer decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
         hidden_size (`int`, *optional*, defaults to 2304):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 9216):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 26):
-            Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*, defaults to 4):
@@ -53,17 +80,13 @@ class Gemma3Config(PretrainedConfig):
         head_dim (`int`, *optional*, defaults to 256):
             The attention head dimension.
         hidden_activation (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
-            The non-linear activation function (function or string) in the decoder. Will default to `"gelu_pytorch_tanh"`
-            if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"` activation function.
-        max_position_embeddings (`int`, *optional*, defaults to 8192):
-            The maximum sequence length that this model might ever be used with.
+            The non-linear activation function (function or string) in the decoder. Will default to
+            `"gelu_pytorch_tanh"` if not specified. `"gelu_pytorch_tanh"` uses an approximation of the `"gelu"`
+            activation function.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         eos_token_id (`int`, *optional*, defaults to 1):
@@ -74,15 +97,26 @@ class Gemma3Config(PretrainedConfig):
             Whether to tie weight embeddings
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+        rope_global_base_freq (float, *optional*, defaults to `rope_theta`):
+            The base period of the RoPE embeddings for global attention.
+        rope_local_base_freq (float, *optional*, defaults to `rope_theta`):
+            The base period of the RoPE embeddings for local attention.
+        attention_pattern (Sequence[AttentionTypes], defaults to (5 * local, global)):
+            The attention pattern to apply
+        attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window attention. This is the
-            size of the sliding window.
-        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
-        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
+        sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
+            attention. This is the size of the sliding window.
+        final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh soft-capping
+            on the logits.z
+        attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh soft-capping
+            on the attention scorexs.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
 
     ```python
@@ -95,7 +129,7 @@ class Gemma3Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "gemma3"
+    model_type = "gemma3_text_model"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -109,30 +143,42 @@ class Gemma3Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=256000,
-        hidden_size=2304,
-        intermediate_size=9216,
-        num_hidden_layers=26,
-        num_attention_heads=8,
-        num_key_value_heads=4,
-        head_dim=256,
-        hidden_activation="gelu_pytorch_tanh",
-        max_position_embeddings=8192,
-        initializer_range=0.02,
+        # Config parameters found in all implementations, name differences noted
+        vocab_size: int = 256000,  # num_embed in FLAX
+        hidden_size: int = 2304,  # embed_dim in FLAX
+        intermediate_size: int = 9216,  # hidden_dim in FLAX
+        num_hidden_layers: int = 26,  # num_layers in FLAX
+        num_attention_heads: int = 8,  # num_heads in FLAX
+        num_key_value_heads: int = 4,  # num_kv_heads in FLAX
+        head_dim: int = 256,
+        sliding_window: int = 4096,  # sliding_window_size in FLAX
+        final_logit_softcapping: float = 30.0,
+        query_pre_attn_scalar: int = 256,
+        attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
+        rope_theta: float = 10_000.0,  # Consolidated in rope_wave_length Mapping in PyTorch
+        rope_global_base_freq: float = 1_000_000.0,
+        rope_local_base_freq: float = 10_000.0,
+        # Config parameters NOT in FLAX but in others
         rms_norm_eps=1e-6,
-        use_cache=True,
+        # Config parameters NOT in PyTorch but in others
+        # Config parameters NOT in Transformers but in others
+        use_pre_ffw_norm: bool = False,  # use_post_attn_norm in FLAX
+        use_post_ffw_norm: bool = False,
+        # Config parameters in Transformers but not others
+        hidden_activation="gelu_pytorch_tanh",
         pad_token_id=0,
         eos_token_id=1,
         bos_token_id=2,
         tie_word_embeddings=True,
-        rope_theta=10000.0,
+        max_position_embeddings=8192,
+        initializer_range=0.02,
         attention_bias=False,
         attention_dropout=0.0,
-        query_pre_attn_scalar=256,
-        sliding_window=4096,
-        final_logit_softcapping=30.0,
-        attn_logit_softcapping=50.0,
+        use_cache=True,
         cache_implementation="hybrid",
+        # Config parameters in FLAX but not others
+        query_pre_attn_norm: Optional[enum.Enum] = None,
+        compression_type: Optional[enum.Enum] = None,  # uant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
         super().__init__(
@@ -154,14 +200,166 @@ class Gemma3Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
+        self.rope_global_base_freq = rope_global_base_freq
+        self.rope_local_base_freq = rope_local_base_freq
+        self.attention_pattern = attention_pattern
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
         self.query_pre_attn_scalar = query_pre_attn_scalar
         self.sliding_window = sliding_window
         self.final_logit_softcapping = final_logit_softcapping
-        self.attn_logit_softcapping = attn_logit_softcapping
         self.cache_implementation = cache_implementation
+
+
+class Gemma3VisionConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Gemma3VisionModel`]. It is used to instantiate a
+    Gemma3 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the Gemma3
+    [google/gemma3-base-patch16-224](https://huggingface.co/google/gemma3-base-patch16-224) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+
+    Example:
+
+    ```python
+    >>> from transformers import Gemma3VisionConfig, Gemma3VisionModel
+
+    >>> # Initializing a Gemma3VisionConfig with google/gemma3-base-patch16-224 style configuration
+    >>> configuration = Gemma3VisionConfig()
+
+    >>> # Initializing a Gemma3VisionModel (with random weights) from the google/gemma3-base-patch16-224 style configuration
+    >>> model = Gemma3VisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "gemma3_vision_model"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        # SigLIP Vision Config Params
+        hidden_size: int = 1152,  # width in FLAX
+        intermediate_size: int = 4304,  # mlp_dim in FLAX
+        num_hidden_layers: int = 27,  # depth in FLAX
+        num_attention_heads: int = 16,  # num_heads in FLAX
+        num_channels: int = 3,  # image_channels in FLAX
+        image_size: int = 896,  # Split into image_height and image_width in FLAX
+        attention_dropout: float = 0.0,  # dropout in FLAX
+        patch_size: int = 14,
+        # Config parameters in Transformers but not FLAX
+        hidden_act: str = "gelu_pytorch_tanh",
+        layer_norm_eps: float = 0.000001,
+        # Config parameters in FLAX but not Transformers
+        position_embedding: str = "learn",
+        representation_size: Union[int, bool] = False,
+        pool_type: Optional[str] = "none",
+        head_zeroinit: bool = True,
+        scan: bool = False,
+        remat_policy: str = "nothing_savable",
+        output_length: int = 256,
+        num_mm_tokens_per_image_prepool: int = 4096,
+        num_mm_tokens_per_image: int = 256,
+        apply_stop_gradient: bool = True,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
+
+        self.position_embedding = position_embedding
+        self.representation_size = representation_size
+        self.pool_type = pool_type
+        self.head_zeroinit = head_zeroinit
+        self.scan = scan
+        self.remat_policy = remat_policy
+        self.output_length = output_length
+        self.num_mm_tokens_per_image_prepool = num_mm_tokens_per_image_prepool
+        self.num_mm_tokens_per_image = num_mm_tokens_per_image
+        self.apply_stop_gradient = apply_stop_gradient
+
+
+class Gemma3Config(PretrainedConfig):
+    model_type = "gemma3"
+    sub_configs = {
+        "text_config": Gemma3TextConfig,
+        "vision_config": Gemma3VisionConfig,
+    }
+
+    def __init__(self, text_config=None, vision_config=None, **kwargs):
+        if text_config is None:
+            self.text_config = Gemma3TextConfig()
+            logger.info("text_config is None, using default Gemma3TextConfig vision config.")
+        elif isinstance(text_config, dict):
+            self.text_config = Gemma3TextConfig(**text_config)
+        elif isinstance(text_config, Gemma3TextConfig):
+            self.text_config = text_config
+        else:
+            raise ValueError("text_config much be None or compatible with initializing a Gemma3TextConfig.")
+
+        """
+            Gemma 3 FLAX                SigLIP HF
+            compression_type    ==>
+            width               ==>     hidden_size
+            mlp_dim             ==>     intermediate_size
+            num_heads           ==>     num_attention_heads
+            depth               ==>     num_hidden_layers
+            patch_size          ==>     patch_size
+            posemb              ==>
+            rep_size            ==>
+            dropout             ==>     attention_dropout
+            pool_type           ==>
+            head_zeroinit       ==>
+            scan                ==>
+            remat_policy        ==>
+            dtype_mm            ==>
+            output_length       ==>
+        """
+        if vision_config is None:
+            self.vision_config = Gemma3VisionConfig()
+            logger.info("vision_config is None, using default SigLIP vision config.")
+        elif isinstance(vision_config, dict):
+            self.vision_config = Gemma3VisionConfig(**vision_config)
+        elif isinstance(vision_config, Gemma3VisionConfig):
+            self.vision_config = vision_config
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["Gemma3Config"]
