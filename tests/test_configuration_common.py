@@ -165,8 +165,9 @@ class ConfigTester:
 
     def check_config_can_be_init_without_params(self):
         if self.config_class.is_composition:
-            with self.parent.assertRaises(ValueError):
-                config = self.config_class()
+            if not getattr(self.config_class, "all_sub_configs_have_defaults", False):
+                with self.parent.assertRaises(ValueError):
+                    config = self.config_class()
         else:
             config = self.config_class()
             self.parent.assertIsNotNone(config)

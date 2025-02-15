@@ -22,7 +22,12 @@ from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
+from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig
+
+
+if is_torch_available():
+    pass
 
 
 class AriaTextConfig(PretrainedConfig):

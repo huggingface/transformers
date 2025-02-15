@@ -77,6 +77,14 @@ class LlavaConfig(PretrainedConfig):
     model_type = "llava"
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     is_composition = True
+    # In general, if `is_composition == True`, the config object must be
+    # initialized passing at least one of the sub-configs. See:
+    # `ConfigTester.check_config_can_be_init_without_params` in
+    # `tests/test_configuration_common.py`.
+    # But if
+    # `all_sub_configs_have_defaults == True`, all sub-configs have defaults,
+    # so the config can be created without arguments.
+    all_sub_configs_have_defaults = True
 
     def __init__(
         self,
