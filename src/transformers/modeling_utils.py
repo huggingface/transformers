@@ -563,20 +563,34 @@ def load_state_dict(
 def set_initialized_submodules(model, state_dict_keys):
     """
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
-    dict.
+    dict. Returns modules that need initialization.
+    
+    A module needs initialization if:
+    1. It's completely new (no parameters in state_dict_keys)
+    2. It has some parameters missing (partial initialization needed)
     """
     state_dict_keys = set(state_dict_keys)
     not_initialized_submodules = {}
+    
     for module_name, module in model.named_modules():
+        # Get module's parameter keys
         if module_name == "":
-            # When checking if the root module is loaded there's no need to prepend module_name.
             module_keys = set(module.state_dict())
         else:
             module_keys = {f"{module_name}.{k}" for k in module.state_dict()}
-        if module_keys.issubset(state_dict_keys):
+            
+        # Check parameter overlap with state dict
+        params_in_state_dict = module_keys.intersection(state_dict_keys)
+        
+        if len(params_in_state_dict) == len(module_keys):
+            # All parameters exist - mark as initialized
             module._is_hf_initialized = True
         else:
+            # Module needs initialization if:
+            # 1. No parameters exist (new module)
+            # 2. Some parameters missing (partial initialization)
             not_initialized_submodules[module_name] = module
+            
     return not_initialized_submodules
 
 
@@ -4938,35 +4952,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
                 " to use it for predictions and inference."
             )
-
-        # Initialize missing weights using the model's init_weights() method
-        if missing_keys:
-            # Get tied parameter groups
-            ptrs = collections.defaultdict(list)
-            for name, tensor in model.state_dict().items():
-                ptrs[id_tensor_storage(tensor)].append(name)
-            tied_params = [names for _, names in ptrs.items() if len(names) > 1]
-
-            # Only initialize parameters that aren't tied or where all tied params are missing
-            for name in missing_keys:
-                # Check if this is a tied parameter
-                is_tied = False
-                for group in tied_params:
-                    if name in group:
-                        # Only initialize if all params in tied group are missing
-                        if not any(tied_name in loaded_keys for tied_name in group):
-                            is_tied = False
-                            break
-                        else:
-                            is_tied = True
-                            break
-                
-                if not is_tied:
-                    # Find the module containing this parameter
-                    module_name = '.'.join(name.split('.')[:-1])
-                    if module_name:
-                        module = getattr(model, module_name.split('.')[0])
-                        model._init_weights(module)
 
         return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
 
