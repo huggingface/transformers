@@ -172,7 +172,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         # avoid unnecessary warnings that min_length is larger than max_new_tokens
         # remove the `MinLengthLogitsProcessor` if exists (NOTE: no need to check for `MinNewTokensLogitsProcessor`)
-        self.main_model_min_length = self.generation_config.min_length
+        self.main_model_min_length = self.generation_config.min_length or 0
         self.generation_config.min_length = 0
         self.generation_config.min_new_tokens = None
         for processor in self.logits_processor:
@@ -280,7 +280,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Calculate the minimum and maximum number of new tokens to generate."""
         new_cur_len = input_ids.shape[-1]
         max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
-        min_new_tokens = max(min(max_new_tokens, self.main_model_min_length or 0 - new_cur_len), 0)
+        min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
         return min_new_tokens, max_new_tokens
 
     def _update_past_and_masks(self, input_ids: torch.LongTensor, remove_from_pkv: int = 0) -> bool:
