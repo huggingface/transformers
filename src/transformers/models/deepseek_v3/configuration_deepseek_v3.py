@@ -142,7 +142,11 @@ class DeepseekV3Config(PretrainedConfig):
         "layers.*.up_proj": "colwise",
         "layers.*.down_proj": "rowwise",
     }
-
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
     def __init__(
         self,
         vocab_size=129280,

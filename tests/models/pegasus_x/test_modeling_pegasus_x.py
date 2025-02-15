@@ -203,7 +203,6 @@ class PegasusXModelTester:
 @require_torch
 class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXModel, PegasusXForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": PegasusXModel,
@@ -399,11 +398,11 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
                 ],
             )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         encoder_expected_shape = (
             batch_size,
             config.num_attention_heads,
-            math.ceil(seq_length / config.block_size),
+            math.ceil(prompt_length / config.block_size),
             config.block_size,
             config.block_size + config.num_global_tokens,
         )
@@ -413,8 +412,8 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             [encoder_expected_shape] * len(attentions),
         )
 
-    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, seq_length):
-        encoder_expected_shape = (batch_size, self.round_up(seq_length, config.block_size), config.hidden_size)
+    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, prompt_length):
+        encoder_expected_shape = (batch_size, self.round_up(prompt_length, config.block_size), config.hidden_size)
         self.assertIsInstance(hidden_states, tuple)
         # Only the last layer will have the hidden states truncated back to token level
         self.assertListEqual(
@@ -424,7 +423,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # Only the last layer will have the hidden states truncated back to token level
         self.assertEqual(
             hidden_states[-1][0].shape,
-            (batch_size, seq_length, config.hidden_size),
+            (batch_size, prompt_length, config.hidden_size),
         )
 
     def test_hidden_states_output(self):
@@ -850,7 +849,6 @@ class PegasusXStandaloneDecoderModelTester:
 @require_torch
 class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PegasusXDecoder,) if is_torch_available() else ()
-    all_generative_model_classes = ()
     test_pruning = False
     is_encoder_decoder = False
     test_head_masking = False
