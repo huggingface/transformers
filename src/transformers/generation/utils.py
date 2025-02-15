@@ -880,7 +880,9 @@ class GenerationMixin:
                     assistant_tokenizer=assistant_tokenizer,
                 )
             else:
-                raise ValueError(f"Invalid value for `do_sample`: expected a boolean, got {type(generation_config.do_sample).__name__}")
+                raise ValueError(
+                    f"Invalid value for `do_sample`: expected a boolean, got {type(generation_config.do_sample).__name__}"
+                )
         else:
             candidate_generator = AssistedCandidateGenerator(
                 input_ids=input_ids,

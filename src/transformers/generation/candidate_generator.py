@@ -635,6 +635,7 @@ class AssistantToTargetTranslator:
         target_vocab_size (`int`, *optional*):
             The size of the target model's vocabulary. If not provided, will be inferred from the target tokenizer.
     """
+
     FILTER_VALUE: float = -float("Inf")  # The value used to filter out unmapped tokens in the logits.
     SUPPRESS_TOKEN_ID: int = -1  # The ID used to mark suppressed tokens in the mapping.
 
