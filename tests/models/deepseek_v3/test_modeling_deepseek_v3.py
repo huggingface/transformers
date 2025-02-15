@@ -580,12 +580,12 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         Overwritting the common test as the test is flaky on tiny models
         """
         model = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/deepseek-v3-test",
+            "bzantium/tiny-deepseek-v3",
             load_in_4bit=True,
             device_map={"": 0},
         )
 
-        tokenizer = AutoTokenizer.from_pretrained("bzantium/deepseek-v3-test")
+        tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3")
 
         texts = ["hi", "Hello this is a very long sentence"]
 
@@ -598,7 +598,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         output_native = tokenizer.batch_decode(output_native)
 
         model = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/deepseek-v3-test",
+            "bzantium/tiny-deepseek-v3",
             load_in_4bit=True,
             device_map={"": 0},
             attn_implementation="flash_attention_2",
@@ -645,10 +645,10 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         """
         max_new_tokens = 30
 
-        tokenizer = AutoTokenizer.from_pretrained("bzantium/deepseek-v3-test")
+        tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3")
 
         model_sdpa = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/deepseek-v3-test",
+            "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
         ).to(torch_device)
@@ -656,7 +656,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/deepseek-v3-test",
+            "bzantium/tiny-deepseek-v3",
             torch_dtype=torch.float16,
             low_cpu_mem_usage=True,
             attn_implementation="eager",
@@ -735,9 +735,9 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained("bzantium/deepseek-v3-test", pad_token="</s>", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained("bzantium/tiny-deepseek-v3", pad_token="</s>", padding_side="right")
         model = DeepseekV3ForCausalLM.from_pretrained(
-            "bzantium/deepseek-v3-test", device_map=torch_device, torch_dtype=torch.float16
+            "bzantium/tiny-deepseek-v3", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -771,7 +771,7 @@ class Mask4DTestHard(unittest.TestCase):
         backend_empty_cache(torch_device)
 
     def setUp(self):
-        model_name = "bzantium/deepseek-v3-test"
+        model_name = "bzantium/tiny-deepseek-v3"
         self.model_dtype = torch.float32
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = DeepseekV3ForCausalLM.from_pretrained(model_name, torch_dtype=self.model_dtype).to(torch_device)
