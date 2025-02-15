@@ -12,6 +12,7 @@ from transformers.testing_utils import require_torch, require_vision, slow
 @require_vision
 @require_torch
 class MaskCropPipelineTests(unittest.TestCase):
+    # class to test mask crop pipeline
     def get_test_pipeline(self):
         pipe = pipeline("mask-generation", model="facebook/sam-vit-base")
         return pipe
