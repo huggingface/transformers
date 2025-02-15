@@ -62,6 +62,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
     from torch import nn
 
 
@@ -1165,7 +1166,7 @@ class AriaGroupedExpertsMLP(nn.Module):
         """
         fc1_output = self.fc1(permuted_tokens, tokens_per_expert)
         projection, gate = torch.chunk(fc1_output, 2, dim=-1)
-        fc1_output = nn.functional.silu(projection) * gate
+        fc1_output = F.silu(projection) * gate
         fc2_output = self.fc2(fc1_output, tokens_per_expert)
         return fc2_output
 
@@ -1214,7 +1215,7 @@ class AriaTextMoELayer(nn.Module):
         # Top K Routing
         logits = self.router(hidden_states)
         top_logits, top_indices = torch.topk(logits, k=self.config.moe_topk, dim=1)
-        scores = nn.functional.softmax(top_logits, dim=-1)
+        scores = F.softmax(top_logits, dim=-1)
 
         original_dtype = top_indices.dtype
 

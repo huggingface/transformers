@@ -22,7 +22,14 @@ def flash_attention_forward(
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
     **kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    """
+    `query` has shape `(batch, num_heads, q_len, head_dim)`, while `key`,
+    `value` have shape `(batch, num_key_value_groups, kv_len, head_dim)`. Here,
+    `num_key_value_groups <= num_heads` and
+    `num_heads % num_key_value_groups == 0`.
+
+    """
     if kwargs.get("output_attentions", False) or kwargs.get("head_mask", None) is not None:
         logger.warning_once(
             "`flash_attention_2` does not support `output_attentions=True` or `head_mask`."
@@ -30,7 +37,7 @@ def flash_attention_forward(
         )
 
     # This is before the transpose
-    seq_len = query.shape[2]
+    q_len = query.shape[2]
 
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
@@ -60,7 +67,7 @@ def flash_attention_forward(
         key,
         value,
         attention_mask,
-        query_length=seq_len,
+        query_length=q_len,
         is_causal=module.is_causal,
         dropout=dropout,
         softmax_scale=scaling,
@@ -70,5 +77,6 @@ def flash_attention_forward(
         target_dtype=target_dtype,
         **kwargs,
     )
+    # attn_output: (batch, q_len, num_heads, head_dim)
 
     return attn_output, None
