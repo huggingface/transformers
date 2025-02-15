@@ -1195,12 +1195,12 @@ class ByteTokenizer(transformers.PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         __kwargs = copy.deepcopy(kwargs)
-        # properties
+        # save the encoding scheme
         self._encoding = encoding
         # enforce defaults
         __kwargs['additional_special_tokens'] = None # use the built-in special characters from Unicode
         __kwargs['split_special_tokens'] = True # in UTF-32, split the special codepoints into 4 bytes too
-        # init
+        # init the parent class
         super(ByteTokenizer, self).__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -1211,26 +1211,64 @@ class ByteTokenizer(transformers.PreTrainedTokenizer):
             mask_token=mask_token,
             **__kwargs)
 
-    def _tokenize(self, text: str, **kwargs) -> list:
+    def _tokenize(self, text: str, **kwargs) -> List[str]:
+        """
+        Each Unicode character is represented by a sequence of 1 to 4 tokens.
+        These tokens are actually bytes converted to strings.
+
+        The number of bytes required for each character depends on the Unicode scheme.
+        The popular choice is 'utf-8', while 'utf-32-be' allows fixed size patching.
+        """
         return list(chr(__b) for __b in text.encode(self._encoding))
 
     def _convert_token_to_id(self, token: str) -> int:
+        """
+        Interpret a single token as a string representation of a byte.
+        """
         return ord(token)
 
     def _convert_id_to_token(self, index: int) -> str:
+        """
+        Cast a single byte to its string representation.
+        """
         return chr(index)
 
-    def convert_tokens_to_string(self, tokens: iter) -> str:
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """
+        Each Unicode character is represented by a sequence of 1 to 4 tokens.
+        These tokens are actually bytes converted to strings.
+
+        This functions joins all the tokens to form the byte representation of
+        the origin string. This byte sequence is then decoded back to text.
+        """
         return bytes(ord(__c) for __c in tokens).decode(self._encoding, errors="ignore")
 
     @property
     def vocab_size(self) -> int:
+        """
+        The byte tokenizer does not use a vocabulary at all.
+        It is implemented for compatibility with the parent classes.
+
+        See `PreTrainedTokenizer.vocab_size`.
+        """
         return 256
 
-    def get_vocab(self) -> dict: # for compatibility
+    def get_vocab(self) -> Dict[str, int]:
+        """
+        The byte tokenizer does not use a vocabulary at all.
+        It is implemented for compatibility with the parent classes.
+
+        See `PreTrainedTokenizerBase.get_vocab`.
+        """
         return {chr(__i): __i for __i in range(256)}
 
-    def save_vocabulary(self, save_directory: str, **kwargs) -> tuple: # for compatibility
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        """
+        The byte tokenizer does not use a vocabulary at all.
+        It is implemented for compatibility with the parent classes.
+
+        See `PreTrainedTokenizerBase.save_vocabulary`.
+        """
         __prefix = kwargs.get('filename_prefix', '')
         __path = "{}/{}vocab.json".format(save_directory, __prefix or '')
         with open(__path, "w") as __file:
