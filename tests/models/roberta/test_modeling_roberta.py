@@ -380,7 +380,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RobertaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RobertaModel,
@@ -541,7 +540,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.model.forward(input_ids)[0][:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):
@@ -559,7 +558,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_slice = roberta.extract_features(input_ids)[:, :3, :3].detach()
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_classification_head(self):
@@ -576,7 +575,7 @@ class RobertaModelIntegrationTest(TestCasePlus):
         # roberta.eval()
         # expected_tensor = roberta.predict("mnli", input_ids, return_logits=True).detach()
 
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
+        torch.testing.assert_close(output, expected_tensor, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_export(self):

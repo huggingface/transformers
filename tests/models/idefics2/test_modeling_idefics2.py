@@ -19,6 +19,7 @@ import tempfile
 import unittest
 from io import BytesIO
 
+import pytest
 import requests
 
 from transformers import (
@@ -368,7 +369,6 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     """
 
     all_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Idefics2ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": Idefics2ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
@@ -412,6 +412,15 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @pytest.mark.generate
+    @require_torch_sdpa
+    @slow
+    @unittest.skip(
+        reason="Idefics2 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
+    )
+    def test_eager_matches_sdpa_generate(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -552,7 +561,7 @@ class Idefics2ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             out_ids = model.generate(input_ids=input_ids, **inputs, max_new_tokens=2)
             out_embeds = model.generate(input_ids=input_ids, inputs_embeds=inputs_embeds, **inputs, max_new_tokens=2)
 
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
 
 @require_torch
@@ -614,7 +623,7 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Create pixel inputs
         text = ["<image>In this image, we see", "bla, bla <image><image>"]
         images = [[self.image1], [self.image2, self.image3]]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=10)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -638,19 +647,19 @@ class Idefics2ForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         text = [f"<image>{dataset[40]['query']['en']}", f"<image>{dataset[41]['query']['en']}"]
         images = [[dataset[40]["image"]], [dataset[41]["image"]]]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=64)
         batched_generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         text = f"<image>{dataset[40]['query']['en']}"
         images = dataset[40]["image"]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=64)
         generated_text_0 = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         text = f"<image>{dataset[41]['query']['en']}"
         images = dataset[41]["image"]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
+        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt").to(torch_device)
         generated_ids = model.generate(**inputs, max_new_tokens=64)
         generated_text_1 = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
