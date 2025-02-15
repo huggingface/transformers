@@ -28,7 +28,7 @@ class DeepseekV3Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DeepseekV3Model`]. It is used to instantiate an DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DeepSeek-V3.
-
+    e.g. [bzantium/tiny-deepseek-v3](https://huggingface.co/bzantium/tiny-deepseek-v3)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -82,9 +82,6 @@ class DeepseekV3Config(PretrainedConfig):
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the weights of the routed experts.
-        aux_loss_alpha (`float`, *optional*, defaults to 0.001):
-            Auxiliary loss weight coefficient.
-            Whether to compute the auxiliary loss for each individual sample.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -170,7 +167,6 @@ class DeepseekV3Config(PretrainedConfig):
         num_experts_per_tok=8,
         first_k_dense_replace=3,
         norm_topk_prob=True,
-        aux_loss_alpha=0.001,
         hidden_act="silu",
         max_position_embeddings=4096,
         initializer_range=0.02,
@@ -209,7 +205,6 @@ class DeepseekV3Config(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.aux_loss_alpha = aux_loss_alpha
 
         # for backward compatibility
         if num_key_value_heads is None:
