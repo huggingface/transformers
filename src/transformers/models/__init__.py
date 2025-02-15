@@ -237,6 +237,7 @@ from . import (
     rt_detr,
     rt_detr_v2,
     rwkv,
+    rwkv6,
     sam,
     seamless_m4t,
     seamless_m4t_v2,
