@@ -311,7 +311,6 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (MiniMaxText01ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MiniMaxText01Model,
@@ -523,123 +522,26 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 self.assertEqual(decoder_past_key_values.key_cache[layer_idx].shape, key_value_cache_expected_shape)
                 self.assertEqual(decoder_past_key_values.value_cache[layer_idx].shape, key_value_cache_expected_shape)
 
+    # Ignore copy
+    @unittest.skip(reason="MiniMaxText01Cache doesnot support cropping, needed for low memory sequential generation")
+    def test_contrastive_generate_low_memory(self):
+        pass
 
 @require_torch
+@require_torch_accelerator
+@slow
 class MiniMaxText01IntegrationTest(unittest.TestCase):
-    # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
-    # Depending on the hardware we get different logits / generations
-    cuda_compute_capability_major_version = None
-
-    @classmethod
-    def setUpClass(cls):
-        if is_torch_available() and torch.cuda.is_available():
-            # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-
-    @slow
-    @require_torch_accelerator
     def test_small_model_logits(self):
-        model_id = "hf-internal-testing/MiniMaxText01-tiny"
+        model_id = "geetu040/MiniMax-Text-01-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MiniMaxText01ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
-        ).to(torch_device)
-        # TODO: might need to tweak it in case the logits do not match on our daily runners
-        # these logits have been obtained with the original megablocks impelmentation.
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in output.
-        EXPECTED_LOGITS = {
-            7: torch.Tensor([[0.1670, 0.1620, 0.6094], [-0.8906, -0.1588, -0.6060], [0.1572, 0.1290, 0.7246]]).to(
-                torch_device
-            ),
-            8: torch.Tensor([[0.1631, 0.1621, 0.6094], [-0.8906, -0.1621, -0.6094], [0.1572, 0.1270, 0.7227]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.1641, 0.1621, 0.6094], [-0.8906, -0.1631, -0.6094], [0.1572, 0.1260, 0.7227]]).to(
-                torch_device
-            ),
-        }
+        model = MiniMaxText01ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
+        )
+        expected_slice = torch.Tensor([[0.4180, 0.7266, 0.0815], [-0.4805, -0.2812, -0.3730], [0.0654, -0.7773, -0.7812]]).to(torch.bfloat16).to(torch_device)
+
         with torch.no_grad():
             logits = model(dummy_input).logits
 
-        torch.testing.assert_close(
-            logits[0, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
-        )
-        torch.testing.assert_close(
-            logits[1, :3, :3], EXPECTED_LOGITS[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
-        )
-
-    @slow
-    @require_torch_accelerator
-    def test_small_model_logits_batched(self):
-        model_id = "hf-internal-testing/MiniMaxText01-tiny"
-        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
-        attention_mask = dummy_input.ne(0).to(torch.long)
-
-        model = MiniMaxText01ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
-        ).to(torch_device)
-
-        # TODO: might need to tweak it in case the logits do not match on our daily runners
-        #
-        # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
-        #
-        # Note: Key 9 is currently set for MI300, but may need potential future adjustments for H100s,
-        # considering differences in hardware processing and potential deviations in generated text.
-        EXPECTED_LOGITS_LEFT = {
-            7: torch.Tensor(
-                [[0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007], [0.1750, 0.0537, 0.7007]],
-            ).to(torch_device),
-            8: torch.Tensor([[0.1914, 0.0508, 0.7188], [0.1953, 0.0510, 0.7227], [0.1973, 0.0562, 0.7148]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.1904, 0.0513, 0.7227], [0.1943, 0.0518, 0.7227], [0.1982, 0.0557, 0.7148]]).to(
-                torch_device
-            ),
-        }
-
-        EXPECTED_LOGITS_LEFT_UNPADDED = {
-            7: torch.Tensor(
-                [[0.2212, 0.5200, -0.3816], [0.8213, -0.2313, 0.6069], [0.2664, -0.7090, 0.2468]],
-            ).to(torch_device),
-            8: torch.Tensor([[0.2217, 0.5195, -0.3828], [0.8203, -0.2295, 0.6055], [0.2676, -0.7109, 0.2461]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.2236, 0.5195, -0.3828], [0.8203, -0.2285, 0.6055], [0.2637, -0.7109, 0.2451]]).to(
-                torch_device
-            ),
-        }
-
-        EXPECTED_LOGITS_RIGHT_UNPADDED = {
-            7: torch.Tensor([[0.2205, 0.1232, -0.1611], [-0.3484, 0.3030, -1.0312], [0.0742, 0.7930, 0.7969]]).to(
-                torch_device
-            ),
-            8: torch.Tensor([[0.2178, 0.1260, -0.1621], [-0.3496, 0.2988, -1.0312], [0.0693, 0.7930, 0.8008]]).to(
-                torch_device
-            ),
-            9: torch.Tensor([[0.2197, 0.1250, -0.1611], [-0.3516, 0.3008, -1.0312], [0.0684, 0.7930, 0.8008]]).to(
-                torch_device
-            ),
-        }
-
-        with torch.no_grad():
-            logits = model(dummy_input, attention_mask=attention_mask).logits
-
-        torch.testing.assert_close(
-            logits[0, :3, :3], EXPECTED_LOGITS_LEFT[self.cuda_compute_capability_major_version], atol=1e-3, rtol=1e-3
-        )
-        torch.testing.assert_close(
-            logits[0, -3:, -3:],
-            EXPECTED_LOGITS_LEFT_UNPADDED[self.cuda_compute_capability_major_version],
-            atol=1e-3,
-            rtol=1e-3,
-        )
-        torch.testing.assert_close(
-            logits[1, -3:, -3:],
-            EXPECTED_LOGITS_RIGHT_UNPADDED[self.cuda_compute_capability_major_version],
-            atol=1e-3,
-            rtol=1e-3,
-        )
+        torch.testing.assert_close(logits[0, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(logits[1, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)

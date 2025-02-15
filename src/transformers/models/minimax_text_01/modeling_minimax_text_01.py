@@ -1337,8 +1337,8 @@ class MiniMaxText01ForCausalLM(MiniMaxText01PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, MiniMaxText01ForCausalLM
 
-        >>> model = MiniMaxText01ForCausalLM.from_pretrained("mistralai/MiniMaxText01-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/MiniMaxText01-8x7B-v0.1")
+        >>> model = MiniMaxText01ForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01")
+        >>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
