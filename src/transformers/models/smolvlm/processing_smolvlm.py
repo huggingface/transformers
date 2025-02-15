@@ -159,13 +159,19 @@ class SmolVLMProcessor(ProcessorMixin):
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str = None, **kwargs):
-        self.fake_image_token = tokenizer.fake_image_token
-        self.image_token = tokenizer.image_token
-        self.end_of_utterance_token = tokenizer.end_of_utterance_token
-        self.global_image_token = tokenizer.global_image_token  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
+        self.fake_image_token = getattr(tokenizer, "fake_image_token",  "<fake_token_around_image>")
+        self.image_token = getattr(tokenizer, "image_token", "<image>")
+        self.end_of_utterance_token = getattr(tokenizer, "end_of_utterance_token", "<end_of_utterance>")
+        self.global_image_token = getattr(tokenizer, "global_image_token", "<global-img>")
         self.image_seq_len = image_seq_len
         
-        self.video_frame_size = image_processor.video_sampling["video_size"]
+
+        self.video_size = image_processor.video_sampling["video_size"]
+        self.image_size = image_processor.size
+
+        self.do_image_splitting = image_processor.do_image_splitting
+        self.do_video_splitting = image_processor.video_sampling.get("do_image_splitting", False)
+        
         self.default_max_frames = image_processor.video_sampling["max_frames"]
         self.default_fps = image_processor.video_sampling["fps"]
         # Matches one or more occurrences of <row_x_col_y> tags (where x and y are digits, optionally surrounded by newline characters
@@ -178,7 +184,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def process_vision(self, text, images, output_kwargs, do_image_splitting=None, image_processor_size=None):
+    def process_vision(self, text, images, output_kwargs, do_image_splitting=False, image_processor_size=None):
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
 
@@ -301,7 +307,13 @@ class SmolVLMProcessor(ProcessorMixin):
         # Images and videos are mutually exclusive, so process one which is present
         if images is not None:
             images = make_nested_list_of_images(images)
-            text, vision_inputs = self.process_vision(text, images, output_kwargs)
+            text, vision_inputs = self.process_vision(
+                text, 
+                images, 
+                output_kwargs,
+                do_image_splitting=self.do_image_splitting,
+                image_processor_size=self.image_size,
+            )
             inputs.update(vision_inputs)
         elif videos is not None:
             videos = make_batched_videos(videos)
@@ -309,8 +321,8 @@ class SmolVLMProcessor(ProcessorMixin):
                 text,
                 videos,
                 output_kwargs,
-                do_image_splitting=False,  # False only if videos
-                image_processor_size=self.video_frame_size,
+                do_image_splitting=self.do_image_splitting,
+                image_processor_size=self.video_size,
             )
             inputs.update(vision_inputs)
 
