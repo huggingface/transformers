@@ -1194,8 +1194,6 @@ class SamHQMaskDecoder(nn.Module):
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
 
-        print("maskdecoder", intermediate_embeddings[0].shape)
-
         if intermediate_embeddings is not None:
             if len(intermediate_embeddings) == 0:
                 raise ValueError("`intermediate_embeddings` must be provided and cannot be empty.")
@@ -1486,7 +1484,6 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         image_embeddings = vision_output[0]
         intermediate_embeddings = vision_output[1]
-        print("vision_encoder", intermediate_embeddings)
 
         return image_embeddings, intermediate_embeddings
 
