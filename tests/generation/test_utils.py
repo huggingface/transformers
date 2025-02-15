@@ -3525,15 +3525,15 @@ class GenerationIntegrationTests(unittest.TestCase):
         with self.assertWarns(UserWarning):
             model.generate(input_ids)
 
-        # Explicitly setting max_length to 20 -> no warning
+        # Explicitly setting max_new_tokens to 20 -> no warning
         with warnings.catch_warnings(record=True) as warning_list:
-            model.generate(input_ids, max_length=20)
+            model.generate(input_ids, max_new_tokens=20)
             self.assertEqual(len(warning_list), 0)
 
-        # Generation config max_length != 20 -> no warning
+        # Generation config max_new_tokens != 20 -> no warning
         with warnings.catch_warnings(record=True) as warning_list:
             # generation_config is modified -> legacy mode is disabled = generation_config takes precedence
-            model.generation_config.max_length = 10
+            model.generation_config.max_new_tokens = 10
             model.generate(input_ids)
             self.assertEqual(len(warning_list), 0)
 
@@ -3636,10 +3636,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
 
     def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
-        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
-
+        """This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly."""
         prompt = "Alice and Bob"
-        checkpoint = "EleutherAI/pythia-160m-deduped"
+        checkpoint = "hf-internal-testing/tiny-random-gpt2"
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         inputs = tokenizer(prompt, return_tensors="pt")
 
@@ -3650,19 +3649,19 @@ class GenerationIntegrationTests(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic"
         generation_kwargs = {
             "eos_token_id": -1,
-            "max_new_tokens": 5,
+            "max_new_tokens": 1,
             "do_sample": False,
             "assistant_model": assistant_model,
         }
         model.generate(**inputs, **generation_kwargs)
-        # update_candidate_strategy is called only once and therefore, assistant_model.generation_config.num_assistant_tokens should be either 4 or 7
+        # `update_candidate_strategy` is called only once and therefore (because `max_new_tokens=1`),
+        # `assistant_model.generation_config.num_assistant_tokens` should be either 4 (no match) or 7 (match)
         self.assertTrue(assistant_model.generation_config.num_assistant_tokens in (4, 7))
 
     def test_assisted_decoding_num_assistant_tokens_heuristic_transient_schedule(self):
-        # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
-
+        """This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly."""
         prompt = "Alice and Bob"
-        checkpoint = "EleutherAI/pythia-160m-deduped"
+        checkpoint = "hf-internal-testing/tiny-random-gpt2"
         tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         inputs = tokenizer(prompt, return_tensors="pt")
 
@@ -3673,12 +3672,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         assistant_model.generation_config.num_assistant_tokens_schedule = "heuristic_transient"
         generation_kwargs = {
             "eos_token_id": -1,
-            "max_new_tokens": 5,
+            "max_new_tokens": 1,
             "do_sample": False,
             "assistant_model": assistant_model,
         }
         model.generate(**inputs, **generation_kwargs)
-        # update_candidate_strategy is called once but assistant_model.generation_config.num_assistant_tokens should stay 5
+        # `update_candidate_strategy` is called once but
+        # `assistant_model.generation_config.num_assistant_tokens` should stay 5 because of the transient schedule
         self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 5)
 
     @slow

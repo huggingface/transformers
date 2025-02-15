@@ -1409,8 +1409,7 @@ class GenerationMixin:
         # 1. Max length warnings related to poor parameterization
         if (
             has_default_max_new_tokens
-            and generation_config.max_length is None
-            and generation_config.max_new_tokens == 20
+            and generation_config.max_length == 20 + input_ids_length
         ):
             # 20 is the default max_length of the generation config
             warnings.warn(
