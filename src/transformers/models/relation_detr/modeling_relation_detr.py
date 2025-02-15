@@ -562,7 +562,7 @@ class RelationDetrConvEncoder(nn.Module):
                     "Feature maps should be in increasing order of channels, make sure `backbone_features_format` is right"
                 )
 
-    def forward(self, pixel_values: torch.Tensor):
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values).feature_maps
 
@@ -1317,7 +1317,7 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
         )
 
 
-def box_rel_encoding(src_boxes: torch.FloatTensor, tgt_boxes: torch.FloatTensor, eps: float = 1e-5):
+def box_rel_encoding(src_boxes: torch.FloatTensor, tgt_boxes: torch.FloatTensor, eps: float = 1e-5) -> torch.Tensor:
     # construct position relation
     xy1, wh1 = src_boxes.split([2, 2], -1)
     xy2, wh2 = tgt_boxes.split([2, 2], -1)
@@ -1329,14 +1329,14 @@ def box_rel_encoding(src_boxes: torch.FloatTensor, tgt_boxes: torch.FloatTensor,
     return pos_embed
 
 
-def get_dim_t(num_pos_feats: int, temperature: int, device: torch.device):
+def get_dim_t(num_pos_feats: int, temperature: int, device: torch.device) -> torch.Tensor:
     dim_t = torch.arange(num_pos_feats // 2, dtype=torch.float32, device=device)
     dim_t.mul_(2 / num_pos_feats)
     dim_t.copy_(temperature**dim_t)
     return dim_t
 
 
-def exchange_xy_fn(pos_res: torch.FloatTensor):
+def exchange_xy_fn(pos_res: torch.FloatTensor) -> torch.Tensor:
     index = torch.cat(
         [
             torch.arange(1, -1, -1, device=pos_res.device),
@@ -1705,7 +1705,7 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
 class RelationDetrChannelMapper(nn.Module):
     """
     Map the channels of a list of feature maps into specific embed_dim. The length of the output is determined by `num_outs`.
-    If the length of outputs is larger than inputs, the difference will be automatically inferred from the last feature map
+    If the length of outputs is larger than inputs, it will be automatically padded from the last feature map with convolutions
     repeatedly. The length of inputs can be smaller than `in_channels`. In this case, only the last `len(inputs) + extra` will
     be used for mapping.
     """
