@@ -13,6 +13,7 @@
 # limitations under the License.
 """Janus model configuration"""
 
+from typing import List
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -280,12 +281,80 @@ class JanusTextConfig(PretrainedConfig):
         )
 
 
-class JanusDecoderVisionConfig(PretrainedConfig):
-    """A custom VQ config model"""
+class JanusVQVAEConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`ChameleonVQModel`]. It is used to instantiate a
+    `ChameleonVQModel` according to the specified arguments, defining the model architecture.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information. Instantiating a
+    configuration with the defaults will yield a similar configuration to the VQModel of the
+    [meta/chameleon-7B](https://huggingface.co/meta/chameleon-7B).
 
-    # TODO
-    def __init__(self):
-        pass
+    Args:
+        embed_dim (`int`, *optional*, defaults to 256):
+            Dimensionality of each embedding vector.
+        num_embeddings (`int`, *optional*, defaults to 8192):
+            Number of codebook embeddings.
+        double_latent (`bool`, *optional*, defaults to `False`):
+            Whether to use double z channels.
+        latent_channels (`int`, *optional*, defaults to 256):
+            Number of channels for the latent space.
+        resolution (`int`, *optional*, defaults to 512):
+            Resolution of the input images.
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        base_channels (`int`, *optional*, defaults to 128):
+            Base channel count.
+        channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
+            Channel multipliers for each resolution.
+        num_res_blocks (`int`, *optional*, defaults to 2):
+            Number of residual blocks.
+        attn_resolutions (`List[int]`, *optional*):
+            Resolutions to apply attention.
+        dropout (`float`, *optional*, defaults to 0.0):
+            Dropout rate.
+        attn_type (`str`, *optional*, defaults to `"vanilla"`):
+            Attention type used in VQ-GAN encoder. Can be "vanilla" or None.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """
+
+    model_type = "chameleon_vqgan"
+    base_config_key = "vq_config"
+
+    def __init__(
+        self,
+        embed_dim: int = 8,
+        num_embeddings: int = 16384,
+        double_latent: bool = False,
+        latent_channels: int = 256,
+        resolution: int = 512,
+        in_channels: int = 3,
+        out_channels: int =3,
+        base_channels: int = 128,
+        channel_multiplier: List[int] = [1, 1, 2, 2, 4],
+        num_res_blocks: int = 2,
+        attn_resolutions: List[int] = None,
+        dropout: float = 0.0,
+        attn_type: str = "vanilla",
+        initializer_range=0.02,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.embed_dim = embed_dim
+        self.num_embeddings = num_embeddings
+        self.double_latent = double_latent
+        self.latent_channels = latent_channels
+        self.resolution = resolution
+        self.in_channels = in_channels
+        self.base_channels = base_channels
+        self.channel_multiplier = channel_multiplier
+        self.num_res_blocks = num_res_blocks
+        self.attn_resolutions = attn_resolutions
+        self.dropout = dropout
+        self.attn_type = attn_type
+        self.initializer_range = initializer_range
+        self.out_channels = out_channels
 
 
 class JanusConfig(PretrainedConfig):
@@ -347,10 +416,10 @@ class JanusConfig(PretrainedConfig):
     sub_configs = {
         "text_config": JanusTextConfig,
         "vision_config": JanusVisionConfig,
-        # "decoder_vision_config": JanusDecoderVisionConfig,
+        "vq_config": JanusVQVAEConfig,
     }
 
-    def __init__(self, text_config=None, vision_config=None, **kwargs):
+    def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
         super().__init__(**kwargs)
 
         if text_config is None:
@@ -361,13 +430,13 @@ class JanusConfig(PretrainedConfig):
             vision_config = {}
             logger.info("`encodr_vision_config` is None. Initializaing with default JanusVisionConfig values")
 
-        # if decoder_vision_config is None:
-        #     decoder_vision_config = {}
-        #     logger.info("`text_config` is None. Initializaing with default JanusDecoderVisionConfig values")
+        if vq_config is None:
+            vq_config = {}
+            logger.info("`text_config` is None. Initializaing with default JanusDecoderVisionConfig values")
 
         self.text_config = JanusTextConfig(**text_config)
         self.vision_config = JanusVisionConfig(**vision_config)
-        # decoder_vision_config = JanusDecoderVisionConfig(**decoder_vision_config)
+        self.vq_config = JanusVQVAEConfig(**vq_config)
 
 
-__all__ = ["JanusDecoderVisionConfig", "JanusTextConfig", "JanusVisionConfig", "JanusConfig"]
+__all__ = ["JanusVQVAEConfig", "JanusTextConfig", "JanusVisionConfig", "JanusConfig"]
