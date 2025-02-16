@@ -544,11 +544,6 @@ class MiniMaxText01IntegrationTest(unittest.TestCase):
             .to(torch.bfloat16)
             .to(torch_device)
         )
-        expected_slice = (
-            torch.Tensor([[0.4180, 0.7266, 0.0815], [-0.4805, -0.2812, -0.3730], [0.0654, -0.7773, -0.7812]])
-            .to(torch.bfloat16)
-            .to(torch_device)
-        )
 
         with torch.no_grad():
             logits = model(dummy_input).logits
