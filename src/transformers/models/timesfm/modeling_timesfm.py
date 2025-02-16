@@ -112,8 +112,7 @@ class TimesFmRMSNorm(nn.Module):
 
 
 class TimesFmPositionalEmbedding(nn.Module):
-    """Generates position embedding for a given 1-d sequence.
-    """
+    """Generates position embedding for a given 1-d sequence."""
 
     def __init__(self, config: TimesFmConfig) -> None:
         super().__init__()
