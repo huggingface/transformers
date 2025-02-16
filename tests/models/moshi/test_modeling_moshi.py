@@ -152,9 +152,6 @@ class MoshiDecoderTester:
 @require_torch
 class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (
-        (MoshiForCausalLM,) if is_torch_available() else ()
-    )  # we don't want to run all the generation tests, only a specific subset
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
@@ -528,7 +525,6 @@ class MoshiTester:
 @require_torch
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False  # training is not supported yet for Moshi
     test_headmasking = False
     test_resize_embeddings = False
@@ -575,76 +571,11 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         return config, filtered_inputs_dict
 
-    def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
-        )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length if idx == 0 else 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-
-    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        super()._check_outputs(
+        super()._check_generate_outputs(
             output, config, use_cache=True, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
-
-    def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        self.assertIsInstance(hidden_states, tuple)
-        self.assertListEqual(
-            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
-            [True] * len(hidden_states),
-        )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
-            # check hidden size
-            self.assertListEqual(
-                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(iter_hidden_states),
-            )
-
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
-        # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
-        self.assertIsInstance(attentions, tuple)
-        self.assertListEqual(
-            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
-        )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
-
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = 1
-            src_len = min_length + idx
-
-            expected_shape = (
-                batch_size * num_beam_groups,
-                config.num_attention_heads,
-                tgt_len,
-                src_len,
-            )
-            # check attn size
-            self.assertListEqual(
-                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-            )
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -675,6 +606,18 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     @unittest.skip("Moshi doesn't support contrastive generation yet.")
     def test_contrastive_generate_low_memory(self):
+        pass
+
+    @unittest.skip(
+        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+    )
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(
+        "Moshi either needs deafult generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
+    )
+    def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
     @unittest.skip("Adapting this test is costly. `test_eager_matches_sdpa_generate` tests this already.")
