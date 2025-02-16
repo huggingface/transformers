@@ -527,6 +527,7 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_contrastive_generate_low_memory(self):
         pass
 
+
 @require_torch
 @require_torch_accelerator
 @slow
@@ -535,10 +536,19 @@ class MiniMaxText01IntegrationTest(unittest.TestCase):
         model_id = "geetu040/MiniMax-Text-01-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MiniMaxText01ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
+        model = MiniMaxText01ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        ).to(torch_device)
+        expected_slice = (
+            torch.Tensor([[0.4180, 0.7266, 0.0815], [-0.4805, -0.2812, -0.3730], [0.0654, -0.7773, -0.7812]])
+            .to(torch.bfloat16)
+            .to(torch_device)
         )
-        expected_slice = torch.Tensor([[0.4180, 0.7266, 0.0815], [-0.4805, -0.2812, -0.3730], [0.0654, -0.7773, -0.7812]]).to(torch.bfloat16).to(torch_device)
+        expected_slice = (
+            torch.Tensor([[0.4180, 0.7266, 0.0815], [-0.4805, -0.2812, -0.3730], [0.0654, -0.7773, -0.7812]])
+            .to(torch.bfloat16)
+            .to(torch_device)
+        )
 
         with torch.no_grad():
             logits = model(dummy_input).logits
