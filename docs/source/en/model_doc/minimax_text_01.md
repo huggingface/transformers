@@ -62,12 +62,11 @@ For more details refer to the [release blog post](https://www.minimaxi.com/en/ne
 
 The pre-trained model can be used as follows:
 
-<!-- TODO: update below -->
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/MiniMaxText01-8x7B-Instruct-v0.1", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/MiniMaxText01-8x7B-Instruct-v0.1")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
 
 >>> messages = [
 ...     {"role": "user", "content": "What is your favourite condiment?"},
@@ -86,7 +85,7 @@ As can be seen, the instruction-tuned model requires a [chat template](../chat_t
 
 ## Speeding up MiniMaxText01 by using Flash Attention
 
-The pre-trained model used in the following code snippet above showcases inference with [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model and drastically speeds up the model.
+The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2 to include the sliding window attention feature.
 
@@ -102,8 +101,8 @@ To load and run a model using Flash Attention-2, refer to the snippet below:
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/MiniMaxText01-8x7B-v0.1", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/MiniMaxText01-8x7B-v0.1")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01", torch_dtype=torch.float16, attn_implementation="flash_attention_2", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
 
 >>> prompt = "My favourite condiment is"
 
@@ -115,14 +114,6 @@ To load and run a model using Flash Attention-2, refer to the snippet below:
 "The expected output"
 ```
 
-### Expected speedups
-
-Below is a expected speedup diagram that compares pure inference time between the native implementation in transformers using `mistralai/MiniMaxText01-8x7B-v0.1` checkpoint and the Flash Attention 2 version of the model.
-
-<div style="text-align: center">
-<img src="https://huggingface.co/datasets/ybelkada/documentation-images/resolve/main/mixtral-7b-inference-large-seqlen.png">
-</div>
-
 ### Sliding window Attention
 
 The current implementation supports the sliding window attention mechanism and memory efficient cache management. 
@@ -132,7 +123,7 @@ The Flash Attention-2 model uses also a more memory efficient cache slicing mech
 
 ## Shrinking down MiniMaxText01 using quantization
 
-As the MiniMaxText01 model has 45 billion parameters, that would require about 90GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter), a single A100 with 40GB of RAM is enough to fit the entire model, as in that case only about 27 GB of RAM is required.
+As the MiniMaxText01 model has 456 billion parameters, that would require about 912GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter), about 228 GB of RAM is required.
 
 Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization.md) for alternative quantization methods):
 
@@ -147,8 +138,8 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ...         bnb_4bit_compute_dtype="torch.float16",
 ... )
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/MiniMaxText01-8x7B-Instruct-v0.1", quantization_config=True, device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("mistralai/MiniMaxText01-8x7B-Instruct-v0.1")
+>>> model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01", quantization_config=True, device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
 
 >>> prompt = "My favourite condiment is"
 
@@ -165,8 +156,8 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 "The expected output"
 ```
 
-This model was contributed by [Younes Belkada](https://huggingface.co/ybelkada) and [Arthur Zucker](https://huggingface.co/ArthurZ) .
-The original code can be found [here](https://github.com/mistralai/mistral-src).
+This model was contributed by [geetu040](https://github.com/geetu040).
+The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/blob/main/modeling_minimax_text_01.py).
 
 ## Resources
 
@@ -174,8 +165,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <PipelineTag pipeline="text-generation"/>
 
-- A demo notebook to perform supervised fine-tuning (SFT) of MiniMaxText01-8x7B can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Mistral/Supervised_fine_tuning_(SFT)_of_an_LLM_using_Hugging_Face_tooling.ipynb). 🌎
-- A [blog post](https://medium.com/@prakharsaxena11111/finetuning-mixtral-7bx8-6071b0ebf114) on fine-tuning MiniMaxText01-8x7B using PEFT. 🌎
 - The [Alignment Handbook](https://github.com/huggingface/alignment-handbook) by Hugging Face includes scripts and recipes to perform supervised fine-tuning (SFT) and direct preference optimization with Mistral-7B. This includes scripts for full fine-tuning, QLoRa on a single GPU as well as multi-GPU fine-tuning.
 - [Causal language modeling task guide](../tasks/language_modeling)
 
