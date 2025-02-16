@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
@@ -207,6 +206,14 @@ class MoonshineAttention(nn.Module):
         )
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
+        # Pad head dimension to the next specified multiple.
+        if self.config.pad_head_dim_to_multiple_of is not None:
+            target_multiple = self.config.pad_head_dim_to_multiple_of
+            target_head_dim = target_multiple * ((self.head_dim + target_multiple - 1) // target_multiple)
+            self.head_dim_padding = target_head_dim - self.head_dim
+        else:
+            self.head_dim_padding = 0
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -276,21 +283,10 @@ class MoonshineAttention(nn.Module):
 
         is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
 
-        # Pad head size dimension to next specified multiple. Q K and V always have equal head sizes.
-        head_dim_padding = 0
-        if self.config.pad_head_dim_to_multiple_of is not None:
-            head_dim = query_states.shape[-1]
-            target_multiple = self.config.pad_head_dim_to_multiple_of
-            target_head_dim = target_multiple * ((head_dim + target_multiple - 1) // target_multiple)
-            head_dim_padding = target_head_dim - head_dim
-            if head_dim_padding > 0:
-                # Ensure scaling is correct even with padding.
-                if self.scaling is None:
-                    self.scaling = 1.0 / math.sqrt(query_states.shape[-1])
-
-                query_states = torch.nn.functional.pad(query_states, (0, head_dim_padding))
-                key_states = torch.nn.functional.pad(key_states, (0, head_dim_padding))
-                value_states = torch.nn.functional.pad(value_states, (0, head_dim_padding))
+        if self.head_dim_padding > 0:
+            query_states = torch.nn.functional.pad(query_states, (0, self.head_dim_padding))
+            key_states = torch.nn.functional.pad(key_states, (0, self.head_dim_padding))
+            value_states = torch.nn.functional.pad(value_states, (0, self.head_dim_padding))
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -304,9 +300,8 @@ class MoonshineAttention(nn.Module):
             **kwargs,
         )
 
-        # Remove head size padding.
-        if head_dim_padding > 0:
-            attn_output = attn_output[:, :, :, :-head_dim_padding]
+        if self.head_dim_padding > 0:
+            attn_output = attn_output[..., : -self.head_dim_padding]
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -1045,7 +1040,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1104,7 +1099,9 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype

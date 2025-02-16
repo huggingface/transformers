@@ -281,7 +281,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (GraniteForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": GraniteModel,

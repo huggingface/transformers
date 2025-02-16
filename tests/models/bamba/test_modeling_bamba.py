@@ -22,6 +22,7 @@ import pytest
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -256,15 +257,7 @@ class BambaModelTester:
 
 @require_torch
 class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            BambaModel,
-            BambaForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (BambaForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BambaModel,
@@ -487,6 +480,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @slow
 @require_torch
+@require_torch_gpu
 class BambaModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
