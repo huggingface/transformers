@@ -43,7 +43,7 @@ Model Hub的内置版本控制基于git和[git-lfs](https://git-lfs.github.com/)
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # tag name, or branch name, or commit hash
 ... )
 ```
 

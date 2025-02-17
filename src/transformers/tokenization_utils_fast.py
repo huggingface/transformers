@@ -21,7 +21,7 @@ import copy
 import json
 import os
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from tokenizers import Encoding as EncodingFast
@@ -102,6 +102,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
+        self.add_prefix_space = kwargs.get("add_prefix_space", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -205,6 +206,18 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 tokens.append(token)
             if tokens:
                 self.add_tokens(tokens)
+
+        try:
+            pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+            if pre_tok_state.get("add_prefix_space", self.add_prefix_space) != self.add_prefix_space:
+                pre_tok_class = getattr(pre_tokenizers_fast, pre_tok_state.pop("type"))
+                pre_tok_state["add_prefix_space"] = self.add_prefix_space
+                self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+        except Exception:
+            # We'll get an error if there is no pre_tokenizer, or if it's a custom pre_tokenizer that can
+            # not be serialized. In those cases, we just ignore the error as there's no pre_tokenizer
+            # for which we need to update the `add_prefix_space` attribute.
+            pass
 
     @property
     def is_fast(self) -> bool:
@@ -326,20 +339,17 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         return encoding_dict, encodings
 
-    def convert_tokens_to_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
+    def convert_tokens_to_ids(self, tokens: Union[str, Iterable[str]]) -> Union[int, List[int]]:
         """
-        Converts a token string (or a sequence of tokens) in a single integer id (or a sequence of ids), using the
+        Converts a token string (or a sequence of tokens) in a single integer id (or a Iterable of ids), using the
         vocabulary.
 
         Args:
-            tokens (`str` or `List[str]`): One or several token(s) to convert to token id(s).
+            tokens (`str` or `Iterable[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
             `int` or `List[int]`: The token id or list of token ids.
         """
-        if tokens is None:
-            return None
-
         if isinstance(tokens, str):
             return self._convert_token_to_id_with_added_voc(tokens)
 
@@ -627,7 +637,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         if return_tensors is None and not return_overflowing_tokens:
             batched_output = BatchEncoding(
                 {
-                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                    key: (value[0] if len(value) > 0 and isinstance(value[0], list) else value)
                     for key, value in batched_output.items()
                 },
                 batched_output.encodings,
@@ -638,7 +648,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return batched_output
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        return self.backend_tokenizer.decoder.decode(tokens)
+        return (
+            self.backend_tokenizer.decoder.decode(tokens)
+            if self.backend_tokenizer.decoder is not None
+            else " ".join(tokens)
+        )
 
     def _decode(
         self,
@@ -812,17 +826,17 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
         if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
             kwargs["unk_token"] = unk_token
-        if (
-            tokenizer_json["pre_tokenizer"] is not None
-            and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
-            or tokenizer_json["pre_tokenizer"]["type"] == "Sequence"
-            and "pretokenizers" in tokenizer_json["pre_tokenizer"]
-            and any(
-                pretokenizer["type"] == "ByteLevel"
-                for pretokenizer in tokenizer_json["pre_tokenizer"]["pretokenizers"]
-            )
-        ):
-            kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
+        if tokenizer_json["pre_tokenizer"] is not None:
+            if (
+                tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
+                or tokenizer_json["pre_tokenizer"]["type"] == "Sequence"
+                and "pretokenizers" in tokenizer_json["pre_tokenizer"]
+                and any(
+                    pretokenizer["type"] == "ByteLevel"
+                    for pretokenizer in tokenizer_json["pre_tokenizer"]["pretokenizers"]
+                )
+            ):
+                kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
@@ -866,13 +880,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         special_tokens_list = SpecialTokensMixin.SPECIAL_TOKENS_ATTRIBUTES.copy()
         special_tokens_list.remove("additional_special_tokens")
         for token in special_tokens_list:
-            # Get the private one to avoid unnecessary warnings.
-            if getattr(self, f"_{token}") is not None:
+            if getattr(self, token) is not None:
                 special_token = getattr(self, token)
                 if special_tokens_map is not None and special_token in special_tokens_map:
                     special_token = special_tokens_map[special_token]
 
-                special_token_full = getattr(self, f"_{token}")
+                special_token_full = self._special_tokens_map.get(token, None)
                 if isinstance(special_token_full, AddedToken):
                     # Create an added token with the same parameters except the content
                     kwargs[token] = AddedToken(

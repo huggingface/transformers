@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -38,8 +38,6 @@ class VideoLlavaConfig(PretrainedConfig):
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
             Defaults to `LlamaConfig` if not indicated.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         video_token_index (`int`, *optional*, defaults to 32001):
@@ -49,12 +47,16 @@ class VideoLlavaConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
             Can be either "full" to select all features or "default" to select features without `CLS`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         image_seq_length (`int`, *optional*, defaults to 256):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 2056):
             Sequence length of one video embedding.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
 
     Example:
 
@@ -78,13 +80,12 @@ class VideoLlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "video_llava"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=32000,
         video_token_index=32001,
         projector_hidden_act="gelu",
@@ -92,9 +93,9 @@ class VideoLlavaConfig(PretrainedConfig):
         vision_feature_layer=-2,
         image_seq_length=256,
         video_seq_length=2056,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
@@ -102,6 +103,7 @@ class VideoLlavaConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
         self.image_seq_length = image_seq_length
         self.video_seq_length = video_seq_length
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         self.vision_config = vision_config
 
@@ -132,3 +134,6 @@ class VideoLlavaConfig(PretrainedConfig):
 
         self.text_config = text_config
         super().__init__(**kwargs)
+
+
+__all__ = ["VideoLlavaConfig"]

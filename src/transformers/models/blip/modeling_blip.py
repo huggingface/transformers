@@ -233,7 +233,6 @@ class BlipVisionEmbeddings(nn.Module):
 
         self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
 
-    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
@@ -245,14 +244,14 @@ class BlipVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
+        num_positions = self.position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = self.position_embedding[:, :1]
+        patch_pos_embed = self.position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
@@ -310,6 +309,13 @@ class BlipTextEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -465,6 +471,8 @@ class BlipPreTrainedModel(PreTrainedModel):
     config_class = BlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["BlipEncoderLayer", "BlipTextEmbeddings"]
+    _skip_keys_device_placement = ["past_key_value"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -796,6 +804,12 @@ class BlipModel(BlipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_model.set_input_embeddings(value)
+
     @add_start_docstrings_to_model_forward(BLIP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
         self,
@@ -1004,7 +1018,8 @@ class BlipModel(BlipPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
+        logit_scale = self.logit_scale.exp().to(device=text_embeds.device)
+        image_embeds = image_embeds.to(device=text_embeds.device, dtype=text_embeds.dtype)
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.t()
 
@@ -1054,8 +1069,11 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+    def get_input_embeddings(self):
+        return self.text_decoder.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_decoder.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BlipForConditionalGenerationModelOutput, config_class=BlipVisionConfig)
@@ -1118,7 +1136,8 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         )
 
         if not return_dict:
-            outputs = (outputs[0], outputs[1], image_embeds, vision_outputs[0]) + vision_outputs[2:]
+            outputs = (outputs[0], outputs[1]) if labels is not None else (outputs[0],)
+            outputs += (image_embeds, vision_outputs[0]) + vision_outputs[2:]
             return tuple(output for output in outputs if output is not None)
 
         return BlipForConditionalGenerationModelOutput(
@@ -1233,8 +1252,12 @@ class BlipForQuestionAnswering(BlipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+    def set_input_embeddings(self, value):
+        self.text_encoder.set_input_embeddings(value)
+
+    def get_input_embeddings(self):
+        # This will return shared embeddings if they are shared else specific to encoder.
+        return self.text_encoder.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
@@ -1475,8 +1498,11 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+    def get_input_embeddings(self):
+        return self.text_encoder.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_encoder.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(BLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BlipTextVisionModelOutput, config_class=BlipVisionConfig)
@@ -1564,3 +1590,14 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
             attentions=vision_outputs.attentions,
             question_embeds=question_embeds,
         )
+
+
+__all__ = [
+    "BlipModel",
+    "BlipPreTrainedModel",
+    "BlipForConditionalGeneration",
+    "BlipForQuestionAnswering",
+    "BlipVisionModel",
+    "BlipTextModel",
+    "BlipForImageTextRetrieval",
+]

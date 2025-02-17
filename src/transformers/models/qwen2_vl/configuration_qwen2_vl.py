@@ -14,9 +14,6 @@
 # limitations under the License.
 """Qwen2VL model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
@@ -27,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 class Qwen2VLVisionConfig(PretrainedConfig):
     model_type = "qwen2_vl"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -54,23 +52,6 @@ class Qwen2VLVisionConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "qwen2_vl":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class Qwen2VLConfig(PretrainedConfig):
@@ -180,7 +161,23 @@ class Qwen2VLConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_vl"
+    sub_configs = {"vision_config": Qwen2VLVisionConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `Qwen2VL`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,
@@ -206,9 +203,9 @@ class Qwen2VLConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(vision_config, dict):
-            self.vision_config = Qwen2VLVisionConfig(**vision_config)
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
-            self.vision_config = Qwen2VLVisionConfig()
+            self.vision_config = self.sub_configs["vision_config"]()
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -235,11 +232,16 @@ class Qwen2VLConfig(PretrainedConfig):
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
-        # and change type from 'mrope' to 'default'
+        # and change type from 'mrope' to 'default' because `mrope` does defeault RoPE calculations
+        # one can set it to "linear"/"dynamic" etc. to have scaled RoPE
+        # TODO: @raushan update config in the hub
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             if self.rope_scaling["type"] == "mrope":
                 self.rope_scaling["type"] = "default"
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        rope_config_validation(self, ignore_keys={"mrope_section"})
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["Qwen2VLConfig"]

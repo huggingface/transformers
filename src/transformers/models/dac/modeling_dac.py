@@ -641,14 +641,14 @@ class DacModel(DacPreTrainedModel):
     @replace_return_docstrings(output_type=DacDecoderOutput, config_class=_CONFIG_FOR_DOC)
     def decode(
         self,
-        quantized_representation: Optional[torch.Tensor],
+        quantized_representation: Optional[torch.Tensor] = None,
         audio_codes: Optional[torch.Tensor] = None,
         return_dict: Optional[bool] = None,
     ):
         """Decode given latent codes and return audio data
 
         Args:
-            quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`):
+            quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
                 Quantized continuous representation of input.
             audio_codes (`torch.Tensor` of shape `(batch_size, num_codebooks, time_steps)`, *optional*):
                 The codebook indices for each codebook, representing the quantized discrete
@@ -719,3 +719,6 @@ class DacModel(DacPreTrainedModel):
             return (loss, audio_values, quantized_representation, audio_codes, projected_latents)
 
         return DacOutput(loss, audio_values, quantized_representation, audio_codes, projected_latents)
+
+
+__all__ = ["DacModel", "DacPreTrainedModel"]

@@ -33,8 +33,8 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
-    is_valid_image,
     is_vision_available,
+    make_nested_list_of_images,
     to_numpy_array,
     validate_preprocess_arguments,
 )
@@ -135,7 +135,7 @@ def get_optimal_tiled_canvas(
     max_image_tiles: int,
     tile_size: int,
 ) -> Tuple[int, int]:
-    """
+    r"""
     Determines the best canvas based on image and tile size and maximum number of tiles.
 
     First, calculates possible resolutions based on the maximum number of tiles and tile size.
@@ -157,6 +157,74 @@ def get_optimal_tiled_canvas(
     If there are multiple resolutions with the same max scale, we pick the one with the lowest area,
     to minimize padding. E.g., the same image can be upscaled to 224x224 and 224x448, but the latter
     has more padding.
+
+    Example of canvases made from tiles:
+
+    To visualize how the image can fit onto different tile grids, let's try fitting an ASCII cat into the tiles.
+
+    Here's an ASCII cat image you want to fit into the tiles:
+
+       /\_/\
+      ( o.o )
+       > ^ <
+
+    If `num_tiles=6`, possible tile grids would look like this:
+
+    **2x3 Canvas (2 tiles wide, 3 tiles tall)**: -> total of 6 tiles
+    +-------+-------+
+    | /\_/\ |   0   |   <- Cat image split across two tiles horizontally
+    +-------+-------+
+    | > ^ < |   0   |   <- Remaining part of the cat occupies the left tile
+    +-------+-------+
+    |( o.o )|   0   |
+    +-------+-------+
+
+    **3x2 Canvas (3 tiles wide, 2 tiles tall)**: -> total of 6 tiles
+    +-------+-------+-------+
+    | /\_/\ |( o.o )|   0   |   <- Cat image occupies the first two tiles, 1 tile remains empty
+    +-------+-------+-------+
+    | > ^ < |   0   |   0   |   <- Remaining part of the cat occupies the left tile
+    +-------+-------+-------+
+
+    **1x6 Canvas (1 tile wide, 6 tiles tall)**: -> total of 6 tiles
+    +-------+
+    | /\_/\ |   <- Top part of the cat
+    +-------+
+    |( o.o )|   <- Middle part of the cat
+    +-------+
+    | > ^ < |   <- Bottom part of the cat
+    +-------+
+    |   0   |
+    +-------+
+    |   0   |
+    +-------+
+    |   0   |
+    +-------+
+
+    Given that the tiles you get depend on the chosen aspect ratio, you have to add
+    embedding in the modeling code to help it know if it got a 3x2 or a 1x6 or a 2x3
+    aspect ratio.
+
+    The function tests these arrangements to find the smallest canvas where the image fits.
+    If multiple canvases fit, it selects the one where the dimensions are closest to the image size.
+
+    In this case the first canvas is the closest to the original image.
+
+    You then feed all of the tiles to the model:
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ |( o.o )| > ^ < |   0   |   0   |   0   |  <- Last canvas
+        +-------+-------+-------+-------+-------+-------+
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ | 0     |( o.o )|   0   | > ^ < |   0   | <- First canvas
+        +-------+-------+-------+-------+-------+-------+
+
+        +-------+-------+-------+-------+-------+-------+
+    -   | /\_/\ |( o.o )|   0   | > ^ < |   0   |   0   | <- second canvas
+        +-------+-------+-------+-------+-------+-------+
+
+    For each tile, you have num_channels (usually RGB so 3), tile_width, tile_height
 
     Args:
         image_height (`int`):
@@ -446,42 +514,6 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
     return alpha_composite
 
 
-# Modified from transformers.models.idefics2.image_processing_idefics2.make_list_of_images
-def make_list_of_images(images: ImageInput) -> List[List[Optional[np.ndarray]]]:
-    """
-    Convert a single image or a list of images to a list of numpy arrays.
-
-    Args:
-        images (`ImageInput`):
-            A single image or a list of images.
-
-    Returns:
-        A list of numpy arrays.
-    """
-    # If it's a single image, convert it to a list of lists
-    if is_valid_image(images):
-        output_images = [[images]]
-    # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        output_images = [images]
-    # If it's a list of batches, it's already in the right format
-    elif (
-        isinstance(images, (list, tuple))
-        and all(isinstance(images_i, (list, tuple)) for images_i in images)
-        and any(is_valid_list_of_images(images_i) for images_i in images)
-    ):
-        output_images = images
-    else:
-        raise ValueError(
-            "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
-        )
-    return output_images
-
-
-def is_valid_list_of_images(images: List):
-    return images and all(is_valid_image(image) for image in images)
-
-
 def _validate_size(size: Dict[str, int]) -> None:
     if not ("height" in size and "width" in size):
         raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
@@ -658,7 +690,7 @@ class MllamaImageProcessor(BaseImageProcessor):
         # extra validation
         _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles)
 
-        images_list = make_list_of_images(images)
+        images_list = make_nested_list_of_images(images)
 
         if self.do_convert_rgb:
             images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
@@ -860,3 +892,6 @@ class MllamaImageProcessor(BaseImageProcessor):
         )
 
         return image, (num_tiles_height, num_tiles_width)
+
+
+__all__ = ["MllamaImageProcessor"]

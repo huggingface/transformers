@@ -735,11 +735,23 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
                 new_imported_modules = extract_imports(module, cache=cache)
+
+                # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
+                from transformers.utils.import_utils import define_import_structure
+
+                new_imported_modules_2 = define_import_structure(PATH_TO_REPO / module)
+
+                for mapping in new_imported_modules_2.values():
+                    for _module, _imports in mapping.items():
+                        _module = module.replace("__init__.py", f"{_module}.py")
+                        new_imported_modules.append((_module, list(_imports)))
+
                 for new_module, new_imports in new_imported_modules:
                     if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
                         imports = [i for i in imports if i not in new_imports]
+
                 if len(imports) > 0:
                     # If there are any objects lefts, they may be a submodule
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
@@ -759,6 +771,7 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
                 dependencies.append(module)
 
         imported_modules = new_modules
+
     return dependencies
 
 
@@ -880,6 +893,7 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
         depending on it recursively. This way the tests impacted by a change in file A are the test files in the list
         corresponding to key A in this result.
     """
+
     cache = {}
     # Start from the example deps init.
     example_deps, examples = init_test_examples_dependencies()
@@ -995,9 +1009,7 @@ def _print_list(l) -> str:
 
 
 def infer_tests_to_run(
-    output_file: str,
-    diff_with_last_commit: bool = False,
-    filter_models: bool = True,
+    output_file: str, diff_with_last_commit: bool = False, filter_models: bool = False, test_all: bool = False
 ):
     """
     The main function called by the test fetcher. Determines the tests to run from the diff.
@@ -1018,7 +1030,11 @@ def infer_tests_to_run(
             Whether or not to filter the tests to core models only, when a file modified results in a lot of model
             tests.
     """
-    modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
+    if not test_all:
+        modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
+    else:
+        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
     # Create the map that will give us all impacted modules.
@@ -1153,6 +1169,7 @@ JOB_TO_TEST_FILE = {
 
 
 def create_test_list_from_filter(full_test_list, out_path):
+    os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
@@ -1228,6 +1245,7 @@ if __name__ == "__main__":
         infer_tests_to_run(
             args.output_file,
             diff_with_last_commit=diff_with_last_commit,
-            filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
+            filter_models=False,
+            test_all=commit_flags["test_all"],
         )
         filter_tests(args.output_file, ["repo_utils"])

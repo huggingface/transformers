@@ -151,9 +151,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
-        self.language_model = AutoModelForCausalLM.from_config(
-            config.text_config, attn_implementation=config._attn_implementation
-        )
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
         self.vision_embed_tokens = nn.Linear(
             config.patch_size * config.patch_size * config.num_channels, config.hidden_size
@@ -180,9 +180,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    def tie_weights(self):
-        return self.language_model.tie_weights()
 
     def gather_continuous_embeddings(
         self,
@@ -242,6 +239,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -330,6 +328,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             labels=labels,
             use_cache=use_cache,
             return_dict=return_dict,
+            **kwargs,
         )
 
         return outputs
@@ -344,7 +343,9 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches_indices=None,
         **kwargs,
     ):
-        if past_key_values:
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
@@ -353,7 +354,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
-                position_ids = position_ids[:, -1].unsqueeze(-1)
+                position_ids = position_ids[:, -1:]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -375,3 +376,15 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             }
         )
         return model_inputs
+
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
+
+
+__all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel"]

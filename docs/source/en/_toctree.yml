@@ -112,6 +112,17 @@
     title: Generation
   - isExpanded: false
     sections:
+    - local: chat_template_basics
+      title: Getting Started with Chat Templates for Text LLMs
+    - local: chat_template_multimodal
+      title: Multimodal Chat Templates for Vision and Audio LLMs
+    - local: chat_template_tools_and_documents
+      title: Expanding Chat Templates with Tools and Documents
+    - local: chat_template_advanced
+      title: Advanced Usage and Customizing Your Chat Templates
+    title: Chat Templates
+  - isExpanded: false
+    sections:
     - local: tasks/idefics
       title: Image tasks with IDEFICS
     - local: tasks/prompting
@@ -127,8 +138,6 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
-  - local: chat_templating
-    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
@@ -139,8 +148,6 @@
     title: Export to TFLite
   - local: torchscript
     title: Export to TorchScript
-  - local: benchmarks
-    title: Benchmarks
   - local: notebooks
     title: Notebooks with examples
   - local: community
@@ -153,6 +160,8 @@
     title: Interoperability with TikToken files
   - local: modular_transformers
     title: Modularity in `transformers`
+  - local: how_to_hack_models
+    title: Model Hacking (overwriting a class to your usage)
   title: Developer guides
 - sections:
   - local: quantization/overview
@@ -165,10 +174,16 @@
     title: AWQ
   - local: quantization/aqlm
     title: AQLM
+  - local: quantization/vptq
+    title: SpQR
+  - local: quantization/spqr
+    title: VPTQ
   - local: quantization/quanto
     title: Quanto
   - local: quantization/eetq
     title: EETQ
+  - local: quantization/higgs
+    title: HIGGS
   - local: quantization/hqq
     title: HQQ
   - local: quantization/fbgemm_fp8
@@ -177,8 +192,12 @@
     title: Optimum
   - local: quantization/torchao
     title: TorchAO
+  - local: quantization/bitnet
+    title: BitNet
   - local: quantization/compressed_tensors
     title: compressed-tensors
+  - local: quantization/finegrained_fp8
+    title: Fine-grained FP8
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -214,6 +233,8 @@
       title: CPU inference
     - local: perf_infer_gpu_one
       title: GPU inference
+    - local: perf_infer_gpu_multi
+      title: Multi-GPU inference
     title: Optimizing inference
   - local: big_models
     title: Instantiate a big model
@@ -316,6 +337,8 @@
       sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/bamba
+        title: Bamba
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
@@ -356,6 +379,8 @@
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
+      - local: model_doc/cohere2
+        title: Cohere2
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -372,6 +397,8 @@
         title: DeBERTa-v2
       - local: model_doc/dialogpt
         title: DialoGPT
+      - local: model_doc/diffllama
+        title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
       - local: model_doc/dpr
@@ -388,10 +415,10 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon3
+        title: Falcon3
       - local: model_doc/falcon_mamba
         title: FalconMamba
-      - local: model_doc/fastspeech2_conformer
-        title: FastSpeech2Conformer
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -410,6 +437,8 @@
         title: Gemma
       - local: model_doc/gemma2
         title: Gemma2
+      - local: model_doc/glm
+        title: GLM
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -432,6 +461,12 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/granitemoeshared
+        title: GraniteMoeShared
+      - local: model_doc/granitevision
+        title: GraniteVision
+      - local: model_doc/helium
+        title: Helium
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -484,6 +519,8 @@
         title: mLUKE
       - local: model_doc/mobilebert
         title: MobileBERT
+      - local: model_doc/modernbert
+        title: ModernBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -494,6 +531,8 @@
         title: MT5
       - local: model_doc/mvp
         title: MVP
+      - local: model_doc/myt5
+        title: myt5
       - local: model_doc/nemotron
         title: Nemotron
       - local: model_doc/nezha
@@ -506,6 +545,8 @@
         title: Nyströmformer
       - local: model_doc/olmo
         title: OLMo
+      - local: model_doc/olmo2
+        title: OLMo2
       - local: model_doc/olmoe
         title: OLMoE
       - local: model_doc/open-llama
@@ -522,6 +563,8 @@
         title: Phi
       - local: model_doc/phi3
         title: Phi-3
+      - local: model_doc/phimoe
+        title: PhiMoE
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -532,12 +575,8 @@
         title: QDQBert
       - local: model_doc/qwen2
         title: Qwen2
-      - local: model_doc/qwen2_audio
-        title: Qwen2Audio
       - local: model_doc/qwen2_moe
         title: Qwen2MoE
-      - local: model_doc/qwen2_vl
-        title: Qwen2VL
       - local: model_doc/rag
         title: RAG
       - local: model_doc/realm
@@ -600,6 +639,10 @@
         title: XLNet
       - local: model_doc/yoso
         title: YOSO
+      - local: model_doc/zamba
+        title: Zamba
+      - local: model_doc/zamba2
+        title: Zamba2
       title: Text models
     - isExpanded: false
       sections:
@@ -615,6 +658,8 @@
         title: ConvNeXTV2
       - local: model_doc/cvt
         title: CvT
+      - local: model_doc/dab-detr
+        title: DAB-DETR
       - local: model_doc/deformable_detr
         title: Deformable DETR
       - local: model_doc/deit
@@ -623,6 +668,8 @@
         title: Depth Anything
       - local: model_doc/depth_anything_v2
         title: Depth Anything V2
+      - local: model_doc/depth_pro
+        title: DepthPro
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
@@ -631,6 +678,8 @@
         title: DiNAT
       - local: model_doc/dinov2
         title: DINOV2
+      - local: model_doc/dinov2_with_registers
+        title: DINOv2 with Registers
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -645,6 +694,8 @@
         title: GLPN
       - local: model_doc/hiera
         title: Hiera
+      - local: model_doc/ijepa
+        title: I-JEPA
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
@@ -675,10 +726,14 @@
         title: ResNet
       - local: model_doc/rt_detr
         title: RT-DETR
+      - local: model_doc/rt_detr_v2
+        title: RT-DETRv2
       - local: model_doc/segformer
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/superglue
+        title: SuperGlue
       - local: model_doc/superpoint
         title: SuperPoint
       - local: model_doc/swiftformer
@@ -691,6 +746,10 @@
         title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
+      - local: model_doc/textnet
+        title: TextNet
+      - local: model_doc/timm_wrapper
+        title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
       - local: model_doc/van
@@ -707,6 +766,8 @@
         title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
       - local: model_doc/yolos
         title: YOLOS
       - local: model_doc/zoedepth
@@ -724,8 +785,8 @@
         title: dac
       - local: model_doc/encodec
         title: EnCodec
-      - local: model_doc/hiera
-        title: Hiera
+      - local: model_doc/fastspeech2_conformer
+        title: FastSpeech2Conformer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -734,6 +795,10 @@
         title: Mimi
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/moonshine
+        title: Moonshine
+      - local: model_doc/moshi
+        title: Moshi
       - local: model_doc/musicgen
         title: MusicGen
       - local: model_doc/musicgen_melody
@@ -794,6 +859,8 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/aria
+        title: Aria
       - local: model_doc/blip
         title: BLIP
       - local: model_doc/blip-2
@@ -812,16 +879,22 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/colpali
+        title: ColPali
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
         title: DePlot
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/emu3
+        title: Emu3
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/git
         title: GIT
+      - local: model_doc/got_ocr2
+        title: GOT-OCR2
       - local: model_doc/grounding-dino
         title: Grounding DINO
       - local: model_doc/groupvit
@@ -882,6 +955,12 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/qwen2_5_vl
+        title: Qwen2.5-VL
+      - local: model_doc/qwen2_audio
+        title: Qwen2Audio
+      - local: model_doc/qwen2_vl
+        title: Qwen2VL
       - local: model_doc/sam
         title: Segment Anything
       - local: model_doc/siglip

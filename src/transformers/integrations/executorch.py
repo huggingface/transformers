@@ -12,11 +12,15 @@
 
 import torch
 
-from transformers import (
-    PreTrainedModel,
-    StaticCache,
-)
-from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
+from ..utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    from transformers import (
+        PreTrainedModel,
+        StaticCache,
+    )
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
 
 
 class TorchExportableModuleWithStaticCache(torch.nn.Module):
@@ -68,7 +72,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             config=self.model.config,
             batch_size=self.model.generation_config.cache_config.batch_size,
             max_cache_len=self.model.generation_config.cache_config.max_cache_len,
-            dtype=self.model.config.torch_dtype,
+            dtype=self.model.dtype,
+            device=self.model.generation_config.cache_config.device,
         )
         self.is_causal = any("CausalLM" in arch for arch in self.model.config.architectures)
         if self.is_causal:
@@ -113,6 +118,56 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             use_cache=True,
         )
         return outs.logits
+
+    @staticmethod
+    def generate(
+        exported_program: torch.export.ExportedProgram, prompt_token_ids: torch.Tensor, max_new_tokens: int
+    ) -> torch.Tensor:
+        """
+        Generate a sequence of tokens using an exported program.
+
+        This util function is designed to test exported models by simulating the generation process.
+        It processes the input prompt tokens sequentially (no parallel prefill).
+        This generate function is not intended to replace the original `generate` method, and the support
+        for leveraging the original `generate` is potentially planed!
+
+        Args:
+            exported_program (`torch.export.ExportedProgram`): The exported program generated via `torch.export`.
+            prompt_token_ids (`torch.Tensor`): Tensor representing the input prompt token IDs.
+            max_new_tokens (`int`): Maximum number of new tokens to generate. Note that the total generation
+                length is limited by both `max_new_tokens` and the model's cache size.
+
+        Returns:
+            torch.Tensor: A tensor containing the generated sequence of token IDs, including the original prompt tokens.
+        """
+        prompt_token_len = prompt_token_ids.shape[-1]
+        max_generation_length = prompt_token_len + max_new_tokens
+        for buffer_name, buffer in exported_program.named_buffers():
+            if buffer_name.startswith("static_cache.key_cache"):
+                max_cache_len = buffer.shape[2]
+                max_generation_length = min(max_generation_length, max_cache_len)
+                break
+
+        response_tokens = []
+        for input_pos in range(min(max_generation_length, prompt_token_len)):
+            result = exported_program.module().forward(
+                input_ids=prompt_token_ids[:, input_pos : input_pos + 1],
+                cache_position=torch.tensor([input_pos], dtype=torch.long),
+            )
+            response_tokens.append(prompt_token_ids[0][input_pos].item())
+
+        current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+        response_tokens.append(current_token)
+
+        while len(response_tokens) < max_generation_length:
+            result = exported_program.module().forward(
+                input_ids=torch.tensor([[current_token]], dtype=torch.long),
+                cache_position=torch.tensor([len(response_tokens)], dtype=torch.long),
+            )
+            current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+            response_tokens.append(current_token)
+
+        return torch.tensor([response_tokens], dtype=torch.long)
 
 
 def convert_and_export_with_cache(

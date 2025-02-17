@@ -316,7 +316,7 @@ class SamImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -1373,6 +1373,14 @@ def _mask_to_rle_pytorch(input_mask: "torch.Tensor"):
     out = []
     for i in range(batch_size):
         cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
+        if len(cur_idxs) == 0:
+            # No changes => either all 0 or all 1
+            # If the entire mask is 0, RLE is [height*width] or if the entire mask is 1, RLE is [0, height*width].
+            if input_mask[i, 0] == 0:
+                out.append({"size": [height, width], "counts": [height * width]})
+            else:
+                out.append({"size": [height, width], "counts": [0, height * width]})
+            continue
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
         counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
@@ -1396,6 +1404,14 @@ def _mask_to_rle_tf(input_mask: "tf.Tensor"):
     out = []
     for i in range(batch_size):
         cur_idxs = change_indices[change_indices[:, 0] == i, 1] + 1
+        if len(cur_idxs) == 0:
+            # No changes => either all 0 or all 1
+            # If the entire mask is 0, RLE is [height*width] or if the entire mask is 1, RLE is [0, height*width].
+            if input_mask[i, 0] == 0:
+                out.append({"size": [height, width], "counts": [height * width]})
+            else:
+                out.append({"size": [height, width], "counts": [0, height * width]})
+            continue
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
         counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
@@ -1473,3 +1489,6 @@ def _postprocess_for_mg_tf(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thre
     masks = [_rle_to_mask(rle) for rle in rle_masks]
 
     return masks, iou_scores, rle_masks, mask_boxes
+
+
+__all__ = ["SamImageProcessor"]

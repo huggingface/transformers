@@ -64,7 +64,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want:
+By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -75,7 +75,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m", 
     quantization_config=quantization_config, 
-    torch_dtype=torch.float32
+    torch_dtype="auto"
 )
 model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -112,7 +112,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want:
+By default, all the other modules such as `torch.nn.LayerNorm` are converted to `torch.float16`. You can change the data type of these modules with the `torch_dtype` parameter if you want. Setting `torch_dtype="auto"` loads the model in the data type defined in a model's `config.json` file.
 
 ```py
 import torch
@@ -123,7 +123,7 @@ quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model_4bit = AutoModelForCausalLM.from_pretrained(
     "facebook/opt-350m",
     quantization_config=quantization_config, 
-    torch_dtype=torch.float32
+    torch_dtype="auto"
 )
 model_4bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 ```
@@ -190,6 +190,7 @@ Now load your model with the custom `device_map` and `quantization_config`:
 ```py
 model_8bit = AutoModelForCausalLM.from_pretrained(
     "bigscience/bloom-1b7",
+    torch_dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -207,11 +208,13 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 model_id = "bigscience/bloom-1b7"
 
 quantization_config = BitsAndBytesConfig(
-    llm_int8_threshold=10,
+    llm_int8_threshold=10.0,
+    llm_int8_enable_fp32_cpu_offload=True
 )
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
+    torch_dtype="auto",
     device_map=device_map,
     quantization_config=quantization_config,
 )
@@ -232,6 +235,7 @@ quantization_config = BitsAndBytesConfig(
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_id,
+    torch_dtype="auto",
     device_map="auto",
     quantization_config=quantization_config,
 )
@@ -275,14 +279,14 @@ nf4_config = BitsAndBytesConfig(
     bnb_4bit_quant_type="nf4",
 )
 
-model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=nf4_config)
+model_nf4 = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype="auto", quantization_config=nf4_config)
 ```
 
 For inference, the `bnb_4bit_quant_type` does not have a huge impact on performance. However, to remain consistent with the model weights, you should use the `bnb_4bit_compute_dtype` and `torch_dtype` values.
 
 ### Nested quantization
 
-Nested quantization is a technique that can save additional memory at no additional performance cost. This feature performs a second quantization of the already quantized weights to save an additional 0.4 bits/parameter. For example, with nested quantization, you can finetune a [Llama-13b](https://huggingface.co/meta-llama/Llama-2-13b) model on a 16GB NVIDIA T4 GPU with a sequence length of 1024, a batch size of 1, and enabling gradient accumulation with 4 steps.
+Nested quantization is a technique that can save additional memory at no additional performance cost. This feature performs a second quantization of the already quantized weights to save an additional 0.4 bits/parameter. For example, with nested quantization, you can finetune a [Llama-13b](https://huggingface.co/meta-llama/Llama-2-13b-chat-hf) model on a 16GB NVIDIA T4 GPU with a sequence length of 1024, a batch size of 1, and enabling gradient accumulation with 4 steps.
 
 ```py
 from transformers import BitsAndBytesConfig
@@ -292,7 +296,7 @@ double_quant_config = BitsAndBytesConfig(
     bnb_4bit_use_double_quant=True,
 )
 
-model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b", quantization_config=double_quant_config)
+model_double_quant = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", torch_dtype="auto", quantization_config=double_quant_config)
 ```
 
 ## Dequantizing `bitsandbytes` models
@@ -304,7 +308,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 
 model_id = "facebook/opt-125m"
 
-model = AutoModelForCausalLM.from_pretrained(model_id, BitsAndBytesConfig(load_in_4bit=True))
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model.dequantize()

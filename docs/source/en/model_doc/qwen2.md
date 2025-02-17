@@ -85,3 +85,8 @@ In the following, we demonstrate how to use `Qwen2-7B-Instruct` for the inferenc
 
 [[autodoc]] Qwen2ForTokenClassification
     - forward
+
+## Qwen2ForQuestionAnswering
+
+[[autodoc]] Qwen2ForQuestionAnswering
+    - forward

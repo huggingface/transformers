@@ -181,6 +181,15 @@ If you're interested in submitting a resource to be included here, please feel f
     - post_process_instance_segmentation
     - post_process_panoptic_segmentation
 
+## DetrImageProcessorFast
+
+[[autodoc]] DetrImageProcessorFast
+    - preprocess
+    - post_process_object_detection
+    - post_process_semantic_segmentation
+    - post_process_instance_segmentation
+    - post_process_panoptic_segmentation
+
 ## DetrFeatureExtractor
 
 [[autodoc]] DetrFeatureExtractor

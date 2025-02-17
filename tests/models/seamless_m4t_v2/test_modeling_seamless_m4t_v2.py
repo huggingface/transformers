@@ -374,9 +374,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4Tv2ForSpeechToText,) if is_torch_available() else ()
-
-    input_name = "input_features"
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="speech")
@@ -394,26 +391,6 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
         model_name = "facebook/seamless-m4t-v2-large"
         model = SeamlessM4Tv2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def _get_input_ids_and_config(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict[self.input_name]
-
-        # cut to half length & take max batch_size 3
-        sequence_length = input_ids.shape[-1] // 2
-        input_ids = input_ids[:batch_size, :sequence_length]
-
-        # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
-        if config.eos_token_id is not None and config.pad_token_id is None:
-            # hack to allow generate for models such as GPT2 as is done in `generate()`
-            if isinstance(config.eos_token_id, int):
-                config.eos_token_id = [config.eos_token_id]
-            config.pad_token_id = config.eos_token_id[0]
-
-        attention_mask = torch.ones(input_ids.shape[:2], dtype=torch.long)[:batch_size, :sequence_length]
-
-        return config, input_ids.float(), attention_mask, max_length
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -611,6 +588,11 @@ class SeamlessM4Tv2ModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase)
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
+    # TODO: @ydshieh: refer to #34968
+    @unittest.skip(reason="Failing on multi-gpu runner")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
 
 @require_torch
 class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -632,7 +614,8 @@ class SeamlessM4Tv2ModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (SeamlessM4Tv2ForTextToText,) if is_torch_available() else ()
+    # Doesn't run generation tests. Has custom generation method with a different interface
+    all_generative_model_classes = ()
 
     def setUp(self):
         self.model_tester = SeamlessM4Tv2ModelTester(self, input_modality="text")
@@ -857,7 +840,13 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
     def test_speech_generation(self):
         config, input_speech, input_text = self.prepare_speech_and_text_input()
 
+        from transformers.testing_utils import set_config_for_less_flaky_test, set_model_for_less_flaky_test
+
+        set_config_for_less_flaky_test(config)
+
         model = SeamlessM4Tv2Model(config=config)
+        set_model_for_less_flaky_test(model)
+
         self.update_generation(model)
         model.save_pretrained(self.tmpdirname)
         model.to(torch_device)
@@ -869,6 +858,11 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
         state_dict = model.state_dict()
 
         text_model = SeamlessM4Tv2ForTextToSpeech.from_pretrained(self.tmpdirname)
+        # Even if this component is loaded after `model.save_pretrained` which is after
+        # `set_model_for_less_flaky_test(model)`, we still need to apply `set_model_for_less_flaky_test` here as the
+        # `eps` attribute in the model's norm layers is not set from the config.
+        set_model_for_less_flaky_test(text_model)
+
         self.update_generation(text_model)
         text_model.to(torch_device)
         text_model.eval()
@@ -876,6 +870,11 @@ class SeamlessM4Tv2GenerationTest(unittest.TestCase):
         output_text = self.factory_generation_speech_test(model, input_text)
 
         speech_model = SeamlessM4Tv2ForSpeechToSpeech.from_pretrained(self.tmpdirname)
+        # Even if this component is loaded after `model.save_pretrained` which is after
+        # `set_model_for_less_flaky_test(model)`, we still need to apply `set_model_for_less_flaky_test` here as the
+        # `eps` attribute in the model's norm layers is not set from the config.
+        set_model_for_less_flaky_test(speech_model)
+
         self.update_generation(speech_model)
         speech_model.to(torch_device)
         speech_model.eval()

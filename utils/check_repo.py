@@ -70,6 +70,7 @@ PRIVATE_MODELS = [
     "Pop2PianoStack",
     "Qwen2AudioEncoder",
     "Qwen2VisionTransformerPretrainedModel",
+    "Qwen2_5_VisionTransformerPretrainedModel",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -82,7 +83,11 @@ PRIVATE_MODELS = [
     "SeamlessM4Tv2TextToUnitModel",
     "SeamlessM4Tv2CodeHifiGan",
     "SeamlessM4Tv2TextToUnitForConditionalGeneration",
+    "Idefics2PerceiverResampler",
+    "Idefics2VisionTransformer",
     "Idefics3VisionTransformer",
+    "AriaTextForCausalLM",
+    "AriaTextModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -133,8 +138,11 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
+        "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
+        "Emu3VQVAE",  # Building part of bigger (tested) model
+        "Emu3TextModel",  # Building part of bigger (tested) model
     ]
 )
 
@@ -170,7 +178,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ClapTextModelWithProjection",
     "ClapAudioModel",
     "ClapAudioModelWithProjection",
-    "Blip2ForConditionalGeneration",
     "Blip2TextModelWithProjection",
     "Blip2VisionModelWithProjection",
     "Blip2QFormerModel",
@@ -181,7 +188,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",
-    "BlipForConditionalGeneration",
     "BlipForImageTextRetrieval",
     "BlipForQuestionAnswering",
     "BlipVisionModel",
@@ -227,7 +233,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "ChineseCLIPTextModel",
     "ChineseCLIPVisionModel",
-    "CLIPTextModel",
     "CLIPTextModelWithProjection",
     "CLIPVisionModelWithProjection",
     "ClvpForCausalLM",
@@ -245,7 +250,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DetrForSegmentation",
     "Pix2StructVisionModel",
     "Pix2StructTextModel",
-    "Pix2StructForConditionalGeneration",
     "ConditionalDetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
@@ -322,7 +326,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SeamlessM4TCodeHifiGan",
     "SeamlessM4TForSpeechToSpeech",  # no auto class for speech-to-speech
     "TvpForVideoGrounding",
-    "UdopForConditionalGeneration",
     "SeamlessM4Tv2NARTextToUnitModel",
     "SeamlessM4Tv2NARTextToUnitForConditionalGeneration",
     "SeamlessM4Tv2CodeHifiGan",
@@ -331,6 +334,11 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SiglipVisionModel",
     "SiglipTextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
+    "VitPoseForPoseEstimation",
+    "CLIPTextModel",
+    "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
+    "Emu3VQVAE",  # no autoclass for VQ-VAE models
+    "Emu3TextModel",  # Building part of bigger (tested) model
 ]
 
 # DO NOT edit this list!
@@ -940,7 +948,6 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
-    "LogitsWarper",
     "NerPipeline",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
@@ -968,6 +975,7 @@ DEPRECATED_OBJECTS = [
     "xnli_processors",
     "xnli_tasks_num_labels",
     "TFTrainingArguments",
+    "OwlViTFeatureExtractor",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -992,15 +1000,12 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    "VitPoseBackbone",  # Internal module
+    "VitPoseBackboneConfig",  # Internal module
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
 SHOULD_HAVE_THEIR_OWN_PAGE = [
-    # Benchmarks
-    "PyTorchBenchmark",
-    "PyTorchBenchmarkArguments",
-    "TensorFlowBenchmark",
-    "TensorFlowBenchmarkArguments",
     "AutoBackbone",
     "BeitBackbone",
     "BitBackbone",
@@ -1008,6 +1013,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ConvNextV2Backbone",
     "DinatBackbone",
     "Dinov2Backbone",
+    "Dinov2WithRegistersBackbone",
     "FocalNetBackbone",
     "HieraBackbone",
     "MaskFormerSwinBackbone",
@@ -1018,6 +1024,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ResNetBackbone",
     "SwinBackbone",
     "Swinv2Backbone",
+    "TextNetBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
@@ -1093,18 +1100,34 @@ def check_public_method_exists(documented_methods_map):
             for submodule_name in nested_submodules:
                 if submodule_name == "transformers":
                     continue
-                submodule = getattr(submodule, submodule_name)
+
+                try:
+                    submodule = getattr(submodule, submodule_name)
+                except AttributeError:
+                    failures.append(f"Could not parse {submodule_name}. Are the required dependencies installed?")
+                continue
+
         class_name = nested_path[-1]
-        obj_class = getattr(submodule, class_name)
+
+        try:
+            obj_class = getattr(submodule, class_name)
+        except AttributeError:
+            failures.append(f"Could not parse {class_name}. Are the required dependencies installed?")
+            continue
+
         # Checks that all explicitly documented methods are defined in the class
         for method in methods:
             if method == "all":  # Special keyword to document all public methods
                 continue
-            if not hasattr(obj_class, method):
-                failures.append(
-                    "The following public method is explicitly documented but not defined in the corresponding "
-                    f"class. class: {obj}, method: {method}"
-                )
+            try:
+                if not hasattr(obj_class, method):
+                    failures.append(
+                        "The following public method is explicitly documented but not defined in the corresponding "
+                        f"class. class: {obj}, method: {method}. If the method is defined, this error can be due to "
+                        f"lacking dependencies."
+                    )
+            except ImportError:
+                pass
 
     if len(failures) > 0:
         raise Exception("\n".join(failures))

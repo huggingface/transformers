@@ -31,6 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    import torch.nn.functional as F
 
     from transformers import (
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
@@ -501,7 +502,6 @@ class LongT5ModelTester:
 @require_torch
 class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": LongT5Model,
@@ -574,6 +574,41 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             lm_labels,
         )
 
+    # overwrite because T5 doesn't accept position ids as input and expects `decoder_input_ids`
+    def test_custom_4d_attention_mask(self):
+        for model_class in self.all_generative_model_classes:
+            config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+
+            (
+                input_ids,
+                _,
+                input_ids_shared_prefix,
+                mask_shared_prefix,
+                _,
+            ) = self._get_custom_4d_mask_test_data()
+
+            logits = model.forward(
+                decoder_input_ids=input_ids,
+                input_ids=input_dict["input_ids"][:3],
+            ).logits
+            # logits.shape == torch.Size([3, 4, ...])
+
+            logits_shared_prefix = model(
+                input_ids=input_dict["input_ids"][:1],
+                decoder_input_ids=input_ids_shared_prefix,
+                decoder_attention_mask=mask_shared_prefix,
+            )[0]
+            # logits_shared_prefix.shape == torch.Size([1, 6, ...])
+
+            out_last_tokens = logits[:, -1, :]  # last tokens in each batch line
+            out_shared_prefix_last_tokens = logits_shared_prefix[0, -3:, :]  # last three tokens
+
+            # comparing softmax-normalized logits:
+            normalized_0 = F.softmax(out_last_tokens)
+            normalized_1 = F.softmax(out_shared_prefix_last_tokens)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -602,7 +637,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
                 f"{tmpdirname}/longt5_test.onnx",
                 export_params=True,
-                opset_version=13,
+                opset_version=14,
                 input_names=["input_ids", "decoder_input_ids"],
             )
 
@@ -749,7 +784,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
         encoder_expected_shape = (batch_size, 2, config.num_attention_heads, block_len, 3 * block_len)
         self.assertIsInstance(attentions, tuple)
@@ -884,10 +919,10 @@ class LongT5TGlobalModelTest(LongT5ModelTest):
                     [self.model_tester.num_attention_heads, block_len, 3 * block_len + global_seq_len],
                 )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
         block_len = getattr(self.model_tester, "block_len", None)
         global_block_size = getattr(self.model_tester, "global_block_size", None)
-        global_seq_length = seq_length // global_block_size
+        global_seq_length = prompt_length // global_block_size
         encoder_expected_shape = (
             batch_size,
             2,
@@ -1326,8 +1361,10 @@ class LongT5ModelIntegrationTests(unittest.TestCase):
 
         # check if encoder_outputs match
         expected_output_slice = torch.tensor([0.0629, -0.1294, -0.0089, 0.0772, 0.0663], device=torch_device)
-        self.assertTrue(torch.allclose(output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, atol=1e-4))
+        torch.testing.assert_close(
+            output.encoder_hidden_states[-1][0, 0, :5], expected_output_slice, rtol=1e-4, atol=1e-4
+        )
 
         # check if logits match
         expected_output_slice = torch.tensor([5.5231, 6.1058, 3.1766, 8.2391, -5.9453], device=torch_device)
-        self.assertTrue(torch.allclose(output.logits[0, 0, :5], expected_output_slice, atol=1e-4))
+        torch.testing.assert_close(output.logits[0, 0, :5], expected_output_slice, rtol=1e-4, atol=1e-4)

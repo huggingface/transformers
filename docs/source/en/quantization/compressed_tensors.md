@@ -19,15 +19,12 @@ The [`compressed-tensors`](https://github.com/neuralmagic/compressed-tensors) li
 
 Some of the supported formats include:
 1. `dense`
-2. `int-quantized`: INT8 quantized models
-    - sample [model/config](https://huggingface.co/nm-testing/tinyllama-w8a8-compressed-hf-quantizer)
-3. `float-quantized`: FP8 quantized models; currently support E4M3
-    - sample [model/config](https://huggingface.co/nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat/tree/main)
-4. `pack-quantized`: INT4 or INT8 weight-quantized models, packed into INT32. For INT4, the weights have an INT4 range but are stored as INT8 and   then packed into INT32.
-    - sample [model/config](nm-testing/tinyllama-w4a16-compressed-hf-quantizer)
+2. `int-quantized` ([sample](https://huggingface.co/nm-testing/tinyllama-w8a8-compressed-hf-quantizer)): INT8 quantized models
+3. `float-quantized` ([sample](https://huggingface.co/nm-testing/Meta-Llama-3-8B-Instruct-fp8-hf_compat)): FP8 quantized models; currently support E4M3
+4. `pack-quantized` ([sample](https://huggingface.co/nm-testing/tinyllama-w4a16-compressed-hf-quantizer)): INT4 or INT8 weight-quantized models, packed into INT32. For INT4, the weights have an INT4 range but are stored as INT8 and then packed into INT32.
 
 Compressed models can be easily created using [llm-compressor](https://github.com/vllm-project/llm-compressor).
-Alternatively models can be created indepedenty and serialized with a compressed tensors config.
+Alternatively models can be created independently and serialized with a compressed tensors config.
 
 To find existing models on the Hugging Face Model Hub, search for the [`compressed-tensors` tag](https://huggingface.co/models?other=compressed-tensors).
 
@@ -35,7 +32,7 @@ To find existing models on the Hugging Face Model Hub, search for the [`compress
  - Weight and activation precisions: FP8, INT4, INT8 (for Q/DQ arbitrary precision is allowed for INT)
  - Quantization scales and zero-points strategies: [tensor, channel, group, block, token](https://github.com/neuralmagic/compressed-tensors/blob/83b2e7a969d70606421a76b9a3d112646077c8de/src/compressed_tensors/quantization/quant_args.py#L43-L52)
  - Dynamic per-token activation quantization (or any static strategy)
- - Sparsity can be 
+ - Sparsity in weights (unstructured or semi-structured like 2:4) can be composed with quantization for extreme compression
  - Supports quantization of arbitrary modules, not just Linear modules
  - Targeted support or ignoring of modules by name or class
 
@@ -64,7 +61,7 @@ ct_model = AutoModelForCausalLM.from_pretrained("nm-testing/Meta-Llama-3.1-8B-In
 
 # Measure memory usage
 mem_params = sum([param.nelement()*param.element_size() for param in ct_model.parameters()])
-print(f"{mem/2**30:.4f} GB")
+print(f"{mem_params/2**30:.4f} GB")
 # 8.4575 GB
 ```
 

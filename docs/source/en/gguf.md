@@ -80,6 +80,15 @@ For now the supported model architectures are the architectures that have been v
 - Qwen2
 - Qwen2Moe
 - Phi3
+- Bloom
+- Falcon
+- StableLM
+- GPT2
+- Starcoder2
+- T5
+- Mamba
+- Nemotron
+- Gemma2
 
 ## Example usage
 
@@ -101,7 +110,7 @@ Now you have access to the full, unquantized version of the model in the PyTorch
 with a plethora of other tools.
 
 In order to convert back to a `gguf` file, we recommend using the 
-[`convert-hf-to-gguf.py` file](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py) from llama.cpp.
+[`convert-hf-to-gguf.py` file](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py) from llama.cpp.
 
 Here's how you would complete the script above to save the model and export it back to `gguf`:
 

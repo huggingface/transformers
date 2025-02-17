@@ -1308,6 +1308,8 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
         self.lm_loss = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, use_mems=None, **kwargs):
+        # Overwritten -- this model has unique input preparation
+
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -2080,3 +2082,16 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
                     hidden_states=transformer_outputs.hidden_states,
                     attentions=transformer_outputs.attentions,
                 )
+
+
+__all__ = [
+    "XLNetForMultipleChoice",
+    "XLNetForQuestionAnswering",
+    "XLNetForQuestionAnsweringSimple",
+    "XLNetForSequenceClassification",
+    "XLNetForTokenClassification",
+    "XLNetLMHeadModel",
+    "XLNetModel",
+    "XLNetPreTrainedModel",
+    "load_tf_weights_in_xlnet",
+]

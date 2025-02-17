@@ -73,6 +73,8 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("mobilenet_v1", "MobileNetV1FeatureExtractor"),
         ("mobilenet_v2", "MobileNetV2FeatureExtractor"),
         ("mobilevit", "MobileViTFeatureExtractor"),
+        ("moonshine", "Wav2Vec2FeatureExtractor"),
+        ("moshi", "EncodecFeatureExtractor"),
         ("nat", "ViTFeatureExtractor"),
         ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
@@ -351,7 +353,9 @@ class AutoFeatureExtractor:
         # If we don't find the feature extractor class in the feature extractor config, let's try the model config.
         if feature_extractor_class is None and feature_extractor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
-                config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
             # It could be in `config.feature_extractor_type``
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
             if hasattr(config, "auto_map") and "AutoFeatureExtractor" in config.auto_map:

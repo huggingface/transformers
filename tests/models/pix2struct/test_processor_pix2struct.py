@@ -96,7 +96,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
 
         encoded_processor = processor(text=input_str)
 
@@ -111,7 +111,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -130,7 +130,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -168,7 +168,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = Pix2StructProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -195,7 +195,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input)
@@ -213,7 +213,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         inputs = processor(text=input_str, images=image_input, max_patches=1024)
@@ -231,7 +231,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
         inputs = processor(
             text=input_str,
@@ -257,8 +257,8 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = self.prepare_image_inputs() * 2
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
         inputs = processor(
             text=input_str,
             images=image_input,
@@ -284,7 +284,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality
@@ -313,7 +313,7 @@ class Pix2StructProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
         self.skip_processor_without_typed_kwargs(processor)
-        input_str = "lower newer"
+        input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
 
         # Define the kwargs for each modality

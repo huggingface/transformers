@@ -50,9 +50,23 @@ The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tre
 </Tip>
 
 
-- Note that each checkpoint has been trained with a specific prompt format, depending on which large language model (LLM) was used. You can use tokenizer's `apply_chat_template` to format your prompts correctly. Below is an example of how to do that.
+> [!NOTE]
+> LLaVA models after release v4.46 will raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you.
+Adding these attributes means that LLaVA will try to infer the number of image tokens required per image and expand the text with as many `<image>` placeholders as there will be tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
+The attributes can be obtained from model config, as `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. The `num_additional_image_tokens` should be `1` if the vision backbone adds a CLS token or `0` if nothing extra is added to the vision patches.
 
-We will use [LLaVA-NeXT-Video-7B-hf](https://huggingface.co/llava-hf/LLaVA-NeXT-Video-7B-hf) and a conversation history of videos and images. Each content field has to be a list of dicts, as follows:
+
+### Formatting Prompts with Chat Templates  
+
+Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
+
+**Important:**  
+- You must construct a conversation history — passing a plain string won't work.  
+- Each message should be a dictionary with `"role"` and `"content"` keys.  
+- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
+
+
+Here’s an example of how to structure your input. We will use [LLaVA-NeXT-Video-7B-hf](https://huggingface.co/llava-hf/LLaVA-NeXT-Video-7B-hf) and a conversation history of videos and images.
 
 ```python
 from transformers import LlavaNextVideoProcessor
@@ -93,6 +107,10 @@ text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=
 print(text_prompt)
 ```
 
+🚀 **Bonus:** If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the **Usage Examples** below for more details on how to use it.
+
+
+
 ## Usage example
 
 ### Single Media Mode
@@ -100,30 +118,9 @@ print(text_prompt)
 The model can accept both images and videos as input. Here's an example code for inference in half-precision (`torch.float16`):
 
 ```python
-import av
+from huggingface_hub import hf_hub_download
 import torch
-import numpy as np
 from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
-
-def read_video_pyav(container, indices):
-    '''
-    Decode the video with PyAV decoder.
-    Args:
-        container (`av.container.input.InputContainer`): PyAV container.
-        indices (`List[int]`): List of frame indices to decode.
-    Returns:
-        result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
-    '''
-    frames = []
-    container.seek(0)
-    start_index = indices[0]
-    end_index = indices[-1]
-    for i, frame in enumerate(container.decode(video=0)):
-        if i > end_index:
-            break
-        if i >= start_index and i in indices:
-            frames.append(frame)
-    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 # Load the model in half-precision
 model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", torch_dtype=torch.float16, device_map="auto")
@@ -131,10 +128,6 @@ processor = LlavaNextVideoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7
 
 # Load the video as an np.array, sampling uniformly 8 frames (can sample more for longer videos)
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
-container = av.open(video_path)
-total_frames = container.streams.video[0].frames
-indices = np.arange(0, total_frames, total_frames / 8).astype(int)
-video = read_video_pyav(container, indices)
 
 conversation = [
     {
@@ -142,13 +135,12 @@ conversation = [
         "role": "user",
         "content": [
             {"type": "text", "text": "Why is this video funny?"},
-            {"type": "video"},
+            {"type": "video", "path": video_path},
             ],
     },
 ]
 
-prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(text=prompt, videos=video, return_tensors="pt")
+inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -160,20 +152,15 @@ processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spac
 The model can also generate from an interleaved image-video inputs. However note, that it was not trained in interleaved image-video setting which might affect the performance. Below is an example usage for mixed media input, add the following lines to the above code snippet: 
 
 ```python
-from PIL import Image
-import requests
 
 # Generate from image and video mixed inputs
-# Load and image and write a new prompt
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
 conversation = [
     {
 
         "role": "user",
         "content": [
             {"type": "text", "text": "How many cats are there in the image?"},
-            {"type": "image"},
+            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
             ],
     },
     {
@@ -186,12 +173,11 @@ conversation = [
         "role": "user",
         "content": [
             {"type": "text", "text": "Why is this video funny?"},
-            {"type": "video"},
+            {"type": "video", "path": video_path},
             ],
     },
 ]
-prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
+inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True, return_tensors="pt")
 
 # Generate
 generate_ids = model.generate(**inputs, max_length=50)
@@ -234,7 +220,7 @@ model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-N
 
 ### Flash-Attention 2 to speed-up generation
 
-Additionally, we can greatly speed-up model inference by using [Flash Attention](../perf_train_gpu_one.md#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
+Additionally, we can greatly speed-up model inference by using [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
 
 First, make sure to install the latest version of Flash Attention 2:
 

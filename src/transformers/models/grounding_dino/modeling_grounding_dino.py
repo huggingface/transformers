@@ -32,30 +32,18 @@ from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_scipy_available,
     is_timm_available,
     is_torch_cuda_available,
-    is_vision_available,
     replace_return_docstrings,
     requires_backends,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import is_accelerate_available, is_ninja_available, logging
+from ...utils import is_ninja_available, logging
 from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_grounding_dino import GroundingDinoConfig
 
-
-if is_vision_available():
-    from transformers.image_transforms import center_to_corners_format
-
-if is_accelerate_available():
-    from accelerate import PartialState
-    from accelerate.utils import reduce
-
-if is_scipy_available():
-    from scipy.optimize import linear_sum_assignment
 
 if is_timm_available():
     from timm import create_model
@@ -307,7 +295,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~GroundingDinoProcessor.post_process_object_detection`] to retrieve the
+            possible padding). You can use [`~GroundingDinoProcessor.post_process_grounded_object_detection`] to retrieve the
             unnormalized bounding boxes.
         auxiliary_outputs (`List[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
@@ -358,6 +346,8 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
             Logits of top `config.num_queries` scoring bounding boxes in the first stage.
         encoder_pred_boxes (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.two_stage=True`):
             Coordinates of top `config.num_queries` scoring bounding boxes in the first stage.
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Encoded candidate labels sequence. Used in processor to post process object detection result.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -381,6 +371,7 @@ class GroundingDinoObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     encoder_logits: Optional[torch.FloatTensor] = None
     encoder_pred_boxes: Optional[torch.FloatTensor] = None
+    input_ids: Optional[torch.LongTensor] = None
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->GroundingDino
@@ -600,11 +591,14 @@ def build_position_encoding(config):
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.multi_scale_deformable_attention
 def multi_scale_deformable_attention(
-    value: Tensor, value_spatial_shapes: Tensor, sampling_locations: Tensor, attention_weights: Tensor
+    value: Tensor,
+    value_spatial_shapes: Union[Tensor, List[Tuple]],
+    sampling_locations: Tensor,
+    attention_weights: Tensor,
 ) -> Tensor:
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points, _ = sampling_locations.shape
-    value_list = value.split([height.item() * width.item() for height, width in value_spatial_shapes], dim=1)
+    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
     sampling_grids = 2 * sampling_locations - 1
     sampling_value_list = []
     for level_id, (height, width) in enumerate(value_spatial_shapes):
@@ -681,29 +675,6 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        default_dtype = torch.get_default_dtype()
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (
-            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.n_heads, 1, 1, 2)
-            .repeat(1, self.n_levels, self.n_points, 1)
-        )
-        for i in range(self.n_points):
-            grid_init[:, :, i, :] *= i + 1
-        with torch.no_grad():
-            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-        nn.init.constant_(self.attention_weights.weight.data, 0.0)
-        nn.init.constant_(self.attention_weights.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.value_proj.weight.data)
-        nn.init.constant_(self.value_proj.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.output_proj.weight.data)
-        nn.init.constant_(self.output_proj.bias.data, 0.0)
-
     def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
@@ -716,6 +687,7 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
         position_embeddings: Optional[torch.Tensor] = None,
         reference_points=None,
         spatial_shapes=None,
+        spatial_shapes_list=None,
         level_start_index=None,
         output_attentions: bool = False,
     ):
@@ -725,6 +697,7 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
+        # Ignore copy
         if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
             raise ValueError(
                 "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
@@ -760,7 +733,7 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        if self.disable_custom_kernels:
+        if self.disable_custom_kernels or MultiScaleDeformableAttention is None:
             # PyTorch implementation
             output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
         else:
@@ -1526,7 +1499,27 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, GroundingDinoMultiscaleDeformableAttention):
-            module._reset_parameters()
+            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            default_dtype = torch.get_default_dtype()
+            thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
+                2.0 * math.pi / module.n_heads
+            )
+            grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+            grid_init = (
+                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
+                .view(module.n_heads, 1, 1, 2)
+                .repeat(1, module.n_levels, module.n_points, 1)
+            )
+            for i in range(module.n_points):
+                grid_init[:, :, i, :] *= i + 1
+            with torch.no_grad():
+                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+            nn.init.constant_(module.attention_weights.weight.data, 0.0)
+            nn.init.constant_(module.attention_weights.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.value_proj.weight.data)
+            nn.init.constant_(module.value_proj.bias.data, 0.0)
+            nn.init.xavier_uniform_(module.output_proj.weight.data)
+            nn.init.constant_(module.output_proj.bias.data, 0.0)
         elif isinstance(module, GroundingDinoBiMultiHeadAttention):
             nn.init.xavier_uniform_(module.vision_proj.weight)
             module.vision_proj.bias.data.fill_(0)
@@ -2132,9 +2125,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             )
 
         # Create text backbone
-        self.text_backbone = AutoModel.from_config(
-            config.text_config, add_pooling_layer=False, attn_implementation=config._attn_implementation
-        )
+        self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
         self.text_projection = nn.Linear(config.text_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
@@ -2994,7 +2985,7 @@ def build_text_mask(logits, attention_mask):
 
     return text_mask.bool()
 
-
+  
 @add_start_docstrings(
     """
     Grounding DINO Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top,
@@ -3071,30 +3062,41 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoProcessor, GroundingDinoForObjectDetection
-        >>> from PIL import Image
         >>> import requests
 
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> text = "a cat."
+        >>> import torch
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
-        >>> processor = AutoProcessor.from_pretrained("IDEA-Research/grounding-dino-tiny")
-        >>> model = GroundingDinoForObjectDetection.from_pretrained("IDEA-Research/grounding-dino-tiny")
+        >>> model_id = "IDEA-Research/grounding-dino-tiny"
+        >>> device = "cuda"
 
-        >>> inputs = processor(images=image, text=text, return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-        >>> # convert outputs (bounding boxes and class logits) to COCO API
-        >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = processor.image_processor.post_process_object_detection(
-        ...     outputs, threshold=0.35, target_sizes=target_sizes
-        ... )[0]
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
-        ...     box = [round(i, 1) for i in box.tolist()]
-        ...     print(f"Detected {label.item()} with confidence " f"{round(score.item(), 2)} at location {box}")
-        Detected 1 with confidence 0.45 at location [344.8, 23.2, 637.4, 373.8]
-        Detected 1 with confidence 0.41 at location [11.9, 51.6, 316.6, 472.9]
+        >>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(image_url, stream=True).raw)
+        >>> # Check for cats and remote controls
+        >>> text_labels = [["a cat", "a remote control"]]
+
+        >>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+
+        >>> results = processor.post_process_grounded_object_detection(
+        ...     outputs,
+        ...     threshold=0.4,
+        ...     text_threshold=0.3,
+        ...     target_sizes=[(image.height, image.width)]
+        ... )
+        >>> # Retrieve the first image result
+        >>> result = results[0]
+        >>> for box, score, text_label in zip(result["boxes"], result["scores"], result["text_labels"]):
+        ...     box = [round(x, 2) for x in box.tolist()]
+        ...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
+        Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.28]
+        Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
+        Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -3159,9 +3161,8 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
-            # First: create the matcher
-            matcher = GroundingDinoHungarianMatcher(
-                class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
             )
             # Second: create the criterion
             losses = ["labels", "boxes", "cardinality"]
@@ -3214,13 +3215,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
         if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
-            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
-
-            return tuple_outputs
+            auxiliary_outputs = auxiliary_outputs if auxiliary_outputs is not None else []
+            output = [loss, loss_dict, logits, pred_boxes, *auxiliary_outputs, *outputs, input_ids]
+            output = tuple(out for out in output if out is not None)
+            return output
 
         dict_outputs = GroundingDinoObjectDetectionOutput(
             loss=loss,
@@ -3244,6 +3242,10 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             encoder_logits=outputs.encoder_logits,
             encoder_pred_boxes=outputs.encoder_pred_boxes,
+            input_ids=input_ids,
         )
 
         return dict_outputs
+
+
+__all__ = ["GroundingDinoForObjectDetection", "GroundingDinoModel", "GroundingDinoPreTrainedModel"]

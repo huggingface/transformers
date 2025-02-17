@@ -228,6 +228,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             elif hasattr(model.config, "hidden_sizes"):
                 # if there are many hidden sizes pick the largest one
                 hidden_size = max(model.config.hidden_sizes)
+            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+                hidden_size = model.config.text_config.hidden_size
+            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+                # if there are many hidden sizes pick the largest one
+                hidden_size = max(model.config.text_config.hidden_sizes)
             else:
                 raise ValueError(
                     "The model's config file has neither `hidden_size` nor `hidden_sizes` entry, "
@@ -378,8 +383,8 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     Returns: optimizer, lr_scheduler
 
     We may use `deepspeed_init` more than once during the life of Trainer, when we do - it's a temp hack based on:
-    https://github.com/microsoft/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
-    can't resume from a checkpoint after it did some stepping https://github.com/microsoft/DeepSpeed/issues/1612
+    https://github.com/deepspeedai/DeepSpeed/issues/1394#issuecomment-937405374 until Deepspeed fixes a bug where it
+    can't resume from a checkpoint after it did some stepping https://github.com/deepspeedai/DeepSpeed/issues/1612
 
     """
     from deepspeed.utils import logger as ds_logger

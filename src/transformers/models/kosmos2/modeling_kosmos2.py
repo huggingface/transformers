@@ -417,15 +417,15 @@ class Kosmos2VisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1] - 1
-        self.position_embeddings = self.position_embedding.weight.unsqueeze(0)
-        num_positions = self.position_embeddings.shape[1] - 1
+        position_embedding = self.position_embedding.weight.unsqueeze(0)
+        num_positions = position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding(self.position_ids)
 
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
+        class_pos_embed = position_embedding[:, :1]
+        patch_pos_embed = position_embedding[:, 1:]
 
         dim = embeddings.shape[-1]
 
@@ -1694,25 +1694,32 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         past_key_values=None,
         attention_mask=None,
         use_cache=None,
+        cache_position=None,
         **model_kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
         position_ids = None
+        if cache_position is None:
+            past_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+            cache_position = torch.arange(past_length, input_ids.shape[1], dtype=torch.long, device=input_ids.device)
 
-        # cut input_ids if past_key_values is used
         if past_key_values is not None:
             position_ids = create_position_ids_from_input_ids(
                 input_ids,
                 padding_idx=self.config.pad_token_id,
                 past_key_values_length=0,
-            )[:, -1:]
+            )
 
-            input_ids = input_ids[:, -1:]
-            # the image info. is already encoded into the past keys/values
+            if input_ids.shape[1] != cache_position.shape[0]:
+                input_ids = input_ids[:, cache_position]
+                position_ids = position_ids[:, -input_ids.shape[1] :]
+
             image_embeds = None
             image_embeds_position_mask = None
         elif image_embeds_position_mask is not None:
@@ -2107,3 +2114,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
         )
 
         return output
+
+
+__all__ = ["Kosmos2ForConditionalGeneration", "Kosmos2Model", "Kosmos2PreTrainedModel"]

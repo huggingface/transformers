@@ -30,7 +30,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -181,7 +181,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -198,13 +198,13 @@ class SiglipImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -239,3 +239,6 @@ class SiglipImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["SiglipImageProcessor"]

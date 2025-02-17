@@ -21,11 +21,19 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from inspect import Parameter, signature
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, is_torchao_available, logging
+from ..utils import (
+    is_auto_awq_available,
+    is_gptqmodel_available,
+    is_hqq_available,
+    is_torch_available,
+    is_torchao_available,
+    logging,
+)
+from .import_utils import is_auto_gptq_available
 
 
 if is_torch_available():
@@ -39,18 +47,24 @@ class QuantizationMethod(str, Enum):
     GPTQ = "gptq"
     AWQ = "awq"
     AQLM = "aqlm"
+    VPTQ = "vptq"
     QUANTO = "quanto"
     EETQ = "eetq"
+    HIGGS = "higgs"
     HQQ = "hqq"
     COMPRESSED_TENSORS = "compressed-tensors"
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
+    BITNET = "bitnet"
+    SPQR = "spqr"
+    FP8 = "fp8"
 
 
 class AWQLinearVersion(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
     EXLLAMA = "exllama"
+    IPEX = "ipex"
 
     @staticmethod
     def from_str(version: str):
@@ -61,6 +75,8 @@ class AWQLinearVersion(str, Enum):
             return AWQLinearVersion.GEMV
         elif version == "exllama":
             return AWQLinearVersion.EXLLAMA
+        elif version == "ipex":
+            return AWQLinearVersion.IPEX
         else:
             raise ValueError(f"Unknown AWQLinearVersion {version}")
 
@@ -95,7 +111,6 @@ class QuantizationConfigMixin:
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
         """
-
         config = cls(**config_dict)
 
         to_remove = []
@@ -194,15 +209,9 @@ class HqqConfig(QuantizationConfigMixin):
             Number of bits. Supported values are (8, 4, 3, 2, 1).
         group_size (`int`, *optional*, defaults to 64):
             Group-size value. Supported values are any value that is divisble by weight.shape[axis]).
-        quant_zero (`bool`, *optional*, defaults to `True`):
-            Quantize the zero-point if set to `True`.
-        quant_scale (`bool`, *optional*, defaults to `False`):
-            Quantize the scaling if set to `True`.
-        offload_meta (`bool`, *optional*, defaults to `False`):
-            Offload the meta-data to the CPU if set to `True`.
         view_as_float (`bool`, *optional*, defaults to `False`):
             View the quantized weight as float (used in distributed training) if set to `True`.
-        axis (`int`, *optional*, defaults to 0):
+        axis (`Optional[int]`, *optional*):
             Axis along which grouping is performed. Supported values are 0 or 1.
         dynamic_config (dict, *optional*):
             Parameters for dynamic configuration. The key is the name tag of the layer and the value is a quantization config.
@@ -217,17 +226,28 @@ class HqqConfig(QuantizationConfigMixin):
         self,
         nbits: int = 4,
         group_size: int = 64,
-        quant_zero: bool = True,
-        quant_scale: bool = False,
-        offload_meta: bool = False,
         view_as_float: bool = False,
-        axis: int = 0,
+        axis: Optional[int] = None,
         dynamic_config: Optional[dict] = None,
         skip_modules: List[str] = ["lm_head"],
         **kwargs,
     ):
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+        else:
+            raise ImportError(
+                "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
+            )
+
+        for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
+            if deprecated_key in kwargs:
+                logger.info(
+                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
+                )
+
+        if axis is None:
+            axis = 1
+            logger.info("Setting axis=1 as faster backends such as TorchAO or BitBlas are only compatible with it.")
 
         if axis not in [0, 1]:
             raise ValueError("Invalid axis value. Only 0 and 1 are allowed.")
@@ -241,9 +261,6 @@ class HqqConfig(QuantizationConfigMixin):
                 **{
                     "nbits": nbits,
                     "group_size": group_size,
-                    "quant_zero": quant_zero,
-                    "quant_scale": quant_scale,
-                    "offload_meta": offload_meta,
                     "view_as_float": view_as_float,
                     "axis": axis,
                 }
@@ -260,12 +277,26 @@ class HqqConfig(QuantizationConfigMixin):
         """
         pass
 
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]):
+        """
+        Override from_dict, used in AutoQuantizationConfig.from_dict in quantizers/auto.py
+        """
+        instance = cls()
+        instance.quant_config = config["quant_config"]
+        instance.skip_modules = config["skip_modules"]
+        return instance
+
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        return self.quant_config
+        return {
+            "quant_config": self.quant_config,
+            "quant_method": self.quant_method,
+            "skip_modules": self.skip_modules,
+        }
 
     def __repr__(self):
         config_dict = self.to_dict()
@@ -397,7 +428,7 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
             raise ValueError("bnb_4bit_quant_storage must be a string or a torch.dtype")
 
         if kwargs:
-            logger.warning(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
+            logger.info(f"Unused kwargs: {list(kwargs.keys())}. These kwargs are not used in {self.__class__}.")
 
         self.post_init()
 
@@ -560,8 +591,16 @@ class GPTQConfig(QuantizationConfigMixin):
             Whether to perform sequential quantization even within a single Transformer block. Instead of quantizing
             the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
             quantization using inputs that have passed through the previously quantized layers.
+        checkpoint_format (`str`, *optional*, defaults to `"gptq"`):
+            GPTQ weight format. `gptq`(v1) is supported by both gptqmodel and auto-gptq. `gptq_v2` is gptqmodel only.
+        meta (`Dict[str, any]`, *optional*):
+            Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
+            i.e. `meta.quantizer`: ["optimum:_version_", "gptqmodel:_version_"]
+        backend (`str`, *optional*):
+            Controls which gptq kernel to be used. Valid values for gptqmodel are `auto`, `auto_trainable` and more. For auto-gptq, only
+            valid value is None and `auto_trainable`. Ref gptqmodel backends: https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
         use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
-            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
+            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16. Auto-gptq only.
         model_seqlen (`int`, *optional*):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`str`, *optional*):
@@ -601,6 +640,9 @@ class GPTQConfig(QuantizationConfigMixin):
         desc_act: bool = False,
         sym: bool = True,
         true_sequential: bool = True,
+        checkpoint_format: str = "gptq",
+        meta: Optional[Dict[str, any]] = None,
+        backend: Optional[str] = None,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
         block_name_to_quantize: Optional[str] = None,
@@ -623,6 +665,9 @@ class GPTQConfig(QuantizationConfigMixin):
         self.desc_act = desc_act
         self.sym = sym
         self.true_sequential = true_sequential
+        self.checkpoint_format = checkpoint_format.lower()
+        self.meta = meta
+        self.backend = backend.lower() if isinstance(backend, str) else backend
         self.use_cuda_fp16 = use_cuda_fp16
         self.model_seqlen = model_seqlen
         self.block_name_to_quantize = block_name_to_quantize
@@ -639,7 +684,14 @@ class GPTQConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "use_exllama", "exllama_config", "use_cuda_fp16", "max_input_length"]
+        loading_attibutes = [
+            "disable_exllama",
+            "use_exllama",
+            "exllama_config",
+            "use_cuda_fp16",
+            "max_input_length",
+            "backend",
+        ]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
@@ -671,6 +723,17 @@ class GPTQConfig(QuantizationConfigMixin):
                     ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                 )
 
+        # make sure backend is back/forward compatible with both gptqmodel (full) and auto-gptq (partial)
+        if is_gptqmodel_available():
+            # convert auto-gptq control into gptqmodel backend
+            if self.backend is None:
+                self.backend = "auto_trainable" if self.use_exllama is not None and not self.use_exllama else "auto"
+        else:
+            # convert gptqmodel backend `auto_trainable` into auto-gptq control
+            if self.backend == "auto_trainable":
+                self.use_exllama = False
+
+        # auto-gptq specific kernel control logic
         if self.disable_exllama is None and self.use_exllama is None:
             # New default behaviour
             self.use_exllama = True
@@ -704,12 +767,13 @@ class GPTQConfig(QuantizationConfigMixin):
                     "speed using exllamav2 kernel by setting `exllama_config`."
                 )
             elif self.exllama_config["version"] == ExllamaVersion.TWO:
-                optimum_version = version.parse(importlib.metadata.version("optimum"))
-                autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
-                if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
-                    raise ValueError(
-                        f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
-                    )
+                if is_auto_gptq_available():
+                    optimum_version = version.parse(importlib.metadata.version("optimum"))
+                    autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
+                    if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                        raise ValueError(
+                            f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
+                        )
         if self.modules_in_block_to_quantize is not None:
             optimum_version = version.parse(importlib.metadata.version("optimum"))
             if optimum_version < version.parse("1.15.0"):
@@ -819,18 +883,20 @@ class AwqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        if not torch.cuda.is_available():
-            raise ValueError("AWQ is only available on GPU")
-
         if self.backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]:
             raise ValueError(
                 f"Only supported quantization backends in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
             )
 
         self.version = AWQLinearVersion.from_str(self.version)
-        if self.version not in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA]:
+        if self.version not in [
+            AWQLinearVersion.GEMM,
+            AWQLinearVersion.GEMV,
+            AWQLinearVersion.EXLLAMA,
+            AWQLinearVersion.IPEX,
+        ]:
             raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA] - not recognized version {self.version}"
+                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX] - not recognized version {self.version}"
             )
 
         if self.backend == AwqBackendPackingMethod.LLMAWQ:
@@ -978,6 +1044,102 @@ class AqlmConfig(QuantizationConfigMixin):
 
 
 @dataclass
+class VptqLayerConfig(QuantizationConfigMixin):
+    """
+    This is used to explain vptq config params for each layer
+    Args:
+        enable_norm (`bool`, *optional*, defaults to `True`): to control if we have scale/bias for fp-weight
+        enable_perm (`bool`, *optional*, defaults to `True`): to perm input_channel or not
+        group_num (`int`, *optional*, defaults to `1`): how many single groups for vector-quantization
+        group_size (`int`, *optional*, defaults to `-1`): depends on out-features
+        indices_as_float (`bool`, *optional*, defaults to `False`): for Finetuning
+        is_indice_packed (`bool`, *optional*, defaults to `True`): should always be True
+        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centriod numbers of clusters
+        num_res_centroids (`list`, *optional*, defaults to `[-1, -1]`): ditto for residual
+        outlier_size (`int`, *optional*, defaults to `1`): outliers
+        vector_lens (`list`, *optional*, defaults to `[-1, -1]`): centroid vector length in quantization
+    """
+
+    def __init__(
+        self,
+        enable_norm: bool = True,
+        enable_perm: bool = True,
+        group_num: int = 1,
+        group_size: int = -1,
+        in_features: int = -1,
+        indices_as_float: bool = False,
+        is_indice_packed: bool = True,
+        num_centroids: tuple = [-1, -1],
+        num_res_centroids: tuple = [-1, -1],
+        out_features: int = -1,
+        outlier_size: int = 0,
+        vector_lens: tuple = [-1, -1],
+        **kwargs,
+    ):
+        self.enable_norm = enable_norm
+        self.enable_perm = enable_perm
+        self.group_num = group_num
+        self.group_size = group_size
+        self.in_features = in_features
+        self.indices_as_float = indices_as_float
+        self.is_indice_packed = is_indice_packed
+        self.num_centroids = num_centroids
+        self.num_res_centroids = num_res_centroids
+        self.out_features = out_features
+        self.outlier_size = outlier_size
+        self.vector_lens = vector_lens
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        if self.is_indice_packed is False:
+            raise ValueError("is_indice_packed should always be True")
+
+
+@dataclass
+class VptqConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `vptq` parameters.
+
+    Args:
+        enable_proxy_error (`bool`, *optional*, defaults to `False`): calculate proxy error for each layer
+        config_for_layers (`Dict`, *optional*, defaults to `{}`): quantization params for each layer
+        shared_layer_config (`Dict`, *optional*, defaults to `{}`): shared quantization params among layers
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        enable_proxy_error: bool = False,
+        config_for_layers: Dict[str, Any] = {},
+        shared_layer_config: Dict[str, Any] = {},
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.VPTQ
+        self.enable_proxy_error = enable_proxy_error
+        self.config_for_layers: Dict[str, Any] = config_for_layers
+        self.shared_layer_config: Dict[str, Any] = shared_layer_config
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        for layer_name, layer_param in self.config_for_layers.items():
+            VptqLayerConfig(**layer_param)
+        if self.enable_proxy_error is True:
+            raise ValueError("enable_proxy_error should always be False until we support training")
+
+
+@dataclass
 class QuantoConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
@@ -1060,7 +1222,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*):
             dictionary mapping group name to a quantization scheme definition
         format (`str`, *optional*, defaults to `"dense"`):
-            format the model is represented as
+            format the model is represented as. Set `run_compressed` True to execute model as the
+            compressed format if not `dense`
         quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
             status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
         kv_cache_scheme (`typing.Union[QuantizationArgs, NoneType]`, *optional*):
@@ -1073,6 +1236,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
+        run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
+            emulate compressed model execution if True, otherwise use default submodule
     """
 
     def __init__(
@@ -1085,16 +1250,19 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
+        run_compressed: bool = True,
         **kwargs,
     ):
-        from compressed_tensors import QuantizationConfig
         from compressed_tensors.config import SparsityCompressionConfig
+        from compressed_tensors.quantization import QuantizationConfig
 
         self.quantization_config = None
         self.sparsity_config = None
 
+        self.run_compressed = run_compressed
+
         # parse from dict to load nested QuantizationScheme objects
-        if config_groups:
+        if config_groups or kv_cache_scheme:
             self.quantization_config = QuantizationConfig.parse_obj(
                 {
                     "config_groups": config_groups,
@@ -1104,6 +1272,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
+                    "run_compressed": run_compressed,
                     **kwargs,
                 }
             )
@@ -1132,7 +1301,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
+
         """
+
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
@@ -1143,16 +1314,23 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def to_dict(self) -> Dict[str, Any]:
         """
+        Quantization config to be added to config.json
+
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
-        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+        quantization_config = {}
+        if self.quantization_config is not None:
+            quantization_config = self.quantization_config.dict()
+        else:
+            quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
 
-        return {
-            "quantization_config": quantization_config,
-            "sparsity_config": sparsity_config,
-        }
+        if self.sparsity_config is not None:
+            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+        else:
+            quantization_config["sparsity_config"] = {}
+
+        return quantization_config
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
@@ -1174,6 +1352,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
+
+    def get_loading_attributes(self):
+        return {"run_compressed": self.run_compressed}
 
 
 @dataclass
@@ -1208,6 +1389,64 @@ class FbgemmFp8Config(QuantizationConfigMixin):
 
 
 @dataclass
+class HiggsConfig(QuantizationConfigMixin):
+    """
+    HiggsConfig is a configuration class for quantization using the HIGGS method.
+
+    Args:
+        bits (int, *optional*, defaults to 4):
+            Number of bits to use for quantization. Can be 2, 3 or 4. Default is 4.
+        p (int, *optional*, defaults to 2):
+            Quantization grid dimension. 1 and 2 are supported. 2 is always better in practice. Default is 2.
+        modules_to_not_convert (`list`, *optional*, default to ["lm_head"]):
+            List of linear layers that should not be quantized.
+        hadamard_size (int, *optional*, defaults to 512):
+            Hadamard size for the HIGGS method. Default is 512. Input dimension of matrices is padded to this value. Decreasing this below 512 will reduce the quality of the quantization.
+        group_size (int, *optional*, defaults to 256):
+            Group size for the HIGGS method. Can be 64, 128 or 256. Decreasing it barely affects the performance. Default is 256. Must be a divisor of hadamard_size.
+        tune_metadata ('dict', *optional*, defaults to {}):
+            Module-wise metadata (gemm block shapes, GPU metadata, etc.) for saving the kernel tuning results. Default is an empty dictionary. Is set automatically during tuning.
+    """
+
+    def __init__(
+        self,
+        bits: int = 4,
+        p: int = 2,
+        modules_to_not_convert: Optional[List[str]] = None,
+        hadamard_size: int = 512,
+        group_size: int = 256,
+        tune_metadata: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ):
+        if modules_to_not_convert is None:
+            modules_to_not_convert = ["lm_head"]
+        if tune_metadata is None:
+            tune_metadata = {}
+        self.quant_method = QuantizationMethod.HIGGS
+        self.bits = bits
+        self.p = p
+        self.modules_to_not_convert = modules_to_not_convert
+        self.hadamard_size = hadamard_size
+        self.group_size = group_size
+        self.tune_metadata = tune_metadata
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if self.bits not in [2, 3, 4]:
+            raise ValueError("bits must be 2, 3, or 4")
+        if self.p not in [1, 2]:
+            raise ValueError("p must be 1 or 2. 2 is always better in practice")
+        if self.group_size not in [64, 128, 256]:
+            raise ValueError("group_size must be 64, 128, or 256")
+        if self.hadamard_size % self.group_size != 0:
+            raise ValueError("hadamard_size must be divisible by group_size")
+
+
+@dataclass
 class TorchAoConfig(QuantizationConfigMixin):
     """This is a config class for torchao quantization/sparsity techniques.
 
@@ -1235,8 +1474,46 @@ class TorchAoConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.TORCHAO
         self.quant_type = quant_type
         self.modules_to_not_convert = modules_to_not_convert
-        self.kwargs = kwargs
-        self._STR_TO_METHOD = {}
+        # when we load from serailized config, "quant_type_kwargs" will be the key
+        if "quant_type_kwargs" in kwargs:
+            self.quant_type_kwargs = kwargs["quant_type_kwargs"]
+        else:
+            self.quant_type_kwargs = kwargs
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if is_torchao_available():
+            if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
+                raise ValueError("Requires torchao 0.4.0 version and above")
+        else:
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
+
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
+        if self.quant_type not in _STR_TO_METHOD.keys():
+            raise ValueError(
+                f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
+            )
+
+        method = _STR_TO_METHOD[self.quant_type]
+        sig = signature(method)
+        all_kwargs = [
+            param.name
+            for param in sig.parameters.values()
+            if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
+        ]
+        for k in self.quant_type_kwargs:
+            if k not in all_kwargs:
+                raise ValueError(
+                    f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
+                )
+
+    def _get_torchao_quant_type_to_method(self):
         if is_torchao_available():
             from torchao.quantization import (
                 int4_weight_only,
@@ -1244,7 +1521,7 @@ class TorchAoConfig(QuantizationConfigMixin):
                 int8_weight_only,
             )
 
-            self._STR_TO_METHOD = {
+            return {
                 "int4_weight_only": int4_weight_only,
                 "int8_weight_only": int8_weight_only,
                 "int8_dynamic_activation_int8_weight": int8_dynamic_activation_int8_weight,
@@ -1254,35 +1531,137 @@ class TorchAoConfig(QuantizationConfigMixin):
                 "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
             )
 
+    def get_apply_tensor_subclass(self):
+        _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
+        return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
+
+    def __repr__(self):
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+
+@dataclass
+class BitNetConfig(QuantizationConfigMixin):
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.BITNET
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        pass
+
+
+@dataclass
+class SpQRConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `spqr` parameters. Refer to the original publication for more details.
+
+    Args:
+        bits (`int`, *optional*, defaults to 3):
+            Specifies the bit count for the weights and first order zero-points and scales.
+            Currently only bits = 3 is supported.
+        beta1 (`int`, *optional*, defaults to 16):
+            SpQR tile width. Currently only beta1 = 16 is supported.
+        beta2 (`int`, *optional*, defaults to 16):
+            SpQR tile height. Currently only beta2 = 16 is supported.
+        shapes (`Optional`, *optional*):
+            A dictionary holding the shape of each object. We need this because it's impossible
+            to deduce the exact size of the parameters just from bits, beta1, beta2.
+        modules_to_not_convert (`Optional[List[str]]`, *optional*):
+            Optionally, provides a list of full paths of `nn.Linear` weight parameters that shall not be quantized.
+            Defaults to None.
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        bits: int = 3,
+        beta1: int = 16,
+        beta2: int = 16,
+        shapes: Optional[Dict[str, int]] = None,
+        modules_to_not_convert: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        if shapes is None:
+            shapes = {}
+        self.shapes = shapes
+        self.quant_method = QuantizationMethod.SPQR
+        self.bits = bits
+        self.beta1 = beta1
+        self.beta2 = beta2
+        if modules_to_not_convert is None:
+            modules_to_not_convert = []
+        self.modules_to_not_convert = modules_to_not_convert
         self.post_init()
 
     def post_init(self):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
-            raise ValueError("Requires torchao 0.4.0 version and above")
+        if not isinstance(self.bits, int):
+            raise TypeError("bits must be an int")
+        if not isinstance(self.beta1, int):
+            raise TypeError("beta1 must be an int")
+        if not isinstance(self.beta2, int):
+            raise TypeError("beta2 must be an int")
 
-        if self.quant_type not in self._STR_TO_METHOD.keys():
-            raise ValueError(
-                f"Requested quantization type: {self.quant_type} is not supported yet, please add support in TorchAoConfig and TorchAoHfQuantizer."
-            )
+        if self.bits != 3:
+            raise ValueError("SpQR currently only supports bits = 3")
+        if self.beta1 != 16:
+            raise ValueError("SpQR currently only supports beta1 = 16")
+        if self.beta2 != 16:
+            raise ValueError("SpQR currently only supports beta2 = 16")
 
-        method = self._STR_TO_METHOD[self.quant_type]
-        sig = signature(method)
-        all_kwargs = [
-            param.name
-            for param in sig.parameters.values()
-            if param.kind in [Parameter.KEYWORD_ONLY, Parameter.POSITIONAL_OR_KEYWORD]
-        ]
-        for k in self.kwargs:
-            if k not in all_kwargs:
-                raise ValueError(
-                    f"Unexpected keyword arg: {k} for API: {method}, accepted keyword args are: {all_kwargs}"
-                )
+        if self.modules_to_not_convert is not None and not isinstance(self.modules_to_not_convert, list):
+            raise ValueError("modules_to_not_convert must be a list of strings")
 
-    def get_apply_tensor_subclass(self):
-        return self._STR_TO_METHOD[self.quant_type](**self.kwargs)
+        if not isinstance(self.shapes, dict):
+            raise TypeError("shapes must be a dict")
 
-    def __repr__(self):
-        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
+
+@dataclass
+class FineGrainedFP8Config(QuantizationConfigMixin):
+    """
+    FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
+
+    Args:
+        activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
+            The scheme used for activation, the defaults and only support scheme for now is "dynamic".
+        weight_block_size (`typing.Tuple[int, int]`, *optional*, defaults to `(128, 128)`):
+            The size of the weight blocks for quantization, default is (128, 128).
+        modules_to_not_convert (`list`, *optional*):
+            A list of module names that should not be converted during quantization.
+    """
+
+    def __init__(
+        self,
+        activation_scheme: str = "dynamic",
+        weight_block_size: Tuple[int, int] = (128, 128),
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.FP8
+        self.modules_to_not_convert = modules_to_not_convert
+        self.activation_scheme = activation_scheme
+        self.weight_block_size = weight_block_size
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        self.activation_scheme = self.activation_scheme.lower()
+        if self.activation_scheme not in ["dynamic"]:
+            raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
+        if len(self.weight_block_size) != 2:
+            raise ValueError("weight_block_size must be a tuple of two integers")
+        if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
+            raise ValueError("weight_block_size must be a tuple of two positive integers")

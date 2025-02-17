@@ -70,6 +70,7 @@ class FlaxOPTModelTester:
         embed_dim=16,
         word_embed_proj_dim=16,
         initializer_range=0.02,
+        attn_implemetation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -92,6 +93,7 @@ class FlaxOPTModelTester:
         self.word_embed_proj_dim = word_embed_proj_dim
         self.initializer_range = initializer_range
         self.is_encoder_decoder = False
+        self.attn_implementation = attn_implemetation
 
     def prepare_config_and_inputs(self):
         input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
@@ -114,6 +116,7 @@ class FlaxOPTModelTester:
             word_embed_proj_dim=self.word_embed_proj_dim,
             initializer_range=self.initializer_range,
             use_cache=False,
+            attn_implementation=self.attn_implementation,
         )
         inputs_dict = prepare_opt_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -202,7 +205,6 @@ class FlaxOPTModelTester:
 @require_flax
 class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     all_model_classes = (FlaxOPTModel, FlaxOPTForCausalLM) if is_flax_available() else ()
-    all_generative_model_classes = () if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxOPTModelTester(self)

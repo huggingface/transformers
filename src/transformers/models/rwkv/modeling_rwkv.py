@@ -23,7 +23,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
@@ -770,6 +769,8 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         self.head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, use_cache=None, **kwargs):
+        # Overwritten -- this model uses `state`, but doesn't have a cache (`past_key_values`)
+
         # only last token for inputs_ids if the state is passed along.
         if state is not None:
             input_ids = input_ids[:, -1].unsqueeze(-1)
@@ -801,6 +802,7 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, RwkvCausalLMOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -825,14 +827,12 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + rwkv_outputs[1:]
@@ -845,3 +845,6 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
             hidden_states=rwkv_outputs.hidden_states,
             attentions=rwkv_outputs.attentions,
         )
+
+
+__all__ = ["RwkvForCausalLM", "RwkvModel", "RwkvPreTrainedModel"]

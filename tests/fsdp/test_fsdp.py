@@ -32,7 +32,6 @@ from transformers.testing_utils import (
     require_accelerate,
     require_fsdp,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -224,6 +223,18 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
         cmd = launcher + script + args + fsdp_args
         execute_subprocess_async(cmd, env=self.get_env())
 
+    @parameterized.expand(params, name_func=_parameterized_custom_name_func)
+    @require_torch_multi_accelerator
+    @slow
+    def test_basic_run_with_gradient_accumulation(self, sharding_strategy, dtype):
+        launcher = get_launcher(distributed=True, use_accelerate=False)
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = self.get_base_args(output_dir, 1, 50).split() + [f"--{dtype}", "--gradient_accumulation_steps", "2"]
+        fsdp_args = ["--fsdp", f"{sharding_strategy} auto_wrap", "--fsdp_transformer_layer_cls_to_wrap", "BertLayer"]
+        script = [f"{self.examples_dir_str}/pytorch/text-classification/run_glue.py"]
+        cmd = launcher + script + args + fsdp_args
+        execute_subprocess_async(cmd, env=self.get_env())
+
     @parameterized.expand(dtypes)
     @require_torch_multi_accelerator
     @slow
@@ -276,7 +287,7 @@ class TrainerIntegrationFSDP(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_multi_accelerator
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_fsdp
     def test_fsdp_cpu_offloading(self):
         try:

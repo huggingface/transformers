@@ -20,7 +20,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -594,7 +593,9 @@ class XGLMModel(XGLMPreTrainedModel):
                 encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
-        hidden_states = inputs_embeds + self.embed_positions(position_ids, past_key_values_length)
+        hidden_states = inputs_embeds + self.embed_positions(position_ids, past_key_values_length).to(
+            inputs_embeds.device
+        )
         hidden_states = nn.functional.dropout(hidden_states, p=float(self.dropout), training=self.training)
 
         if self.gradient_checkpointing and self.training:
@@ -690,6 +691,33 @@ class XGLMModel(XGLMPreTrainedModel):
         )
 
 
+def xglm_cross_entropy_loss(
+    logits,
+    labels,
+    num_items_in_batch: int = None,
+    ignore_index: int = -100,
+    pad_token_id: int = -100,
+    vocab_size: int = None,
+):
+    """
+    Loss function for XGLM that takes into account `num_items_in_batch`
+    """
+    shift_labels = labels.new_zeros(labels.shape)
+    shift_labels[:, :-1] = labels[:, 1:].clone()
+    shift_labels[:, -1] = pad_token_id
+    # move labels to correct device to enable model parallelism
+    labels = labels.float().to(logits.device)
+
+    logits = logits.view(-1, vocab_size).float()
+    shift_labels = shift_labels.view(-1)
+
+    reduction = "sum" if num_items_in_batch is not None else "mean"
+    loss = nn.functional.cross_entropy(logits, shift_labels, ignore_index=ignore_index, reduction=reduction)
+    if reduction == "sum":
+        loss = loss / num_items_in_batch
+    return loss
+
+
 @add_start_docstrings(
     """
     The XGLM Model transformer with a language modeling head on top (linear layer with weights tied to the input
@@ -708,6 +736,8 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+        self._loss_function = xglm_cross_entropy_loss
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -743,6 +773,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -778,13 +809,13 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # shift labels and add a pad token to the end
-            shift_labels = labels.new_zeros(labels.shape)
-            shift_labels[:, :-1] = labels[:, 1:].clone()
-            shift_labels[:, -1] = self.config.pad_token_id
-
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
+            loss = self.loss_function(
+                logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                pad_token_id=self.config.pad_token_id,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -799,42 +830,6 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
-    ):
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-        else:
-            position_ids = None
-            # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-            if attention_mask is None:
-                attention_mask = input_ids.new_ones(input_ids.shape)
-        # first step, decoder_cached_states are empty
-        return {
-            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
-            "attention_mask": attention_mask,
-            "position_ids": position_ids,
-            "past_key_values": past_key_values,
-            "use_cache": use_cache,
-        }
-
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -843,3 +838,6 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = ["XGLMForCausalLM", "XGLMModel", "XGLMPreTrainedModel"]

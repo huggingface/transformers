@@ -24,7 +24,8 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...utils import (
@@ -272,7 +273,6 @@ class Idefics3VisionFlashAttention2(Idefics3VisionAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -620,12 +620,13 @@ class Idefics3PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Idefics3VisionAttention", "Idefics3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_sdpa = True
     _supports_cache_class = True
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2PreTrainedModel._init_weights
     def _init_weights(self, module):
         std = (
-            self.config.initializer_range
+            self.config.text_config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
@@ -666,6 +667,7 @@ IDEFICS3_VISION_START_DOCSTRING = r"""
 )
 class Idefics3VisionTransformer(Idefics3PreTrainedModel):
     config_class = Idefics3VisionConfig
+    _supports_sdpa = False
 
     def __init__(self, config: Idefics3VisionConfig):
         super().__init__(config)
@@ -823,18 +825,16 @@ class Idefics3Model(Idefics3PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics3VisionTransformer._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        self.vision_model = Idefics3VisionTransformer._from_config(config.vision_config)
         self.connector = Idefics3Connector(config)
-        self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.text_model = AutoModel.from_config(config.text_config)
 
         self.image_seq_len = int(
             ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.scale_factor**2)
         )
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 
@@ -899,7 +899,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
         new_inputs_embeds = inputs_embeds.clone()
         reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size)
         # cast to the dtype of the input_embeds to support quantized models
-        reshaped_image_hidden_states = reshaped_image_hidden_states.to(inputs_embeds.dtype)
+        reshaped_image_hidden_states = reshaped_image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
         new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
         return new_inputs_embeds
 
@@ -953,6 +953,8 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         past_seen_tokens = 0
         if use_cache:
+            if past_key_values is None:
+                past_key_values = DynamicCache()
             past_seen_tokens = past_key_values.get_seq_length()
 
         if inputs_embeds is not None and input_ids is None and past_seen_tokens == 0:
@@ -1019,6 +1021,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1040,7 +1043,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
     """The Idefics3 Model with a language modeling head. It is made up a SigLIP vision encoder, with a language modeling head on top. """,
     IDEFICS3_START_DOCSTRING,
 )
-class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
+class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.__init__ with Idefics2->Idefics3
@@ -1090,17 +1093,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-
-    # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.tie_weights
-    def tie_weights(self):
-        """
-        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of DecoupledLinear and DecoupledEmbedding.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
-
-        if getattr(self.config, "tie_word_embeddings", True):
-            output_embeddings.weight = input_embeddings.weight
 
     @add_start_docstrings_to_model_forward(IDEFICS3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Idefics3CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -1206,14 +1198,17 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        logits = logits.float()
 
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             labels = labels.to(logits.device)
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[..., 1:].to(logits.device)
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
                 shift_logits = logits[..., :-1, :][shift_attention_mask != 0].contiguous()
                 shift_labels = labels[..., 1:][shift_attention_mask != 0].contiguous()
             else:
@@ -1243,35 +1238,22 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         past_key_values=None,
         attention_mask=None,
         inputs_embeds=None,
-        num_logits_to_keep=None,
+        cache_position=None,
+        pixel_values=None,
+        pixel_attention_mask=None,
+        image_hidden_states=None,
+        logits_to_keep=None,
         **kwargs,
     ):
-        past_length = 0
-        # Omit tokens covered by past_key_values
+        # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
+        # precedence is moved to the model, we can remove this fn)
+
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         if past_key_values is not None:
-            # Past key values are always initialized with a `Cache` object -> no need for if-else anymore
-            past_length = past_key_values.get_seq_length()
-            max_cache_length = past_key_values.get_max_length()
-
-            # Keep only the unprocessed tokens:
-            # 1 - If the length of the attention_mask exceeds the length of input_ids, then we are in a setting where
-            # some of the inputs are exclusively passed as part of the cache (e.g. when passing input_embeds as
-            # input)
-            if attention_mask is not None and attention_mask.shape[1] > input_ids.shape[1]:
-                input_ids = input_ids[:, -(attention_mask.shape[1] - past_length) :]
-            # 2 - If the past_length is smaller than input_ids', then input_ids holds all input tokens. We can discard
-            # input_ids based on the past_length.
-            elif past_length < input_ids.shape[1]:
-                input_ids = input_ids[:, past_length:]
-            # 3 - Otherwise (past_length >= input_ids.shape[1]), let's assume input_ids only has unprocessed tokens.
-
-            # If we are about to go beyond the maximum cache length, we need to crop the input attention mask.
-            if (
-                max_cache_length is not None
-                and attention_mask is not None
-                and past_length + input_ids.shape[1] > max_cache_length
-            ):
-                attention_mask = attention_mask[:, -max_cache_length:]
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:
+                input_ids = input_ids[:, cache_position]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -1282,21 +1264,22 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
                 position_ids = position_ids[:, -input_ids.shape[1] :]
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and past_length == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
+        # but IDEFICS requires noth ids and embeds to be present
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": input_ids}
         else:
-            model_inputs = {"input_ids": input_ids}
+            # The clone here is for the same reason as for `position_ids`.
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
-        if num_logits_to_keep is not None:
-            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+        if logits_to_keep is not None:
+            model_inputs["logits_to_keep"] = logits_to_keep
 
-        image_hidden_states = kwargs.get("image_hidden_states", None)
         if image_hidden_states is not None:
             pixel_values = None
             pixel_attention_mask = None
         else:
-            pixel_values = kwargs.get("pixel_values", None)
-            pixel_attention_mask = kwargs.get("pixel_attention_mask", None)
+            pixel_values = pixel_values
+            pixel_attention_mask = pixel_attention_mask
         model_inputs.update(
             {
                 "position_ids": position_ids,
@@ -1321,3 +1304,6 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel):
         # Get the precomputed image_hidden_states
         model_kwargs["image_hidden_states"] = outputs.image_hidden_states
         return model_kwargs
+
+
+__all__ = ["Idefics3ForConditionalGeneration", "Idefics3PreTrainedModel", "Idefics3Model", "Idefics3VisionTransformer"]

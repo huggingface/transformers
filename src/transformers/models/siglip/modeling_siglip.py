@@ -279,13 +279,13 @@ class SiglipVisionEmbeddings(nn.Module):
         """
 
         num_patches = embeddings.shape[1]
-        num_positions = self.position_embeddings.shape[1]
+        num_positions = self.position_embedding.weight.shape[0]
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
+            return self.position_embedding(self.position_ids)
 
-        patch_pos_embed = self.position_embeddings
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
 
         dim = embeddings.shape[-1]
 
@@ -308,7 +308,8 @@ class SiglipVisionEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
         _, _, height, width = pixel_values.shape
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
         if interpolate_pos_encoding:
@@ -339,6 +340,13 @@ class SiglipTextEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -437,7 +445,6 @@ class SiglipFlashAttention2(SiglipAttention):
 
     is_causal = False
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -669,6 +676,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
     config_class = SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
+
     _no_split_modules = [
         "SiglipTextEmbeddings",
         "SiglipEncoderLayer",
@@ -1218,8 +1226,8 @@ class SiglipModel(SiglipPreTrainedModel):
         vision_config = config.vision_config
 
         # First, initialize the text and vision models with proper attention implementation
-        text_model = SiglipTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
-        vision_model = SiglipVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+        text_model = SiglipTextModel._from_config(text_config)
+        vision_model = SiglipVisionModel._from_config(vision_config)
 
         # Second, get the text and vision submodules (for backward compatibility)
         self.text_model = text_model.text_model
@@ -1454,9 +1462,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
 
         # Create the vision model with proper attention
         # and take only vision_model submodule (for backward compatibility)
-        vision_model = SiglipVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        vision_model = SiglipVisionModel._from_config(config.vision_config)
         self.vision_model = vision_model.vision_model
 
         # Classifier head
@@ -1567,3 +1573,12 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "SiglipModel",
+    "SiglipPreTrainedModel",
+    "SiglipTextModel",
+    "SiglipVisionModel",
+    "SiglipForImageClassification",
+]

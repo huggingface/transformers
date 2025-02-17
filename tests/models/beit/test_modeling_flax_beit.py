@@ -36,7 +36,7 @@ if is_vision_available():
     from transformers import BeitImageProcessor
 
 
-class FlaxBeitModelTester(unittest.TestCase):
+class FlaxBeitModelTester:
     def __init__(
         self,
         parent,

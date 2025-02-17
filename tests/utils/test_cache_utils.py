@@ -21,7 +21,7 @@ from parameterized import parameterized
 from transformers import set_seed
 from transformers.testing_utils import (
     is_torch_available,
-    require_auto_gptq,
+    require_gptq,
     require_non_xpu,
     require_read_token,
     require_torch,
@@ -53,7 +53,7 @@ class CacheTest(unittest.TestCase):
     def test_dynamic_cache_retrocompatibility(self):
         """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
         legacy_cache = ()
-        new_cache = DynamicCache(num_hidden_layers=10)
+        new_cache = DynamicCache()
 
         # Creates a new cache with 10 layers in both formats
         for layer_idx in range(10):
@@ -83,7 +83,7 @@ class CacheTest(unittest.TestCase):
                 )
 
         # Test 1: We can convert from legacy to new with no changes
-        from_legacy = DynamicCache.from_legacy_cache(legacy_cache, num_hidden_layers=10)
+        from_legacy = DynamicCache.from_legacy_cache(legacy_cache)
         for layer_idx in range(10):
             for key_value_idx in range(2):
                 self.assertTrue(
@@ -103,7 +103,7 @@ class CacheTest(unittest.TestCase):
         legacy_reorder_fn = GPT2LMHeadModel._reorder_cache  # An example of a legacy `_reorder_cache` function
 
         legacy_cache = ()
-        new_cache = DynamicCache(num_hidden_layers=10)
+        new_cache = DynamicCache()
 
         # Creates a new cache with 10 layers in both formats
         for layer_idx in range(10):
@@ -181,7 +181,7 @@ class CacheTest(unittest.TestCase):
 
         set_seed(0)
         device = "cpu"
-        dtype = torch.float32
+        dtype = "bfloat16"
         cache_implementation = "static"
         attn_implementation = "sdpa"  # Export and ExecuTorch only works for SdpaAttention
         batch_size = 1
@@ -198,6 +198,7 @@ class CacheTest(unittest.TestCase):
                 cache_config={
                     "batch_size": batch_size,
                     "max_cache_len": max_cache_len,
+                    "device": device,
                 },
             ),
         )
@@ -240,9 +241,7 @@ class CacheIntegrationTest(unittest.TestCase):
         set_seed(0)
         gen_out_legacy = model.generate(**inputs, do_sample=True, max_new_tokens=256)
         set_seed(0)
-        gen_out = model.generate(
-            **inputs, do_sample=True, max_new_tokens=256, past_key_values=DynamicCache(model.config.num_hidden_layers)
-        )
+        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, past_key_values=DynamicCache())
         self.assertListEqual(gen_out_legacy.tolist(), gen_out.tolist())
 
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
@@ -270,9 +269,7 @@ class CacheIntegrationTest(unittest.TestCase):
             model.device
         )
 
-        gen_out = model.generate(
-            **inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache(model.config.num_hidden_layers)
-        )
+        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10, past_key_values=DynamicCache())
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = ["A sequence: 1, 2, 3, 4, 5, 6, 7, 8,", "A sequence: A, B, C, D, E, F, G, H"]
         self.assertListEqual(decoded, expected_text)
@@ -314,16 +311,17 @@ class CacheIntegrationTest(unittest.TestCase):
             do_sample=False,
             max_new_tokens=20,
             num_return_sequences=2,
+            num_beams=2,
         )
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = [
-            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "Hello I am doing a project for my school and I am trying to make a program that will allow me to input a",
+            "Hello I am doing a project for my school and I am trying to make a program that will allow me to use a",
         ]
         self.assertListEqual(decoded, expected_text)
 
     @require_non_xpu
-    @require_auto_gptq
+    @require_gptq
     def test_sink_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("TheBloke/LLaMa-7B-GPTQ")
         model = AutoModelForCausalLM.from_pretrained("TheBloke/LLaMa-7B-GPTQ", device_map="auto")
@@ -366,7 +364,7 @@ class CacheIntegrationTest(unittest.TestCase):
             input_ids = gen_out
 
         # We went well beyond the cache length
-        self.assertTrue(input_ids.shape[1] > cache.get_max_length() * 1.5)
+        self.assertTrue(input_ids.shape[1] > cache.get_max_cache_shape() * 1.5)
 
         # And it still produces a coherent english
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
@@ -384,8 +382,6 @@ class CacheIntegrationTest(unittest.TestCase):
         [
             ("eager", "static"),
             ("sdpa", "static"),
-            ("eager", "offloaded-static"),
-            ("sdpa", "offloaded-static"),
         ]
     )
     def test_static_cache_greedy_decoding_pad_left(self, attn_implementation, cache_implementation):
@@ -431,8 +427,6 @@ class CacheIntegrationTest(unittest.TestCase):
         [
             ("eager", "static"),
             ("sdpa", "static"),
-            ("eager", "offloaded-static"),
-            ("sdpa", "offloaded-static"),
         ]
     )
     def test_static_cache_greedy_decoding_pad_right(self, attn_implementation, cache_implementation):
@@ -464,26 +458,6 @@ class CacheIntegrationTest(unittest.TestCase):
         gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
-            self.assertListEqual(decoded, EXPECTED_GENERATION)
-
-        set_seed(0)
-        model._forward = model.forward
-        compiled_forward = torch.compile(model.forward)
-
-        def compiled(func, input_ids, **kwargs):
-            return func(input_ids, **kwargs)
-
-        def call(input_ids, **kwargs):
-            if input_ids.shape[-1] == 1:
-                return compiled(compiled_forward, input_ids, **kwargs)
-
-            return model._forward(input_ids, **kwargs)
-
-        model.forward = call
-
-        gen_out = model.generate(**inputs, do_sample=False, max_new_tokens=10)
-        decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
-        with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     def test_dynamic_cache_extra_left_padding(self):
@@ -523,7 +497,6 @@ class CacheIntegrationTest(unittest.TestCase):
     @parameterized.expand(
         [
             "static",
-            "offloaded-static",
         ]
     )
     def test_static_cache_extra_left_padding(self, cache_implementation):

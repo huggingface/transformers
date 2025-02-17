@@ -195,9 +195,6 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
-    )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
     pipeline_model_mapping = (
         {
             "feature-extraction": OpenAIGPTModel,
@@ -211,9 +208,16 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
-        if pipeline_test_casse_name == "ZeroShotClassificationPipelineTests":
+        if pipeline_test_case_name == "ZeroShotClassificationPipelineTests":
             # Get `tokenizer does not have a padding token` error for both fast/slow tokenizers.
             # `OpenAIGPTConfig` was never used in pipeline tests, either because of a missing checkpoint or because a
             # tiny config could not be created.

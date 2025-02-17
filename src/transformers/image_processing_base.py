@@ -19,7 +19,7 @@ import json
 import os
 import warnings
 from io import BytesIO
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar, Union
 
 import numpy as np
 import requests
@@ -43,6 +43,9 @@ from .utils import (
 
 if is_vision_available():
     from PIL import Image
+
+
+ImageProcessorType = TypeVar("ImageProcessorType", bound="ImageProcessingMixin")
 
 
 logger = logging.get_logger(__name__)
@@ -95,7 +98,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
     @classmethod
     def from_pretrained(
-        cls,
+        cls: Type[ImageProcessorType],
         pretrained_model_name_or_path: Union[str, os.PathLike],
         cache_dir: Optional[Union[str, os.PathLike]] = None,
         force_download: bool = False,
@@ -103,7 +106,7 @@ class ImageProcessingMixin(PushToHubMixin):
         token: Optional[Union[str, bool]] = None,
         revision: str = "main",
         **kwargs,
-    ):
+    ) -> ImageProcessorType:
         r"""
         Instantiate a type of [`~image_processing_utils.ImageProcessingMixin`] from an image processor.
 
@@ -141,7 +144,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
                 <Tip>
 
-                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
 
                 </Tip>
 
@@ -282,6 +285,8 @@ class ImageProcessingMixin(PushToHubMixin):
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            image_processor_filename (`str`, *optional*, defaults to `"config.json"`):
+                The name of the file in the model directory to use for the image processor config.
 
         Returns:
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the image processor object.
@@ -295,6 +300,7 @@ class ImageProcessingMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+        image_processor_filename = kwargs.pop("image_processor_filename", IMAGE_PROCESSOR_NAME)
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -321,7 +327,7 @@ class ImageProcessingMixin(PushToHubMixin):
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
-            image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
+            image_processor_file = os.path.join(pretrained_model_name_or_path, image_processor_filename)
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             is_local = True
@@ -329,7 +335,7 @@ class ImageProcessingMixin(PushToHubMixin):
             image_processor_file = pretrained_model_name_or_path
             resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
-            image_processor_file = IMAGE_PROCESSOR_NAME
+            image_processor_file = image_processor_filename
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_image_processor_file = cached_file(
@@ -355,7 +361,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     f"Can't load image processor for '{pretrained_model_name_or_path}'. If you were trying to load"
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
-                    f" directory containing a {IMAGE_PROCESSOR_NAME} file"
+                    f" directory containing a {image_processor_filename} file"
                 )
 
         try:
@@ -375,8 +381,6 @@ class ImageProcessingMixin(PushToHubMixin):
             logger.info(
                 f"loading configuration file {image_processor_file} from cache at {resolved_image_processor_file}"
             )
-
-        if not is_local:
             if "auto_map" in image_processor_dict:
                 image_processor_dict["auto_map"] = add_model_info_to_auto_map(
                     image_processor_dict["auto_map"], pretrained_model_name_or_path
@@ -385,6 +389,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 image_processor_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
                     image_processor_dict["custom_pipelines"], pretrained_model_name_or_path
                 )
+
         return image_processor_dict, kwargs
 
     @classmethod
