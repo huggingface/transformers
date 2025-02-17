@@ -443,6 +443,7 @@ _import_structure = {
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
+    "models.evolla": ["EvollaConfig"],
     "models.falcon": ["FalconConfig"],
     "models.falcon_mamba": ["FalconMambaConfig"],
     "models.fastspeech2_conformer": [
@@ -512,7 +513,6 @@ _import_structure = {
     "models.hubert": ["HubertConfig"],
     "models.ibert": ["IBertConfig"],
     "models.idefics": ["IdeficsConfig"],
-    "models.evolla": ["EvollaConfig"],
     "models.idefics2": ["Idefics2Config"],
     "models.idefics3": ["Idefics3Config"],
     "models.ijepa": ["IJepaConfig"],
@@ -1249,13 +1249,13 @@ else:
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.emu3"].append("Emu3ImageProcessor")
+    _import_structure["models.evolla"].extend(["EvollaProcessor"])
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
-    _import_structure["models.evolla"].extend(["EvollaProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -2336,6 +2336,14 @@ else:
             "EsmPreTrainedModel",
         ]
     )
+    _import_structure["models.evolla"].extend(
+        [
+            "EvollaForProteinText2Text",
+            "EvollaModel",
+            "EvollaPreTrainedModel",
+            "EvollaProcessor",
+        ]
+    )
     _import_structure["models.falcon"].extend(
         [
             "FalconForCausalLM",
@@ -2542,6 +2550,7 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+
     _import_structure["models.granitemoeshared"].extend(
         [
             "GraniteMoeSharedForCausalLM",
@@ -2549,7 +2558,6 @@ else:
             "GraniteMoeSharedPreTrainedModel",
         ]
     )
-
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
@@ -2608,14 +2616,6 @@ else:
             "IdeficsModel",
             "IdeficsPreTrainedModel",
             "IdeficsProcessor",
-        ]
-    )
-    _import_structure["models.evolla"].extend(
-        [
-            "EvollaForProteinText2Text",
-            "EvollaModel",
-            "EvollaPreTrainedModel",
-            "EvollaProcessor",
         ]
     )
     _import_structure["models.idefics2"].extend(
