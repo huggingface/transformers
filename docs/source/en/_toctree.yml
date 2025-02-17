@@ -112,6 +112,17 @@
     title: Generation
   - isExpanded: false
     sections:
+    - local: chat_template_basics
+      title: Getting Started with Chat Templates for Text LLMs
+    - local: chat_template_multimodal
+      title: Multimodal Chat Templates for Vision and Audio LLMs
+    - local: chat_template_tools_and_documents
+      title: Expanding Chat Templates with Tools and Documents
+    - local: chat_template_advanced
+      title: Advanced Usage and Customizing Your Chat Templates
+    title: Chat Templates
+  - isExpanded: false
+    sections:
     - local: tasks/idefics
       title: Image tasks with IDEFICS
     - local: tasks/prompting
@@ -127,8 +138,6 @@
     title: Use model-specific APIs
   - local: custom_models
     title: Share a custom model
-  - local: chat_templating
-    title: Chat templates
   - local: trainer
     title: Trainer
   - local: sagemaker
@@ -166,6 +175,8 @@
   - local: quantization/aqlm
     title: AQLM
   - local: quantization/vptq
+    title: SpQR
+  - local: quantization/spqr
     title: VPTQ
   - local: quantization/quanto
     title: Quanto
@@ -185,6 +196,8 @@
     title: BitNet
   - local: quantization/compressed_tensors
     title: compressed-tensors
+  - local: quantization/finegrained_fp8
+    title: Fine-grained FP8
   - local: quantization/contribute
     title: Contribute new quantization method
   title: Quantization Methods
@@ -448,6 +461,8 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/granitemoeshared
+        title: GraniteMoeShared
       - local: model_doc/granitevision
         title: GraniteVision
       - local: model_doc/helium
@@ -653,6 +668,8 @@
         title: Depth Anything
       - local: model_doc/depth_anything_v2
         title: Depth Anything V2
+      - local: model_doc/depth_pro
+        title: DepthPro
       - local: model_doc/deta
         title: DETA
       - local: model_doc/detr
