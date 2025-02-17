@@ -114,7 +114,7 @@ from unittest.mock import patch
 from transformers.utils import is_sklearn_available
 
 
-# TODO: raushan/joao remove this when default generatino config is added
+# TODO: raushan remove this when VLMs start accepting input embeds
 VLM_CLASS_NAMES = ["llava", "idefics2", "idefics3", "mllama", "paligemma", "emu3", "gotocr2", "qwen2vl", "qwen2_5_vl"]
 
 
