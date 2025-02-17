@@ -373,7 +373,6 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (RemBertForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": RemBertModel,
@@ -507,4 +506,6 @@ class RemBertModelIntegrationTest(unittest.TestCase):
         #     [-0.15887849032878876, -0.054529931396245956, 0.5356100797653198]
         # ]]
 
-        self.assertTrue(torch.allclose(output["last_hidden_state"][:, :, :3], expected_implementation, atol=1e-4))
+        torch.testing.assert_close(
+            output["last_hidden_state"][:, :, :3], expected_implementation, rtol=1e-4, atol=1e-4
+        )

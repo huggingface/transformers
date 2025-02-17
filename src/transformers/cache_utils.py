@@ -29,6 +29,8 @@ class Cache(torch.nn.Module):
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
 
+    is_compileable = False
+
     def __init__(self):
         super().__init__()
 
@@ -361,8 +363,7 @@ class DynamicCache(Cache):
         ```
     """
 
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def __init__(self, num_hidden_layers: Optional[int] = None) -> None:
+    def __init__(self) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: List[torch.Tensor] = []
@@ -464,10 +465,7 @@ class DynamicCache(Cache):
         return legacy_cache
 
     @classmethod
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def from_legacy_cache(
-        cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None, num_hidden_layers: int = None
-    ) -> "DynamicCache":
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
         """Converts a cache in the legacy cache format into an equivalent `DynamicCache`. Used for
         backward compatibility."""
         cache = cls()
@@ -493,10 +491,7 @@ class DynamicCache(Cache):
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
 
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def batch_split(
-        self, full_batch_size: int, split_size: int, num_hidden_layers: int = None
-    ) -> List["DynamicCache"]:
+    def batch_split(self, full_batch_size: int, split_size: int) -> List["DynamicCache"]:
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         out = []
@@ -509,8 +504,7 @@ class DynamicCache(Cache):
         return out
 
     @classmethod
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def from_batch_splits(cls, splits: List["DynamicCache"], num_hidden_layers: int = None) -> "DynamicCache":
+    def from_batch_splits(cls, splits: List["DynamicCache"]) -> "DynamicCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         cache = cls()
@@ -1098,6 +1092,8 @@ class StaticCache(Cache):
         ```
     """
 
+    is_compileable = True
+
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
     def __init__(
@@ -1297,6 +1293,7 @@ class SlidingWindowCache(StaticCache):
     """
 
     is_sliding = True
+    is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
@@ -1421,6 +1418,7 @@ class EncoderDecoderCache(Cache):
         super().__init__()
         self.self_attention_cache = self_attention_cache
         self.cross_attention_cache = cross_attention_cache
+        self.is_compileable = getattr(self.self_attention_cache, "is_compileable", False)
 
         self.is_updated = {}
         for layer_idx in range(len(cross_attention_cache.key_cache)):
@@ -1521,10 +1519,7 @@ class EncoderDecoderCache(Cache):
         self.check_dynamic_cache(self.crop.__name__)
         self.self_attention_cache.crop(maximum_length)
 
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def batch_split(
-        self, full_batch_size: int, split_size: int, num_hidden_layers: int = None
-    ) -> "List[EncoderDecoderCache]":
+    def batch_split(self, full_batch_size: int, split_size: int) -> "List[EncoderDecoderCache]":
         """Split the current instance into a list of `DynamicCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         self.check_dynamic_cache(self.batch_split.__name__)
@@ -1537,10 +1532,7 @@ class EncoderDecoderCache(Cache):
         return out
 
     @classmethod
-    @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def from_batch_splits(
-        cls, splits: List["EncoderDecoderCache"], num_hidden_layers: int = None
-    ) -> "EncoderDecoderCache":
+    def from_batch_splits(cls, splits: List["EncoderDecoderCache"]) -> "EncoderDecoderCache":
         """This is the opposite of the above `batch_split()` method. This will be used by `stack_model_outputs` in
         `generation.utils`"""
         self_attention_cache = DynamicCache()
@@ -1611,6 +1603,8 @@ class HybridCache(Cache):
         HybridCache()
         ```
     """
+
+    is_compileable = True
 
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     @deprecate_kwarg("layer_device_map", version="4.52.0")
@@ -1832,6 +1826,8 @@ class MambaCache:
         ```
     """
 
+    is_compileable = True
+
     # TODO (joao): remove `=None` in non-optional arguments in v4.46. Remove from `OBJECTS_TO_IGNORE` as well.
     def __init__(
         self,
@@ -1974,6 +1970,8 @@ class OffloadedStaticCache(StaticCache):
         >>> past_kv_length = outputs.past_key_values # access cache filled with key/values from generation
         ```
     """
+
+    is_compileable = True
 
     @deprecate_kwarg("layer_device_map", version="4.52.0")
     def __init__(

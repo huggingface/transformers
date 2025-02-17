@@ -379,6 +379,9 @@ class GenerationConfig(PushToHubMixin):
             If using a static cache, this controls how `generate` will `compile` the forward pass for performance
             gains.
 
+        disable_compile (`bool`, *optional*): Whether to disable the compilation of the forward pass when using 'statis' cache
+            implementation.
+
         > Wild card
 
         generation_kwargs:
@@ -482,7 +485,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Performances
         self.compile_config = kwargs.pop("compile_config", CompileConfig())
-
+        self.disable_compile = kwargs.pop("disable_compile", False)
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
 
@@ -785,8 +788,7 @@ class GenerationConfig(PushToHubMixin):
             for arg_name in ("cache_implementation", "cache_config", "return_legacy_cache"):
                 if getattr(self, arg_name) is not None:
                     logger.warning_once(
-                        no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name)),
-                        UserWarning,
+                        no_cache_warning.format(cache_arg=arg_name, cache_arg_value=getattr(self, arg_name))
                     )
 
         # 6.  check watermarking arguments
@@ -1579,7 +1581,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
 
 
 @dataclass
-class CompileConfig(object):
+class CompileConfig:
     """
     Class that holds arguments relative to `torch.compile` behavior, when using automatic compilation in `generate`.
     See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
@@ -1620,7 +1622,9 @@ class CompileConfig(object):
     backend: Union[str, Callable] = "inductor"
     mode: str = "reduce-overhead"
     options: Optional[dict] = None
+    # Used to flag our `generate` call to compile on e.g. CPU. Often not optimal, but useful for testing purposes.
+    _compile_all_devices = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes this instance to a Python dictionary."""
-        return copy.deepcopy(self.__dict__)
+        return copy.deepcopy({key: value for key, value in self.__dict__.items() if key != "_compile_all_devices"})
