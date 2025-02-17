@@ -114,6 +114,10 @@ from unittest.mock import patch
 from transformers.utils import is_sklearn_available
 
 
+# TODO: raushan/joao remove this when default generatino config is added
+VLM_CLASS_NAMES = ["llava", "idefics2", "idefics3", "mllama", "paligemma", "emu3", "gotocr2", "qwen2vl", "qwen2_5_vl"]
+
+
 class GenerationTesterMixin:
     input_name = "input_ids"
     model_tester = None
@@ -1259,6 +1263,7 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
+                    *VLM_CLASS_NAMES, # shouldn't suggest image tokens
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1272,6 +1277,7 @@ class GenerationTesterMixin:
 
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
+            logits_processors = self._get_logits_processor_kwargs(config=model.config)
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) the prompt lookup tries to give the model 2 tokens, to ensure the input preparation of
@@ -1291,10 +1297,10 @@ class GenerationTesterMixin:
                 "use_cache": True,
             }
 
-            output_greedy = model.generate(**generation_kwargs, **inputs_dict)
+            output_greedy = model.generate(**generation_kwargs, **inputs_dict, **logits_processors)
 
             generation_kwargs.update({"prompt_lookup_num_tokens": 2})  # see b)
-            output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict)
+            output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict, **logits_processors)
 
             # The two outputs must match and their shape must be as expected
             self._check_similar_generate_outputs(output_greedy, output_prompt_lookup)
@@ -1691,8 +1697,7 @@ class GenerationTesterMixin:
             #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
             #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
             pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower()
-                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma", "emu3", "gotocr2"]
+                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
             )
             if pixel_values_is_mutually_exclusive:
                 inputs_dict.pop("pixel_values", None)
@@ -1700,7 +1705,7 @@ class GenerationTesterMixin:
                 inputs_dict.pop("pixel_values_images", None)
             #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
-                model_name in model_class.__name__.lower() for model_name in ["moshi", "qwen2vl", "qwen2_5_vl"]
+                model_name in model_class.__name__.lower() for model_name in ["moshi"]
             )
             # 3 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
             # we infer it from `input_ids`. The last test case will fail if there is a pad token in the original input.
@@ -1770,8 +1775,7 @@ class GenerationTesterMixin:
             #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
             #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
             pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower()
-                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma", "emu3"]
+                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
             )
             if pixel_values_is_mutually_exclusive:
                 inputs_dict.pop("pixel_values", None)
@@ -1930,8 +1934,7 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model doesn't return `past_key_values`")
 
             pixel_values_is_mutually_exclusive = any(
-                model_name in model_class.__name__.lower()
-                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma", "emu3"]
+                model_name in model_class.__name__.lower() for model_name in VLM_CLASS_NAMES
             )
             if pixel_values_is_mutually_exclusive:
                 inputs_dict.pop("pixel_values", None)
