@@ -26,7 +26,6 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import (
     require_essentia,
     require_librosa,
-    require_onnx,
     require_scipy,
     require_torch,
     slow,
