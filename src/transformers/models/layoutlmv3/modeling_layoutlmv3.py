@@ -16,13 +16,13 @@
 
 import collections
 import math
-from typing import Optional, Tuple, Union
+from collections.abc import Callable
+from typing import Any, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
-from packaging import version
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
@@ -33,12 +33,11 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    get_torch_version,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -361,7 +360,9 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
 
     config_class = LayoutLMv3Config
     base_model_prefix = "layoutlmv3"
+    _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -380,159 +381,57 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class LayoutLMv3SelfAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    head_mask: Optional[torch.Tensor] = None,
+    rel_pos: Optional[torch.Tensor] = None,
+    rel_2d_pos: Optional[torch.Tensor] = None,
+    **kwargs: Any,
+) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    _batch_size, num_heads, _seq_len, attn_head_size = query.shape
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
+    # Changing the computational order into QT(K/√d) alleviates the problem. (https://arxiv.org/pdf/2105.13290.pdf)
+    attention_scores = torch.matmul(query / math.sqrt(attn_head_size), key.transpose(-1, -2))
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+    if rel_pos is not None and rel_2d_pos is not None:
+        attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(attn_head_size)
+    elif rel_pos is not None:
+        attention_scores += rel_pos / math.sqrt(attn_head_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.has_relative_attention_bias = config.has_relative_attention_bias
-        self.has_spatial_attention_bias = config.has_spatial_attention_bias
+    if attention_mask is not None:
+        # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
+        attention_scores = attention_scores + attention_mask
 
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
+    # Normalize the attention scores to probabilities.
+    # Use the trick of the CogView paper to stablize training
+    attn_weights = _cogview_attention(attention_scores)
 
-    def cogview_attention(self, attention_scores, alpha=32):
-        """
-        https://arxiv.org/abs/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
-        (PB-Relax). A replacement of the original nn.Softmax(dim=-1)(attention_scores). Seems the new attention_probs
-        will result in a slower speed and a little bias. Can use torch.allclose(standard_attention_probs,
-        cogview_attention_probs, atol=1e-08) for comparison. The smaller atol (e.g., 1e-08), the better.
-        """
-        scaled_attention_scores = attention_scores / alpha
-        max_value = scaled_attention_scores.amax(dim=(-1)).unsqueeze(-1)
-        new_attention_scores = (scaled_attention_scores - max_value) * alpha
-        return nn.Softmax(dim=-1)(new_attention_scores)
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
-    ):
-        mixed_query_layer = self.query(hidden_states)
+    # Mask heads if we want to
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+    # Mask heads if we want to
+    if head_mask := kwargs.get("head_mask") is not None:
+        attn_weights = attn_weights * head_mask
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        # The attention scores QT K/√d could be significantly larger than input elements, and result in overflow.
-        # Changing the computational order into QT(K/√d) alleviates the problem. (https://arxiv.org/pdf/2105.13290.pdf)
-        attention_scores = torch.matmul(query_layer / math.sqrt(self.attention_head_size), key_layer.transpose(-1, -2))
+    attn_output = torch.matmul(attn_weights, value)
 
-        if self.has_relative_attention_bias and self.has_spatial_attention_bias:
-            attention_scores += (rel_pos + rel_2d_pos) / math.sqrt(self.attention_head_size)
-        elif self.has_relative_attention_bias:
-            attention_scores += rel_pos / math.sqrt(self.attention_head_size)
+    attn_output = attn_output.permute(0, 2, 1, 3).contiguous()
+    new_attn_output_shape = attn_output.size()[:-2] + (attn_head_size * num_heads,)
+    attn_output = attn_output.view(*new_attn_output_shape)
 
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        # Use the trick of the CogView paper to stablize training
-        attention_probs = self.cogview_attention(attention_scores)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        return outputs
-
-
-class LayoutLMv3SdpaSelfAttention(LayoutLMv3SelfAttention):
-    def __init__(self, config: LayoutLMv3Config) -> None:
-        super().__init__(config)
-        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
-
-    # Adapted from LayoutLMv3SelfAttention
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        rel_pos: Optional[torch.Tensor] = None,
-        rel_2d_pos: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
-        if (
-            self.has_relative_attention_bias
-            or self.has_spatial_attention_bias
-            or output_attentions
-            or head_mask is not None
-        ):
-            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
-            logger.warning_once(
-                "LayoutLMv3SdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
-                "`relative_attention_bias` or `spatial_attention_bias or `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but "
-                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
-                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states,
-                attention_mask,
-                head_mask,
-                output_attentions,
-                rel_pos,
-                rel_2d_pos,
-            )
-
-        batch_size, seq_len = hidden_states.shape[:2]
-
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-
-        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
-        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
-        # Reference: https://github.com/pytorch/pytorch/issues/112577
-        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
-            query_layer = query_layer.contiguous()
-            key_layer = key_layer.contiguous()
-            value_layer = value_layer.contiguous()
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_layer,
-            key_layer,
-            value_layer,
-            attn_mask=attention_mask,
-        )
-
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, seq_len, self.all_head_size)
-        attn_output = self.dropout(attn_output)
-
-        return (attn_output,)
+    return (attn_output, attn_weights) if kwargs.get("output_attentions") else (attn_output, None)
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput
@@ -550,38 +449,94 @@ class LayoutLMv3SelfOutput(nn.Module):
         return hidden_states
 
 
-LAYOUTLMV3_SELF_ATTENTION_CLASSES = {
-    "eager": LayoutLMv3SelfAttention,
-    "sdpa": LayoutLMv3SdpaSelfAttention,
-}
-
-
 class LayoutLMv3Attention(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv3Config) -> None:
         super().__init__()
-        self.self = LAYOUTLMV3_SELF_ATTENTION_CLASSES[config._attn_implementation](config)
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = config.hidden_size // config.num_attention_heads
+
+        self.self = nn.ModuleDict(
+            {
+                "query": nn.Linear(config.hidden_size, config.num_attention_heads * self.attention_head_size),
+                "key": nn.Linear(config.hidden_size, config.num_attention_heads * self.attention_head_size),
+                "value": nn.Linear(config.hidden_size, config.num_attention_heads * self.attention_head_size),
+            }
+        )
         self.output = LayoutLMv3SelfOutput(config)
+
+        self.dropout = config.attention_probs_dropout_prob
+        self.has_relative_attention_bias = config.has_relative_attention_bias
+        self.has_spatial_attention_bias = config.has_spatial_attention_bias
+
+        # Necessary for Flash Attention v2
+        self.is_causal = False
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        rel_pos=None,
-        rel_2d_pos=None,
-    ):
-        self_outputs = self.self(
-            hidden_states,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+        rel_pos: Optional[torch.Tensor] = None,
+        rel_2d_pos: Optional[torch.Tensor] = None,
+        **kwargs: Any,
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+
+        query_states = self.self.query(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.self.key(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.self.value(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            elif (
+                self.has_relative_attention_bias
+                or self.has_spatial_attention_bias
+                or output_attentions
+                or head_mask is not None
+            ):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` and `flash_attention_v2` does not support "
+                    "`relative_attention_bias` or `spatial_attention_bias or `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, but "
+                    "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                    'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
-            head_mask,
-            output_attentions,
+            dropout=0.0 if not self.training else self.dropout,
+            head_mask=head_mask,
             rel_pos=rel_pos,
             rel_2d_pos=rel_2d_pos,
+            output_attentions=output_attentions,
+            **kwargs,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attention_output = self.output(attn_output, hidden_states)
+
+        if attn_weights is not None:
+            return (attention_output, attn_weights)
+        return (attention_output,)
 
 
 # Copied from transformers.models.layoutlmv2.modeling_layoutlmv2.LayoutLMv2Layer with LayoutLMv2->LayoutLMv3
@@ -1037,16 +992,17 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
                 position_ids = position_ids.expand_as(input_ids)
                 final_position_ids = position_ids
 
-        use_sdpa_attention_mask = (
-            self.attn_implementation == "sdpa"
-            and not self.config.has_relative_attention_bias
-            and not self.config.has_spatial_attention_bias
-            and head_mask is None
-            and not output_attentions
+        eager_attn_required = (
+            self.config.has_relative_attention_bias
+            or self.config.has_spatial_attention_bias
+            or head_mask is not None
+            or output_attentions
         )
 
         # Expand the attention mask
-        if use_sdpa_attention_mask and attention_mask.dim() == 2:
+        if not eager_attn_required and self.attn_implementation == "flash_attention_2" and attention_mask.dim() == 2:
+            extended_attention_mask = attention_mask
+        elif not eager_attn_required and self.attn_implementation == "sdpa" and attention_mask.dim() == 2:
             extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                 attention_mask, embedding_output.dtype, tgt_len=seq_length
             )
@@ -1472,6 +1428,19 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+def _cogview_attention(attention_scores: torch.Tensor, alpha: Union[int, float] = 32) -> torch.Tensor:
+    """
+    https://arxiv.org/abs/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
+    (PB-Relax). A replacement of the original nn.Softmax(dim=-1)(attention_scores). Seems the new attention_probs
+    will result in a slower speed and a little bias. Can use torch.allclose(standard_attention_probs,
+    cogview_attention_probs, atol=1e-08) for comparison. The smaller atol (e.g., 1e-08), the better.
+    """
+    scaled_attention_scores = attention_scores / alpha
+    max_value = scaled_attention_scores.amax(dim=(-1)).unsqueeze(-1)
+    new_attention_scores = (scaled_attention_scores - max_value) * alpha
+    return nn.Softmax(dim=-1)(new_attention_scores)
 
 
 __all__ = [
