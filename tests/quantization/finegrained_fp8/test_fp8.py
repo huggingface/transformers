@@ -20,6 +20,7 @@ import unittest
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.testing_utils import (
     require_accelerate,
+    require_read_token,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -59,6 +60,7 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
 @slow
 @require_accelerate
+@require_read_token
 @require_torch_gpu
 class FP8QuantizerTest(unittest.TestCase):
     model_name = "meta-llama/Llama-3.2-1B"
