@@ -1429,26 +1429,13 @@ class LongT5Stack(LongT5PreTrainedModel):
         batch_size, seq_length = input_shape
 
         # initialize past_key_values
-        return_legacy_cache = False
         return_self_attention_cache = False
-        if self.is_decoder and (use_cache or past_key_values is not None):
+        if use_cache:
             if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
                 return_self_attention_cache = True
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
-            elif not isinstance(past_key_values, EncoderDecoderCache):
-                return_legacy_cache = True
-                logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.48.0. "
-                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-                )
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        elif not self.is_decoder:
-            # do not pass cache object down the line for encoder stack
-            # it messes indexing later in decoder-stack because cache object is modified in-place
-            past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
@@ -1567,8 +1554,6 @@ class LongT5Stack(LongT5PreTrainedModel):
         next_cache = next_decoder_cache if use_cache else None
         if return_self_attention_cache:
             next_cache = past_key_values.self_attention_cache
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -1800,12 +1785,15 @@ LONGT5_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (`EncoderDecoderCache`, *optional*):
+            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+            four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
+            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
+            when `config.use_cache=True`. An [`~cache_utils.EncoderDecoderCache`] instance.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -1951,7 +1939,7 @@ class LongT5Model(LongT5PreTrainedModel):
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -2110,7 +2098,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -2232,30 +2220,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past_key_values is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past_key_values
-
-        reordered_decoder_past = ()
-        for layer_past_states in past_key_values:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
-                )
-
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
-
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
 
 
 @add_start_docstrings(

@@ -25,7 +25,7 @@ from ..utils import is_sklearn_available
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
-from ..cache_utils import DynamicCache
+from ..cache_utils import DynamicCache, EncoderDecoderCache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
@@ -779,7 +779,15 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
 def _crop_past_key_values(model, past_key_values, max_length):
     """Crops the past key values up to a certain maximum length."""
     new_past = []
-    if model.config.is_encoder_decoder:
+
+    # `Cache` instances
+    if isinstance(past_key_values, DynamicCache):
+        past_key_values.crop(max_length)
+    elif isinstance(past_key_values, EncoderDecoderCache):
+        past_key_values.self_attention_cache.crop(max_length)
+
+    # legacy cache instances
+    elif model.config.is_encoder_decoder:
         for idx in range(len(past_key_values)):
             new_past.append(
                 (
@@ -800,8 +808,6 @@ def _crop_past_key_values(model, past_key_values, max_length):
         else:
             for idx in range(len(past_key_values)):
                 past_key_values[idx] = past_key_values[idx][:, :, :max_length, :]
-    elif isinstance(past_key_values, DynamicCache):
-        past_key_values.crop(max_length)
     elif past_key_values is not None:
         for idx in range(len(past_key_values)):
             if past_key_values[idx] != ([], []):
@@ -814,6 +820,7 @@ def _crop_past_key_values(model, past_key_values, max_length):
             else:
                 new_past.append((past_key_values[idx][0], past_key_values[idx][1]))
         past_key_values = tuple(new_past)
+
     return past_key_values
 
 
