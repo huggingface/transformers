@@ -2234,6 +2234,7 @@ class SharedCache(DynamicCache):
     def __init__(
         self,
         shared_cache_layer_groups: Optional[int] = None,
+        **kwargs,
     ) -> None:
         super().__init__()
         self.shared_cache_layer_groups = shared_cache_layer_groups if shared_cache_layer_groups is not None else 1
@@ -2241,7 +2242,8 @@ class SharedCache(DynamicCache):
     @property
     def shared_layer_indices(self) -> List[int]:
         indices = [i for i in range(len(self)) if i % self.shared_cache_layer_groups == 0]
-        indices[-1] = len(self) - 1
+        if indices:
+            indices[-1] = len(self) - 1
         return indices
 
     def shared_layer_idx(self, layer_idx: int) -> int:
