@@ -69,7 +69,7 @@ from .utils import (
 
 logger = logging.get_logger(__name__)
 
-# Dynamically import the Transformers module to grab the attribute classes of the processor form their names.
+# Dynamically import the Transformers module to grab the attribute classes of the processor from their names.
 transformers_module = direct_transformers_import(Path(__file__).parent)
 
 
@@ -1129,13 +1129,13 @@ class ProcessorMixin(PushToHubMixin):
                 args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
             else:
                 if attribute_name == "tokenizer":
-                    autoclass = getattr(transformers_module, "AutoTokenizer")
+                    autoclass = transformers_module.AutoTokenizer
                 elif attribute_name == "image_processor":
-                    autoclass = getattr(transformers_module, "AutoImageProcessor")
+                    autoclass = transformers_module.AutoImageProcessor
                 elif attribute_name == "feature_extractor":
-                    autoclass = getattr(transformers_module, "AutoFeatureExtractor")
+                    autoclass = transformers_module.AutoFeatureExtractor
                 elif attribute_name == "config":
-                    autoclass = getattr(transformers_module, "AutoConfig")
+                    autoclass = transformers_module.AutoConfig
                 else:
                     raise ValueError(
                         f"The {cls.__name__} class has {attribute_name}_class {class_name}"
