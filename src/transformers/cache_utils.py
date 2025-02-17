@@ -2217,8 +2217,8 @@ class SharedCache(DynamicCache):
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SharedCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-60M-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-60M-Instruct")
+        >>> model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-160M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-160M")
 
         >>> inputs = tokenizer(text="My name is Doge", return_tensors="pt")
 
@@ -2240,7 +2240,9 @@ class SharedCache(DynamicCache):
 
     @property
     def shared_layer_indices(self) -> List[int]:
-        return [i for i in range(len(self)) if i % self.shared_cache_layer_groups == 0]
+        indices = [i for i in range(len(self)) if i % self.shared_cache_layer_groups == 0]
+        indices[-1] = len(self) - 1
+        return indices
 
     def shared_layer_idx(self, layer_idx: int) -> int:
         if len(self.shared_layer_indices) == 0:
