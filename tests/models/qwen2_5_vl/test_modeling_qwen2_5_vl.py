@@ -27,7 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
-    isflaky,
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -348,7 +348,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_generate_compile_fullgraph(self):
         pass
 
-    @isflaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
+    @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         super().test_prompt_lookup_decoding_matches_greedy_search()
 
