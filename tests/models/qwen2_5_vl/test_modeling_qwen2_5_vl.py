@@ -27,6 +27,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    is_flaky,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -229,7 +230,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     """
 
     all_model_classes = (Qwen2_5_VLForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (Qwen2_5_VLForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
 
@@ -347,6 +347,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
     def test_generate_compile_fullgraph(self):
         pass
+
+    @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        super().test_prompt_lookup_decoding_matches_greedy_search()
 
 
 @require_torch

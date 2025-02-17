@@ -3125,7 +3125,7 @@ class Trainer:
 
         is_distributed = self.args.parallel_mode == ParallelMode.DISTRIBUTED
         if torch.cuda.is_available():
-            set_rng_state_for_device("GPU", torch.cuda, checkpoint_rng_state, is_distributed)
+            set_rng_state_for_device("CUDA", torch.cuda, checkpoint_rng_state, is_distributed)
         if is_torch_npu_available():
             set_rng_state_for_device("NPU", torch.npu, checkpoint_rng_state, is_distributed)
         if is_torch_mlu_available():
@@ -4477,7 +4477,7 @@ class Trainer:
         inputs = self._prepare_inputs(inputs)
         if ignore_keys is None:
             if hasattr(self.model, "config"):
-                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", [])
+                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", ["past_key_values"])
             else:
                 ignore_keys = []
 
