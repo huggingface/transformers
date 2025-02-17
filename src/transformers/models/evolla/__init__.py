@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .configuration_evolla import *
     from .modeling_evolla import *
     from .processing_evolla import *
-    from .protein_processing_evolla import *
 else:
     import sys
 
