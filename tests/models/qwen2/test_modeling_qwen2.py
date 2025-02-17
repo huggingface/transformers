@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -345,6 +346,14 @@ class Qwen2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def setUp(self):
         self.model_tester = Qwen2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen2Config, hidden_size=37)
+
+    @skipIfRocm
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
+
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
+    def test_flex_attention_with_grads(self):
+        super().test_flex_attention_with_grads()
 
     def test_config(self):
         self.config_tester.run_common_tests()

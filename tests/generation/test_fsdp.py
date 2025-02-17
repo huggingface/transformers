@@ -104,7 +104,7 @@ if is_torch_available():
 
 class TestFSDPGeneration(TestCasePlus):
     @require_torch_multi_gpu
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch='gfx90a', os_name='ubuntu', os_version='24.04')
     def test_fsdp_generate(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}
@@ -116,7 +116,7 @@ class TestFSDPGeneration(TestCasePlus):
         # successful return here == success - any errors would have caused an error in the sub-call
 
     @require_torch_multi_gpu
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch='gfx90a', os_name='ubuntu', os_version='24.04')
     def test_fsdp2_generate(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}

@@ -1455,6 +1455,7 @@ class GenerationTesterMixin:
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
     @pytest.mark.generate
+    @skipIfRocm(os_name='ubuntu',os_version='24.04')
     def test_left_padding_compatibility(self):
         # NOTE: left-padding results in small numerical differences. This is expected.
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535

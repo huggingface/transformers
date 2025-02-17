@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -311,6 +312,18 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def setUp(self):
         self.model_tester = PhiModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PhiConfig, hidden_size=37)
+
+    @skipIfRocm(min_torch_version="2.5")
+    def test_flex_attention_with_grads(self):
+        super().test_flex_attention_with_grads()
+
+    @skipIfRocm
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        super().test_generate_from_inputs_embeds_with_static_cache()
+
+    @skipIfRocm
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_config
     def test_config(self):

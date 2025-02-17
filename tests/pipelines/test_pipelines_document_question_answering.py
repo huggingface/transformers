@@ -160,7 +160,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
     @require_torch_bf16
     @require_detectron2
     @require_pytesseract
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch='gfx90a', os_name='ubuntu', os_version='24.04')
     def test_small_model_pt_bf16(self):
         dqa_pipeline = pipeline(
             "document-question-answering",

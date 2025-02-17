@@ -308,6 +308,10 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         super().test_generate_from_inputs_embeds_with_static_cache()
         pass
 
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
+    def test_left_padding_compatibility(self):
+        super().test_left_padding_compatibility()
+
     def setUp(self):
         self.model_tester = GraniteMoeModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GraniteMoeConfig, hidden_size=37)

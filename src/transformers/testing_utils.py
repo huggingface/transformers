@@ -241,6 +241,7 @@ _test_with_rocm = parse_flag_from_env("TEST_WITH_ROCM", default=False)
 
 
 import platform
+from packaging.version import parse as parse_version
 
 class RocmUtil:
     def __init__(self):
@@ -390,7 +391,7 @@ class RocmUtil:
 
 rocmUtils = RocmUtil()
 
-def skipIfRocm(func=None, *, msg="test doesn't currently work on the ROCm stack", arch=None, rocm_version=None, os_name=None, os_version=None):
+def skipIfRocm(func=None, *, msg="test doesn't currently work on the ROCm stack", arch=None, rocm_version=None, os_name=None, os_version=None, min_torch_version=None):
     """
     Pytest decorator to skip a test on AMD systems running ROCm, with additional conditions based on
     GPU architecture, ROCm version, and/or operating system.
@@ -429,6 +430,13 @@ def skipIfRocm(func=None, *, msg="test doesn't currently work on the ROCm stack"
 
         @wraps(fn)
         def wrapper(*args, **kwargs):
+            # Check the torch version if a minimum is specified.
+            if min_torch_version is not None:
+                if parse_version(torch.__version__) < parse_version(min_torch_version):
+                    pytest.skip(
+                        f"Test requires torch version {min_torch_version} or greater; found {torch.__version__}"
+                    )
+
             vendor = rocmUtils.get_gpu_vendor()
             # Only consider the ROCm skip logic for AMD systems.
             if vendor == "AMD":

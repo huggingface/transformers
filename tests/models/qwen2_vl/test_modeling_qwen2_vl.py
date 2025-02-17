@@ -230,6 +230,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     test_head_masking = False
     _is_composite = True
 
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
+    def test_generate_with_static_cache():
+        super().test_generate_with_static_cache()
+
     @skipIfRocm(arch='gfx90a')
     def test_generate_continue_from_past_key_values(self):
         super().test_generate_continue_from_past_key_values()

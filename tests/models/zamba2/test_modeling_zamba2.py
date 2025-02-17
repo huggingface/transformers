@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -319,6 +320,10 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=37)
+
+    @skipIfRocm(min_torch_version='2.5')
+    def test_flex_attention_with_grads(self):
+        super().test_flex_attention_with_grads()
 
     @unittest.skip("position_ids cannot be used to pad due to Mamba2 layers")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):

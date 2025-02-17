@@ -329,6 +329,10 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
         super().test_generate_with_static_cache()
 
+    @skipIfRocm(min_torch_version='2.5')
+    def test_flex_attention_with_grads(self):
+        super().test_flex_attention_with_grads()
+
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
         self,

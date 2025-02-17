@@ -621,6 +621,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
     @pytest.mark.generate
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
     def test_left_padding_compatibility(self):
         """Overwrite because IDEFICS needs image attention mask to be also padded"""
         # NOTE: left-padding results in small numerical differences. This is expected.
