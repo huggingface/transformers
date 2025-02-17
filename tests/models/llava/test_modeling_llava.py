@@ -17,6 +17,7 @@
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -180,7 +181,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
     """
 
     all_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (LlavaForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-to-text": LlavaForConditionalGeneration, "image-text-to-text": LlavaForConditionalGeneration}
         if is_torch_available()
@@ -198,6 +198,13 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         )
 
     def test_config(self):
+        # overwritten from `tests/test_configuration_common.py::ConfigTester` after #36077
+        # TODO: avoid overwritten once there is a better fix for #36077
+        def check_config_can_be_init_without_params():
+            config = self.config_tester.config_class()
+            self.config_tester.parent.assertIsNotNone(config)
+
+        self.config_tester.check_config_can_be_init_without_params = check_config_can_be_init_without_params
         self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
@@ -241,7 +248,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -272,6 +279,32 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layer):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layer = vision_feature_layer
+
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
+
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -288,14 +321,6 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
-    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
@@ -537,9 +562,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
 
     @slow
-    @require_bitsandbytes
     def test_pixtral(self):
-        model_id = "hf-internal-testing/pixtral-12b"
+        model_id = "mistral-community/pixtral-12b"
         model = LlavaForConditionalGeneration.from_pretrained(model_id)
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -552,33 +576,75 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
         # image = Image.open(requests.get(url, stream=True).raw)
-        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
+        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
         generate_ids = model.generate(**inputs, max_new_tokens=500)
         ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        print(ouptut)
 
         # fmt: off
         EXPECTED_GENERATION = """
 Describe the images.
-Sure, let's break down each image description:
+Certainly! Here are the descriptions of the images:
 
-1. **Image 1:**
-   - **Description:** A black dog with a glossy coat is sitting on a wooden floor. The dog has a focused expression and is looking directly at the camera.
-   - **Details:** The wooden floor has a rustic appearance with visible wood grain patterns. The dog's eyes are a striking color, possibly brown or amber, which contrasts with its black fur.
+1. **Image 1**: This image features a black dog with a glossy coat sitting on a wooden surface. The dog has a calm and attentive expression, looking directly at the camera. The wooden background has a rustic appearance with visible grain and texture.
 
-2. **Image 2:**
-   - **Description:** A scenic view of a mountainous landscape with a winding road cutting through it. The road is surrounded by lush green vegetation and leads to a distant valley.
-   - **Details:** The mountains are rugged with steep slopes, and the sky is clear, indicating good weather. The winding road adds a sense of depth and perspective to the image.
+2. **Image 2**: This image captures a breathtaking view of a mountainous landscape. The mountains are rugged and covered with patches of green vegetation. The sky above is clear, and the scene conveys a sense of tranquility and natural beauty.
 
-3. **Image 3:**
-   - **Description:** A beach scene with waves crashing against the shore. There are several people in the water and on the beach, enjoying the waves and the sunset.
-   - **Details:** The waves are powerful, creating a dynamic and lively atmosphere. The sky is painted with hues of orange and pink from the setting sun, adding a warm glow to the scene.
+3. **Image 3**: This image shows a beach scene during sunset. The waves are gently rolling onto the shore, and several people can be seen in the water, possibly surfing or swimming. The sky is painted with warm hues of orange and yellow, creating a serene and picturesque atmosphere.
 
-4. **Image 4:**
-   - **Description:** A garden path leading to a large tree with a bench underneath it. The path is bordered by well-maintained grass and flowers.
-   - **Details:** The path is made of small stones or gravel, and the tree provides a shaded area with the bench invitingly placed beneath it. The surrounding area is lush and green, suggesting a well-kept garden.
+4. **Image 4**: This image depicts a narrow, winding path that cuts through a lush, green landscape. On either side of the path, there is dense grass and various trees, including a prominent tree with white blossoms. The sky is clear and blue, adding to the peaceful and inviting ambiance of the scene.
 
-Each image captures a different scene, from a close-up of a dog to expansive natural landscapes, showcasing various elements of nature and human interaction with it.
+These descriptions provide a detailed overview of the content and atmosphere of each image.
 """
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(ouptut, EXPECTED_GENERATION)
+        self.assertEqual(ouptut, EXPECTED_GENERATION)
+
+    @slow
+    @require_bitsandbytes
+    def test_pixtral_4bit(self):
+        model_id = "mistral-community/pixtral-12b"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        IMG_URLS = [
+            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
+            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+        ]
+        PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
+
+        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
+        generate_ids = model.generate(**inputs, max_new_tokens=50)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+
+        EXPECTED_GENERATION = "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador"  # fmt: skip
+        self.assertEqual(output, EXPECTED_GENERATION)
+
+    @slow
+    @require_bitsandbytes
+    def test_pixtral_batched(self):
+        model_id = "mistral-community/pixtral-12b"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+        processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        IMG_URLS = [
+            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
+            Image.open(requests.get("https://picsum.photos/id/17/150/500", stream=True).raw),
+        ]
+        PROMPT = [
+            "<s>[INST][IMG]What breed is the dog?[/INST]",
+            "<s>[INST][IMG]What is shown in this image?[/INST]",
+        ]
+
+        inputs = processor(text=PROMPT, images=IMG_URLS, padding=True, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        generate_ids = model.generate(**inputs, max_new_tokens=50)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+
+        EXPECTED_GENERATION = [
+            'What breed is the dog?The dog in the image is a black Labrador Retriever.',
+            'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
+        ]  # fmt: skip
+        self.assertEqual(output, EXPECTED_GENERATION)

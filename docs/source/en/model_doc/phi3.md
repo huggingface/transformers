@@ -57,10 +57,7 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 >>> outputs = model.generate(inputs, max_new_tokens=32)
 >>> text = tokenizer.batch_decode(outputs)[0]
 >>> print(text)
-<s><|user|> 
-Can you provide ways to eat combinations of bananas and dragonfruits?<|end|> 
-<|assistant|> 
-Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for eating combinations of bananas and
+<|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some creative ideas for incorporating both fruits
 ```
 
 ## Phi3Config

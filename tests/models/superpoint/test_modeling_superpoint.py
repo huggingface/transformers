@@ -113,7 +113,6 @@ class SuperPointModelTester:
 @require_torch
 class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperPointForKeypointDetection,) if is_torch_available() else ()
-    all_generative_model_classes = () if is_torch_available() else ()
 
     fx_compatible = False
     test_pruning = False
@@ -297,7 +296,7 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
                 atol=1e-4,
             )
         )
-        self.assertTrue(torch.allclose(predicted_scores_image0_values, expected_scores_image0_values, atol=1e-4))
+        torch.testing.assert_close(predicted_scores_image0_values, expected_scores_image0_values, rtol=1e-4, atol=1e-4)
         self.assertTrue(
             torch.allclose(
                 predicted_descriptors_image0_value,

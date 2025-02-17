@@ -19,6 +19,7 @@ import unittest
 import numpy as np
 import requests
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     VideoLlavaConfig,
@@ -191,7 +192,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     """
 
     all_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (VideoLlavaForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -224,14 +224,6 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Pass because video-LLava requires `attention_mask is not None`")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Pass because video-LLava requires `attention_mask is not None`")
-    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
@@ -388,7 +380,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -418,6 +410,32 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values_images=pixel_values)
+
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layer):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layer = vision_feature_layer
+
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
 
 
 @require_torch
