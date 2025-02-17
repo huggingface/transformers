@@ -264,13 +264,14 @@ def is_full_docstring(new_docstring: str) -> bool:
         return True
     # If it contains Returns, but starts with text indented with an additional 4 spaces before, it is self-contained
     # (this is the scenario when using `@add_start_docstrings_to_model_forward`, but adding more args to docstring)
-    match_object = re.search(rf"\n([^\S\n]*)Returns:\n", new_docstring)
+    match_object = re.search(r"\n([^\S\n]*)Returns:\n", new_docstring)
     if match_object is not None:
         full_indent = match_object.group(1)
         striped_doc = new_docstring.strip("\n")
-        if striped_doc.startswith(full_indent + " "*4):
+        if striped_doc.startswith(full_indent + " " * 4) or striped_doc.startswith(full_indent + "\t"):
             return True
     return False
+
 
 def merge_docstrings(original_docstring, updated_docstring):
     original_level = get_docstring_indent(original_docstring)
