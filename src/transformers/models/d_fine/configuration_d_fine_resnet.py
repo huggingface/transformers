@@ -20,44 +20,8 @@
 # limitations under the License.
 
 
-from typing import Any, Iterator, List, NamedTuple
-
 from ...configuration_utils import PretrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
-
-
-class DFineResNetStageConfig(NamedTuple):
-    """
-    Configuration for each stage in the D-FINE ResNet backbone.
-    Each stage is defined by a list of parameters in the following order:
-    [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
-
-    Args:
-        stage1 (`List[Any]`, defaults to [48, 48, 128, 1, False, False, 3, 6]):
-            First stage configuration:
-            - Input channels: 48
-            - Middle (bottleneck) channels: 48
-            - Output channels: 128
-            - Number of blocks: 1
-            - No downsampling
-            - Standard (non-light) blocks
-            - Kernel size: 3
-            - Number of layers per block: 6
-        stage2 (`List[Any]`, defaults to [128, 96, 512, 1, True, False, 3, 6]):
-            Second stage with spatial downsampling and channel expansion
-        stage3 (`List[Any]`, defaults to [512, 192, 1024, 3, True, True, 5, 6]):
-            Third stage with light blocks and larger kernel size
-        stage4 (`List[Any]`, defaults to [1024, 384, 2048, 1, True, True, 5, 6]):
-            Final stage with maximum channel width
-    """
-
-    stage1: List[Any] = [48, 48, 128, 1, False, False, 3, 6]
-    stage2: List[Any] = [128, 96, 512, 1, True, False, 3, 6]
-    stage3: List[Any] = [512, 192, 1024, 3, True, True, 5, 6]
-    stage4: List[Any] = [1024, 384, 2048, 1, True, True, 5, 6]
-
-    def __iter__(self) -> Iterator[List[Any]]:
-        return iter([self.stage1, self.stage2, self.stage3, self.stage4])
 
 
 class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
@@ -71,10 +35,10 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
             - First number (3) is input image channels
             - Second number (32) is intermediate stem channels
             - Third number (48) is output stem channels
-        stage_config (`DFineResNetStageConfig`, *optional*):
+        stage_config (`List[List[Any]]` *optional*):
             Configuration for the four stages of the backbone.
-            See DFineResNetStageConfig for details.
-        use_lab (`bool`, *optional*, defaults to False):
+            [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
+        use_learnable_affine_block (`bool`, *optional*, defaults to False):
             Whether to use Learnable Affine Blocks (LAB) in the network.
             LAB adds learnable scale and bias parameters after certain operations.
         **super_kwargs:
@@ -98,8 +62,13 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         out_features=None,
         out_indices=None,
         stem_channels=[3, 32, 48],
-        stage_config=DFineResNetStageConfig(),
-        use_lab=False,
+        stage_config=[
+            [48, 48, 128, 1, False, False, 3, 6],
+            [128, 96, 512, 1, True, False, 3, 6],
+            [512, 192, 1024, 3, True, True, 5, 6],
+            [1024, 384, 2048, 1, True, True, 5, 6],
+        ],
+        use_learnable_affine_block=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -119,7 +88,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         )
         self.stem_channels = stem_channels
         self.stage_config = stage_config
-        self.use_lab = use_lab
+        self.use_learnable_affine_block = use_learnable_affine_block
 
 
-__all__ = ["DFineResNetConfig", "DFineResNetStageConfig"]
+__all__ = ["DFineResNetConfig"]
