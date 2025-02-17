@@ -362,7 +362,7 @@ class SmolVLMProcessor(ProcessorMixin):
                 per batch.
         """
         # We don't want to modify in-place the messages passed by user
-        # The user might want to add new turn on conv and continue geenration
+        # The user might want to add new turn on conv and continue generation
         conversations = copy.deepcopy(conversations)
         batch_num_frames, batch_timestamps = [], []
         for metadata_list, video_list in zip(batch_video_metadata, batch_videos):
