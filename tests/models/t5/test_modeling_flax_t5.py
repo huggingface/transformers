@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     slow,
 )
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
@@ -227,7 +226,7 @@ class FlaxT5ModelTester:
 
 
 @require_flax
-class FlaxT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+class FlaxT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxT5Model, FlaxT5ForConditionalGeneration) if is_flax_available() else ()
     is_encoder_decoder = True
 
