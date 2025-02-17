@@ -180,6 +180,7 @@ MODEL_NAMES_TO_IGNORE = [
     "CLIPVisionModel",
     "Qwen2AudioEncoder",
     "SiglipVisionModel",
+    "SmolVLMVisionTransformer",
 ]
 
 
