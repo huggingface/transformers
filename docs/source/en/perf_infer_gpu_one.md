@@ -270,6 +270,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [GraniteMoeShared](https://huggingface.co/docs/transformers/model_doc/granitemoeshared#transformers.GraniteMoeSharedModel)
 * [JetMoe](https://huggingface.co/docs/transformers/model_doc/jetmoe#transformers.JetMoeModel)
 * [Jamba](https://huggingface.co/docs/transformers/model_doc/jamba#transformers.JambaModel)
+* [LayoutLMv3](https://huggingface.co/docs/transformers/model_doc/layoutlmv3#transformers.LayoutLMv3Model)
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
 * [Llava](https://huggingface.co/docs/transformers/model_doc/llava)
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)

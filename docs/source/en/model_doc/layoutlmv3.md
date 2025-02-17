@@ -41,6 +41,40 @@ This model was contributed by [nielsr](https://huggingface.co/nielsr). The Tenso
   Due to these differences in data preprocessing, one can use [`LayoutLMv3Processor`] which internally combines a [`LayoutLMv3ImageProcessor`] (for the image modality) and a [`LayoutLMv3Tokenizer`]/[`LayoutLMv3TokenizerFast`] (for the text modality) to prepare all data for the model.
 - Regarding usage of [`LayoutLMv3Processor`], we refer to the [usage guide](layoutlmv2#usage-layoutlmv2processor) of its predecessor.
 
+### Using Scaled Dot Product Attention (SDPA)
+
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of [torch.nn.functional](https://pytorch.org/docs/stable/nn.functional.html). This function 
+encompasses several memory-efficient attention implementations that can be applied depending on the inputs and hardware. See the 
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) 
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set 
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
+
+```py
+from transformers import LayoutLMv3Model
+
+model = LayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base", torch_dtype=torch.float16, attn_implementation="sdpa")
+...
+```
+
+On a local benchmark ((A100-80GB, 16 CPU workers, RAM 128 GB, PyTorch 2.4.1, OS Ubuntu 22.04)) with pre-tokenized dataset with `bfloat16`, we saw the 
+following speedups during training.
+
+| Batch Size | Seq Length | Eager (it/s) | SDPA (it/s) | SDPA vs Eager | Eager VRAM (GB) | SDPA VRAM (GB) | Mem Saving (%) |
+|------------|------------|--------------|-------------|---------------|-----------------|----------------|----------------|
+| 32         | 128        | 23.40        | 29.35       | 1.25x         | 5.13            | 4.41           | 14.03          |
+| 32         | 512        | 4.36         | 10.35       | 2.37x         | 21.61           | 8.85           | 59.04          |
+| 32         | 1024       | 1.41         | 5.63        | 3.99          | 65.54           | 14.93          | 77.22          |
+| 64         | 128        | 13.92        | 19.80       | 1.42x         | 7.21            | 5.87           | 18.59          |
+| 64         | 512        | 2.30         | 5.90        | 2.57x         | 40.58           | 14.95          | 63.16          |
+| 64         | 1024       | *OOM*        | 2.98        | -x            | *OOM*           | 26.91          | -              |
+| 128        | 128        | 7.77         | 11.48       | 1.48x         | 11.97           | 8.85           | 26.01          |
+| 128        | 512        | 1.18         | 3.21        | 2.72x         | 80.09           | 26.91          | 66.40          |
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LayoutLMv3. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
