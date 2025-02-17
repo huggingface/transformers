@@ -129,7 +129,7 @@ class Gemma3TextConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "gemma3_text_model"
+    model_type = "gemma3"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -158,25 +158,22 @@ class Gemma3TextConfig(PretrainedConfig):
         rope_theta: float = 10_000.0,  # Consolidated in rope_wave_length Mapping in PyTorch
         rope_global_base_freq: float = 1_000_000.0,
         rope_local_base_freq: float = 10_000.0,
-        # Config parameters NOT in FLAX but in others
-        rms_norm_eps=1e-6,
-        # Config parameters NOT in PyTorch but in others
-        # Config parameters NOT in Transformers but in others
+        rms_norm_eps: float = 1e-6,
+        hidden_activation: str = "gelu_pytorch_tanh",
+        pad_token_id: int = 0,
+        eos_token_id: int = 1,
+        bos_token_id: int = 2,
+        image_token_index: int = 256_000,
+        tie_word_embeddings: bool = True,
+        max_position_embeddings: int = 8192,
+        initializer_range: float = 0.02,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
+        use_cache: bool = True,
+        cache_implementation: str = "hybrid",
+        # Config parameters still to be adjudicated
         use_pre_ffw_norm: bool = False,  # use_post_attn_norm in FLAX
         use_post_ffw_norm: bool = False,
-        # Config parameters in Transformers but not others
-        hidden_activation="gelu_pytorch_tanh",
-        pad_token_id=0,
-        eos_token_id=1,
-        bos_token_id=2,
-        tie_word_embeddings=True,
-        max_position_embeddings=8192,
-        initializer_range=0.02,
-        attention_bias=False,
-        attention_dropout=0.0,
-        use_cache=True,
-        cache_implementation="hybrid",
-        # Config parameters in FLAX but not others
         query_pre_attn_norm: Optional[enum.Enum] = None,
         compression_type: Optional[enum.Enum] = None,  # uant in Torch, v3_compression_type in FLAX
         **kwargs,
@@ -260,7 +257,7 @@ class Gemma3VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "gemma3_vision_model"
+    model_type = "siglip_vision_model"
     base_config_key = "vision_config"
 
     def __init__(
@@ -274,6 +271,7 @@ class Gemma3VisionConfig(PretrainedConfig):
         image_size: int = 896,  # Split into image_height and image_width in FLAX
         attention_dropout: float = 0.0,  # dropout in FLAX
         patch_size: int = 14,
+        projection_dim: int = 2048,
         # Config parameters in Transformers but not FLAX
         hidden_act: str = "gelu_pytorch_tanh",
         layer_norm_eps: float = 0.000001,
@@ -303,6 +301,7 @@ class Gemma3VisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
 
+        self.projection_dim = projection_dim
         self.position_embedding = position_embedding
         self.representation_size = representation_size
         self.pool_type = pool_type

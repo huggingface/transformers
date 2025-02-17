@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 import enum
 import itertools
 import math
@@ -28,13 +29,14 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
+from ...generation import GenerationMixin
 from ...image_utils import is_valid_image, make_flat_list_of_images
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -47,12 +49,13 @@ from ...tokenization_utils_base import (
     AddedToken,
     TextInput,
 )
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import ModelOutput, is_torchdynamo_compiling, logging
+from ..auto import AutoModel, AutoModelForCausalLM
 from ..gemma.modeling_gemma import (
     GemmaAttention,
-    GemmaForCausalLM,
     GemmaMLP,
     GemmaModel,
+    GemmaPreTrainedModel,
     GemmaRMSNorm,
     apply_rotary_pos_emb,
     repeat_kv,
@@ -180,7 +183,7 @@ class Gemma3TextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "gemma3_text_model"
+    model_type = "gemma3"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -214,6 +217,7 @@ class Gemma3TextConfig(PretrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
+        image_token_index: int = 256_000,
         tie_word_embeddings: bool = True,
         max_position_embeddings: int = 8192,
         initializer_range: float = 0.02,
@@ -262,6 +266,8 @@ class Gemma3TextConfig(PretrainedConfig):
 
 class Gemma3VisionConfig(SiglipVisionConfig):
 
+    model_type = "siglip_vision_model"
+
     def __init__(
         self,
         # SigLIP Vision Config Params
@@ -273,6 +279,7 @@ class Gemma3VisionConfig(SiglipVisionConfig):
         image_size: int = 896,                  # Split into image_height and image_width in FLAX
         attention_dropout: float = 0.0,         # dropout in FLAX
         patch_size: int = 14,
+        projection_dim: int = 2048,
         # Config parameters in Transformers but not FLAX
         hidden_act: str = "gelu_pytorch_tanh",
         layer_norm_eps: float = 0.000001,
@@ -303,6 +310,7 @@ class Gemma3VisionConfig(SiglipVisionConfig):
             **kwargs,
         )
 
+        self.projection_dim = projection_dim
         self.position_embedding = position_embedding
         self.representation_size = representation_size
         self.pool_type = pool_type
@@ -572,7 +580,8 @@ class Gemma3RMSNorm(GemmaRMSNorm):
 
 
 class Gemma3MLP(GemmaMLP):
-    def __init__(self, config):
+
+    def __init__(self, config: Gemma3TextConfig):
         super().__init__()
         self.act_fn = ACT2FN[config.hidden_activation]
 
@@ -607,23 +616,33 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Gemma3Attention(GemmaAttention):
-    def __init__(self, config: Gemma3Config, layer_idx: int):
+class Gemma3Attention(nn.Module):
+    def __init__(self, config: Gemma3TextConfig, layer_idx: int):
 
-        super().__init__(config.text_config, layer_idx)
-
-        self.attention_dropout = self.config.attention_dropout
-        self.attention_type: AttentionType = config.text_config.attention_pattern[
-            layer_idx % len(config.text_config.attention_pattern)
-        ]
+        super().__init__()
+        self.attention_dropout = config.attention_dropout
+        self.attention_type: AttentionType = config.attention_pattern[layer_idx % len(config.attention_pattern)]
+        self.config = config
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.is_causal = True
-        self.scaling = config.text_config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.text_config.sliding_window if not bool(layer_idx % 2) else None
+        self.layer_idx = layer_idx
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = config.query_pre_attn_scalar**-0.5
+        self.sliding_window = config.sliding_window if self.attention_type == ATTENTION_TYPE_LOCAL else None
 
-        self.qk_norm = Gemma3RMSNorm(
-            config.text_config.head_dim,
-            config.text_config.rms_norm_eps,
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
+        self.qk_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -666,8 +685,9 @@ class Gemma3Attention(GemmaAttention):
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
                 logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. "
+                    "Falling back to eager attention. This warning can be removed using the argument "
+                    '`attn_implementation="eager"` when loading the model.'
                 )
             else:
                 attention_interface = cast(
@@ -693,18 +713,19 @@ class Gemma3Attention(GemmaAttention):
 
 
 class Gemma3DecoderLayer(nn.Module):
-    def __init__(self, config: Gemma3Config, layer_idx: int):
+
+    def __init__(self, config: Gemma3TextConfig, layer_idx: int):
         super().__init__()
         self.config = config
-        self.hidden_size = config.text_config.hidden_size
+        self.hidden_size = config.hidden_size
         self.is_sliding = not bool(layer_idx % 2)
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
-        self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
-        self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.text_config.rms_norm_eps)
-        self.sliding_window = config.text_config.sliding_window
+        self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.sliding_window = config.sliding_window
 
     def forward(
         self,
@@ -775,8 +796,16 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
-class Gemma3Model(GemmaModel):
-    def __init__(self, config: Gemma3Config):
+class Gemma3PreTrainedModel(GemmaPreTrainedModel):
+    base_model_prefix = "model"
+    config_class = Gemma3TextConfig
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Gemma3DecoderLayer"]
+
+
+class Gemma3Model(Gemma3PreTrainedModel):
+
+    def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
         self.config = config
         self.layers = nn.ModuleList(
@@ -858,14 +887,14 @@ class Gemma3Model(GemmaModel):
         # normalized
         # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
-        normalizer = torch.tensor(self.config.text_config.hidden_size**0.5, dtype=hidden_states.dtype)
+        normalizer = torch.tensor(self.config.hidden_size**0.5, dtype=hidden_states.dtype)
         hidden_states = hidden_states * normalizer
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.text_config.num_hidden_layers]:
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -950,12 +979,13 @@ class Gemma3Model(GemmaModel):
         return causal_mask
 
 
-class Gemma3ForCausalLM(GemmaForCausalLM):
-    def __init__(self, config: Gemma3Config):
+class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
+
+    def __init__(self, config: Gemma3TextConfig):
         super().__init__(config)
+        self.config = config
         self.model = Gemma3Model(config)
         self.post_init()
-        self.config = config
 
     def forward(
         self,
@@ -1018,10 +1048,10 @@ class Gemma3ForCausalLM(GemmaForCausalLM):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        if self.config.text_config.final_logit_softcapping is not None:
-            logits = logits / self.config.text_config.final_logit_softcapping
+        if self.config.final_logit_softcapping is not None:
+            logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
-            logits = logits * self.config.text_config.final_logit_softcapping
+            logits = logits * self.config.final_logit_softcapping
 
         loss = None
         if labels is not None:
@@ -1127,9 +1157,337 @@ class Gemma3ForCausalLM(GemmaForCausalLM):
         return model_inputs
 
 
+@dataclass
+class Gemma3CausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for PaliGemmacausal language model (or autoregressive) outputs.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.text_config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+            `past_key_values` input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`torch.FloatTensor`, *optional*):
+            A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
+            image_hidden_states of the model produced by the vision encoder after projecting last hidden state.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[torch.FloatTensor] = None
+
+
+class Gemma3MultiModalProjector(nn.Module):
+    def __init__(self, config: Gemma3Config):
+        super().__init__()
+        self.linear = nn.Linear(
+            config.vision_config.hidden_size,
+            config.vision_config.projection_dim,
+            bias=True,
+        )
+
+    def forward(self, image_features):
+        return self.linear(image_features)
+
+
+class Gemma3ForConditionalGeneration(PreTrainedModel, GenerationMixin):
+    config_class = Gemma3Config
+    supports_gradient_checkpointing = True
+
+    _no_split_modules = ["Gemma3MultiModalProjector"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_cache_class = True
+    _supports_flash_attn_2 = True
+    _supports_quantized_cache = True
+    _supports_sdpa = True
+    _supports_static_cache = True
+
+    def __init__(self, config: Gemma3Config):
+        super.__init__(config)
+
+        self.config = config
+        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
+        self.multi_modal_projector = Gemma3MultiModalProjector(config=config)
+        self.vision_model = AutoModel.from_config(config=config.vision_config)
+        self.vocab_size = config.text_config.vocab_size
+
+        self.pad_token_id = pad_token_id if (pad_token_id := config.text_config.pad_token_id) is not None else -1
+        self.post_init()
+
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.get_input_embeddings with PaliGemma->Gema3
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.set_input_embeddings with PaliGemma->Gema3
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
+
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.get_output_embeddings with PaliGemma->Gema3
+    def get_output_embeddings(self):
+        return self.language_model.get_output_embeddings()
+
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.set_output_embeddings with PaliGemma->Gema3
+    def set_output_embeddings(self, new_embeddings):
+        self.language_model.set_output_embeddings(new_embeddings)
+
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.set_decoder with PaliGemma->Gema3
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    # Copied from transformers.models.paligemma.modeling_paligemma.PaliGemmaForConditionalGeneration.get_decoder with PaliGemma->Gema3
+    def get_decoder(self):
+        return self.language_model.get_decoder()
+
+    def get_image_features(self, pixel_values: torch.FloatTensor):
+        """
+        Obtains image last hidden states from the vision tower and apply multimodal projection.
+
+        Args:
+            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
+        Returns:
+            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        """
+        image_outputs = self.vision_model(pixel_values)
+        selected_image_feature = image_outputs.last_hidden_state
+        image_features = self.multi_modal_projector(selected_image_feature)
+        image_features = image_features / (self.config.text_config.hidden_size**0.5)
+        return image_features
+
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
+    @add_start_docstrings_to_model_forward(GEMMA3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=PaliGemmaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Union[List[torch.FloatTensor], Cache]] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
+    ) -> Union[tuple, Gemma3CausalLMOutputWithPast]:
+        r"""
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
+
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
+
+        >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/PaliGemma-test-224px-hf")
+        >>> processor = AutoProcessor.from_pretrained("google/PaliGemma-test-224px-hf")
+
+        >>> prompt = "answer en Where is the cow standing?"
+        >>> url = "https://huggingface.co/gv-hf/PaliGemma-test-224px-hf/resolve/main/cow_beach_1.png"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_length=30)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "answer en Where is the cow standing?\nbeach"
+        ```"""
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and inputs_embeds is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
+            )
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        is_training = token_type_ids is not None and labels is not None
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if cache_position is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
+
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0) + 1  # Paligemma positions are 1-indexed
+
+        # Merge text and images
+        if pixel_values is not None:
+            image_features = self.get_image_features(pixel_values)
+
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if inputs_embeds[special_image_mask].numel() != image_features.numel():
+                image_tokens_in_text = torch.sum(input_ids == self.config.image_token_index)
+                raise ValueError(
+                    f"Number of images does not match number of special image tokens in the input text. "
+                    f"Got {image_tokens_in_text} image tokens in the text but {image_features.shape[0] * image_features.shape[1]} "
+                    "tokens from image embeddings."
+                )
+            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
+        # mask out pad-token-ids in labels for BC
+        if labels is not None and self.pad_token_id in labels:
+            logger.warning_once(
+                "`labels` contains `pad_token_id` which will be masked with `config.ignore_index`. "
+                "You have to mask out `pad_token_id` when preparing `labels`, this behavior will be removed in v.4.46.",
+            )
+            labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
+
+        causal_mask = self._update_causal_mask(
+            attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
+        )
+        outputs = self.language_model(
+            attention_mask=causal_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            logits_to_keep=logits_to_keep,
+            **lm_kwargs,
+        )
+
+        logits = outputs.logits
+        loss = None
+        if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
+            shift_logits = logits[..., :-1, :]
+            shift_labels = labels[..., 1:]
+            if attention_mask is not None:
+                # we use the input attention mask to shift the logits and labels, because it is 2D.
+                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
+                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
+                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
+                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
+            else:
+                shift_logits = shift_logits.contiguous()
+                shift_labels = shift_labels.contiguous()
+            # Flatten the tokens
+            loss_fct = nn.CrossEntropyLoss()
+
+            flat_logits = shift_logits.view(-1, self.config.text_config.vocab_size)
+            flat_labels = shift_labels.view(-1).to(shift_logits.device)
+            loss = loss_fct(flat_logits, flat_labels)
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return Gemma3CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        pixel_values=None,
+        attention_mask=None,
+        token_type_ids=None,
+        use_cache=True,
+        logits_to_keep=None,
+        labels=None,
+        **kwargs,
+    ):
+        # Overwritten -- custom `position_ids` and `pixel_values` handling
+        model_inputs = self.language_model.prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            cache_position=cache_position,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            token_type_ids=token_type_ids,
+            **kwargs,
+        )
+
+        # position_ids in Paligemma are 1-indexed
+        if model_inputs.get("position_ids") is not None:
+            model_inputs["position_ids"] += 1
+        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+        # Otherwise we need pixel values to be passed to model. NOTE: use_cache=False needs pixel_values always
+        if cache_position[0] == 0:
+            model_inputs["pixel_values"] = pixel_values
+        is_training = token_type_ids is not None and labels is not None
+        if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+            input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
+            causal_mask = self._update_causal_mask(
+                attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
+            )
+            model_inputs["attention_mask"] = causal_mask
+
+        return model_inputs
+
+
 __all__ = [
     "Gemma3Config",
-    "Gemma3ForCausalLM",
-    "Gemma3Model",
     "Gemma3PreTrainedModel",  # noqa: F822
+    "Gemma3Model",
+    "Gemma3ForCausalLM",
+    "Gemma3ForConditionalGeneration",
 ]
