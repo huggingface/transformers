@@ -31,9 +31,11 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next import LlavaNextConfig
 
@@ -194,8 +196,12 @@ class LlavaNextCausalLMOutputWithPast(ModelOutput):
 class LlavaNextMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaNextConfig):
         super().__init__()
+        # We have hidden_size * the number of vision feature layers
+        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
         self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+            config.vision_config.hidden_size * num_feature_layers,
+            config.text_config.hidden_size,
+            bias=config.multimodal_projector_bias,
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(
@@ -240,6 +246,8 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         # important: this ported version of LlavaNext isn't meant for training from scratch - only
@@ -318,8 +326,10 @@ LLAVA_NEXT_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
@@ -398,245 +408,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def _merge_input_ids_with_image_features(
-        self,
-        image_features,
-        feature_lens,
-        inputs_embeds,
-        input_ids,
-        attention_mask,
-        position_ids=None,
-        labels=None,
-        image_token_index=None,
-        ignore_index=-100,
-    ):
-        """
-        Merge input_ids with with image features into final embeddings
-
-        Args:
-            image_features (`torch.Tensor` of shape `(all_feature_lens, embed_dim)`):
-                All vision vectors of all images in the batch
-            feature_lens (`torch.LongTensor` of shape `(num_images)`):
-                The length of visual embeddings of each image as stacked in `image_features`
-            inputs_embeds (`torch.Tensor` of shape `(batch_size, sequence_length, embed_dim)`):
-                Token embeddings before merging with visual embeddings
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Input_ids of tokens, possibly filled with image token
-            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Mask to avoid performing attention on padding token indices.
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.n_positions - 1]`.
-            labels (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*)
-                :abels need to be recalculated to support training (if provided)
-            image_token_index (`int`, *optional*)
-                Token id used to indicate the special "image" token. Defaults to `config.image_token_index`
-            ignore_index (`int`, *optional*)
-                Value that is used to pad `labels` and will be ignored when calculated loss. Default: -100.
-        Returns:
-            final_embedding, final_attention_mask, position_ids, final_labels
-
-        Explanation:
-            each image has variable length embeddings, with length specified by feature_lens
-            image_features is concatenation of all visual embed vectors
-            task: fill each <image> with the correct number of visual embeddings
-            Example:
-                X (5 patches), Y (3 patches), Z (8)
-                X, Y are in the same sequence (in-context learning)
-            if right padding
-                input_ids: [
-                    a b c d e f X g h i j k Y l m
-                    o p q r Z s t u v _ _ _ _ _ _
-                ]
-                input_ids should be: [
-                    a b c d e f X X X X X g h i j k Y Y Y l m
-                    o p q r Z Z Z Z Z Z Z Z s t u v _ _ _ _ _
-                ]
-                labels should be: [
-                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
-                    o p q r _ _ _ _ _ _ _ _ s t u v _ _ _ _ _
-                ]
-            elif left padding
-                input_ids: [
-                    a b c d e f X g h i j k Y l m
-                    _ _ _ _ _ _ o p q r Z s t u v
-                ]
-                input_ids should be: [
-                    a b c d e f X X X X X g h i j k Y Y Y l m
-                    _ _ _ _ _ o p q r Z Z Z Z Z Z Z Z s t u v
-                ]
-                labels should be: [
-                    a b c d e f _ _ _ _ _ g h i j k _ _ _ l m
-                    _ _ _ _ _ o p q r _ _ _ _ _ _ _ _ s t u v
-                ]
-            Edge cases:
-                * If tokens are same but image token sizes are different, then cannot infer left or right padding
-                ```python
-                cat_img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
-                chart_img = Image.open(requests.get("https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true", stream=True).raw)
-                prompts = [
-                    "[INST] <image>\nWhat is shown in this image? [/INST]",
-                    "[INST] <image>\nWhat is shown in this image? [/INST]",
-                ]
-                inputs = processor(prompts, [chart_img, cat_img], return_tensors='pt', padding=True).to("cuda")
-                    chart_img has 2634 tokens, while cat_img has 2340 tokens
-                ```
-
-                input_ids: [
-                    a b c d X g h
-                    i j Y k l m n
-                ]
-                where X is 3 tokens while Y is 5, this mean after merge
-                if left-padding (batched generation)
-                    input_ids should be: [
-                        _ _ a b c d X X X g h
-                        i j Y Y Y Y Y k l m n
-                    ]
-                elif (right padding) (training)
-                    input_ids should be: [
-                        a b c d X X X g h _ _
-                        i j Y Y Y Y Y k l m n
-                    ]
-        """
-        image_token_index = image_token_index if image_token_index is not None else self.config.image_token_index
-        ignore_index = ignore_index if ignore_index is not None else self.config.ignore_index
-
-        if self.training and self.padding_side == "left":
-            logger.warning_once(
-                "Padding side is set to 'left' but the model is in training mode. For training "
-                "it is recommended to set `model.padding_side='right' and `processor.tokenizer.padding_side='right'`. "
-                "If that's intended, ignore this warning"
-            )
-        if not self.training and self.padding_side == "right":
-            logger.warning_once(
-                "Padding side is set to 'right' but the model is in inference mode. For correct "
-                "generation results, please set `model.padding_side='left'` and `processor.tokenizer.padding_side='left'`. "
-                "If that's intended, ignore this warning"
-            )
-
-        with torch.no_grad():
-            # ! in llava 1.6, number of patches is variable
-            num_images = feature_lens.size(0)
-            num_image_features, embed_dim = image_features.shape
-            if feature_lens.sum() != num_image_features:
-                raise ValueError(f"{feature_lens=} / {feature_lens.sum()} != {image_features.shape=}")
-            batch_size = input_ids.shape[0]
-            _left_padding = torch.any(attention_mask[:, 0] == 0)
-            _right_padding = torch.any(attention_mask[:, -1] == 0)
-
-            left_padding = self.padding_side == "left"
-            if batch_size > 1:
-                if _left_padding and _right_padding:
-                    raise ValueError(f"both side of attention_mask has zero, invalid. {attention_mask}")
-                elif _right_padding and left_padding:
-                    left_padding = False
-                elif _left_padding and not left_padding:
-                    left_padding = True
-
-            # Whether to turn off right padding
-            # 1. Create a mask to know where special image tokens are
-            special_image_token_mask = input_ids == image_token_index
-            # special_image_token_mask: [bsz, seqlen]
-            num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-            # num_special_image_tokens: [bsz]
-            # Reserve for padding of num_images
-            total_num_special_image_tokens = torch.sum(special_image_token_mask)
-            if total_num_special_image_tokens != num_images:
-                raise ValueError(
-                    f"Number of image tokens in input_ids ({total_num_special_image_tokens}) different from num_images ({num_images})."
-                )
-            # Compute the maximum embed dimension
-            # max_image_feature_lens is max_feature_lens per batch
-            feature_lens = feature_lens.to(input_ids.device)
-            feature_lens_batch = feature_lens.split(num_special_image_tokens.tolist(), dim=0)
-            feature_lens_batch_sum = torch.tensor([x.sum() for x in feature_lens_batch], device=input_ids.device)
-            embed_sequence_lengths = (
-                (attention_mask == 1).long().sum(-1) - num_special_image_tokens + feature_lens_batch_sum
-            )
-            max_embed_dim = embed_sequence_lengths.max()
-
-            batch_indices, non_image_indices = torch.where((input_ids != image_token_index) & (attention_mask == 1))
-            # 2. Compute the positions where text should be written
-            # Calculate new positions for text tokens in merged image-text sequence.
-            # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images` text tokens.
-            # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-            # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-            # ! instead of special_image_token_mask * (num_image_patches - 1)
-            #   special_image_token_mask * (num_feature_len - 1)
-            special_image_token_mask = special_image_token_mask.long()
-            special_image_token_mask[special_image_token_mask == 1] = feature_lens - 1
-            new_token_positions = torch.cumsum((special_image_token_mask + 1), -1) - 1
-            if left_padding:
-                # shift right token positions so that they are ending at the same number
-                # the below here was incorrect? new_token_positions += new_token_positions[:, -1].max() - new_token_positions[:, -1:]
-                new_token_positions += max_embed_dim - 1 - new_token_positions[:, -1:]
-
-            text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
-        # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(
-            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-        )
-        final_attention_mask = torch.zeros(
-            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
-        )
-        final_input_ids = torch.full(
-            (batch_size, max_embed_dim), self.pad_token_id, dtype=input_ids.dtype, device=inputs_embeds.device
-        )
-        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
-        target_device = inputs_embeds.device
-        batch_indices, non_image_indices, text_to_overwrite = (
-            batch_indices.to(target_device),
-            non_image_indices.to(target_device),
-            text_to_overwrite.to(target_device),
-        )
-        attention_mask = attention_mask.to(target_device)
-        input_ids = input_ids.to(target_device)
-
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        final_input_ids[batch_indices, text_to_overwrite] = input_ids[batch_indices, non_image_indices]
-        final_labels = None
-        if labels is not None:
-            labels = labels.to(target_device)
-            final_labels = torch.full_like(final_attention_mask, ignore_index).to(torch.long)
-            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
-
-        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
-        with torch.no_grad():
-            image_to_overwrite = torch.full(
-                (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
-            )
-            image_to_overwrite[batch_indices, text_to_overwrite] = False
-            embed_indices = torch.arange(max_embed_dim).unsqueeze(0).to(target_device)
-            embed_indices = embed_indices.expand(batch_size, max_embed_dim)
-            embed_seq_lens = embed_sequence_lengths[:, None].to(target_device)
-
-            if left_padding:
-                # exclude padding on the left
-                max_embed_dim = max_embed_dim.to(target_device)
-                val = (max_embed_dim - embed_indices) <= embed_seq_lens
-            else:
-                # exclude padding on the right
-                val = embed_indices < embed_seq_lens
-            image_to_overwrite &= val
-
-            if image_to_overwrite.sum() != num_image_features:
-                raise ValueError(
-                    f"{image_to_overwrite.sum()=} != {num_image_features=} The input provided to the model are wrong. "
-                    f"The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                    f" the number of image given to the model is {num_images}. "
-                    f"This prevents correct indexing and breaks batch generation."
-                )
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        final_attention_mask |= image_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-
-        return final_embedding, final_attention_mask, position_ids, final_labels, final_input_ids
-
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
@@ -663,18 +434,22 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 image_feature = image_feature[1:]
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
 
-                if vision_feature_select_strategy == "default":
-                    expected_num_patches = height * width
-                elif vision_feature_select_strategy == "full":
-                    expected_num_patches = height * width + 1
-                if expected_num_patches != base_image_feature.shape[0]:
-                    raise ValueError("The number of patches is not consistent with the image size.")
-
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
                     self.config.vision_config.image_size,
                 )
+
+                if (
+                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
+                    and vision_feature_select_strategy == "default"
+                ):
+                    logger.warning_once(
+                        "Image feature shape does not line up with the provided patch size. "
+                        "You may be using the `default` vision_feature_select_strategy with a"
+                        " visual encoder that does not have CLS."
+                    )
+
                 image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
                 image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                 image_feature = image_feature.flatten(1, 2).flatten(2, 3)
@@ -705,7 +480,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: int,
+        vision_feature_layer: Union[int, List[int]],
         vision_feature_select_strategy: str,
     ):
         """
@@ -716,8 +491,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                The tensors corresponding to the input images.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
-            vision_feature_layer (`int`):
-                The index of the layer to select the vision feature.
+            vision_feature_layer (`Union[int, List[int]]`):
+                The index of the layer to select the vision feature. If multiple indices are provided,
+                the vision feature of the corresponding indices will be concatenated to form the
+                vision features.
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
@@ -743,15 +520,24 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        selected_image_feature = image_features.hidden_states[vision_feature_layer]
+        # If we have one vision feature layer, return the corresponding hidden states,
+        # otherwise, select the hidden states of each feature layer and concatenate them
+        if isinstance(vision_feature_layer, int):
+            selected_image_feature = image_features.hidden_states[vision_feature_layer]
+        else:
+            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            selected_image_feature = torch.cat(hs_pool, dim=-1)
+
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
             selected_image_feature = selected_image_feature
+
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
         return image_features
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=LlavaNextCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -763,7 +549,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -771,7 +557,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
     ) -> Union[Tuple, LlavaNextCausalLMOutputWithPast]:
         r"""
         Args:
@@ -780,10 +567,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -850,14 +639,14 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 image_newline=self.image_newline,
             )
 
-            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
-            n_image_features = image_features.shape[0]
-            if n_image_tokens != n_image_features:
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+                n_image_tokens = (input_ids == self.config.image_token_index).sum()
+                n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
@@ -871,7 +660,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
+            **lm_kwargs,
         )
 
         logits = outputs[0]
@@ -916,7 +706,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         image_sizes=None,
         attention_mask=None,
         cache_position=None,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -927,7 +717,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 

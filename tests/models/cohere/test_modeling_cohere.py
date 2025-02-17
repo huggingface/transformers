@@ -274,7 +274,6 @@ class CohereModelTester:
 @require_torch
 class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CohereModel, CohereForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (CohereForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": CohereModel,
@@ -363,4 +362,4 @@ class CohereIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         logits = output.logits
-        self.assertTrue(torch.allclose(EXPECTED_LOGITS, logits[:, :3, :3], rtol=1e-3, atol=1e-3))
+        torch.testing.assert_close(EXPECTED_LOGITS, logits[:, :3, :3], rtol=1e-3, atol=1e-3)

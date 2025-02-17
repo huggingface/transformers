@@ -18,6 +18,7 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -230,7 +231,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
 
     all_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (LlavaNextVideoForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -304,7 +304,7 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -338,6 +338,32 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layer):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layer = vision_feature_layer
+
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
+
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -356,26 +382,6 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Feedforward chunking is not yet supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="CPU offload is not yet supported")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(
-        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
-    )
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(
-        reason="Compile not yet supported because in LLava models (https://github.com/huggingface/transformers/issues/29891)"
-    )
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
@@ -384,6 +390,10 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("LLaVA Next Video has dynamic control flow in unpadding")
+    def test_generate_compile_model_forward(self):
         pass
 
 

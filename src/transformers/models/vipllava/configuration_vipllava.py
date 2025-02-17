@@ -37,16 +37,14 @@ class VipLlavaConfig(PretrainedConfig):
             Custom vision config or dict
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object of the text backbone. Can be any of `LlamaConfig` or `MistralConfig`.
-        ignore_index (`int`, *optional*, defaults to -100):
-            The ignore index for the loss function.
         image_token_index (`int`, *optional*, defaults to 32000):
             The image token index to encode the image prompt.
         projector_hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The activation function used by the multimodal projector.
         projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
             The layer norm epsilon of the projector layernorm
-        vision_feature_layers (`List[int]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
-            The list of layers to select the vision features from.
+        vision_feature_layers (`Union[int, List[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
+            The vision feature layer, or list of layers to select the vision features from.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
 
@@ -78,7 +76,6 @@ class VipLlavaConfig(PretrainedConfig):
         self,
         vision_config=None,
         text_config=None,
-        ignore_index=-100,
         image_token_index=32000,
         projector_hidden_act="gelu",
         projector_layernorm_eps=1e-5,
@@ -86,7 +83,6 @@ class VipLlavaConfig(PretrainedConfig):
         image_seq_length=576,
         **kwargs,
     ):
-        self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.projector_layernorm_eps = projector_layernorm_eps

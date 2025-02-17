@@ -322,7 +322,6 @@ class DbrxModelTester:
 @require_torch
 class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (DbrxForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = {"text-generation": DbrxForCausalLM} if is_torch_available() else {}
     test_headmasking = False
     test_pruning = False
@@ -368,10 +367,6 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_disk_offload_bin(self):
         pass
 
-    @unittest.skip("Dbrx does not support `torch.compile` with `fullgraph=True`.")
-    def test_generate_compile_model_forward(self):
-        pass
-
 
 @require_torch
 class DbrxModelIntegrationTest(unittest.TestCase):
@@ -394,4 +389,4 @@ class DbrxModelIntegrationTest(unittest.TestCase):
                 ]
             ]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
