@@ -40,7 +40,7 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # TORCH_CUDA_ARCH_LIST="7.5+PTX" is added to make the package compile for Tesla T4 gpus available for the CI.
 # RUN pip install gekko
 # RUN git clone https://github.com/PanQiWei/AutoGPTQ.git && cd AutoGPTQ && TORCH_CUDA_ARCH_LIST="7.5+PTX" python3 setup.py install
-RUN pip install -v gptqmodel --no-build-isolation
+RUN git clone https://github.com/ModelCloud/GPTQModel.git && cd GPTQModel && pip install -v . --no-build-isolation
 
 # Add optimum for gptq quantization testing
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
@@ -72,7 +72,8 @@ RUN python3 -m pip install --no-cache-dir autoawq[kernels]
 RUN python3 -m pip install --no-cache-dir optimum-quanto
 
 # Add eetq for quantization testing
-RUN python3 -m pip install git+https://github.com/NetEase-FuXi/EETQ.git
+# RUN python3 -m pip install git+https://github.com/NetEase-FuXi/EETQ.git
+RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submodule update --init --recursive && pip install .
 
 # Add flute-kernel and fast_hadamard_transform for quantization testing
 RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
