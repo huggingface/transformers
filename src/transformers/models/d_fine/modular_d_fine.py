@@ -58,7 +58,7 @@ class DFineConfig(RTDetrConfig):
         layer_scale (`float`, *optional*, defaults to 1.0):
             Scaling factor for the hidden dimension in later decoder layers. Used to adjust the
             model capacity after the evaluation layer.
-        reg_max (`int`, *optional*, defaults to 32):
+        max_num_bins (`int`, *optional*, defaults to 32):
             Maximum number of bins for the distribution-guided bounding box refinement.
             Higher values allow for more fine-grained localization but increase computation.
         reg_scale (`float`, *optional*, defaults to 4.0):
@@ -93,7 +93,7 @@ class DFineConfig(RTDetrConfig):
         encoder_attention_heads=8,
         eval_idx=-1,
         layer_scale=1,
-        reg_max=32,
+        max_num_bins=32,
         reg_scale=4.0,
         depth_mult=1.0,
         top_prob_values=4,
@@ -106,7 +106,7 @@ class DFineConfig(RTDetrConfig):
         # add the new attributes with the given values or defaults
         self.eval_idx = eval_idx
         self.layer_scale = layer_scale
-        self.reg_max = reg_max
+        self.max_num_bins = max_num_bins
         self.reg_scale = reg_scale
         self.depth_mult = depth_mult
         self.decoder_offset_scale = decoder_offset_scale
@@ -126,46 +126,41 @@ class DFineConfig(RTDetrConfig):
         if not hasattr(self, "encoder_attention_heads"):
             self.encoder_attention_heads = encoder_attention_heads
 
+        if isinstance(self.decoder_n_points, list):
+            if len(self.decoder_n_points) != self.num_feature_levels:
+                raise ValueError(
+                    f"Length of decoder_n_points list ({len(self.decoder_n_points)}) must match num_feature_levels ({self.num_feature_levels})."
+                )
+
 
 class DFineMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: DFineConfig):
         """
         D-Fine version of multiscale deformable attention
         """
-        super(DFineMultiscaleDeformableAttention, self).__init__()
+        super().__init__()
         self.d_model = config.d_model
-        self.n_levels = config.num_feature_levels
         self.n_heads = config.decoder_attention_heads
-        self.n_points = config.decoder_n_points
+        self.n_levels = config.num_feature_levels
         self.offset_scale = config.decoder_offset_scale
         self.decoder_method = config.decoder_method
+        self.n_points = config.decoder_n_points
 
         if isinstance(self.n_points, list):
-            assert len(self.n_points) == self.n_levels, ""
             num_points_list = self.n_points
         else:
             num_points_list = [self.n_points for _ in range(self.n_levels)]
 
         self.num_points_list = num_points_list
-
-        num_points_scale = [1 / n for n in num_points_list for _ in range(n)]
+        num_points_scale = [1 / n for n in self.num_points_list for _ in range(n)]
         self.register_buffer("num_points_scale", torch.tensor(num_points_scale, dtype=torch.float32))
 
-        self.total_points = self.n_heads * sum(num_points_list)
-
-        self.head_dim = self.d_model // self.n_heads
-        assert self.head_dim * self.n_heads == self.d_model, "embed_dim must be divisible by num_heads"
+        self.total_points = self.n_heads * sum(self.num_points_list)
 
         self.sampling_offsets = nn.Linear(self.d_model, self.total_points * 2)
         self.attention_weights = nn.Linear(self.d_model, self.total_points)
 
-        self.ms_deformable_attn_core = functools.partial(
-            multi_scale_deformable_attention_v2, method=self.decoder_method
-        )
-
-        if self.decoder_method == "discrete":
-            for p in self.sampling_offsets.parameters():
-                p.requires_grad = False
+        self.ms_deformable_attn_core = multi_scale_deformable_attention_v2
 
     def forward(
         self,
@@ -212,7 +207,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
             )
 
         output = self.ms_deformable_attn_core(
-            value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+            value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list, self.decoder_method
         )
 
         return output, attention_weights
@@ -220,7 +215,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
 
 class DFineGate(nn.Module):
     def __init__(self, d_model):
-        super(DFineGate, self).__init__()
+        super().__init__()
         self.gate = nn.Linear(2 * d_model, 2 * d_model)
         self.norm = nn.LayerNorm(d_model)
 
@@ -234,7 +229,6 @@ class DFineGate(nn.Module):
 
 class DFineDecoderLayer(RTDetrDecoderLayer):
     def __init__(self, config: DFineConfig):
-        # initialize parent class
         super().__init__(config)
 
         # override the encoder attention module with d-fine version
@@ -370,17 +364,17 @@ class DFineIntegral(nn.Module):
     distribution, and W(n) is the non-uniform Weighting Function.
 
     Args:
-        reg_max (int): Max number of the discrete bins. Default is 32.
+        max_num_bins (int): Max number of the discrete bins. Default is 32.
                        It can be adjusted based on the dataset or task requirements.
     """
 
     def __init__(self, config: DFineConfig):
-        super(DFineIntegral, self).__init__()
-        self.reg_max = config.reg_max
+        super().__init__()
+        self.max_num_bins = config.max_num_bins
 
     def forward(self, pred_corners: torch.Tensor, project: torch.Tensor) -> torch.Tensor:
         shape = pred_corners.shape
-        pred_corners = F.softmax(pred_corners.reshape(-1, self.reg_max + 1), dim=1)
+        pred_corners = F.softmax(pred_corners.reshape(-1, self.max_num_bins + 1), dim=1)
         pred_corners = F.linear(pred_corners, project.to(pred_corners.device)).reshape(-1, 4)
         pred_corners = pred_corners.reshape(list(shape[:-1]) + [-1])
         return pred_corners
@@ -403,7 +397,7 @@ class DFineDecoder(RTDetrDecoder):
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
         super().__init__(config=config)
         self.reg_scale = nn.Parameter(torch.tensor([config.reg_scale]), requires_grad=False)
-        self.reg_max = config.reg_max
+        self.max_num_bins = config.max_num_bins
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
         self.pre_bbox_head = DFineMLP(config.hidden_size, config.hidden_size, 4, 3)
@@ -449,7 +443,7 @@ class DFineDecoder(RTDetrDecoder):
 
         output_detach = pred_corners_undetach = 0
 
-        project = weighting_function(self.reg_max, self.up, self.reg_scale)
+        project = weighting_function(self.max_num_bins, self.up, self.reg_scale)
         ref_points_detach = F.sigmoid(reference_points)
 
         for i, decoder_layer in enumerate(self.layers):
@@ -551,22 +545,16 @@ class DFineModel(RTDetrModel):
             if config.hidden_size == config.decoder_in_channels[-1]:
                 decoder_input_proj.append(nn.Identity())
             else:
-                decoder_input_proj.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
-                        nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                    )
-                )
+                conv = nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False)
+                batchnorm = nn.BatchNorm2d(config.d_model, config.batch_norm_eps)
+                decoder_input_proj.append(nn.Sequential(conv, batchnorm))
         for _ in range(config.num_feature_levels - num_backbone_outs):
             if config.hidden_size == config.decoder_in_channels[-1]:
                 decoder_input_proj.append(nn.Identity())
             else:
-                decoder_input_proj.append(
-                    nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
-                        nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
-                    )
-                )
+                conv = nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False)
+                batchnorm = nn.BatchNorm2d(config.d_model, config.batch_norm_eps)
+                decoder_input_proj.append(nn.Sequential(conv, batchnorm))
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
         self.decoder = DFineDecoder(config)
 
@@ -584,11 +572,11 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
         self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList(
             [
-                DFineMLP(config.hidden_size, config.hidden_size, 4 * (config.reg_max + 1), 3)
+                DFineMLP(config.hidden_size, config.hidden_size, 4 * (config.max_num_bins + 1), 3)
                 for _ in range(self.eval_idx + 1)
             ]
             + [
-                DFineMLP(scaled_dim, scaled_dim, 4 * (config.reg_max + 1), 3)
+                DFineMLP(scaled_dim, scaled_dim, 4 * (config.max_num_bins + 1), 3)
                 for _ in range(config.decoder_layers - self.eval_idx - 1)
             ]
         )
@@ -601,25 +589,25 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
         self.post_init()
 
 
-def weighting_function(reg_max: int, up: torch.Tensor, reg_scale: int) -> torch.Tensor:
+def weighting_function(max_num_bins: int, up: torch.Tensor, reg_scale: int) -> torch.Tensor:
     """
     Generates the non-uniform Weighting Function W(n) for bounding box regression.
 
     Args:
-        reg_max (int): Max number of the discrete bins.
+        max_num_bins (int): Max number of the discrete bins.
         up (Tensor): Controls upper bounds of the sequence,
                      where maximum offset is ±up * H / W.
         reg_scale (float): Controls the curvature of the Weighting Function.
-                           Larger values result in flatter weights near the central axis W(reg_max/2)=0
+                           Larger values result in flatter weights near the central axis W(max_num_bins/2)=0
                            and steeper weights at both ends.
     Returns:
         Tensor: Sequence of Weighting Function.
     """
     upper_bound1 = abs(up[0]) * abs(reg_scale)
     upper_bound2 = abs(up[0]) * abs(reg_scale) * 2
-    step = (upper_bound1 + 1) ** (2 / (reg_max - 2))
-    left_values = [-((step) ** i) + 1 for i in range(reg_max // 2 - 1, 0, -1)]
-    right_values = [(step) ** i - 1 for i in range(1, reg_max // 2)]
+    step = (upper_bound1 + 1) ** (2 / (max_num_bins - 2))
+    left_values = [-((step) ** i) + 1 for i in range(max_num_bins // 2 - 1, 0, -1)]
+    right_values = [(step) ** i - 1 for i in range(1, max_num_bins // 2)]
     values = [-upper_bound2] + left_values + [torch.zeros_like(up[0][None])] + right_values + [upper_bound2]
     values = torch.cat(values, 0)
     return values
@@ -670,14 +658,14 @@ class DFineMLP(nn.Module):
 
 class DFineLQE(nn.Module):
     def __init__(self, config: DFineConfig):
-        super(DFineLQE, self).__init__()
+        super().__init__()
         self.top_prob_values = config.top_prob_values
-        self.reg_max = config.reg_max
+        self.max_num_bins = config.max_num_bins
         self.reg_conf = DFineMLP(4 * (self.top_prob_values + 1), config.lqe_hidden_dim, 1, config.lqe_layers)
 
-    def forward(self, scores, pred_corners):
+    def forward(self, scores: torch.Tensor, pred_corners: torch.Tensor) -> torch.Tensor:
         batch_size, length, _ = pred_corners.size()
-        prob = F.softmax(pred_corners.reshape(batch_size, length, 4, self.reg_max + 1), dim=-1)
+        prob = F.softmax(pred_corners.reshape(batch_size, length, 4, self.max_num_bins + 1), dim=-1)
         prob_topk, _ = prob.topk(self.top_prob_values, dim=-1)
         stat = torch.cat([prob_topk, prob_topk.mean(dim=-1, keepdim=True)], dim=-1)
         quality_score = self.reg_conf(stat.reshape(batch_size, length, -1))
@@ -705,19 +693,12 @@ class DFineConvNormLayer(RTDetrConvNormLayer):
         )
 
 
-class DFineRepVggBlock(nn.Module):
+class DFineRepVggBlock(RTDetrRepVggBlock):
     def __init__(self, config: DFineConfig, in_channels: int, out_channels: int):
-        super().__init__()
+        super().__init__(config)
 
-        activation = config.activation_function
         self.conv1 = DFineConvNormLayer(config, in_channels, out_channels, 3, 1, padding=1)
         self.conv2 = DFineConvNormLayer(config, in_channels, out_channels, 1, 1, padding=0)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.conv1(hidden_state) + self.conv2(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
 
 
 class DFineCSPRepLayer(nn.Module):
@@ -725,7 +706,9 @@ class DFineCSPRepLayer(nn.Module):
     Cross Stage Partial (CSP) network layer with RepVGG blocks.
     """
 
-    def __init__(self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion=1.0):
+    def __init__(
+        self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion: float = 1.0
+    ):
         super().__init__()
         in_channels = in_channels
         out_channels = out_channels
@@ -821,21 +804,19 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
-            self.lateral_convs.append(
-                DFineConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
-            )
-            self.fpn_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
+            lateral_layer = DFineConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
+            self.lateral_convs.append(lateral_layer)
+            num_blocks = round(3 * config.depth_mult)
+            fpn_layer = DFineRepNCSPELAN4(config, numb_blocks=num_blocks)
+            self.fpn_blocks.append(fpn_layer)
 
         # bottom-up pan
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(
-                nn.Sequential(
-                    DFineSCDown(config, 3, 2),
-                )
-            )
-            self.pan_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
+            self.downsample_convs.append(DFineSCDown(config, 3, 2))
+            num_blocks = round(3 * config.depth_mult)
+            self.pan_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=num_blocks))
 
 
 __all__ = [

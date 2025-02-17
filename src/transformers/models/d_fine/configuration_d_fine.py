@@ -41,7 +41,7 @@ class DFineConfig(PretrainedConfig):
         layer_scale (`float`, *optional*, defaults to 1.0):
             Scaling factor for the hidden dimension in later decoder layers. Used to adjust the
             model capacity after the evaluation layer.
-        reg_max (`int`, *optional*, defaults to 32):
+        max_num_bins (`int`, *optional*, defaults to 32):
             Maximum number of bins for the distribution-guided bounding box refinement.
             Higher values allow for more fine-grained localization but increase computation.
         reg_scale (`float`, *optional*, defaults to 4.0):
@@ -134,7 +134,7 @@ class DFineConfig(PretrainedConfig):
         eos_coefficient=1e-4,
         eval_idx=-1,
         layer_scale=1,
-        reg_max=32,
+        max_num_bins=32,
         reg_scale=4.0,
         depth_mult=1.0,
         top_prob_values=4,
@@ -148,7 +148,7 @@ class DFineConfig(PretrainedConfig):
         # add the new attributes with the given values or defaults
         self.eval_idx = eval_idx
         self.layer_scale = layer_scale
-        self.reg_max = reg_max
+        self.max_num_bins = max_num_bins
         self.reg_scale = reg_scale
         self.depth_mult = depth_mult
         self.decoder_offset_scale = decoder_offset_scale
@@ -247,6 +247,12 @@ class DFineConfig(PretrainedConfig):
 
         if not hasattr(self, "encoder_attention_heads"):
             self.encoder_attention_heads = encoder_attention_heads
+
+        if isinstance(self.decoder_n_points, list):
+            if len(self.decoder_n_points) != self.num_feature_levels:
+                raise ValueError(
+                    f"Length of decoder_n_points list ({len(self.decoder_n_points)}) must match num_feature_levels ({self.num_feature_levels})."
+                )
 
     @property
     def num_attention_heads(self) -> int:

@@ -24,7 +24,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DFineConfig, DFineForObjectDetection, DFineResNetStageConfig, RTDetrImageProcessor
+from transformers import DFineConfig, DFineForObjectDetection, RTDetrImageProcessor
 from transformers.utils import logging
 
 
@@ -51,12 +51,12 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
 
     if model_name in ["dfine_x_coco", "dfine_x_obj2coco", "dfine_x_obj365"]:
         config.backbone_config.hidden_sizes = [256, 512, 1024, 2048]
-        config.backbone_config.stage_config = DFineResNetStageConfig(
-            stage1=[64, 64, 128, 1, False, False, 3, 6],
-            stage2=[128, 128, 512, 2, True, False, 3, 6],
-            stage3=[512, 256, 1024, 5, True, True, 5, 6],
-            stage4=[1024, 512, 2048, 2, True, True, 5, 6],
-        )
+        config.backbone_config.stage_config = [
+            [64, 64, 128, 1, False, False, 3, 6],
+            [128, 128, 512, 2, True, False, 3, 6],
+            [512, 256, 1024, 5, True, True, 5, 6],
+            [1024, 512, 2048, 2, True, True, 5, 6],
+        ]
         config.backbone_config.stem_channels = [3, 32, 64]
         config.encoder_in_channels = [512, 1024, 2048]
         config.encoder_hidden_dim = 384
@@ -68,27 +68,27 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     elif model_name in ["dfine_m_coco", "dfine_m_obj2coco", "dfine_m_obj365"]:
         config.backbone_config.hidden_sizes = [192, 384, 768, 1536]
         config.backbone_config.stem_channels = [3, 24, 32]
-        config.backbone_config.stage_config = DFineResNetStageConfig(
-            stage1=[32, 32, 96, 1, False, False, 3, 4],
-            stage2=[96, 64, 384, 1, True, False, 3, 4],
-            stage3=[384, 128, 768, 3, True, True, 5, 4],
-            stage4=[768, 256, 1536, 1, True, True, 5, 4],
-        )
+        config.backbone_config.stage_config = [
+            [32, 32, 96, 1, False, False, 3, 4],
+            [96, 64, 384, 1, True, False, 3, 4],
+            [384, 128, 768, 3, True, True, 5, 4],
+            [768, 256, 1536, 1, True, True, 5, 4],
+        ]
         config.decoder_layers = 4
         config.encoder_in_channels = [384, 768, 1536]
-        config.backbone_config.use_lab = True
+        config.backbone_config.use_learnable_affine_block = True
         config.depth_mult = 0.67
         if model_name == "dfine_m_obj365":
             config.num_labels = 366
     elif model_name in ["dfine_l_coco", "dfine_l_obj2coco_e25", "dfine_l_obj365"]:
         config.backbone_config.hidden_sizes = [256, 512, 1024, 2048]
         config.backbone_config.stem_channels = [3, 32, 48]
-        config.backbone_config.stage_config = DFineResNetStageConfig(
-            stage1=[48, 48, 128, 1, False, False, 3, 6],
-            stage2=[128, 96, 512, 1, True, False, 3, 6],
-            stage3=[512, 192, 1024, 3, True, True, 5, 6],
-            stage4=[1024, 384, 2048, 1, True, True, 5, 6],
-        )
+        config.backbone_config.stage_config = [
+            [48, 48, 128, 1, False, False, 3, 6],
+            [128, 96, 512, 1, True, False, 3, 6],
+            [512, 192, 1024, 3, True, True, 5, 6],
+            [1024, 384, 2048, 1, True, True, 5, 6],
+        ]
         config.encoder_ffn_dim = 1024
         config.encoder_in_channels = [512, 1024, 2048]
         if model_name == "dfine_l_obj365":
@@ -96,17 +96,17 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     else:
         config.backbone_config.hidden_sizes = [128, 256, 512, 1024]
         config.backbone_config.stem_channels = [3, 16, 16]
-        config.backbone_config.stage_config = DFineResNetStageConfig(
-            stage1=[16, 16, 64, 1, False, False, 3, 3],
-            stage2=[64, 32, 256, 1, True, False, 3, 3],
-            stage3=[256, 64, 512, 2, True, True, 5, 3],
-            stage4=[512, 128, 1024, 1, True, True, 5, 3],
-        )
+        config.backbone_config.stage_config = [
+            [16, 16, 64, 1, False, False, 3, 3],
+            [64, 32, 256, 1, True, False, 3, 3],
+            [256, 64, 512, 2, True, True, 5, 3],
+            [512, 128, 1024, 1, True, True, 5, 3],
+        ]
         config.decoder_layers = 3
         config.hidden_expansion = 0.5
         config.depth_mult = 0.34
         config.encoder_in_channels = [256, 512, 1024]
-        config.backbone_config.use_lab = True
+        config.backbone_config.use_learnable_affine_block = True
         if model_name == "dfine_s_obj365":
             config.num_labels = 366
 
@@ -246,8 +246,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"encoder.pan_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv2.conv.weight": r"model.encoder.pan_blocks.\1.csp_rep2.bottlenecks.\2.conv2.conv.weight",
     r"encoder.pan_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.csp_rep2.bottlenecks.\2.conv2.norm.\3",
     # Downsample convolutions
-    r"encoder.downsample_convs.(\d+).0.cv(\d+).conv.weight": r"model.encoder.downsample_convs.\1.0.conv\2.conv.weight",
-    r"encoder.downsample_convs.(\d+).0.cv(\d+).norm.(weight|bias|running_mean|running_var)": r"model.encoder.downsample_convs.\1.0.conv\2.norm.\3",
+    r"encoder.downsample_convs.(\d+).0.cv(\d+).conv.weight": r"model.encoder.downsample_convs.\1.conv\2.conv.weight",
+    r"encoder.downsample_convs.(\d+).0.cv(\d+).norm.(weight|bias|running_mean|running_var)": r"model.encoder.downsample_convs.\1.conv\2.norm.\3",
     # Decoder layers
     r"decoder.decoder.layers.(\d+).self_attn.out_proj.(weight|bias)": r"model.decoder.layers.\1.self_attn.out_proj.\2",
     r"decoder.decoder.layers.(\d+).cross_attn.sampling_offsets.(weight|bias)": r"model.decoder.layers.\1.encoder_attn.sampling_offsets.\2",
@@ -595,10 +595,12 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id, commit_message="Add config from convert_d_fine_original_pytorch_checkpoint_to_hf.py"
+            repo_id=repo_id,
+            commit_message="Add config from convert_d_fine_original_pytorch_checkpoint_to_hf.py",
         )
         model.push_to_hub(
-            repo_id=repo_id, commit_message="Add model from convert_d_fine_original_pytorch_checkpoint_to_hf.py"
+            repo_id=repo_id,
+            commit_message="Add model from convert_d_fine_original_pytorch_checkpoint_to_hf.py",
         )
         image_processor.push_to_hub(
             repo_id=repo_id,
