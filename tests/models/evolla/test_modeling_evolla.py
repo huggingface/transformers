@@ -17,15 +17,12 @@
 import unittest
 
 from parameterized import parameterized
-from pytest import mark
 
 from transformers import BitsAndBytesConfig, EvollaConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
-    require_accelerate,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
     require_torch_sdpa,
     slow,
     torch_device,

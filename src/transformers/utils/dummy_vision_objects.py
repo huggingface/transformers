@@ -247,14 +247,14 @@ class EfficientNetImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class EvollaProcessor(metaclass=DummyObject):
+class Emu3ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
 
 
-class Emu3ImageProcessor(metaclass=DummyObject):
+class EvollaProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
