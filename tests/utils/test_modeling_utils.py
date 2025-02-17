@@ -39,6 +39,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     DynamicCache,
     LlavaForConditionalGeneration,
+    MistralForCausalLM,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -318,6 +319,14 @@ def check_models_equal(model1, model2):
 
 @require_torch
 class ModelUtilsTest(TestCasePlus):
+    def setUp(self):
+        self.old_dtype = torch.get_default_dtype()
+        super().setUp()
+
+    def tearDown(self):
+        torch.set_default_dtype(self.old_dtype)
+        super().tearDown()
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google-bert/bert-base-uncased"
@@ -466,13 +475,14 @@ class ModelUtilsTest(TestCasePlus):
     def test_model_from_config_torch_dtype_composite(self):
         """
         Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
+        Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
         """
         # should be able to set torch_dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
 
-        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float16")
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype=torch.float16)
         self.assertEqual(model.language_model.dtype, torch.float16)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
 
@@ -1818,6 +1828,80 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNone(model_outputs.past_key_values)
         self.assertTrue(model.training)
 
+    def test_restore_default_torch_dtype_from_pretrained(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
+            with self.assertRaises(RuntimeError):
+                _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
+
+    def test_restore_default_torch_dtype_from_config(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+
+        config = AutoConfig.from_pretrained(
+            TINY_MISTRAL,
+        )
+
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
+            with self.assertRaises(RuntimeError):
+                config.torch_dtype = torch.float16
+                _ = AutoModelForCausalLM.from_config(
+                    config,
+                )
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
+
+    def test_unknown_quantization_config(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            config.quantization_config = {"quant_method": "unknown"}
+            model.save_pretrained(tmpdir)
+            with self.assertLogs("transformers", level="WARNING") as cm:
+                BertModel.from_pretrained(tmpdir)
+            self.assertEqual(len(cm.records), 1)
+            self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
+
 
 @slow
 @require_torch
@@ -1980,7 +2064,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
-        self.api.update_repo_visibility(self.repo_name, private=False)
+        self.api.update_repo_settings(self.repo_name, private=False)
 
         # We once again call from_pretrained, which should call the bot to open a PR
         BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)

@@ -110,6 +110,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
 |                           [CvT](model_doc/cvt)                           |       ✅        |         ✅         |      ❌      |
+|                      [DAB-DETR](model_doc/dab-detr)                      |       ✅        |         ❌         |      ❌      |
 |                           [DAC](model_doc/dac)                           |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
@@ -122,6 +123,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [DeiT](model_doc/deit)                          |       ✅        |         ✅         |      ❌      |
 |                        [DePlot](model_doc/deplot)                        |       ✅        |         ❌         |      ❌      |
 |                [Depth Anything](model_doc/depth_anything)                |       ✅        |         ❌         |      ❌      |
+|                     [DepthPro](model_doc/depth_pro)                      |       ✅        |         ❌         |      ❌      |
 |                          [DETA](model_doc/deta)                          |       ✅        |         ❌         |      ❌      |
 |                          [DETR](model_doc/detr)                          |       ✅        |         ❌         |      ❌      |
 |                      [DialoGPT](model_doc/dialogpt)                      |       ✅        |         ✅         |      ✅      |
@@ -161,6 +163,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [GIT](model_doc/git)                           |       ✅        |         ❌         |      ❌      |
 |                           [GLM](model_doc/glm)                           |       ✅        |         ❌         |      ❌      |
 |                          [GLPN](model_doc/glpn)                          |       ✅        |         ❌         |      ❌      |
+|                      [GOT-OCR2](model_doc/got_ocr2)                      |       ✅        |         ❌         |      ❌      |
 |                       [GPT Neo](model_doc/gpt_neo)                       |       ✅        |         ❌         |      ✅      |
 |                      [GPT NeoX](model_doc/gpt_neox)                      |       ✅        |         ❌         |      ❌      |
 |             [GPT NeoX Japanese](model_doc/gpt_neox_japanese)             |       ✅        |         ❌         |      ❌      |
@@ -170,6 +173,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [GPTSAN-japanese](model_doc/gptsan-japanese)               |       ✅        |         ❌         |      ❌      |
 |                       [Granite](model_doc/granite)                       |       ✅        |         ❌         |      ❌      |
 |                  [GraniteMoeMoe](model_doc/granitemoe)                   |       ✅        |         ❌         |      ❌      |
+|            [GraniteMoeSharedMoe](model_doc/granitemoeshared)             |       ✅        |         ❌         |      ❌      |
 |                    [Graphormer](model_doc/graphormer)                    |       ✅        |         ❌         |      ❌      |
 |                [Grounding DINO](model_doc/grounding-dino)                |       ✅        |         ❌         |      ❌      |
 |                      [GroupViT](model_doc/groupvit)                      |       ✅        |         ✅         |      ❌      |
@@ -303,6 +307,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [RoFormer](model_doc/roformer)                      |       ✅        |         ✅         |      ✅      |
 |                       [RT-DETR](model_doc/rt_detr)                       |       ✅        |         ❌         |      ❌      |
 |                [RT-DETR-ResNet](model_doc/rt_detr_resnet)                |       ✅        |         ❌         |      ❌      |
+|                    [RT-DETRv2](model_doc/rt_detr_v2)                     |       ✅        |         ❌         |      ❌      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
