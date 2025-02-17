@@ -29,6 +29,8 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from transformers.models.qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
@@ -853,6 +855,14 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return model_inputs
 
 
+class Qwen2_5_VLImageProcessor(Qwen2VLImageProcessor):
+    pass
+
+
+class Qwen2_5_VLImageProcessorFast(Qwen2VLImageProcessorFast):
+    pass
+
+
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
 
@@ -1005,4 +1015,6 @@ __all__ = [
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
     "Qwen2_5_VLProcessor",
+    "Qwen2_5_VLImageProcessor",
+    "Qwen2_5_VLImageProcessorFast",
 ]

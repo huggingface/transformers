@@ -29,6 +29,16 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import (
+    is_torchvision_available,
+    is_torchvision_v2_available,
+)
+
+
+if is_torchvision_v2_available():
+    pass
+elif is_torchvision_available():
+    pass
 
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):

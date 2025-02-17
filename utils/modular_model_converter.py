@@ -1419,7 +1419,7 @@ class ModularFileMapper(ModuleMapper):
                 cased_model_name = cased_default_name  # the default name prefix
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
-                    cased_model_name = class_name.replace(suffix, "")
+                    cased_model_name = class_name.rstrip(suffix)
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files

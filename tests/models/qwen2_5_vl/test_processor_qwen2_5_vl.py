@@ -27,7 +27,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Qwen2_5_VLProcessor, Qwen2VLImageProcessor
+    from transformers import Qwen2_5_VLImageProcessor, Qwen2_5_VLProcessor
 
 
 @require_vision
@@ -63,7 +63,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, Qwen2Tokenizer)
-        self.assertIsInstance(processor.image_processor, Qwen2VLImageProcessor)
+        self.assertIsInstance(processor.image_processor, Qwen2_5_VLImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
