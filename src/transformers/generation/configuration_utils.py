@@ -64,10 +64,10 @@ if is_torch_available():
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
     CACHE_CONFIG_MAPPING["quantized"] = QuantizedCacheConfig
-    CACHE_CONFIG_MAPPING["shared"] = SharedCache
     CACHE_CONFIG_MAPPING["static"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
+        "shared": SharedCache,
         "offloaded_static": OffloadedStaticCache,
         "sliding_window": SlidingWindowCache,
         "hybrid": HybridCache,
