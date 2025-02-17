@@ -1150,7 +1150,8 @@ class ProcessorMixin(PushToHubMixin):
                         f"The {cls.__name__} class has {attribute_name}_class {class_name}"
                         f"but we could not find this class in the Transformers root. We also could "
                         f"not load it with {autoclass.__name__}, and so Transformers doesn't know how "
-                        f"to initialize this module!"
+                        f"to initialize this module! If {class_name} is a custom code component, we recommend "
+                        f"registering it via the {autoclass.__name__}.register() method to resolve this error."
                     )
         return args
 
