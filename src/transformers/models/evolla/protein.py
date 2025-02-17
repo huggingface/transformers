@@ -721,7 +721,7 @@ class SaProtEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
+# Adapted from transformers.models.bert.modeling_bert.BertPooler
 class SaProtPooler(nn.Module):
     def __init__(self, hidden_size: int):
         super().__init__()

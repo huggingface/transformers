@@ -1255,7 +1255,7 @@ else:
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
-    _import_structure["models.evolla"].extend(["EvollProcessor"])
+    _import_structure["models.evolla"].extend(["EvollaProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -4465,14 +4465,6 @@ else:
             "TFIdeficsPreTrainedModel",
         ]
     )
-    _import_structure["models.evolla"].extend(
-        [
-            "TFEvollaForProteinText2Text",
-            "TFEvollaModel",
-            "TFEvollaPreTrainedModel",
-        ]
-    )
-
     _import_structure["models.layoutlm"].extend(
         [
             "TFLayoutLMForMaskedLM",
@@ -5579,6 +5571,9 @@ if TYPE_CHECKING:
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ErnieConfig
     from .models.esm import EsmConfig, EsmTokenizer
+    from .models.evolla import (
+        EvollaConfig,
+    )
     from .models.falcon import FalconConfig
     from .models.falcon_mamba import FalconMambaConfig
     from .models.fastspeech2_conformer import (
@@ -5648,9 +5643,6 @@ if TYPE_CHECKING:
     from .models.ibert import IBertConfig
     from .models.idefics import (
         IdeficsConfig,
-    )
-    from .models.evolla import (
-        EvollaConfig,
     )
     from .models.idefics2 import Idefics2Config
     from .models.idefics3 import Idefics3Config
@@ -6419,6 +6411,7 @@ if TYPE_CHECKING:
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.emu3 import Emu3ImageProcessor
+        from .models.evolla import EvollaProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -6429,7 +6422,6 @@ if TYPE_CHECKING:
         from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
-        from .models.evolla import EvollaProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -7341,6 +7333,12 @@ if TYPE_CHECKING:
             EsmModel,
             EsmPreTrainedModel,
         )
+        from .models.evolla import (
+            EvollaForProteinText2Text,
+            EvollaModel,
+            EvollaPreTrainedModel,
+            EvollaProcessor,
+        )
         from .models.falcon import (
             FalconForCausalLM,
             FalconForQuestionAnswering,
@@ -7560,12 +7558,6 @@ if TYPE_CHECKING:
             IdeficsModel,
             IdeficsPreTrainedModel,
             IdeficsProcessor,
-        )
-        from .models.evolla import (
-            EvollaForProteinText2Text,
-            EvollaModel,
-            EvollaPreTrainedModel,
-            EvollaProcessor,
         )
         from .models.idefics2 import (
             Idefics2ForConditionalGeneration,
@@ -9011,11 +9003,6 @@ if TYPE_CHECKING:
             TFIdeficsForVisionText2Text,
             TFIdeficsModel,
             TFIdeficsPreTrainedModel,
-        )
-        from .models.evolla import (
-            TFEvollaForProteinText2Text,
-            TFEvollaModel,
-            TFEvollaPreTrainedModel,
         )
         from .models.layoutlm import (
             TFLayoutLMForMaskedLM,

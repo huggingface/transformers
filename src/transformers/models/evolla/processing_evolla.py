@@ -207,7 +207,7 @@ class EvollaProcessor(ProcessorMixin):
     Args:
         protein_tokenizer (`EsmTokenizer`):
             An instance of [`EsmTokenizer`]. The protein tokenizer is a required input.
-        tokenizer (`LlamaTokenizerFast`):
+        tokenizer (`LlamaTokenizerFast`, *optional*):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         protein_max_length (`int`, *optional*, defaults to 1024):
             The maximum length of the sequence to be generated.
