@@ -1194,11 +1194,11 @@ class SamHQMaskDecoder(nn.Module):
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
 
-        if intermediate_embeddings is not None:
-            if len(intermediate_embeddings) == 0:
-                raise ValueError("`intermediate_embeddings` must be provided and cannot be empty.")
-            if not isinstance(intermediate_embeddings, list):
-                raise ValueError("`intermediate_embeddings` must be a list.")
+        # if intermediate_embeddings is not None:
+        #     if len(intermediate_embeddings) == 0:
+        #         raise ValueError("`intermediate_embeddings` must be provided and cannot be empty.")
+        #     if not isinstance(intermediate_embeddings, list):
+        #         raise ValueError("`intermediate_embeddings` must be a list.")
 
         vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2).contiguous()
 
@@ -1651,7 +1651,7 @@ class SamHQModel(SamHQPreTrainedModel):
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
             hq_token_only=hq_token_only,
-            intermediate_embeddings=intermediate_embeddings,
+            intermediate_embeddings=intermediate_embeddings[0].unsqueeze(0),
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
             output_attentions=output_attentions,
