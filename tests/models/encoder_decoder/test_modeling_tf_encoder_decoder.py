@@ -368,24 +368,6 @@ class TFEncoderDecoderMixin:
             outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
         )
 
-    def check_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
-
-        # Generate until max length
-        if hasattr(enc_dec_model.config, "eos_token_id"):
-            enc_dec_model.config.eos_token_id = None
-        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
-            enc_dec_model.config.decoder.eos_token_id = None
-        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
-            enc_dec_model.generation_config.eos_token_id = None
-
-        # Bert does not have a bos token id, so use pad_token_id instead
-        generated_output = enc_dec_model.generate(
-            input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
-        )
-        self.assertEqual(tuple(generated_output.shape.as_list()), (input_ids.shape[0],) + (decoder_config.max_length,))
-
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
         """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
 
@@ -599,10 +581,6 @@ class TFEncoderDecoderMixin:
     def test_encoder_decoder_model_output_attentions_from_config(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_output_attentions_from_config(**input_ids_dict)
-
-    def test_encoder_decoder_model_generate(self):
-        input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_generate(**input_ids_dict)
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()

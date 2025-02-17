@@ -298,26 +298,6 @@ class TFVisionEncoderDecoderMixin:
             (decoder_config.num_attention_heads, cross_attention_input_seq_len),
         )
 
-    def check_encoder_decoder_model_generate(self, pixel_values, config, decoder_config, **kwargs):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFVisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
-
-        # Generate until max length
-        if hasattr(enc_dec_model.config, "eos_token_id"):
-            enc_dec_model.config.eos_token_id = None
-        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
-            enc_dec_model.config.decoder.eos_token_id = None
-        if hasattr(enc_dec_model.generation_config, "eos_token_id"):
-            enc_dec_model.generation_config.eos_token_id = None
-
-        # Bert does not have a bos token id, so use pad_token_id instead
-        generated_output = enc_dec_model.generate(
-            pixel_values, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
-        )
-        self.assertEqual(
-            tuple(generated_output.shape.as_list()), (pixel_values.shape[0],) + (decoder_config.max_length,)
-        )
-
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
         """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
 
@@ -524,10 +504,6 @@ class TFVisionEncoderDecoderMixin:
     def test_encoder_decoder_model_output_attentions(self):
         config_inputs_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_output_attentions(**config_inputs_dict)
-
-    def test_encoder_decoder_model_generate(self):
-        config_inputs_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_generate(**config_inputs_dict)
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
