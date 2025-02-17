@@ -14,43 +14,34 @@
 # limitations under the License.
 """Testing suite for the PyTorch Evolla model."""
 
-import inspect
 import unittest
 
-import pytest
-from pytest import mark
 from parameterized import parameterized
-import tempfile
-import numpy as np
+from pytest import mark
 
 from transformers import BitsAndBytesConfig, EvollaConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
-    is_pt_tf_cross_test,
-    require_bitsandbytes,
     require_accelerate,
+    require_bitsandbytes,
     require_torch,
     require_torch_gpu,
     require_torch_sdpa,
-    require_vision,
     slow,
     torch_device,
 )
 from transformers.utils import (
+    cached_property,
     is_accelerate_available,
 )
 
-from transformers.utils import cached_property
-from transformers import EsmTokenizer, LlamaTokenizerFast
-
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, _config_zero_init, is_torch_fp16_available_on_device, is_torch_bf16_available_on_device, set_model_tester_for_less_flaky_test, set_config_for_less_flaky_test, set_model_for_less_flaky_test, sdpa_kernel
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_accelerate_available():
-    from accelerate.utils import compute_module_sizes
+    pass
 
 if is_torch_available():
     import torch
@@ -58,7 +49,7 @@ if is_torch_available():
     from transformers import EvollaForProteinText2Text, EvollaModel, EvollaProcessor
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class EvollaModelTester:
@@ -71,17 +62,22 @@ class EvollaModelTester:
         text_vocab_size=100,
         protein_seq_length=10,
         protein_vocab_size=20,
-        hidden_size=4, # llama hidden size
-        num_hidden_layers=1, # llama hidden layers
-        num_attention_heads=2, # llama attention heads
-        num_key_value_heads=2, # llama key value heads
-        protein_hidden_size=8, # protein encoder hidden size
-        protein_num_hidden_layers=1, # protein encoder hidden layers
-        protein_num_attention_heads=4, # protein encoder attention heads
-        sequence_compressor_num_latents=7, # sequence compressor num latents
-        sequence_compressor_ff_mult=1, # sequence compressor ff mult
-        sequence_compressor_depth=2, # sequence compressor depth
-        sequence_aligner_num_add_layers=1, # sequence aligner num add layers
+        hidden_size=4,  # llama hidden size
+        intermediate_size=7,  # llama intermediate size
+        num_hidden_layers=1,  # llama hidden layers
+        num_attention_heads=2,  # llama attention heads
+        num_key_value_heads=2,  # llama key value heads
+        protein_hidden_size=8,  # protein encoder hidden size
+        protein_num_hidden_layers=1,  # protein encoder hidden layers
+        protein_num_attention_heads=4,  # protein encoder attention heads
+        protein_intermediate_size=11,  # protein encoder intermediate size
+        resampler_num_latents=7,  # sequence compressor num latents
+        resampler_ff_mult=1,  # sequence compressor ff mult
+        resampler_depth=2,  # sequence compressor depth
+        resampler_dim_head=4,  # sequence compressor dim head
+        resampler_heads=2,  # sequence compressor heads
+        aligner_num_add_layers=1,  # sequence aligner num add layers
+        aligner_ffn_mult=1,  # sequence aligner ffn mult
         use_input_mask=True,
     ):
         self.parent = parent
@@ -91,20 +87,25 @@ class EvollaModelTester:
         self.text_seq_length = text_seq_length
         self.text_vocab_size = text_vocab_size
         self.seq_length = text_seq_length
-        
+
         self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.protein_hidden_size = protein_hidden_size
         self.protein_num_hidden_layers = protein_num_hidden_layers
         self.protein_num_attention_heads = protein_num_attention_heads
+        self.protein_intermediate_size = protein_intermediate_size
 
-        self.sequence_compressor_num_latents = sequence_compressor_num_latents
-        self.sequence_compressor_ff_mult = sequence_compressor_ff_mult
-        self.sequence_compressor_depth = sequence_compressor_depth
+        self.resampler_num_latents = resampler_num_latents
+        self.resampler_ff_mult = resampler_ff_mult
+        self.resampler_depth = resampler_depth
+        self.resampler_dim_head = resampler_dim_head
+        self.resampler_heads = resampler_heads
 
-        self.sequence_aligner_num_add_layers = sequence_aligner_num_add_layers
+        self.aligner_num_add_layers = aligner_num_add_layers
+        self.aligner_ffn_mult = aligner_ffn_mult
 
         self.use_input_mask = use_input_mask
         self.is_training = is_training
@@ -112,7 +113,7 @@ class EvollaModelTester:
     @property
     def is_encoder_decoder(self):
         return False
-    
+
     def prepare_config_and_inputs(self, num_proteins=None):
         batch_size = num_proteins if num_proteins is not None else self.batch_size
         text_input_ids = ids_tensor([batch_size, self.text_seq_length], self.text_vocab_size)
@@ -126,33 +127,26 @@ class EvollaModelTester:
         config = self.get_config()
         return (config, text_input_ids, text_input_mask, protein_input_ids, protein_input_mask)
 
-
     def get_config(self):
         return EvollaConfig(
-            llm_config={
-                "llama_config": {
-                    "num_hidden_layers": self.num_hidden_layers,
-                    "hidden_size": self.hidden_size,
-                    "num_attention_heads": self.num_attention_heads,
-                    "num_key_value_heads": self.num_key_value_heads,
-                    "vocab_size": self.text_vocab_size,
-                },
-                "sequence_aligner_config": {
-                    "num_add_layers": self.sequence_aligner_num_add_layers,
-                }
-            },
-            protein_config={
-                "protein_encoder_config": {
-                    "num_hidden_layers": self.protein_num_hidden_layers,
-                    "hidden_size": self.protein_hidden_size,
-                    "num_attention_heads": self.protein_num_attention_heads,
-                },
-                "resampler_config": {
-                    "num_latents": self.sequence_compressor_num_latents,
-                    "ff_mult": self.sequence_compressor_ff_mult,
-                    "depth": self.sequence_compressor_depth,
-                }
-            }
+            vocab_size=self.text_vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            aligner_ffn_mult=self.aligner_ffn_mult,
+            aligner_num_add_layers=self.aligner_num_add_layers,
+            protein_vocab_size=self.protein_vocab_size,
+            protein_hidden_size=self.protein_hidden_size,
+            protein_num_hidden_layers=self.protein_num_hidden_layers,
+            protein_num_attention_heads=self.protein_num_attention_heads,
+            protein_intermediate_size=self.protein_intermediate_size,
+            resampler_depth=self.resampler_depth,
+            resampler_dim_head=self.resampler_dim_head,
+            resampler_heads=self.resampler_heads,
+            resampler_num_latents=self.resampler_num_latents,
+            resampler_ff_mult=self.resampler_ff_mult,
         )
 
     def create_and_check_model(
@@ -174,11 +168,8 @@ class EvollaModelTester:
             protein_input_ids=protein_input_ids,
             protein_attention_mask=protein_input_mask,
         )
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (batch_size, input_ids.shape[1], self.hidden_size)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (batch_size, input_ids.shape[1], self.hidden_size))
 
-    
     def create_and_check_model_gen(
         self,
         config,
@@ -200,13 +191,7 @@ class EvollaModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config, 
-            text_input_ids,
-            text_input_mask, 
-            protein_input_ids, 
-            protein_input_mask
-        ) = config_and_inputs
+        (config, text_input_ids, text_input_mask, protein_input_ids, protein_input_mask) = config_and_inputs
         inputs_dict = {
             "input_ids": text_input_ids,
             "attention_mask": text_input_mask,
@@ -214,6 +199,7 @@ class EvollaModelTester:
             "protein_attention_mask": protein_input_mask,
         }
         return config, inputs_dict
+
 
 @require_torch
 class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -232,7 +218,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @property
     def is_encoder_decoder(self):
         return self.model_tester.is_encoder_decoder
-    
+
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         # XXX: EvollaForProteinText2Text has no MODEL_FOR group yet, but it should be the same
@@ -258,27 +244,19 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_model_single_protein(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_proteins=1
-        )
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_proteins=1)
         self.model_tester.create_and_check_model(*config_and_inputs, batch_size=1)
 
     def test_model_multiple_proteins(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_proteins=2
-        )
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_proteins=2)
         self.model_tester.create_and_check_model(*config_and_inputs, batch_size=2)
 
     def test_generate_single_protein(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_proteins=1
-        )
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_proteins=1)
         self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
     def test_generate_multiple_proteins(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs(
-            num_proteins=2
-        )
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(num_proteins=2)
         self.model_tester.create_and_check_model_gen(*config_and_inputs)
 
     def test_saprot_output(self):
@@ -312,7 +290,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model.eval()
             protein_encoder_outputs = model.protein_encoder(**protein_informations, return_dict=True)
             print(model_class, protein_encoder_outputs)
-    
+
     def test_single_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -357,6 +335,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # def test_model_is_small(self):
     #     pass
 
+
 @require_torch
 class EvollaModelIntegrationTest(TestCasePlus):
     @cached_property
@@ -366,19 +345,18 @@ class EvollaModelIntegrationTest(TestCasePlus):
     @require_bitsandbytes
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        protein_information = {
-            "aa_seq": "AAAA",
-            "foldseek": "dddd"
-        }
+        protein_information = {"aa_seq": "AAAA", "foldseek": "dddd"}
         proteins = [protein_information]
-        
+
         message = [
             {"role": "system", "content": "You are an AI expert that can answer any questions about protein."},
-            {"role": "user", "content": "What is the function of this protein?"}
+            {"role": "user", "content": "What is the function of this protein?"},
         ]
         messages_list = [message]
         processor = self.default_processor
-        inputs = processor(messages_list=messages_list, proteins=proteins, return_tensors="pt", padding="longest").to(torch_device)
+        inputs = processor(messages_list=messages_list, proteins=proteins, return_tensors="pt", padding="longest").to(
+            torch_device
+        )
 
         # the CI gpu is small so using quantization to fit
         quantization_config = BitsAndBytesConfig(
@@ -386,7 +364,9 @@ class EvollaModelIntegrationTest(TestCasePlus):
             bnb_4bit_compute_dtype="float16",
         )
         model = EvollaForProteinText2Text.from_pretrained(
-            "/zhouxibin/workspaces/transformers/evolla-base", quantization_config=quantization_config, device_map="auto"
+            "/zhouxibin/workspaces/transformers/evolla-base",
+            quantization_config=quantization_config,
+            device_map="auto",
         )
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)

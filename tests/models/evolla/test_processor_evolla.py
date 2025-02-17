@@ -17,16 +17,13 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
-
 from transformers import (
     AutoProcessor,
     EsmTokenizer,
     EvollaProcessor,
     LlamaTokenizerFast,
-    PreTrainedTokenizerFast,
 )
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
@@ -36,7 +33,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 EVOLLA_VALID_AA = list("ACDEFGHIKLMNPQRSTVWY#")
@@ -65,7 +62,6 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         amino_acid_sequence = "AAAA"
         foldseek_sequence = "dddd"
         question = "What is the function of this protein?"
-        answer = "I don't know"
 
         expected_output = {
             "protein_input_ids": torch.tensor([[0, 13, 13, 13, 13, 2]]),
