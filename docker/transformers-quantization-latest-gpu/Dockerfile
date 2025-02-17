@@ -53,6 +53,9 @@ RUN python3 -m pip install --no-cache-dir aqlm[gpu]==1.0.2
 # Add vptq for quantization testing
 RUN python3 -m pip install --no-cache-dir vptq
 
+# Add spqr for quantization testing
+RUN python3 -m pip install --no-cache-dir spqr_quant[gpu]
+
 # Add hqq for quantization testing
 RUN python3 -m pip install --no-cache-dir hqq
 
@@ -72,6 +75,9 @@ RUN python3 -m pip install git+https://github.com/NetEase-FuXi/EETQ.git
 # Add flute-kernel and fast_hadamard_transform for quantization testing
 RUN python3 -m pip install --no-cache-dir flute-kernel==0.3.0 -i https://flute-ai.github.io/whl/cu118
 RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
+
+# Add compressed-tensors for quantization testing
+RUN python3 -m pip install --no-cache-dir compressed-tensors
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.

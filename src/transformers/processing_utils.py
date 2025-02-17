@@ -1201,18 +1201,18 @@ class ProcessorMixin(PushToHubMixin):
         **chat_template_kwargs: Unpack[AllKwargsForChatTemplate],
     ):
         """
-        Used within `apply_chat_template` when a model has special way to process conversation history. For example,
-        video models might want to specify in the prompt the duratin of video or which frame indices ate which timestamps
+        Used within `apply_chat_template` when a model has a special way to process conversation history. For example,
+        video models might want to specify in the prompt the duration of video or which frame indices at which timestamps
         were sampled. This information cannot be accessed before the video is loaded.
 
-        For most models it is a no-op, must be overriden by model processors which require special processing.
+        For most models it is a no-op, and must be overriden by model processors which require special processing.
 
         Args:
             conversation (`List[Dict, str, str]`):
                 The conversation to process. Always comes in batched format.
             batch_images (`List[List[ImageInput]]`):
                 Batch of images that were loaded from url/path defined in the conversation. The images
-                are ordered in the samm way as in the conversation. Comes in nested list format, one list of `PIL` images
+                are ordered in the same way as in the conversation. Comes in nested list format, one list of `PIL` images
                 per batch.
             batch_videos (`List[List[ImageInput]]`):
                 Batch of videos that were loaded from url/path defined in the conversation. The videos
@@ -1220,7 +1220,7 @@ class ProcessorMixin(PushToHubMixin):
                 per batch.
             batch_video_metadata (`List[List[Dict[[str, any]]]]`):
                 Batch of metadata returned from loading videos. That includes video fps, duration and total number of framer in original video.
-                Metadata are ordered in the samm way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
+                Metadata are ordered in the same way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
                 per batch.
 
         """
@@ -1297,9 +1297,6 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = chat_template_kwargs.get("tokenize")
         return_dict = chat_template_kwargs.get("return_dict")
         sample_indices_fn = chat_template_kwargs.get("sample_indices_fn")
-        unused_kwargs = {
-            key: kwargs[key] for key in kwargs if key not in AllKwargsForChatTemplate.__annotations__.keys()
-        }
 
         if tokenize:
             batch_images, batch_videos = [], []
@@ -1328,7 +1325,11 @@ class ProcessorMixin(PushToHubMixin):
                             video = [np.array(load_image(image_fname)).T for image_fname in fname]
                             # create a 4D video because `load_video` always returns a 4D array
                             video = np.stack(video)
-                            metadata = None  # TODO: infer metadata from loaded video
+                            metadata = None
+                            logger.warning(
+                                "When loading the video from list of images, we cannot infer metadata such as `fps` or `duration`. "
+                                "If you model applies special processing based on metadata, please load the whole video and let the model sample frames."
+                            )
                         else:
                             video, metadata = load_video(
                                 fname,
@@ -1336,12 +1337,11 @@ class ProcessorMixin(PushToHubMixin):
                                 fps=video_fps,
                                 backend=video_load_backend,
                                 sample_indices_fn=sample_indices_fn,
-                                **unused_kwargs,
                             )
                         videos.append(video)
                         video_metadata.append(metadata)
 
-                # Currently all processors can accept accept nested list of batches, but not flat list of visuals
+                # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
                 if images:
                     batch_images.append(images)

@@ -53,12 +53,12 @@ def smolvlm_sample_indices_fn(metadata, max_frames, target_fps, skip_secs=0):
             An array of unique frame indices to sample.
     """
 
-    total_num_frames = metadata.get("total_num_frames", 0)
+    total_num_frames = getattr(metadata, "total_num_frames", 0)
     if total_num_frames <= 0:
         raise ValueError(f"Invalid total_num_frames={total_num_frames} in metadata.")
 
-    native_fps = metadata.get("fps", 30.0) or 30.0
-    duration_seconds = metadata.get("duration", 0)
+    native_fps = getattr(metadata, "fps", 30.0)
+    duration_seconds = getattr(metadata, "duration", 0)
 
     if duration_seconds <= 0:
         raise ValueError(f"Invalid duration_seconds={duration_seconds} in metadata.")

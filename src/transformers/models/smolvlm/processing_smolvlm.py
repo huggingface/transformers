@@ -367,9 +367,9 @@ class SmolVLMProcessor(ProcessorMixin):
         batch_num_frames, batch_timestamps = [], []
         for metadata_list, video_list in zip(batch_video_metadata, batch_videos):
             for metadata, video in zip(metadata_list, video_list):
-                duration_sec = metadata["duration"]
-                frames_idx = metadata["frames_indices"]
-                fps = metadata["fps"]
+                duration_sec = getattr(metadata, "duration")
+                frames_idx = getattr(metadata, "frames_indices")
+                fps = getattr(metadata, "fps")
 
                 timestamps = []
                 for idx, frame_np in zip(frames_idx, video):
