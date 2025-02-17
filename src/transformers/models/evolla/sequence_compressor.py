@@ -1,8 +1,8 @@
 import torch
-from einops import rearrange, repeat
-from einops_exts import rearrange_many
+
+# from einops import rearrange, repeat
+# from einops_exts import rearrange_many
 from torch import einsum, nn
-from .configuration_evolla import EvollaProteinConfig
 
 
 def FeedForward(dim, mult=4):
@@ -13,6 +13,14 @@ def FeedForward(dim, mult=4):
         nn.GELU(),
         nn.Linear(inner_dim, dim, bias=False),
     )
+
+
+def rearrange_einsum(out, h):
+    # 使用torch.einsum重新排列维度
+    out_einsum = torch.einsum("b h n d -> b n h d", out)
+    # 合并h和d维度
+    out_einsum = out_einsum.reshape(out_einsum.shape[0], out_einsum.shape[1], -1)
+    return out_einsum
 
 
 class SequenceCompressorAttention(nn.Module):
@@ -48,7 +56,13 @@ class SequenceCompressorAttention(nn.Module):
             2, dim=-1
         )  # each: batch_size, max_protein_length+num_latents, dim_head*num_heads
 
-        q, k, v = rearrange_many((q, k, v), "b n (h d) -> b h n d", h=h)
+        # q_raw, k_raw, v_raw = rearrange_many((q, k, v), "b n (h d) -> b h n d", h=h)
+        q = q.view(q.size(0), q.size(1), h, -1).permute(0, 2, 1, 3)
+        k = k.view(k.size(0), k.size(1), h, -1).permute(0, 2, 1, 3)
+        v = v.view(v.size(0), v.size(1), h, -1).permute(0, 2, 1, 3)
+        # assert torch.allclose(q_raw, q)
+        # assert torch.allclose(k_raw, k)
+        # assert torch.allclose(v_raw, v)
         q = q * self.scale  # batch_size, num_heads, num_latents, dim_head
 
         # attention
@@ -57,7 +71,10 @@ class SequenceCompressorAttention(nn.Module):
         sim = sim - sim.amax(dim=-1, keepdim=True).detach()
 
         bs, nh, skd, okd = sim.shape
-        mask = repeat(mask, "bs okd -> bs nh skd okd", nh=nh, skd=skd)
+        # mask_raw = repeat(mask, "bs okd -> bs nh skd okd", nh=nh, skd=skd)
+        ones = torch.ones(nh, skd).to(mask.device)  # 创建一个全 1 的张量，形状为 (nh, skd)
+        mask = torch.einsum("bk,oj -> bojk", mask, ones)
+        # assert torch.allclose(mask_raw, mask)
 
         sim = sim.masked_fill((1 - mask).bool(), -1e4)
         # sim = sim + (1 - mask) * torch.tensor(float('-inf'), dtype=sim.dtype)  # 加上mask
@@ -65,27 +82,25 @@ class SequenceCompressorAttention(nn.Module):
 
         out = einsum("... i j, ... j d -> ... i d", attn, v)
 
-        out = rearrange(out, "b h n d -> b n (h d)", h=h)
+        # out_raw = rearrange(out, "b h n d -> b n (h d)", h=h)
+        out_einsum = torch.einsum("b h n d -> b n h d", out)
+        out = out_einsum.reshape(out_einsum.shape[0], out_einsum.shape[1], -1)
+        # assert torch.allclose(out_raw, out)
         return self.to_out(out)
 
 
 class SequenceCompressorResampler(nn.Module):
     def __init__(
         self,
-        config: EvollaProteinConfig,
+        protein_repr_dim: int,
+        output_repr_dim: int,
+        depth: int,
+        dim_head: int,
+        heads: int,
+        num_latents: int,
+        ff_mult: int,
     ):
         super().__init__()
-        protein_encoder_config = config.protein_encoder_config
-        sequence_compressor_config = config.resampler_config
-        self.config = config
-        protein_repr_dim = protein_encoder_config.hidden_size
-        output_repr_dim = config.output_repr_dim
-        depth = sequence_compressor_config.depth if hasattr(sequence_compressor_config, 'depth') else 6
-        dim_head = sequence_compressor_config.dim_head if hasattr(sequence_compressor_config, 'dim_head') else 64
-        heads = sequence_compressor_config.heads if hasattr(sequence_compressor_config, 'heads') else 8
-        num_latents = sequence_compressor_config.num_latents if hasattr(sequence_compressor_config, 'num_latents') else 64
-        ff_mult = sequence_compressor_config.ff_mult if hasattr(sequence_compressor_config, 'ff_mult') else 4
-
         self.latents = nn.Parameter(torch.randn(num_latents, protein_repr_dim))
 
         self.layers = nn.ModuleList([])
@@ -93,9 +108,7 @@ class SequenceCompressorResampler(nn.Module):
             self.layers.append(
                 nn.ModuleList(
                     [
-                        SequenceCompressorAttention(
-                            dim=protein_repr_dim, dim_head=dim_head, heads=heads
-                        ),
+                        SequenceCompressorAttention(dim=protein_repr_dim, dim_head=dim_head, heads=heads),
                         FeedForward(dim=protein_repr_dim, mult=ff_mult),
                     ]
                 )
@@ -110,23 +123,23 @@ class SequenceCompressorResampler(nn.Module):
     @property
     def device(self):
         return self.latents.device
-    
+
     @property
     def dtype(self):
         return self.latents.dtype
 
     def forward(self, embeds, mask):
-
         b = embeds.shape[0]
 
         bs, _ = mask.shape  # bs, max_protein_length
         latent_mask = torch.ones(bs, self.num_latents).to(mask.device)
-        mask = torch.cat(
-            (mask, latent_mask), dim=1
-        )  # bs, max_protein_length + num_latents
+        mask = torch.cat((mask, latent_mask), dim=1)  # bs, max_protein_length + num_latents
 
         # blocks
-        latents = repeat(self.latents, "n d -> b n d", b=b)
+        # latents_raw = repeat(self.latents, "n d -> b n d", b=b)
+        ones = torch.ones(b).to(self.latents.device)
+        latents = torch.einsum("nd, b -> bnd", self.latents, ones)
+        # assert torch.allclose(latents_raw, latents)
         for attn, ff in self.layers:
             latents = attn(embeds, latents, mask) + latents
             latents = ff(latents) + latents
@@ -134,6 +147,7 @@ class SequenceCompressorResampler(nn.Module):
         transformed_feature = self.protein_projector(latents)
 
         return self.norm(transformed_feature)
+
 
 class MLPResampler(nn.Module):
     def __init__(
@@ -148,6 +162,6 @@ class MLPResampler(nn.Module):
             nn.Linear(output_repr_dim, output_repr_dim),
             nn.LayerNorm(output_repr_dim),
         )
-        
+
     def forward(self, embeds, mask):
         return self.model(embeds)

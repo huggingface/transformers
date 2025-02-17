@@ -541,60 +541,140 @@ class EvollaConfig(PretrainedConfig):
     ```"""
 
     model_type = "EvollaModel"
-    sub_configs = {"protein_config": EvollaProteinConfig, "llm_config": EvollaLLMConfig}
+    # sub_configs = {"protein_config": EvollaProteinConfig, "llm_config": EvollaLLMConfig}
 
     def __init__(
         self,
         vocab_size=128256,  # llama vocab size
-        protein_text_hidden_size=4096,  # llama hidden size
+        hidden_size=4096,  # llama hidden size
+        intermediate_size=14336,  # llama intermediate size
+        num_hidden_layers=32,  # llama num layers
+        num_attention_heads=32,  # llama num heads
+        num_key_value_heads=8,  # llama num key-value heads
+        hidden_act="silu",  # llama activation function
+        max_position_embeddings=8192,  # llama rope max length
+        rms_norm_eps=1e-05,
+        pad_token_id=None,
+        bos_token_id=128000,
+        eos_token_id=128009,
+        pretraining_tp=1,
+        tie_word_embeddings=False,
+        rope_theta=500000.0,
+        rope_scaling=None,
+        attention_bias=False,
+        attention_dropout=0.0,
+        mlp_bias=False,
+        # head_dim=None,
+        aligner_ffn_mult=4,
+        aligner_enable_bias=True,
+        aligner_attention_probs_dropout_prob=0.1,
+        aligner_num_add_layers=8,
+        protein_vocab_size=446,
+        protein_mask_token_id=4,
+        protein_pad_token_id=1,
+        protein_hidden_size=1280,
+        protein_num_hidden_layers=33,
+        protein_num_attention_heads=20,
+        protein_intermediate_size=5120,
+        protein_hidden_dropout_prob=0.1,
+        protein_attention_probs_dropout_prob=0.1,
+        protein_max_position_embeddings=1026,
+        protein_layer_norm_eps=1e-05,
+        protein_position_embedding_type="rotary",
+        protein_emb_layer_norm_before=False,
+        protein_token_dropout=True,
+        resampler_depth=6,
+        resampler_dim_head=64,
+        resampler_heads=8,
+        resampler_num_latents=64,
+        resampler_ff_mult=4,
         output_attentions=False,
         output_hidden_states=False,
         use_cache=False,
         return_dict=True,
-        generation_max_new_tokens=512,
-        generation_do_sample=True,
-        generation_temperature=0.6,
-        generation_top_p=0.9,
-        generation_config=None,
-        protein_config=None,
-        llm_config=None,
+        # protein_config=None,
+        # llm_config=None,
         initializer_range=0.02,
+        max_new_tokens=512,
+        do_sample=True,
+        temperature=0.6,
+        top_p=0.9,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.protein_text_hidden_size = protein_text_hidden_size
-        self.output_attentions = output_attentions
-        self.output_hidden_states = output_hidden_states
-        self.use_cache = use_cache
-        self.return_dict = return_dict
+        # self.output_attentions = output_attentions
+        # self.output_hidden_states = output_hidden_states
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.max_position_embeddings = max_position_embeddings
+        self.rms_norm_eps = rms_norm_eps
+        # self.pad_token_id = pad_token_id
+        # self.bos_token_id = bos_token_id
+        # self.eos_token_id = eos_token_id
+        self.pretraining_tp = pretraining_tp
+        self.tie_word_embeddings = tie_word_embeddings
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.mlp_bias = mlp_bias
+        self.aligner_ffn_mult = aligner_ffn_mult
+        self.aligner_enable_bias = aligner_enable_bias
+        self.aligner_attention_probs_dropout_prob = aligner_attention_probs_dropout_prob
+        self.aligner_num_add_layers = aligner_num_add_layers
 
-        if generation_config is None:
-            self.generation_config = {
-                "max_new_tokens": generation_max_new_tokens,
-                "do_sample": generation_do_sample,
-                "temperature": generation_temperature,
-                "top_p": generation_top_p,
-            }
-        elif isinstance(generation_config, dict):
-            self.generation_config = generation_config
-        else:
-            raise ValueError("`generation_config` should be a dict or None")
+        self.protein_vocab_size = protein_vocab_size
+        self.protein_mask_token_id = protein_mask_token_id
+        self.protein_pad_token_id = protein_pad_token_id
+        self.protein_hidden_size = protein_hidden_size
+        self.protein_num_hidden_layers = protein_num_hidden_layers
+        self.protein_num_attention_heads = protein_num_attention_heads
+        self.protein_intermediate_size = protein_intermediate_size
+        self.protein_hidden_dropout_prob = protein_hidden_dropout_prob
+        self.protein_attention_probs_dropout_prob = protein_attention_probs_dropout_prob
+        self.protein_max_position_embeddings = protein_max_position_embeddings
+        self.protein_layer_norm_eps = protein_layer_norm_eps
+        self.protein_position_embedding_type = protein_position_embedding_type
+        self.protein_emb_layer_norm_before = protein_emb_layer_norm_before
+        self.protein_token_dropout = protein_token_dropout
 
-        if protein_config is None:
-            self.protein_config = EvollaProteinConfig(protein_text_hidden_size=self.protein_text_hidden_size)
-        elif isinstance(protein_config, dict):
-            protein_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
-            self.protein_config = EvollaProteinConfig(**protein_config)
-        elif isinstance(protein_config, EvollaProteinConfig):
-            self.protein_config = protein_config
+        self.resampler_depth = resampler_depth
+        self.resampler_dim_head = resampler_dim_head
+        self.resampler_heads = resampler_heads
+        self.resampler_num_latents = resampler_num_latents
+        self.resampler_ff_mult = resampler_ff_mult
 
-        if llm_config is None:
-            self.llm_config = EvollaLLMConfig(protein_text_hidden_size=self.protein_text_hidden_size)
-        elif isinstance(llm_config, dict):
-            llm_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
-            self.llm_config = EvollaLLMConfig(**llm_config)
-        elif isinstance(llm_config, EvollaLLMConfig):
-            self.llm_config = llm_config
+        # self.max_new_tokens = max_new_tokens
+        # self.do_sample = do_sample
+        # self.temperature = temperature
+        # self.top_p = top_p
+        # print(return_dict, self.return_dict)
+
+        self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        # Validate the correctness of rotary position embeddings parameters
+        # BC: if there is a 'type' field, copy it it to 'rope_type'.
+        if self.rope_scaling is not None and "type" in self.rope_scaling:
+            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        rope_config_validation(self)
+
+        # if protein_config is None:
+        #     self.protein_config = EvollaProteinConfig(protein_text_hidden_size=self.protein_text_hidden_size)
+        # elif isinstance(protein_config, dict):
+        #     protein_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
+        #     self.protein_config = EvollaProteinConfig(**protein_config)
+        # elif isinstance(protein_config, EvollaProteinConfig):
+        #     self.protein_config = protein_config
+
+        # if llm_config is None:
+        #     self.llm_config = EvollaLLMConfig(protein_text_hidden_size=self.protein_text_hidden_size)
+        # elif isinstance(llm_config, dict):
+        #     llm_config.update({"protein_text_hidden_size": self.protein_text_hidden_size})
+        #     self.llm_config = EvollaLLMConfig(**llm_config)
+        # elif isinstance(llm_config, EvollaLLMConfig):
+        #     self.llm_config = llm_config
 
         # if self.protein_config.resampler_config.output_repr_dim is None:
         #     self.protein_config.resampler_config.output_repr_dim = self.llm_config.llama_config.hidden_size
@@ -604,6 +684,18 @@ class EvollaConfig(PretrainedConfig):
 
         self.initializer_range = initializer_range
         super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            return_dict=return_dict,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature,
+            top_p=top_p,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 

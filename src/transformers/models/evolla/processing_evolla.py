@@ -16,6 +16,7 @@
 Processor class for EVOLLA.
 """
 
+import os
 from typing import Callable, Dict, List, Optional, Union
 from urllib.parse import urlparse
 
@@ -34,8 +35,6 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_tf_available, is_torch_available
 from ...utils.deprecation import deprecate_kwarg
 
-from transformers import EsmTokenizer, LlamaTokenizerFast
-import os
 
 if is_torch_available():
     import torch
@@ -194,7 +193,9 @@ def is_url(string):
     result = urlparse(string)
     return all([result.scheme, result.netloc])
 
+
 PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
+
 
 class EvollaProcessor(ProcessorMixin):
     r"""
@@ -213,6 +214,7 @@ class EvollaProcessor(ProcessorMixin):
         text_max_length (`int`, *optional*, defaults to 512):
             The maximum length of the text to be generated.
     """
+
     attributes = ["protein_tokenizer", "tokenizer"]
     valid_kwargs = ["sequence_max_length"]
     protein_tokenizer_class = "EsmTokenizer"
@@ -220,18 +222,12 @@ class EvollaProcessor(ProcessorMixin):
     protein_tokenizer_dir_name = "protein_tokenizer"
     # tokenizer_dir_name = "text_tokenizer"
 
-    def __init__(
-            self, 
-            protein_tokenizer, 
-            tokenizer=None, 
-            protein_max_length=1024, 
-            text_max_length=512,
-            **kwargs):
+    def __init__(self, protein_tokenizer, tokenizer=None, protein_max_length=1024, text_max_length=512, **kwargs):
         if protein_tokenizer is None:
             raise ValueError("You need to specify an `protein_tokenizer`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
-        
+
         super().__init__(protein_tokenizer, tokenizer)
 
         self.tokenizer.pad_token = "<|reserved_special_token_0|>"
@@ -239,12 +235,11 @@ class EvollaProcessor(ProcessorMixin):
         self.text_max_length = text_max_length
 
     def process_proteins(self, proteins, protein_max_length=1024):
-
         sa_sequences = []
         for protein in proteins:
             aa_seq = protein.get("aa_seq")
             foldseek = protein.get("foldseek")
-            sa_sequence = "".join([s.upper()+f.lower() for s, f in zip(aa_seq, foldseek)])
+            sa_sequence = "".join([s.upper() + f.lower() for s, f in zip(aa_seq, foldseek)])
             sa_sequences.append(sa_sequence)
 
         sa_tokens = self.protein_tokenizer.batch_encode_plus(
@@ -253,10 +248,10 @@ class EvollaProcessor(ProcessorMixin):
         return sa_tokens
 
     def process_text(
-            self, 
-            texts,
-            text_max_length: int = 512,
-        ):
+        self,
+        texts,
+        text_max_length: int = 512,
+    ):
         prompts = []
         for messages in texts:
             prompt = self.tokenizer.apply_chat_template(
@@ -265,7 +260,7 @@ class EvollaProcessor(ProcessorMixin):
                 add_generation_prompt=True,
             )
             prompts.append(prompt)
-        
+
         prompt_inputs = self.tokenizer(
             prompts,
             add_special_tokens=False,
@@ -300,7 +295,7 @@ class EvollaProcessor(ProcessorMixin):
                 The maximum length of the sequence to be generated.
             text_max_length (`int`, *optional*, defaults to 512):
                 The maximum length of the text.
-        
+
         Return:
             a dict with following keys:
                 - `protein_input_ids` (`torch.Tensor` of shape `(batch_size, sequence_length)`) -- The input IDs for the protein sequence.
@@ -311,7 +306,7 @@ class EvollaProcessor(ProcessorMixin):
         # proteins and messages_list should be provided
         if proteins is None or messages_list is None:
             raise ValueError("You need to specify `messages_list` and `proteins`.")
-        
+
         protein_max_length = protein_max_length if protein_max_length is not None else self.protein_max_length
         text_max_length = text_max_length if text_max_length is not None else self.text_max_length
 
@@ -323,10 +318,10 @@ class EvollaProcessor(ProcessorMixin):
             messages_list = [messages_list]
         # Check if batched proteins are in the correct format
         if isinstance(proteins, (list, tuple)) and not all(isinstance(p, dict) for p in proteins):
-            raise ValueError(
-                "The proteins should be a list of dictionaries, but not all elements are dictionaries."
-            )
-        if isinstance(proteins, (list, tuple)) and not all(all(k in PROTEIN_VALID_KEYS for k in p.keys()) for p in proteins):
+            raise ValueError("The proteins should be a list of dictionaries, but not all elements are dictionaries.")
+        if isinstance(proteins, (list, tuple)) and not all(
+            all(k in PROTEIN_VALID_KEYS for k in p.keys()) for p in proteins
+        ):
             raise ValueError(
                 "There should be a list of dictionaries with keys: "
                 f"{', '.join(PROTEIN_VALID_KEYS)} for each protein."
@@ -336,14 +331,14 @@ class EvollaProcessor(ProcessorMixin):
         if isinstance(messages_list, (list, tuple)):
             for messages in messages_list:
                 if not isinstance(messages, (list, tuple)):
-                    raise ValueError(
-                        f"Each messages in messages_list should be a list instead of {type(messages)}."
-                    )
+                    raise ValueError(f"Each messages in messages_list should be a list instead of {type(messages)}.")
                 if not all(isinstance(m, dict) for m in messages):
                     raise ValueError(
                         "Each message in messages_list should be a list of dictionaries, but not all elements are dictionaries."
                     )
-                if any(len(m.keys()) != 2 for m in messages) or any(set(m.keys()) != {"role", "content"} for m in messages):
+                if any(len(m.keys()) != 2 for m in messages) or any(
+                    set(m.keys()) != {"role", "content"} for m in messages
+                ):
                     raise ValueError(
                         "Each message in messages_list should be a list of dictionaries with two keys: 'role' and 'content'."
                         f"But got: {messages}"
@@ -364,22 +359,24 @@ class EvollaProcessor(ProcessorMixin):
                 "attention_mask": text_tokens["attention_mask"],
             }
         )
-    
+
     def batch_decode(self, *args, **kwargs):
         return self.tokenizer.batch_decode(*args, **kwargs)
-    
+
     def decode(self, *args, **kwargs):
         return self.tokenizer.decode(*args, **kwargs)
-    
+
     def protein_batch_decode(self, *args, **kwargs):
         return self.protein_tokenizer.batch_decode(*args, **kwargs)
-    
+
     def protein_decode(self, *args, **kwargs):
         return self.protein_tokenizer.decode(*args, **kwargs)
-    
-    def save_pretrained(self, save_directory, push_to_hub = False, **kwargs):
+
+    def save_pretrained(self, save_directory, push_to_hub=False, **kwargs):
         # only save the protein tokenizer in sub_dir
-        self.protein_tokenizer.save_pretrained(os.path.join(save_directory, self.protein_tokenizer_dir_name), push_to_hub=push_to_hub, **kwargs)
+        self.protein_tokenizer.save_pretrained(
+            os.path.join(save_directory, self.protein_tokenizer_dir_name), push_to_hub=push_to_hub, **kwargs
+        )
         return super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
     @classmethod
@@ -398,9 +395,13 @@ class EvollaProcessor(ProcessorMixin):
                     attribute_class = classes[0]
             else:
                 attribute_class = getattr(transformers_module, class_name)
-            
+
             if sub_dir_name is not None:
-                args.append(attribute_class.from_pretrained(os.path.join(pretrained_model_name_or_path, sub_dir_name), **kwargs))
+                args.append(
+                    attribute_class.from_pretrained(
+                        os.path.join(pretrained_model_name_or_path, sub_dir_name), **kwargs
+                    )
+                )
             else:
                 args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
 

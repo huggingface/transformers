@@ -1,8 +1,6 @@
-import math
-
 import torch
 from torch import nn
-from .configuration_evolla import EvollaLLMConfig
+
 
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -16,6 +14,7 @@ class RMSNorm(torch.nn.Module):
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
+
 
 def FeedForward(dim, mult=None):
     if mult is None:
@@ -32,46 +31,51 @@ def FeedForward(dim, mult=None):
 class CrossAttention(nn.Module):
     def __init__(
         self,
-        config: EvollaLLMConfig,
+        hidden_size: int,
+        num_attention_heads: int,
+        attention_probs_dropout_prob: float,
+        enable_bias: bool,
+        ffn_mult: float,
+        protein_encoder_dim: int = None,
+        structure_encoder_dim: int = None,
+        msa_encoder_dim: int = None,
     ):
         super().__init__()
-        llama_config = config.llama_config
-        sequence_aligner_config = config.sequence_aligner_config
-        self.hidden_size = llama_config.hidden_size
-        self.scale = llama_config.num_attention_heads**-0.5
-        self.num_attention_heads = llama_config.num_attention_heads
-        self.attention_head_size = int(self.hidden_size / llama_config.num_attention_heads)
+        self.hidden_size = hidden_size
+        self.scale = num_attention_heads**-0.5
+        self.num_attention_heads = num_attention_heads
+        self.attention_head_size = int(self.hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(self.hidden_size, self.all_head_size)
-        if sequence_aligner_config.protein_encoder_dim is not None:
-            self.key_protein = nn.Linear(sequence_aligner_config.protein_encoder_dim, self.all_head_size)
-            self.value_protein = nn.Linear(sequence_aligner_config.protein_encoder_dim, self.all_head_size)
+        if protein_encoder_dim is not None:
+            self.key_protein = nn.Linear(protein_encoder_dim, self.all_head_size)
+            self.value_protein = nn.Linear(protein_encoder_dim, self.all_head_size)
         else:
             self.key_protein = None
             self.value_protein = None
 
-        if sequence_aligner_config.structure_encoder_dim is not None:
-            self.key_structure = nn.Linear(sequence_aligner_config.structure_encoder_dim, self.all_head_size)
-            self.value_structure = nn.Linear(sequence_aligner_config.structure_encoder_dim, self.all_head_size)
+        if structure_encoder_dim is not None:
+            self.key_structure = nn.Linear(structure_encoder_dim, self.all_head_size)
+            self.value_structure = nn.Linear(structure_encoder_dim, self.all_head_size)
         else:
             self.key_structure = None
             self.value_structure = None
 
-        if sequence_aligner_config.msa_encoder_dim is not None:
-            self.key_msa = nn.Linear(sequence_aligner_config.msa_encoder_dim, self.all_head_size)
-            self.value_msa = nn.Linear(sequence_aligner_config.msa_encoder_dim, self.all_head_size)
+        if msa_encoder_dim is not None:
+            self.key_msa = nn.Linear(msa_encoder_dim, self.all_head_size)
+            self.value_msa = nn.Linear(msa_encoder_dim, self.all_head_size)
         else:
             self.key_msa = None
             self.value_msa = None
 
         self.attention_norm = RMSNorm(self.hidden_size)
 
-        self.dropout = nn.Dropout(sequence_aligner_config.attention_probs_dropout_prob)
+        self.dropout = nn.Dropout(attention_probs_dropout_prob)
 
-        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=sequence_aligner_config.enable_bias)
+        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=enable_bias)
 
-        self.ff = FeedForward(self.hidden_size, sequence_aligner_config.ffn_mult)
+        self.ff = FeedForward(self.hidden_size, ffn_mult)
         self.gate_attention = nn.Parameter(torch.tensor([0.0]))
         self.gate_ffw = nn.Parameter(torch.tensor([0.0]))
 
@@ -99,9 +103,7 @@ class CrossAttention(nn.Module):
         kv_attn_mask = [protein_kv_attn_mask, structure_kv_attn_mask, msa_kv_attn_mask]
         kv_attn_mask = [_ for _ in kv_attn_mask if _ is not None]
         if not kv_attn_mask:
-            raise ValueError(
-                "At least one modality should be provided for cross attention."
-            )
+            raise ValueError("At least one modality should be provided for cross attention.")
         kv_attn_mask = torch.cat(kv_attn_mask, dim=1)
 
         query_layer = self.attention_norm(query_states)
@@ -114,24 +116,16 @@ class CrossAttention(nn.Module):
 
         if self.key_protein is not None and self.value_protein is not None:
             protein_key_value_states = protein_key_value_states.to(query_states)
-            key_layer_protein = self.key_protein(
-                protein_key_value_states
-            )  # [bs, keylength, dim]
-            value_layer_protein = self.value_protein(
-                protein_key_value_states
-            )  # [bs, keylength, dim]
+            key_layer_protein = self.key_protein(protein_key_value_states)  # [bs, keylength, dim]
+            value_layer_protein = self.value_protein(protein_key_value_states)  # [bs, keylength, dim]
         else:
             key_layer_protein = None
             value_layer_protein = None
 
         if self.key_structure is not None and self.value_structure is not None:
             structure_key_value_states = structure_key_value_states.to(query_states)
-            key_layer_structure = self.key_structure(
-                structure_key_value_states
-            )  # [bs, keylength, dim]
-            value_layer_structure = self.value_structure(
-                structure_key_value_states
-            )  # [bs, keylength, dim]
+            key_layer_structure = self.key_structure(structure_key_value_states)  # [bs, keylength, dim]
+            value_layer_structure = self.value_structure(structure_key_value_states)  # [bs, keylength, dim]
         else:
             key_layer_structure = None
             value_layer_structure = None
@@ -139,9 +133,7 @@ class CrossAttention(nn.Module):
         if self.key_msa is not None and self.value_msa is not None:
             msa_key_value_states = msa_key_value_states.to(query_states)
             key_layer_msa = self.key_msa(msa_key_value_states)  # [bs, keylength, dim]
-            value_layer_msa = self.value_msa(
-                msa_key_value_states
-            )  # [bs, keylength, dim]
+            value_layer_msa = self.value_msa(msa_key_value_states)  # [bs, keylength, dim]
         else:
             key_layer_msa = None
             value_layer_msa = None
@@ -154,29 +146,17 @@ class CrossAttention(nn.Module):
         value_layer = [_ for _ in value_layer if _ is not None]
         value_layer = torch.cat(value_layer, dim=1)
 
-        query_layer = self.transpose_for_scores(
-            query_layer
-        )  # [bs, numheads, querylength, dim/numheads]
-        key_layer = self.transpose_for_scores(
-            key_layer
-        )  # [bs, numheads, keylength, dim/numheads]
-        value_layer = self.transpose_for_scores(
-            value_layer
-        )  # [bs, numheads, keylength, dim/numheads]
+        query_layer = self.transpose_for_scores(query_layer)  # [bs, numheads, querylength, dim/numheads]
+        key_layer = self.transpose_for_scores(key_layer)  # [bs, numheads, keylength, dim/numheads]
+        value_layer = self.transpose_for_scores(value_layer)  # [bs, numheads, keylength, dim/numheads]
 
         query_layer = query_layer * self.scale
 
         # attention_mask: [bs, 1, querylength, keylength]
-        attention_mask = (
-            query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
-        )
+        attention_mask = query_attn_mask[:, None, :, None] * kv_attn_mask[:, None, None, :]
         # Compute the scaled dot-product attention scores
-        attn_weights = torch.matmul(
-            query_layer, key_layer.transpose(-1, -2)
-        )  # [bs, numheads, querylength, keylength]
-        attn_weights = (
-            attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()
-        )  # To stablize score
+        attn_weights = torch.matmul(query_layer, key_layer.transpose(-1, -2))  # [bs, numheads, querylength, keylength]
+        attn_weights = attn_weights - attn_weights.amax(dim=-1, keepdim=True).detach()  # To stablize score
         attention_scores = attn_weights.masked_fill(
             (1 - attention_mask).bool(), torch.finfo(attn_weights.dtype).min
         )  # [bs, numheads, querylength, keylength]
@@ -185,9 +165,7 @@ class CrossAttention(nn.Module):
 
         # attention_probs_dropped = self.dropout(attention_probs)
 
-        context_layer = torch.matmul(
-            attention_probs, value_layer
-        )  # [bs, numheads, querylength, dim/numheads]
+        context_layer = torch.matmul(attention_probs, value_layer)  # [bs, numheads, querylength, dim/numheads]
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -222,7 +200,6 @@ class CrossAttention(nn.Module):
         kv_attn_mask: [bs, kv_seq_len], default None
         past_key_value: [bs, past_kv_seq_len, dim], default None
         """
-        query_seq_len = query_states.shape[1]
         if protein_kv_states is not None:
             bs, protein_kv_seq_len, dim = protein_kv_states.shape
             if protein_kv_attn_mask is None:
@@ -254,10 +231,10 @@ class CrossAttention(nn.Module):
             msa_kv_attn_mask = None
         hidden_states = query_states
         # only when there's at least one valid modality, crossattention will be performed
-        if (protein_kv_states is not None and protein_kv_attn_mask.any()) or (
-            structure_kv_states is not None and structure_kv_attn_mask.any()
-        ) or (
-            msa_kv_states is not None and msa_kv_attn_mask.any()
+        if (
+            (protein_kv_states is not None and protein_kv_attn_mask.any())
+            or (structure_kv_states is not None and structure_kv_attn_mask.any())
+            or (msa_kv_states is not None and msa_kv_attn_mask.any())
         ):
             residual = hidden_states
             hidden_states = self.cross_attention(

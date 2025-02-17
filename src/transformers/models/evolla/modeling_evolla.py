@@ -20,32 +20,29 @@
 """PyTorch Evolla model."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable
+from typing import Callable, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import ModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, Seq2SeqModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import PretrainedConfig, ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
-from .configuration_evolla import EvollaConfig, EvollaLLMConfig, EvollaProteinConfig
-from .sequence_compressor import SequenceCompressorResampler
-from .protein import SaProtProteinEncoder, ProteinEncoderModelOutput
+from .configuration_evolla import EvollaConfig
+from .protein import ProteinEncoderModelOutput, SaProtProteinEncoder
 from .sequence_aligner import CrossAttention
+from .sequence_compressor import SequenceCompressorResampler
 
 
 logger = logging.get_logger(__name__)
@@ -54,7 +51,7 @@ _CONFIG_FOR_DOC = "EvollaConfig"
 
 
 @dataclass
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsBaseModelOutputWithPast with Idefics->Evolla
+# this was adapted from transformers.models.idefics.modeling_idefics.IdeficsBaseModelOutputWithPast with Idefics->Evolla
 class EvollaBaseModelOutputWithPast(ModelOutput):
     """
     Base class for Evolla model's outputs that may also contain a past key/values (to speed up sequential decoding).
@@ -159,9 +156,7 @@ def freeze_model(model, module_exceptions=[]):
     return model
 
 
-
 # this was adapted from LlamaRMSNorm
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsRMSNorm with Idefics->Evolla
 class EvollaRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -181,11 +176,11 @@ class EvollaRMSNorm(nn.Module):
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
+
 ALL_LAYERNORM_LAYERS.append(EvollaRMSNorm)
 
 
 # this was adapted from LlamaRotaryEmbedding
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsEmbedding with Idefics->Evolla
 class EvollaRotaryEmbedding(nn.Module):
     def __init__(self, config: EvollaConfig, device=None):
         super().__init__()
@@ -243,11 +238,13 @@ class EvollaRotaryEmbedding(nn.Module):
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
+
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
@@ -277,17 +274,21 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 # this was adapted from LlamaMLP
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsMLP with Idefics->Evolla
 class EvollaMLP(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        mlp_bias: bool,
+        hidden_act: str,
+    ):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=mlp_bias)
+        self.act_fn = ACT2FN[hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -304,6 +305,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 
 def eager_attention_forward(
     module: nn.Module,
@@ -330,34 +332,35 @@ def eager_attention_forward(
 
     return attn_output, attn_weights
 
+
 # this was adapted from LlamaAttention
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsAttention with Idefics->Evolla
 class EvollaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: EvollaConfig, layer_idx: int):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        num_key_value_heads: int,
+        attention_dropout: float,
+        attention_bias: bool,
+        layer_idx: int,
+    ):
         super().__init__()
-        self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        assert self.num_key_value_groups > 0, f"In {self._get_name()} num_attention_heads ({config.num_attention_heads}) must be larger than num_key_value_heads ({config.num_key_value_heads})"
+        self.head_dim = hidden_size // num_attention_heads
+        self.num_key_value_groups = num_attention_heads // num_key_value_heads
+        assert (
+            self.num_key_value_groups > 0
+        ), f"In {self._get_name()} num_attention_heads ({num_attention_heads}) must be larger than num_key_value_heads ({num_key_value_heads})"
         self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
+        self.attention_dropout = attention_dropout
         self.is_causal = True
 
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.q_proj = nn.Linear(hidden_size, num_attention_heads * self.head_dim, bias=attention_bias)
+        self.k_proj = nn.Linear(hidden_size, num_key_value_heads * self.head_dim, bias=attention_bias)
+        self.v_proj = nn.Linear(hidden_size, num_key_value_heads * self.head_dim, bias=attention_bias)
+        self.o_proj = nn.Linear(num_attention_heads * self.head_dim, hidden_size, bias=attention_bias)
 
     def forward(
         self,
@@ -384,14 +387,14 @@ class EvollaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        # if self.config._attn_implementation != "eager":
+        #     if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+        #         logger.warning_once(
+        #             "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+        #             'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+        #         )
+        #     else:
+        #         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -410,17 +413,40 @@ class EvollaAttention(nn.Module):
 
 
 # this was adapted from LlamaDecoderLayer
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsDecoderLayer with Idefics->Evolla
 class EvollaDecoderLayer(nn.Module):
-    def __init__(self, config: EvollaConfig, layer_idx: int):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        num_key_value_heads: int,
+        attention_dropout: float,
+        attention_bias: bool,
+        rms_norm_eps: float,
+        intermediate_size: int,
+        mlp_bias: bool,
+        hidden_act: str,
+        layer_idx: int,
+    ):
         super().__init__()
-        self.hidden_size = config.hidden_size
+        self.hidden_size = hidden_size
 
-        self.self_attn = EvollaAttention(config=config, layer_idx=layer_idx)
+        self.self_attn = EvollaAttention(
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            attention_dropout=attention_dropout,
+            attention_bias=attention_bias,
+            layer_idx=layer_idx,
+        )
 
-        self.mlp = EvollaMLP(config)
-        self.input_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = EvollaMLP(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            mlp_bias=mlp_bias,
+            hidden_act=hidden_act,
+        )
+        self.input_layernorm = EvollaRMSNorm(hidden_size, eps=rms_norm_eps)
+        self.post_attention_layernorm = EvollaRMSNorm(hidden_size, eps=rms_norm_eps)
 
     def forward(
         self,
@@ -465,7 +491,6 @@ class EvollaDecoderLayer(nn.Module):
         return outputs
 
 
-
 LLAMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -483,13 +508,11 @@ LLAMA_START_DOCSTRING = r"""
 """
 
 
-
-
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
 )
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsPreTrainedModel with Idefics->Evolla
+# this was adapted from transformers.models.idefics.modeling_idefics.IdeficsPreTrainedModel with Idefics->Evolla
 class EvollaPreTrainedModel(PreTrainedModel):
     config_class = EvollaConfig
     base_model_prefix = "model"
@@ -515,12 +538,58 @@ class EvollaPreTrainedModel(PreTrainedModel):
 
 
 class EvollaProteinEncoder(nn.Module):
-    def __init__(self, config: EvollaProteinConfig):
+    def __init__(
+        self,
+        vocab_size: int,
+        mask_token_id: int,
+        pad_token_id: int,
+        hidden_size: int,
+        num_hidden_layers: int,
+        num_attention_heads: int,
+        intermediate_size: int,
+        hidden_dropout_prob: float,
+        attention_probs_dropout_prob: float,
+        max_position_embeddings: int,
+        layer_norm_eps: float,
+        position_embedding_type: str,
+        emb_layer_norm_before: bool,
+        token_dropout: bool,
+        resampler_output_repr_dim: int,
+        resampler_depth: int,
+        resampler_dim_head: int,
+        resampler_heads: int,
+        resampler_num_latents: int,
+        resampler_ff_mult: int,
+        add_pooling_layer: bool = False,
+    ):
         super().__init__()
-        self.config = config
-        self.model = SaProtProteinEncoder(config.protein_encoder_config)
-        self.sequence_compressor_resampler = SequenceCompressorResampler(config) # TODO
-    
+        self.model = SaProtProteinEncoder(
+            vocab_size=vocab_size,
+            mask_token_id=mask_token_id,
+            pad_token_id=pad_token_id,
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            max_position_embeddings=max_position_embeddings,
+            layer_norm_eps=layer_norm_eps,
+            position_embedding_type=position_embedding_type,
+            emb_layer_norm_before=emb_layer_norm_before,
+            token_dropout=token_dropout,
+            add_pooling_layer=add_pooling_layer,
+        )
+        self.sequence_compressor_resampler = SequenceCompressorResampler(
+            protein_repr_dim=hidden_size,
+            output_repr_dim=resampler_output_repr_dim,
+            depth=resampler_depth,
+            dim_head=resampler_dim_head,
+            heads=resampler_heads,
+            num_latents=resampler_num_latents,
+            ff_mult=resampler_ff_mult,
+        )
+
     def sequence_encode(
         self,
         input_ids: torch.LongTensor,
@@ -546,7 +615,7 @@ class EvollaProteinEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ):
         protein_output = self.sequence_encode(
             input_ids=input_ids,
@@ -570,6 +639,7 @@ class EvollaProteinEncoder(nn.Module):
             hidden_states=protein_output.hidden_states,
             attentions=protein_output.attentions,
         )
+
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
@@ -636,7 +706,8 @@ LLAMA_INPUTS_DOCSTRING = r"""
             the complete sequence length.
 """
 
-class EvollaLLM(EvollaPreTrainedModel):
+
+class EvollaLLM(nn.Module):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
 
@@ -644,28 +715,72 @@ class EvollaLLM(EvollaPreTrainedModel):
         config: LlamaConfig
     """
 
-    def __init__(self, config: EvollaLLMConfig):
-        super().__init__(config)
-        llama_config = config.llama_config
-        sequence_aligner_config = config.sequence_aligner_config
-        self.padding_idx = llama_config.pad_token_id
-        self.vocab_size = llama_config.vocab_size
+    def __init__(
+        self,
+        config: EvollaConfig,
+        vocab_size: int,
+        pad_token_id: int,
+        hidden_size: int,
+        num_hidden_layers: int,
+        num_add_layers: int,
+        num_attention_heads: int,
+        num_key_value_heads: int,
+        attention_dropout: float,
+        attention_bias: bool,
+        intermediate_size: int,
+        mlp_bias: bool,
+        hidden_act: str,
+        rms_norm_eps: float,
+        aligner_num_attention_heads: int,
+        aligner_attention_probs_dropout_prob: float,
+        aligner_enable_bias: bool,
+        aligner_ffn_mult: int,
+        protein_encoder_dim: int,
+    ):
+        super().__init__()
+        self.padding_idx = pad_token_id
+        self.vocab_size = vocab_size
 
-        self.embed_tokens = nn.Embedding(llama_config.vocab_size, llama_config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(vocab_size, hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [EvollaDecoderLayer(llama_config, layer_idx) for layer_idx in range(llama_config.num_hidden_layers)]
+            [
+                EvollaDecoderLayer(
+                    hidden_size=hidden_size,
+                    num_attention_heads=num_attention_heads,
+                    num_key_value_heads=num_key_value_heads,
+                    attention_dropout=attention_dropout,
+                    attention_bias=attention_bias,
+                    rms_norm_eps=rms_norm_eps,
+                    intermediate_size=intermediate_size,
+                    mlp_bias=mlp_bias,
+                    hidden_act=hidden_act,
+                    layer_idx=layer_idx,
+                )
+                for layer_idx in range(num_hidden_layers)
+            ]
         )
-        every_n_layers = max(llama_config.num_hidden_layers // sequence_aligner_config.num_add_layers, 1)
-        for i, layer in enumerate(range(llama_config.num_hidden_layers)):
+        every_n_layers = max(num_hidden_layers // num_add_layers, 1)
+        for i, layer in enumerate(range(num_hidden_layers)):
             if (i + 1) % every_n_layers == 0:
-                self.layers[i].adapter = CrossAttention(config)
+                self.layers[i].adapter = CrossAttention(
+                    hidden_size=hidden_size,
+                    num_attention_heads=aligner_num_attention_heads,
+                    attention_probs_dropout_prob=aligner_attention_probs_dropout_prob,
+                    enable_bias=aligner_enable_bias,
+                    ffn_mult=aligner_ffn_mult,
+                    protein_encoder_dim=protein_encoder_dim,
+                )
 
-        self.norm = EvollaRMSNorm(llama_config.hidden_size, eps=llama_config.rms_norm_eps)
-        self.rotary_emb = EvollaRotaryEmbedding(config=llama_config)
+        self.norm = EvollaRMSNorm(hidden_size, eps=rms_norm_eps)
+        self.rotary_emb = EvollaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
+        # self.use_cache = config.use_cache
+        # self.use_return_dict = config.use_return_dict
+        self.config = config
+
         # Initialize weights and apply final processing
-        self.post_init()
+        # self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -698,8 +813,8 @@ class EvollaLLM(EvollaPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.llama_config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -752,7 +867,7 @@ class EvollaLLM(EvollaPreTrainedModel):
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                if not hasattr(decoder_layer, 'adapter'):
+                if not hasattr(decoder_layer, "adapter"):
                     layer_outputs = self._gradient_checkpointing_func(
                         decoder_layer.__call__,
                         hidden_states,
@@ -791,7 +906,7 @@ class EvollaLLM(EvollaPreTrainedModel):
                     )
                     layer_outputs = (hidden_states,) + other_outputs
             else:
-                if not hasattr(decoder_layer, 'adapter'):
+                if not hasattr(decoder_layer, "adapter"):
                     layer_outputs = decoder_layer(
                         hidden_states,
                         attention_mask=causal_mask,
@@ -971,46 +1086,78 @@ class EvollaLLM(EvollaPreTrainedModel):
 
         return causal_mask
 
+
 class EvollaModel(EvollaPreTrainedModel):
-    r"""
-    """
-    def __init__(
-        self, 
-        config: EvollaConfig,
-        **kwargs
-    ):
+    r""" """
+
+    def __init__(self, config: EvollaConfig, **kwargs):
         super().__init__(config)
         self.config = config
         self.gradient_checkpointing = getattr(config, "gradient_checkpointing", False)
-        self.config.llm_config.gradient_checkpointing = self.gradient_checkpointing
-        self.generation_config = kwargs.pop("generation_config", {})
 
-        if len(self.generation_config) == 0:
-            print("Warning: No generate config is provided, the generate config now is \{\}")
-        else:
-            print("Generate config is provided, the generate config is: ", self.generate_config)
-        
         self.initialize_model()
 
     def initialize_model(self):
-        self.protein_encoder = EvollaProteinEncoder(self.config.protein_config)
+        self.protein_encoder = EvollaProteinEncoder(
+            vocab_size=self.config.protein_vocab_size,
+            mask_token_id=self.config.protein_mask_token_id,
+            pad_token_id=self.config.protein_pad_token_id,
+            hidden_size=self.config.protein_hidden_size,
+            num_hidden_layers=self.config.protein_num_hidden_layers,
+            num_attention_heads=self.config.protein_num_attention_heads,
+            intermediate_size=self.config.protein_intermediate_size,
+            hidden_dropout_prob=self.config.protein_hidden_dropout_prob,
+            attention_probs_dropout_prob=self.config.protein_attention_probs_dropout_prob,
+            max_position_embeddings=self.config.protein_max_position_embeddings,
+            layer_norm_eps=self.config.protein_layer_norm_eps,
+            position_embedding_type=self.config.protein_position_embedding_type,
+            emb_layer_norm_before=self.config.protein_emb_layer_norm_before,
+            token_dropout=self.config.protein_token_dropout,
+            resampler_output_repr_dim=self.config.hidden_size,
+            resampler_depth=self.config.resampler_depth,
+            resampler_dim_head=self.config.resampler_dim_head,
+            resampler_heads=self.config.resampler_heads,
+            resampler_num_latents=self.config.resampler_num_latents,
+            resampler_ff_mult=self.config.resampler_ff_mult,
+            add_pooling_layer=False,
+        )
 
-        self.llm = EvollaLLM(self.config.llm_config)
-        
+        self.llm = EvollaLLM(
+            config=self.config,
+            vocab_size=self.config.vocab_size,
+            pad_token_id=self.config.pad_token_id,
+            hidden_size=self.config.hidden_size,
+            num_hidden_layers=self.config.num_hidden_layers,
+            num_add_layers=self.config.aligner_num_add_layers,
+            num_attention_heads=self.config.num_attention_heads,
+            num_key_value_heads=self.config.num_key_value_heads,
+            attention_dropout=self.config.attention_dropout,
+            attention_bias=self.config.attention_bias,
+            intermediate_size=self.config.intermediate_size,
+            mlp_bias=self.config.mlp_bias,
+            hidden_act=self.config.hidden_act,
+            rms_norm_eps=self.config.rms_norm_eps,
+            aligner_num_attention_heads=self.config.num_attention_heads,
+            aligner_attention_probs_dropout_prob=self.config.aligner_attention_probs_dropout_prob,
+            aligner_enable_bias=self.config.aligner_enable_bias,
+            aligner_ffn_mult=self.config.aligner_ffn_mult,
+            protein_encoder_dim=self.config.hidden_size,
+        )
+
         self.post_init()
-        
+
     def forward(
         self,
-        input_ids: torch.LongTensor = None, # text input ids
-        attention_mask: Optional[torch.Tensor] = None, # text attention mask
-        inputs_embeds: Optional[torch.FloatTensor] = None, # text input embeddings
+        input_ids: torch.LongTensor = None,  # text input ids
+        attention_mask: Optional[torch.Tensor] = None,  # text attention mask
+        inputs_embeds: Optional[torch.FloatTensor] = None,  # text input embeddings
         protein_input_ids: torch.LongTensor = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1022,7 +1169,7 @@ class EvollaModel(EvollaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if (protein_input_ids is None):
+        if protein_input_ids is None:
             raise ValueError("protein_input_ids is required")
 
         text_input_ids = input_ids
@@ -1030,14 +1177,14 @@ class EvollaModel(EvollaPreTrainedModel):
         text_inputs_embeds = inputs_embeds
 
         # create batch mask for seqs
-        protein_batch_mask = torch.tensor([True]*protein_input_ids.shape[0])
+        protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0])
 
         protein_outputs = self.protein_encoder(
             input_ids=protein_input_ids,
             attention_mask=protein_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True
+            return_dict=True,
         )
 
         text_outputs = self.llm(
@@ -1048,18 +1195,16 @@ class EvollaModel(EvollaPreTrainedModel):
             protein_batch_mask=protein_batch_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True
+            return_dict=True,
         )
 
         if output_hidden_states:
-            encoder_hidden_states = protein_outputs.hidden_states
             decoder_hidden_states = text_outputs.hidden_states
         else:
-            encoder_hidden_states = None
             decoder_hidden_states = None
 
         last_hidden_state = text_outputs.last_hidden_state
-        
+
         if output_attentions:
             decoder_attentions = text_outputs.attentions
         else:
@@ -1073,7 +1218,7 @@ class EvollaModel(EvollaPreTrainedModel):
             # protein_hidden_states=encoder_hidden_states,
         )
         return output if return_dict else output.to_tuple()
-    
+
     def embed_tokens(self, input_ids, **kwargs):
         return self.llm.embed_tokens(input_ids, **kwargs)
 
@@ -1083,27 +1228,31 @@ class EvollaModel(EvollaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.llm.set_input_embeddings(value)
 
-# Copied from transformers.models.idefics.modeling_idefics.IdeficsForVisionText2Text with Idefics->Evolla,HuggingFaceM4/idefics-9b->westlake-repl/Evolla-10B
+
+# this was adapted from modeling_idefics.IdeficsForVisionText2Text
 class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
+    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    _tied_weights_keys = []
+
     def __init__(self, config):
         super().__init__(config)
         self.model = EvollaModel(config)
-        self.vocab_size = config.llm_config.llama_config.vocab_size
-        self.lm_head = nn.Linear(config.llm_config.llama_config.hidden_size, self.vocab_size, bias=False)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, self.vocab_size, bias=False)
 
         self.post_init()
-    
+
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()
-    
+
     def set_input_embeddings(self, value):
         return self.model.set_input_embeddings(value)
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None, # text input ids
-        attention_mask: Optional[torch.Tensor] = None, # text attention mask
-        inputs_embeds: Optional[torch.FloatTensor] = None, # text input embeddings
+        input_ids: torch.LongTensor = None,  # text input ids
+        attention_mask: Optional[torch.Tensor] = None,  # text attention mask
+        inputs_embeds: Optional[torch.FloatTensor] = None,  # text input embeddings
         labels: Optional[torch.LongTensor] = None,
         protein_input_ids: torch.LongTensor = None,
         protein_attention_mask: Optional[torch.Tensor] = None,
@@ -1111,10 +1260,37 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ):
+        r"""
+        Args:
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import EvollaProcessor, EvollaForProteinText2Text
+        >>> model = EvollaForProteinText2Text.from_pretrained("westlake/Evolla-10B-hf")
+        >>> processor = EvollaProcessor.from_pretrained("westlake/Evolla-10B-hf")
+
+        >>> protein_information = {
+            "aa_seq": "your amino acid sequence",
+            "foldseek": "your foldseek sequence",
+        }
+        >>> question = "What is the function of this protein?"
+        >>> message = [
+            {"role": "system", "content": "You are an AI expert that can answer any questions about protein."},
+            {"role": "user", "content": question},
+        ]
+
+        >>> inputs = processor(proteins=[protein_information], messages_list=[message], return_tensors="pt", padding="longest")
+        >>> outputs = model.generate(**inputs)
+
+        >>> print(processor.batch_decode(outputs, skip_special_tokens=True))
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1125,7 +1301,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             use_cache=use_cache,
             return_dict=True,
-            **kwargs
+            **kwargs,
         )
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
@@ -1133,7 +1309,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
-        
+
         lm_outputs = CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
@@ -1142,5 +1318,6 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
         )
         return lm_outputs if return_dict else lm_outputs.to_tuple()
+
 
 __all__ = ["EvollaForProteinText2Text", "EvollaModel", "EvollaPreTrainedModel"]

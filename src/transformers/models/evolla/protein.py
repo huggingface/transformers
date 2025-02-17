@@ -16,19 +16,18 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
-from ...modeling_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPastAndCrossAttentions, BaseModelOutputWithPoolingAndCrossAttentions
+from ...modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+)
+from ...modeling_utils import find_pruneable_heads_and_indices, get_parameter_dtype, prune_linear_layer
 from ...utils import ModelOutput, logging
-from .configuration_evolla import EvollaProteinConfig, EvollaProteinEncoderConfig
-from .sequence_compressor import SequenceCompressorResampler
-from ...modeling_utils import get_parameter_dtype
 
 
 logger = logging.get_logger(__name__)
@@ -36,12 +35,13 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class ProteinEncoderModelOutput(ModelOutput):
-    """
-    """
+    """ """
+
     sequence_compressor_output: torch.FloatTensor = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
 
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
@@ -58,32 +58,41 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
 
+
 class SaProtEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    def __init__(self, config):
+    def __init__(
+        self,
+        vocab_size: int,
+        mask_token_id: int,
+        pad_token_id: int,
+        hidden_size: int,
+        emb_layer_norm_before: bool,
+        layer_norm_eps: float,
+        hidden_dropout_prob: float,
+        max_position_embeddings: int,
+        token_dropout: bool,
+        position_embedding_type: str = None,
+    ):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(vocab_size, hidden_size, padding_idx=pad_token_id)
 
-        if config.emb_layer_norm_before:
-            self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        if emb_layer_norm_before:
+            self.layer_norm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
         else:
             self.layer_norm = None
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_embedding_type = "absolute" if position_embedding_type is None else position_embedding_type
+        self.register_buffer("position_ids", torch.arange(max_position_embeddings).expand((1, -1)), persistent=False)
 
-        self.padding_idx = config.pad_token_id
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
-        )
-        self.token_dropout = config.token_dropout
-        self.mask_token_id = config.mask_token_id
+        self.padding_idx = pad_token_id
+        self.position_embeddings = nn.Embedding(max_position_embeddings, hidden_size, padding_idx=self.padding_idx)
+        self.token_dropout = token_dropout
+        self.mask_token_id = mask_token_id
 
     def forward(
         self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -147,9 +156,11 @@ class SaProtEmbeddings(nn.Module):
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
+
 def rotate_half(x):
     x1, x2 = x.chunk(2, dim=-1)
     return torch.cat((-x2, x1), dim=-1)
+
 
 def apply_rotary_pos_emb(x, cos, sin):
     cos = cos[:, :, : x.shape[-2], :]
@@ -157,7 +168,8 @@ def apply_rotary_pos_emb(x, cos, sin):
 
     return (x * cos) + (rotate_half(x) * sin)
 
-class RotaryEmbedding(torch.nn.Module):
+
+class SaProtRotaryEmbedding(torch.nn.Module):
     """
     Rotary position embeddings based on those in
     [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
@@ -199,35 +211,42 @@ class RotaryEmbedding(torch.nn.Module):
             apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
         )
 
+
 class SaProtSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        attention_probs_dropout_prob: float,
+        max_position_embeddings=None,
+        is_decoder=False,
+        position_embedding_type=None,
+    ):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if hidden_size % num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
+                f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
+                f"heads ({num_attention_heads})"
             )
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.num_attention_heads = num_attention_heads
+        self.attention_head_size = int(hidden_size / num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(hidden_size, self.all_head_size)
+        self.key = nn.Linear(hidden_size, self.all_head_size)
+        self.value = nn.Linear(hidden_size, self.all_head_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
+        self.dropout = nn.Dropout(attention_probs_dropout_prob)
+        self.position_embedding_type = position_embedding_type if position_embedding_type else "absolute"
         self.rotary_embeddings = None
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.max_position_embeddings = max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * max_position_embeddings - 1, self.attention_head_size)
         elif self.position_embedding_type == "rotary":
-            self.rotary_embeddings = RotaryEmbedding(dim=self.attention_head_size)
+            self.rotary_embeddings = SaProtRotaryEmbedding(dim=self.attention_head_size)
 
-        self.is_decoder = config.is_decoder
+        self.is_decoder = is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -336,11 +355,16 @@ class SaProtSelfAttention(nn.Module):
             outputs = outputs + (past_key_value,)
         return outputs
 
+
 class SaProtSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        hidden_size: int,
+        hidden_dropout_prob: float,
+    ):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.dropout = nn.Dropout(hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -350,12 +374,28 @@ class SaProtSelfOutput(nn.Module):
 
 
 class SaProtAttention(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        attention_probs_dropout_prob: float,
+        position_embedding_type: str,
+        layer_norm_eps: float,
+        hidden_dropout_prob: float,
+    ):
         super().__init__()
-        self.self = SaProtSelfAttention(config)
-        self.output = SaProtSelfOutput(config)
+        self.self = SaProtSelfAttention(
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            position_embedding_type=position_embedding_type,
+        )
+        self.output = SaProtSelfOutput(
+            hidden_size=hidden_size,
+            hidden_dropout_prob=hidden_dropout_prob,
+        )
         self.pruned_heads = set()
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
     def prune_heads(self, heads):
         if len(heads) == 0:
@@ -406,10 +446,15 @@ def gelu(x):
     """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
+
 class SaProtIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+    ):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dense = nn.Linear(hidden_size, intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -418,10 +463,15 @@ class SaProtIntermediate(nn.Module):
 
 
 class SaProtOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        intermediate_size: int,
+        hidden_size: int,
+        hidden_dropout_prob: float,
+    ):
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dense = nn.Linear(intermediate_size, hidden_size)
+        self.dropout = nn.Dropout(hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -431,20 +481,51 @@ class SaProtOutput(nn.Module):
 
 
 class SaProtLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        attention_probs_dropout_prob: float,
+        position_embedding_type: str,
+        layer_norm_eps: float,
+        hidden_dropout_prob: float,
+        intermediate_size: int,
+        is_decoder: bool = False,
+        add_cross_attention: bool = False,
+    ):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = SaProtAttention(config)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
+        self.attention = SaProtAttention(
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            position_embedding_type=position_embedding_type,
+            layer_norm_eps=layer_norm_eps,
+            hidden_dropout_prob=hidden_dropout_prob,
+        )
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = SaProtAttention(config)
-        self.intermediate = SaProtIntermediate(config)
-        self.output = SaProtOutput(config)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.crossattention = SaProtAttention(
+                hidden_size=hidden_size,
+                num_attention_heads=num_attention_heads,
+                attention_probs_dropout_prob=attention_probs_dropout_prob,
+                position_embedding_type=position_embedding_type,
+                layer_norm_eps=layer_norm_eps,
+                hidden_dropout_prob=hidden_dropout_prob,
+            )
+        self.intermediate = SaProtIntermediate(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+        )
+        self.output = SaProtOutput(
+            intermediate_size=intermediate_size,
+            hidden_size=hidden_size,
+            hidden_dropout_prob=hidden_dropout_prob,
+        )
+        self.LayerNorm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
 
     def forward(
         self,
@@ -517,12 +598,39 @@ class SaProtLayer(nn.Module):
 
 
 class SaProtEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_hidden_layers: int,
+        num_attention_heads: int,
+        attention_probs_dropout_prob: float,
+        position_embedding_type: str,
+        layer_norm_eps: float,
+        hidden_dropout_prob: float,
+        intermediate_size: int,
+        is_decoder: bool = False,
+        add_cross_attention: bool = False,
+    ):
         super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([SaProtLayer(config) for _ in range(config.num_hidden_layers)])
-        self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer = nn.ModuleList(
+            [
+                SaProtLayer(
+                    hidden_size=hidden_size,
+                    num_attention_heads=num_attention_heads,
+                    attention_probs_dropout_prob=attention_probs_dropout_prob,
+                    position_embedding_type=position_embedding_type,
+                    layer_norm_eps=layer_norm_eps,
+                    hidden_dropout_prob=hidden_dropout_prob,
+                    intermediate_size=intermediate_size,
+                    is_decoder=is_decoder,
+                    add_cross_attention=add_cross_attention,
+                )
+                for _ in range(num_hidden_layers)
+            ]
+        )
+        self.emb_layer_norm_after = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
         self.gradient_checkpointing = False
+        self.add_cross_attention = add_cross_attention
 
     def forward(
         self,
@@ -546,7 +654,7 @@ class SaProtEncoder(nn.Module):
                 use_cache = False
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = () if output_attentions and self.add_cross_attention else None
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -583,7 +691,7 @@ class SaProtEncoder(nn.Module):
                 next_decoder_cache = next_decoder_cache + (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
+                if self.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if self.emb_layer_norm_after:
@@ -613,12 +721,11 @@ class SaProtEncoder(nn.Module):
         )
 
 
-
 # Copied from transformers.models.bert.modeling_bert.BertPooler
 class SaProtPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self, hidden_size: int):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(hidden_size, hidden_size)
         self.activation = nn.Tanh()
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -628,6 +735,7 @@ class SaProtPooler(nn.Module):
         pooled_output = self.dense(first_token_tensor)
         pooled_output = self.activation(pooled_output)
         return pooled_output
+
 
 # Adapted from transformers.modeling_utils.ModuleUtilsMixin.get_extended_attention_mask
 def get_extended_attention_mask(attention_mask: torch.Tensor, input_shape: Tuple[int], dtype: torch.float):
@@ -639,7 +747,7 @@ def get_extended_attention_mask(attention_mask: torch.Tensor, input_shape: Tuple
         raise ValueError(
             f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
         )
-    
+
     # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
     # masked positions, this operation will create a tensor which is 0.0 for
     # positions we want to attend and the dtype's smallest value for masked positions.
@@ -652,15 +760,53 @@ def get_extended_attention_mask(attention_mask: torch.Tensor, input_shape: Tuple
 
 # Adapted from transformers.models.esm.modeling_esm.EsmModel
 class SaProtProteinEncoder(nn.Module):
-    def __init__(self, config: EvollaProteinEncoderConfig, add_pooling_layer=False):
+    def __init__(
+        self,
+        vocab_size: int,
+        mask_token_id: int,
+        pad_token_id: int,
+        hidden_size: int,
+        num_hidden_layers: int,
+        num_attention_heads: int,
+        intermediate_size: int,
+        hidden_dropout_prob: float,
+        attention_probs_dropout_prob: float,
+        max_position_embeddings: int,
+        layer_norm_eps: float,
+        position_embedding_type: str,
+        emb_layer_norm_before: bool,
+        token_dropout: bool,
+        add_pooling_layer: bool = False,
+    ):
         super().__init__()
-        self.config = config
 
-        self.embeddings = SaProtEmbeddings(config)
-        self.encoder = SaProtEncoder(config)
-    
-        self.pooler = SaProtPooler(config) if add_pooling_layer else None
-    
+        self.embeddings = SaProtEmbeddings(
+            vocab_size=vocab_size,
+            mask_token_id=mask_token_id,
+            pad_token_id=pad_token_id,
+            hidden_size=hidden_size,
+            emb_layer_norm_before=emb_layer_norm_before,
+            layer_norm_eps=layer_norm_eps,
+            hidden_dropout_prob=hidden_dropout_prob,
+            max_position_embeddings=max_position_embeddings,
+            token_dropout=token_dropout,
+            position_embedding_type=position_embedding_type,
+        )
+        self.encoder = SaProtEncoder(
+            hidden_size=hidden_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            position_embedding_type=position_embedding_type,
+            layer_norm_eps=layer_norm_eps,
+            hidden_dropout_prob=hidden_dropout_prob,
+            intermediate_size=intermediate_size,
+            is_decoder=False,
+            add_cross_attention=False,
+        )
+
+        self.pooler = SaProtPooler(hidden_size=hidden_size) if add_pooling_layer else None
+
     @property
     def dtype(self) -> torch.dtype:
         """
@@ -680,9 +826,10 @@ class SaProtProteinEncoder(nn.Module):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = get_extended_attention_mask(attention_mask, input_shape, dtype=self.dtype)
+        extended_attention_mask: torch.Tensor = get_extended_attention_mask(
+            attention_mask, input_shape, dtype=self.dtype
+        )
 
-        
         embedding_output = self.embeddings(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -696,11 +843,10 @@ class SaProtProteinEncoder(nn.Module):
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
-        
+
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
