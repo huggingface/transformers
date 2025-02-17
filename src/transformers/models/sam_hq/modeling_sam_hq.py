@@ -1155,7 +1155,7 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        intermediate_embeddings: torch.Tensor,
+        intermediate_embeddings: List[torch.Tensor],
         output_attentions: Optional[bool] = None,
         attention_similarity: torch.Tensor = None,
         target_embedding: torch.Tensor = None,

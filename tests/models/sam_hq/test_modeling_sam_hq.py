@@ -190,6 +190,7 @@ class SamHQModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
+        
 
         return config, pixel_values
 
@@ -305,6 +306,7 @@ class SamHQModelTester:
         return config, inputs_dict
 
 
+
 @require_torch
 class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
@@ -337,22 +339,13 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = SamHQModelTester(self)
-        self.vision_config_tester = ConfigTester(self, config_class=SamHQVisionConfig, has_text_modality=False)
-        self.prompt_encoder_config_tester = ConfigTester(
-            self,
-            config_class=SamHQPromptEncoderConfig,
-            has_text_modality=False,
-            num_attention_heads=12,
-            num_hidden_layers=2,
-        )
-        self.mask_decoder_config_tester = ConfigTester(
-            self, config_class=SamHQMaskDecoderConfig, has_text_modality=False
+        common_properties = ["initializer_range"]
+        self.config_tester = ConfigTester(
+            self, config_class=SamHQConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):
-        self.vision_config_tester.run_common_tests()
-        self.prompt_encoder_config_tester.run_common_tests()
-        self.mask_decoder_config_tester.run_common_tests()
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="SAM-HQ's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
