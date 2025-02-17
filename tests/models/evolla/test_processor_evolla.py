@@ -47,9 +47,9 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
+        protein_tokenizer = EsmTokenizer.from_pretrained("westlake-repl/SaProt_35M_AF2")
         tokenizer = LlamaTokenizerFast.from_pretrained(
-            "/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct"
+            "meta-llama/Meta-Llama-3-8B-Instruct"
         )
 
         processor = EvollaProcessor(protein_tokenizer, tokenizer)

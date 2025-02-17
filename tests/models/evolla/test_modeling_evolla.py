@@ -340,7 +340,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class EvollaModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
-        return EvollaProcessor.from_pretrained("/zhouxibin/workspaces/transformers/evolla-base", revision="refs/pr/11")
+        return EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-hf", revision="refs/pr/11")
 
     @require_bitsandbytes
     @slow
@@ -364,7 +364,7 @@ class EvollaModelIntegrationTest(TestCasePlus):
             bnb_4bit_compute_dtype="float16",
         )
         model = EvollaForProteinText2Text.from_pretrained(
-            "/zhouxibin/workspaces/transformers/evolla-base",
+            "westlake-repl/Evolla-10B-hf",
             quantization_config=quantization_config,
             device_map="auto",
         )

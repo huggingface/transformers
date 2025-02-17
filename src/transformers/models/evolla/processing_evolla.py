@@ -503,7 +503,7 @@ class EvollaProcessor2(ProcessorMixin):
         Example:
 
         ```python
-        checkpoint = "westlake-repl/Evolla-10B"
+        checkpoint = "westlake-repl/Evolla-10B-hf"
         processor = AutoProcessor.from_pretrained(checkpoint)
         url = "https://hips.hearstapps.com/hmg-prod/images/cute-photos-of-cats-in-grass-1593184777.jpg"
         img = processor.image_processor.fetch_images([url])[0]
