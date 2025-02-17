@@ -53,7 +53,7 @@ from ...utils import (
     is_torchvision_v2_available,
     logging,
 )
-from .image_processing_qwen2_5_vl import smart_resize
+from .image_processing_qwen2_5_vl_fast import smart_resize
 
 
 if is_torchvision_v2_available():
