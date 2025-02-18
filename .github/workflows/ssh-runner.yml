@@ -5,7 +5,7 @@ on:
     inputs:
       runner_type:
         description: 'Type of runner to test (a10 or t4)'
-        required: true 
+        required: true
       docker_image:
         description: 'Name of the Docker image'
         required: true
@@ -15,15 +15,14 @@ on:
 
 env:
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  HF_HOME: /mnt/cache 
-  TRANSFORMERS_IS_CI: yes 
-  OMP_NUM_THREADS: 8 
-  MKL_NUM_THREADS: 8 
-  RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`. 
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }} 
-  TF_FORCE_GPU_ALLOW_GROWTH: true 
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`.
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
-  RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
   get_runner:
@@ -78,7 +77,7 @@ jobs:
       - name: Show installed libraries and their versions
         working-directory: /transformers
         run: pip freeze
-      
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi

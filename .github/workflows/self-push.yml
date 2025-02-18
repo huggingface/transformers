@@ -24,7 +24,6 @@ env:
   MKL_NUM_THREADS: 8
   PYTEST_TIMEOUT: 60
   TF_FORCE_GPU_ALLOW_GROWTH: true
-  RUN_PT_TF_CROSS_TESTS: 1
   CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
@@ -293,7 +292,7 @@ jobs:
 
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
-          
+
       - name: Update clone using environment variables
         working-directory: /transformers
         run: |
@@ -406,7 +405,7 @@ jobs:
 
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
-          
+
       - name: Update clone using environment variables
         working-directory: /workspace/transformers
         run: |
@@ -516,7 +515,7 @@ jobs:
 
           echo "$machine_type"
           echo "machine_type=$machine_type" >> $GITHUB_ENV
-          
+
       - name: Update clone using environment variables
         working-directory: /workspace/transformers
         run: |
@@ -648,6 +647,6 @@ jobs:
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
           pip install huggingface_hub
-          pip install slack_sdk 
+          pip install slack_sdk
           pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"

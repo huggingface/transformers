@@ -33,7 +33,7 @@ limitations under the License.
 * 实现新的模型。
 * 为示例或文档做贡献。
 
-如果你不知道从哪里开始，有一个特别的 [Good First Issue](https://github.com/huggingface/transformers/contribute) 列表。它会列出一些适合初学者的开放的 issues，并帮助你开始为开源项目做贡献。只需要在你想要处理的 issue 下发表评论就行。 
+如果你不知道从哪里开始，有一个特别的 [Good First Issue](https://github.com/huggingface/transformers/contribute) 列表。它会列出一些适合初学者的开放的 issues，并帮助你开始为开源项目做贡献。只需要在你想要处理的 issue 下发表评论就行。
 
 如果想要稍微更有挑战性的内容，你也可以查看 [Good Second Issue](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue) 列表。总的来说，如果你觉得自己知道该怎么做，就去做吧，我们会帮助你达到目标的！🚀
 
@@ -139,7 +139,7 @@ python src/transformers/commands/transformers_cli.py env
    ```
 
    如果在虚拟环境中已经安装了 🤗 Transformers，请先使用 `pip uninstall transformers` 卸载它，然后再用 `-e` 参数以可编辑模式重新安装。
-   
+
    根据你的操作系统，以及 Transformers 的可选依赖项数量的增加，可能会在执行此命令时出现失败。如果出现这种情况，请确保已经安装了你想使用的深度学习框架（PyTorch, TensorFlow 和 Flax），然后执行以下操作：
 
    ```bash
@@ -187,7 +187,7 @@ python src/transformers/commands/transformers_cli.py env
    想要了解有关这些检查及如何解决相关问题的更多信息，请阅读 [检查 Pull Request](https://huggingface.co/docs/transformers/pr_checks) 指南。
 
    如果你修改了 `docs/source` 目录下的文档，请确保文档仍然能够被构建。这个检查也会在你创建 PR 时在 CI 中运行。如果要进行本地检查，请确保安装了文档构建工具：
-   
+
    ```bash
    pip install ".[docs]"
    ```
@@ -282,7 +282,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 和时间较长的测试一样，还有其他环境变量在测试过程中，在默认情况下是未启用的：
 - `RUN_CUSTOM_TOKENIZERS`: 启用自定义分词器的测试。
 - `RUN_PT_FLAX_CROSS_TESTS`: 启用 PyTorch + Flax 整合的测试。
-- `RUN_PT_TF_CROSS_TESTS`: 启用 TensorFlow + PyTorch 整合的测试。
 
 更多环境变量和额外信息可以在 [testing_utils.py](src/transformers/testing_utils.py) 中找到。
 

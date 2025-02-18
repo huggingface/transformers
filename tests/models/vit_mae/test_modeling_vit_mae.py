@@ -204,22 +204,6 @@ class ViTMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
-    # overwrite from common since ViTMAEForPretraining has random masking, we need to fix the noise
-    # to generate masks during test
-    def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
-        # make masks reproducible
-        np.random.seed(2)
-
-        num_patches = int((pt_model.config.image_size // pt_model.config.patch_size) ** 2)
-        noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
-        pt_noise = torch.from_numpy(noise)
-
-        # Add `noise` argument.
-        # PT inputs will be prepared in `super().check_pt_tf_models()` with this added `noise` argument
-        pt_inputs_dict["noise"] = pt_noise
-
-        super().check_pt_tf_models(tf_model, pt_model, pt_inputs_dict)
-
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

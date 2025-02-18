@@ -28,7 +28,6 @@ COMMON_ENV_VARIABLES = {
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
-    "RUN_PT_TF_CROSS_TESTS": False,
     "RUN_PT_FLAX_CROSS_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
@@ -177,15 +176,6 @@ class CircleCIJob:
 
 
 # JOBS
-torch_and_tf_job = CircleCIJob(
-    "torch_and_tf",
-    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    additional_env={"RUN_PT_TF_CROSS_TESTS": True},
-    marker="is_pt_tf_cross_test",
-    pytest_options={"rA": None, "durations": 0},
-)
-
-
 torch_and_flax_job = CircleCIJob(
     "torch_and_flax",
     additional_env={"RUN_PT_FLAX_CROSS_TESTS": True},

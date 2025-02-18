@@ -272,22 +272,6 @@ class TFViTMAEModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
     # to generate masks during test
-    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-        # make masks reproducible
-        np.random.seed(2)
-
-        num_patches = int((tf_model.config.image_size // tf_model.config.patch_size) ** 2)
-        noise = np.random.uniform(size=(self.model_tester.batch_size, num_patches))
-        tf_noise = tf.constant(noise)
-
-        # Add `noise` argument.
-        # PT inputs will be prepared in `super().check_pt_tf_models()` with this added `noise` argument
-        tf_inputs_dict["noise"] = tf_noise
-
-        super().check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
-
-    # overwrite from common since TFViTMAEForPretraining has random masking, we need to fix the noise
-    # to generate masks during test
     def test_keras_save_load(self):
         # make mask reproducible
         np.random.seed(2)

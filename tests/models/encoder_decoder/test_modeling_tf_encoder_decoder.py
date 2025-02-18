@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import copy
 import os
 import tempfile
 import unittest
@@ -607,70 +606,6 @@ class TFEncoderDecoderMixin:
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and tf is {diff} (>= {tol}).")
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        config_inputs_dict = self.prepare_config_and_inputs()
-        labels = config_inputs_dict.pop("decoder_token_labels")
-
-        # Keep only common arguments
-        arg_names = [
-            "config",
-            "input_ids",
-            "attention_mask",
-            "decoder_config",
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            "encoder_hidden_states",
-        ]
-        config_inputs_dict = {k: v for k, v in config_inputs_dict.items() if k in arg_names}
-
-        config = config_inputs_dict.pop("config")
-        decoder_config = config_inputs_dict.pop("decoder_config")
-
-        # Output all for aggressive testing
-        config.output_hidden_states = True
-        decoder_config.output_hidden_states = True
-        # All models tested in this file have attentions
-        config.output_attentions = True
-        decoder_config.output_attentions = True
-
-        tf_inputs_dict = config_inputs_dict
-        # `encoder_hidden_states` is not used in model call/forward
-        del tf_inputs_dict["encoder_hidden_states"]
-
-        # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
-        # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
-        for k in ["attention_mask", "decoder_attention_mask"]:
-            attention_mask = tf_inputs_dict[k]
-
-            # Make sure no all 0s attention masks - to avoid failure at this moment.
-            # Put `1` at the beginning of sequences to make it still work when combining causal attention masks.
-            # TODO: remove this line once a fix regarding large negative values for attention mask is done.
-            attention_mask = tf.concat(
-                [tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], axis=-1
-            )
-            tf_inputs_dict[k] = attention_mask
-
-        tf_inputs_dict_with_labels = copy.copy(tf_inputs_dict)
-        tf_inputs_dict_with_labels["labels"] = labels
-
-        self.assertTrue(decoder_config.cross_attention_hidden_size is None)
-
-        # Original test: check without `labels` and  without `enc_to_dec_proj` projection
-        self.assertTrue(config.hidden_size == decoder_config.hidden_size)
-        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
-        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
-
-        # check with `labels`
-        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
-        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
-
-        # check `enc_to_dec_proj` work as expected
-        decoder_config.hidden_size = decoder_config.hidden_size * 2
-        self.assertTrue(config.hidden_size != decoder_config.hidden_size)
-        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
-        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
 
     def test_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()

@@ -176,6 +176,3 @@ class BlipTextModelTest(TFModelTesterMixin, unittest.TestCase):
         model_name = "Salesforce/blip-vqa-base"
         model = TFBlipTextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)

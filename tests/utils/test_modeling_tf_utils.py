@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import inspect
 import json
 import os
 import random
@@ -24,7 +23,7 @@ import tempfile
 import unittest
 import unittest.mock as mock
 
-from huggingface_hub import HfFolder, Repository, snapshot_download
+from huggingface_hub import HfFolder, snapshot_download
 from requests.exceptions import HTTPError
 
 from transformers import is_tf_available, is_torch_available
@@ -35,11 +34,9 @@ from transformers.testing_utils import (  # noqa: F401
     CaptureLogger,
     TemporaryHubRepo,
     _tf_gpu_memory_limit,
-    is_pt_tf_cross_test,
     is_staging_test,
     require_safetensors,
     require_tf,
-    require_torch,
     slow,
 )
 from transformers.utils import (
@@ -61,14 +58,9 @@ if is_tf_available():
 
     from transformers import (
         BertConfig,
-        PreTrainedModel,
-        PushToHubCallback,
         RagRetriever,
-        TFAutoModel,
-        TFBertForMaskedLM,
         TFBertForSequenceClassification,
         TFBertModel,
-        TFPreTrainedModel,
         TFRagModel,
     )
     from transformers.modeling_tf_utils import keras, tf_shard_checkpoint, unpack_inputs
@@ -91,7 +83,7 @@ if is_tf_available():
                 print(e)
 
 if is_torch_available():
-    from transformers import BertModel
+    pass
 
 
 @require_tf
@@ -240,34 +232,6 @@ class TFModelUtilsTest(unittest.TestCase):
     def test_sharded_checkpoint_transfer(self):
         # If this doesn't throw an error then the test passes
         TFBertForSequenceClassification.from_pretrained("ArthurZ/tiny-random-bert-sharded")
-
-    @is_pt_tf_cross_test
-    def test_checkpoint_sharding_local_from_pt(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-bert-sharded")
-            model = TFBertModel.from_pretrained(tmp_dir, from_pt=True)
-            # the model above is the same as the model below, just a sharded pytorch version.
-            ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-            for p1, p2 in zip(model.weights, ref_model.weights):
-                assert np.allclose(p1.numpy(), p2.numpy())
-
-    @is_pt_tf_cross_test
-    def test_checkpoint_loading_with_prefix_from_pt(self):
-        model = TFBertModel.from_pretrained(
-            "hf-internal-testing/tiny-random-bert", from_pt=True, load_weight_prefix="a/b"
-        )
-        ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert", from_pt=True)
-        for p1, p2 in zip(model.weights, ref_model.weights):
-            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-            self.assertTrue(p1.name.startswith("a/b/"))
-
-    @is_pt_tf_cross_test
-    def test_checkpoint_sharding_hub_from_pt(self):
-        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded", from_pt=True)
-        # the model above is the same as the model below, just a sharded pytorch version.
-        ref_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        for p1, p2 in zip(model.weights, ref_model.weights):
-            assert np.allclose(p1.numpy(), p2.numpy())
 
     def test_shard_checkpoint(self):
         # This is the model we will use, total size 340,000 bytes.
@@ -437,16 +401,6 @@ class TFModelUtilsTest(unittest.TestCase):
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
-    @is_pt_tf_cross_test
-    @require_safetensors
-    def test_bfloat16_torch_loading(self):
-        # Assert that neither of these raise an error - both repos contain bfloat16 tensors
-        model1 = TFAutoModel.from_pretrained("Rocketknight1/tiny-random-gpt2-bfloat16-pt", from_pt=True)
-        model2 = TFAutoModel.from_pretrained("Rocketknight1/tiny-random-gpt2-bfloat16")  # PT-format safetensors
-        # Check that PT and safetensors loading paths end up with the same values
-        for weight1, weight2 in zip(model1.weights, model2.weights):
-            self.assertTrue(tf.reduce_all(weight1 == weight2))
-
     @slow
     def test_save_pretrained_signatures(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -522,36 +476,6 @@ class TFModelUtilsTest(unittest.TestCase):
             for p1, p2 in zip(model.weights, new_model.weights):
                 self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
-    @is_pt_tf_cross_test
-    def test_safetensors_save_and_load_pt_to_tf(self):
-        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            pt_model.save_pretrained(tmp_dir, safe_serialization=True)
-            # Check we have a model.safetensors file
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
-
-            new_model = TFBertModel.from_pretrained(tmp_dir)
-
-            # Check models are equal
-            for p1, p2 in zip(model.weights, new_model.weights):
-                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-
-    @is_pt_tf_cross_test
-    def test_sharded_safetensors_save_and_load_pt_to_tf(self):
-        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        pt_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            pt_model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="150kB")
-            # Check we have a safetensors shard index file
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
-
-            new_model = TFBertModel.from_pretrained(tmp_dir)
-
-            # Check models are equal
-            for p1, p2 in zip(model.weights, new_model.weights):
-                self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-
     @require_safetensors
     def test_safetensors_load_from_hub(self):
         tf_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -579,19 +503,6 @@ class TFModelUtilsTest(unittest.TestCase):
             new_model = TFBertModel.from_pretrained(tmp_dir)
 
         for p1, p2 in zip(model.weights, new_model.weights):
-            self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
-
-    @require_safetensors
-    @is_pt_tf_cross_test
-    def test_safetensors_tf_from_torch(self):
-        hub_model = TFBertModel.from_pretrained("hf-internal-testing/tiny-bert-tf-only")
-        model = BertModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, safe_serialization=True)
-            new_model = TFBertModel.from_pretrained(tmp_dir)
-
-        for p1, p2 in zip(hub_model.weights, new_model.weights):
             self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
     @require_safetensors
@@ -728,37 +639,6 @@ class TFModelPushToHubTester(unittest.TestCase):
                     models_equal = False
                     break
             self.assertTrue(models_equal)
-
-    @is_pt_tf_cross_test
-    def test_push_to_hub_callback(self):
-        with TemporaryHubRepo(token=self._token) as tmp_repo:
-            config = BertConfig(
-                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-            )
-            model = TFBertForMaskedLM(config)
-            model.compile()
-
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                push_to_hub_callback = PushToHubCallback(
-                    output_dir=tmp_dir,
-                    hub_model_id=tmp_repo.repo_id,
-                    hub_token=self._token,
-                )
-                model.fit(model.dummy_inputs, model.dummy_inputs, epochs=1, callbacks=[push_to_hub_callback])
-
-            new_model = TFBertForMaskedLM.from_pretrained(tmp_repo.repo_id)
-            models_equal = True
-            for p1, p2 in zip(model.weights, new_model.weights):
-                if not tf.math.reduce_all(p1 == p2):
-                    models_equal = False
-                    break
-            self.assertTrue(models_equal)
-
-            tf_push_to_hub_params = dict(inspect.signature(TFPreTrainedModel.push_to_hub).parameters)
-            tf_push_to_hub_params.pop("base_model_card_args")
-            pt_push_to_hub_params = dict(inspect.signature(PreTrainedModel.push_to_hub).parameters)
-            pt_push_to_hub_params.pop("deprecated_kwargs")
-            self.assertDictEaual(tf_push_to_hub_params, pt_push_to_hub_params)
 
     def test_push_to_hub_in_organization(self):
         with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:

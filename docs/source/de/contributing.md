@@ -284,7 +284,6 @@ Wie bei den langsamen Tests gibt es auch andere Umgebungsvariablen, die standard
 
 * `RUN_CUSTOM_TOKENIZERS`: Aktiviert Tests für benutzerdefinierte Tokenizer.
 * `RUN_PT_FLAX_CROSS_TESTS`: Aktiviert Tests für die Integration von PyTorch + Flax.
-* `RUN_PT_TF_CROSS_TESTS`: Aktiviert Tests für die Integration von TensorFlow + PyTorch.
 
 Weitere Umgebungsvariablen und zusätzliche Informationen finden Sie in der [testing_utils.py](src/transformers/testing_utils.py).
 

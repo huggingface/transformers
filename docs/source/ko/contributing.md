@@ -85,7 +85,7 @@ python src/transformers/commands/transformers_cli.py env
 3. 해당 기능의 사용법을 보여주는 *코드 스니펫*을 제공해 주세요.
 4. 기능과 관련된 논문이 있는 경우 링크를 포함해 주세요.
 
-이슈가 잘 작성되었다면 이슈가 생성된 순간, 이미 80% 정도의 작업이 완료된 것입니다. 
+이슈가 잘 작성되었다면 이슈가 생성된 순간, 이미 80% 정도의 작업이 완료된 것입니다.
 
 이슈를 제기하는 데 도움이 될 만한 [템플릿](https://github.com/huggingface/transformers/tree/main/templates)도 준비되어 있습니다.
 
@@ -140,7 +140,7 @@ python src/transformers/commands/transformers_cli.py env
    ```
 
    만약 이미 가상 환경에 🤗 Transformers가 설치되어 있다면, `-e` 플래그를 사용하여 설치하기 전에 `pip uninstall transformers`로 제거해주세요.
-   
+
    여러분의 운영체제에 따라서, 그리고 🤗 Transformers의 선택적 의존성의 수가 증가하면서, 이 명령이 실패할 수도 있습니다. 그럴 경우 사용하려는 딥러닝 프레임워크(PyTorch, TensorFlow, 그리고/또는 Flax)를 설치한 후 아래 명령을 실행해주세요:
 
    ```bash
@@ -188,7 +188,7 @@ python src/transformers/commands/transformers_cli.py env
    이러한 검사에 대해 자세히 알아보고 관련 문제를 해결하는 방법은 [Pull Request에 대한 검사](https://huggingface.co/docs/transformers/pr_checks) 가이드를 확인하세요.
 
    만약 `docs/source` 디렉터리 아래의 문서를 수정하는 경우, 문서가 빌드될 수 있는지 확인하세요. 이 검사는 Pull Request를 열 때도 CI에서 실행됩니다. 로컬 검사를 실행하려면 문서 빌더를 설치해야 합니다:
-   
+
    ```bash
    pip install ".[docs]"
    ```
@@ -216,7 +216,7 @@ python src/transformers/commands/transformers_cli.py env
    git fetch upstream
    git rebase upstream/main
    ```
-   
+
    변경 사항을 브랜치에 푸시하세요:
 
    ```bash
@@ -238,7 +238,7 @@ python src/transformers/commands/transformers_cli.py env
 ☐ 새로운 기능을 추가하는 경우, 해당 기능에 대한 테스트도 추가하세요.<br>
    - 새 모델을 추가하는 경우, `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`을 사용하여 일반적인 테스트를 활성화하세요.
    - 새 `@slow` 테스트를 추가하는 경우, 다음 명령으로 테스트를 통과하는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
-   - 새 토크나이저를 추가하는 경우, 테스트를 작성하고 다음 명령으로 테스트를 통과하는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py`. 
+   - 새 토크나이저를 추가하는 경우, 테스트를 작성하고 다음 명령으로 테스트를 통과하는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py`.
    - CircleCI에서는 느린 테스트를 실행하지 않지만, GitHub Actions에서는 매일 밤 실행됩니다!<br>
 
 ☐ 모든 공개 메소드는 유용한 기술문서를 가져야 합니다 (예를 들어 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py) 참조).<br>
@@ -283,7 +283,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 느린 테스트와 마찬가지로, 다음과 같이 테스트 중에 기본적으로 활성화되지 않는 다른 환경 변수도 있습니다:
 - `RUN_CUSTOM_TOKENIZERS`: 사용자 정의 토크나이저 테스트를 활성화합니다.
 - `RUN_PT_FLAX_CROSS_TESTS`: PyTorch + Flax 통합 테스트를 활성화합니다.
-- `RUN_PT_TF_CROSS_TESTS`: TensorFlow + PyTorch 통합 테스트를 활성화합니다.
 
 더 많은 환경 변수와 추가 정보는 [testing_utils.py](src/transformers/testing_utils.py)에서 찾을 수 있습니다.
 

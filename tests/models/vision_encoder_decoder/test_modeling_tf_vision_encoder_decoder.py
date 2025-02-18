@@ -16,7 +16,6 @@
 
 from __future__ import annotations
 
-import copy
 import os
 import tempfile
 import unittest
@@ -25,14 +24,10 @@ import numpy as np
 
 from transformers import is_tf_available, is_torch_available, is_vision_available
 from transformers.testing_utils import (
-    is_pt_tf_cross_test,
     require_tf,
-    require_torch,
     require_vision,
     slow,
-    torch_device,
 )
-from transformers.utils.generic import ModelOutput
 
 from ...test_modeling_tf_common import floats_tensor, ids_tensor
 from ..gpt2.test_modeling_tf_gpt2 import TFGPT2ModelTester
@@ -56,9 +51,7 @@ if is_tf_available():
     from transformers.modeling_tf_outputs import TFBaseModelOutput
 
 if is_torch_available():
-    import torch
-
-    from transformers import GPT2LMHeadModel, VisionEncoderDecoderModel, ViTModel
+    pass
 
 if is_vision_available():
     from PIL import Image
@@ -318,185 +311,6 @@ class TFVisionEncoderDecoderMixin:
             tuple(generated_output.shape.as_list()), (pixel_values.shape[0],) + (decoder_config.max_length,)
         )
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
-
-        Args:
-            model_class: The class of the model that is currently testing. For example, `TFBertModel`,
-                TFBertForMaskedLM`, `TFBertForSequenceClassification`, etc. Mainly used for providing more informative
-                error messages.
-            name (`str`): The name of the output. For example, `output.hidden_states`, `output.attentions`, etc.
-            attributes (`Tuple[str]`): The names of the output's element if the output is a tuple/list with each element
-                being a named field in the output.
-        """
-
-        self.assertEqual(type(name), str)
-        if attributes is not None:
-            self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
-
-        # Allow `ModelOutput` (e.g. `CLIPOutput` has `text_model_output` and `vision_model_output`).
-        if isinstance(tf_outputs, ModelOutput):
-            self.assertTrue(
-                isinstance(pt_outputs, ModelOutput),
-                f"{name}: `pt_outputs` should an instance of `ModelOutput` when `tf_outputs` is",
-            )
-
-            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
-            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
-
-            self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
-
-            # convert to the case of `tuple`
-            # appending each key to the current (string) `names`
-            attributes = tuple([f"{name}.{k}" for k in tf_keys])
-            self.check_pt_tf_outputs(
-                tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
-            )
-
-        # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
-        elif type(tf_outputs) in [tuple, list]:
-            self.assertEqual(type(tf_outputs), type(pt_outputs), f"{name}: Output types differ between TF and PyTorch")
-            self.assertEqual(len(tf_outputs), len(pt_outputs), f"{name}: Output lengths differ between TF and PyTorch")
-
-            if attributes is not None:
-                # case 1: each output has assigned name (e.g. a tuple form of a `ModelOutput`)
-                self.assertEqual(
-                    len(attributes),
-                    len(tf_outputs),
-                    f"{name}: The tuple `names` should have the same length as `tf_outputs`",
-                )
-            else:
-                # case 2: each output has no assigned name (e.g. hidden states of each layer) -> add an index to `names`
-                attributes = tuple([f"{name}_{idx}" for idx in range(len(tf_outputs))])
-
-            for tf_output, pt_output, attr in zip(tf_outputs, pt_outputs, attributes):
-                self.check_pt_tf_outputs(tf_output, pt_output, model_class, tol=tol, name=attr)
-
-        elif isinstance(tf_outputs, tf.Tensor):
-            self.assertTrue(
-                isinstance(pt_outputs, torch.Tensor), f"{name}: `pt_outputs` should a tensor when `tf_outputs` is"
-            )
-
-            tf_outputs = tf_outputs.numpy()
-            pt_outputs = pt_outputs.detach().to("cpu").numpy()
-
-            self.assertEqual(
-                tf_outputs.shape, pt_outputs.shape, f"{name}: Output shapes differ between TF and PyTorch"
-            )
-
-            # deal with NumPy's scalars to make replacing nan values by 0 work.
-            if np.isscalar(tf_outputs):
-                tf_outputs = np.array([tf_outputs])
-                pt_outputs = np.array([pt_outputs])
-
-            tf_nans = np.isnan(tf_outputs)
-            pt_nans = np.isnan(pt_outputs)
-
-            pt_outputs[tf_nans] = 0
-            tf_outputs[tf_nans] = 0
-            pt_outputs[pt_nans] = 0
-            tf_outputs[pt_nans] = 0
-
-            max_diff = np.amax(np.abs(tf_outputs - pt_outputs))
-            self.assertLessEqual(max_diff, tol, f"{name}: Difference between torch and tf is {max_diff} (>= {tol}).")
-        else:
-            raise ValueError(
-                "`tf_outputs` should be an instance of `tf.Tensor`, a `tuple`, or an instance of `tf.Tensor`. Got"
-                f" {type(tf_outputs)} instead."
-            )
-
-    def prepare_pt_inputs_from_tf_inputs(self, tf_inputs_dict):
-        pt_inputs_dict = {}
-        for name, key in tf_inputs_dict.items():
-            if isinstance(key, bool):
-                pt_inputs_dict[name] = key
-            elif name == "input_values":
-                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-            elif name == "pixel_values":
-                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-            elif name == "input_features":
-                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-            # other general float inputs
-            elif tf_inputs_dict[name].dtype.is_floating:
-                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.float32)
-            else:
-                pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
-
-        return pt_inputs_dict
-
-    def check_pt_tf_models(self, tf_model, pt_model, tf_inputs_dict):
-        pt_inputs_dict = self.prepare_pt_inputs_from_tf_inputs(tf_inputs_dict)
-
-        # send pytorch inputs to the correct device
-        pt_inputs_dict = {
-            k: v.to(device=torch_device) if isinstance(v, torch.Tensor) else v for k, v in pt_inputs_dict.items()
-        }
-
-        # send pytorch model to the correct device
-        pt_model.to(torch_device)
-
-        # Check predictions on first output (logits/hidden-states) are close enough given low-level computational differences
-        pt_model.eval()
-
-        with torch.no_grad():
-            pt_outputs = pt_model(**pt_inputs_dict)
-        tf_outputs = tf_model(tf_inputs_dict)
-
-        # tf models returned loss is usually a tensor rather than a scalar.
-        # (see `hf_compute_loss`: it uses `keras.losses.Reduction.NONE`)
-        # Change it here to a scalar to match PyTorch models' loss
-        tf_loss = getattr(tf_outputs, "loss", None)
-        if tf_loss is not None:
-            tf_outputs.loss = tf.math.reduce_mean(tf_loss)
-
-        self.check_pt_tf_outputs(tf_outputs, pt_outputs, type(tf_model))
-
-    def check_pt_tf_equivalence(self, tf_model, pt_model, tf_inputs_dict):
-        """Wrap `check_pt_tf_models` to further check PT -> TF again"""
-
-        self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
-
-        # PT -> TF
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            pt_model.save_pretrained(tmpdirname)
-            tf_model = TFVisionEncoderDecoderModel.from_pretrained(tmpdirname)
-
-        self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict)
-
-    def check_pt_to_tf_equivalence(self, config, decoder_config, tf_inputs_dict):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
-        # Output all for aggressive testing
-        encoder_decoder_config.output_hidden_states = True
-        # All models tested in this file have attentions
-        encoder_decoder_config.output_attentions = True
-
-        pt_model = VisionEncoderDecoderModel(encoder_decoder_config)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            pt_model.save_pretrained(tmpdirname)
-            tf_model = TFVisionEncoderDecoderModel.from_pretrained(tmpdirname)
-
-        self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
-
-    def check_tf_to_pt_equivalence(self, config, decoder_config, tf_inputs_dict):
-        encoder_decoder_config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
-        # Output all for aggressive testing
-        encoder_decoder_config.output_hidden_states = True
-        # TODO: A generalizable way to determine this attribute
-        encoder_decoder_config.output_attentions = True
-
-        tf_model = TFVisionEncoderDecoderModel(encoder_decoder_config)
-        # Make sure model is built before saving
-        tf_model(**tf_inputs_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            tf_model.save_pretrained(tmpdirname, safe_serialization=False)
-            pt_model = VisionEncoderDecoderModel.from_pretrained(
-                tmpdirname, from_tf=True, attn_implementation=tf_model.config._attn_implementation
-            )
-
-        self.check_pt_tf_equivalence(tf_model, pt_model, tf_inputs_dict)
-
     def test_encoder_decoder_model(self):
         config_inputs_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model(**config_inputs_dict)
@@ -532,69 +346,6 @@ class TFVisionEncoderDecoderMixin:
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and tf is {diff} (>= {tol}).")
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        config_inputs_dict = self.prepare_config_and_inputs()
-        labels = config_inputs_dict.pop("decoder_token_labels")
-
-        # Keep only common arguments
-        arg_names = [
-            "config",
-            "pixel_values",
-            "decoder_config",
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            "encoder_hidden_states",
-        ]
-        config_inputs_dict = {k: v for k, v in config_inputs_dict.items() if k in arg_names}
-
-        config = config_inputs_dict.pop("config")
-        decoder_config = config_inputs_dict.pop("decoder_config")
-
-        # Output all for aggressive testing
-        config.output_hidden_states = True
-        decoder_config.output_hidden_states = True
-        # All models tested in this file have attentions
-        config.output_attentions = True
-        decoder_config.output_attentions = True
-
-        tf_inputs_dict = config_inputs_dict
-        # `encoder_hidden_states` is not used in model call/forward
-        del tf_inputs_dict["encoder_hidden_states"]
-
-        # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
-        # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
-        for k in ["decoder_attention_mask"]:
-            attention_mask = tf_inputs_dict[k]
-
-            # Make sure no all 0s attention masks - to avoid failure at this moment.
-            # Put `1` at the beginning of sequences to make it still work when combining causal attention masks.
-            # TODO: remove this line once a fix regarding large negative values for attention mask is done.
-            attention_mask = tf.concat(
-                [tf.ones_like(attention_mask[:, :1], dtype=attention_mask.dtype), attention_mask[:, 1:]], axis=-1
-            )
-            tf_inputs_dict[k] = attention_mask
-
-        tf_inputs_dict_with_labels = copy.copy(tf_inputs_dict)
-        tf_inputs_dict_with_labels["labels"] = labels
-
-        self.assertTrue(decoder_config.cross_attention_hidden_size is None)
-
-        # Original test: check without `labels` and  without `enc_to_dec_proj` projection
-        self.assertTrue(config.hidden_size == decoder_config.hidden_size)
-        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
-        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
-
-        # check with `labels`
-        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
-        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict_with_labels)
-
-        # check `enc_to_dec_proj` work as expected
-        decoder_config.hidden_size = decoder_config.hidden_size * 2
-        self.assertTrue(config.hidden_size != decoder_config.hidden_size)
-        self.check_pt_to_tf_equivalence(config, decoder_config, tf_inputs_dict)
-        self.check_tf_to_pt_equivalence(config, decoder_config, tf_inputs_dict)
 
     @slow
     def test_real_model_save_load_from_pretrained(self):
@@ -780,56 +531,6 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         max_diff = np.max(np.abs(logits_2.numpy() - logits_orig.numpy()))
         self.assertAlmostEqual(max_diff, 0.0, places=4)
-
-    @require_torch
-    @is_pt_tf_cross_test
-    def test_encoder_decoder_save_load_from_encoder_decoder_from_pt(self):
-        config = self.get_encoder_decoder_config_small()
-
-        # create two random ViT/GPT2 models for vit-gpt2 & initialize weights (+cross_attention weights)
-        encoder_pt = ViTModel(config.encoder).to(torch_device).eval()
-        decoder_pt = GPT2LMHeadModel(config.decoder).to(torch_device).eval()
-
-        encoder_decoder_pt = VisionEncoderDecoderModel(encoder=encoder_pt, decoder=decoder_pt).to(torch_device).eval()
-
-        pixel_values = floats_tensor(
-            [
-                13,
-                encoder_pt.config.num_channels,
-                encoder_pt.config.image_size,
-                encoder_pt.config.image_size,
-            ]
-        )
-        decoder_input_ids = ids_tensor([13, 1], decoder_pt.config.vocab_size)
-
-        pt_pixel_values = torch.tensor(pixel_values.numpy(), device=torch_device, dtype=torch.float)
-        pt_decoder_input_ids = torch.tensor(decoder_input_ids.numpy(), device=torch_device, dtype=torch.long)
-
-        logits_pt = encoder_decoder_pt(pixel_values=pt_pixel_values, decoder_input_ids=pt_decoder_input_ids).logits
-
-        # PyTorch => TensorFlow
-        with tempfile.TemporaryDirectory() as tmp_dirname_1, tempfile.TemporaryDirectory() as tmp_dirname_2:
-            encoder_decoder_pt.encoder.save_pretrained(tmp_dirname_1)
-            encoder_decoder_pt.decoder.save_pretrained(tmp_dirname_2)
-            encoder_decoder_tf = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                tmp_dirname_1, tmp_dirname_2
-            )
-
-        logits_tf = encoder_decoder_tf(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
-
-        max_diff = np.max(np.abs(logits_pt.detach().cpu().numpy() - logits_tf.numpy()))
-        self.assertAlmostEqual(max_diff, 0.0, places=3)
-
-        # Make sure `from_pretrained` following `save_pretrained` work and give the same result
-        # (See https://github.com/huggingface/transformers/pull/14016)
-        with tempfile.TemporaryDirectory() as tmp_dirname:
-            encoder_decoder_tf.save_pretrained(tmp_dirname, safe_serialization=False)
-            encoder_decoder_tf = TFVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
-
-            logits_tf_2 = encoder_decoder_tf(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids).logits
-
-            max_diff = np.max(np.abs(logits_tf_2.numpy() - logits_tf.numpy()))
-            self.assertAlmostEqual(max_diff, 0.0, places=3)
 
     @require_vision
     @slow

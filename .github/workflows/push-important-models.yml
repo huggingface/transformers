@@ -7,14 +7,13 @@ on:
 env:
   OUTPUT_SLACK_CHANNEL_ID: "C06L2SGMEEA"
   HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
-  HF_HOME: /mnt/cache 
-  TRANSFORMERS_IS_CI: yes 
-  OMP_NUM_THREADS: 8 
-  MKL_NUM_THREADS: 8 
-  RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`. 
-  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }} 
-  TF_FORCE_GPU_ALLOW_GROWTH: true 
-  RUN_PT_TF_CROSS_TESTS: 1
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access. # This token is created under the bot `hf-transformers-bot`.
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
 
 jobs:
   get_modified_models:
@@ -25,13 +24,13 @@ jobs:
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-      
+
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@3f54ebb830831fc121d3263c1857cfbdc310cdb9 #v42
         with:
           files: src/transformers/models/**
-      
+
       - name: Run step if only the files listed above change
         if: steps.changed-files.outputs.any_changed == 'true'
         id: set-matrix
@@ -60,41 +59,41 @@ jobs:
     if: ${{ needs.get_modified_models.outputs.matrix != '[]' && needs.get_modified_models.outputs.matrix != '' && fromJson(needs.get_modified_models.outputs.matrix)[0] != null }}
     strategy:
       fail-fast: false
-      matrix: 
+      matrix:
         model-name: ${{ fromJson(needs.get_modified_models.outputs.matrix) }}
 
     steps:
       - name: Check out code
         uses: actions/checkout@v4
-      
+
       - name: Install locally transformers & other libs
         run: |
           apt install sudo
           sudo -H pip install --upgrade pip
-          sudo -H pip uninstall -y transformers 
-          sudo -H pip install -U -e ".[testing]" 
+          sudo -H pip uninstall -y transformers
+          sudo -H pip install -U -e ".[testing]"
           MAX_JOBS=4 pip install flash-attn --no-build-isolation
           pip install bitsandbytes
-      
+
       - name: NVIDIA-SMI
         run: |
           nvidia-smi
-      
+
       - name: Show installed libraries and their versions
         run: pip freeze
-      
+
       - name: Run FA2 tests
         id: run_fa2_tests
         run:
           pytest -rsfE -m "flash_attn_test" --make-reports=${{ matrix.model-name }}_fa2_tests/ tests/${{ matrix.model-name }}/test_modeling_*
-      
+
       - name: "Test suite reports artifacts: ${{ matrix.model-name }}_fa2_tests"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.model-name }}_fa2_tests
           path: /transformers/reports/${{ matrix.model-name }}_fa2_tests
-      
+
       - name: Post to Slack
         if: always()
         uses: huggingface/hf-workflows/.github/actions/post-slack@main
@@ -103,13 +102,13 @@ jobs:
           title: 🤗 Results of the FA2 tests - ${{ matrix.model-name }}
           status: ${{ steps.run_fa2_tests.conclusion}}
           slack_token: ${{ secrets.CI_SLACK_BOT_TOKEN }}
-      
+
       - name: Run integration tests
         id: run_integration_tests
         if: always()
         run:
           pytest -rsfE -k "IntegrationTest"  --make-reports=tests_integration_${{ matrix.model-name }} tests/${{ matrix.model-name }}/test_modeling_*
-      
+
       - name: "Test suite reports artifacts: tests_integration_${{ matrix.model-name }}"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
@@ -119,7 +118,7 @@ jobs:
 
       - name: Post to Slack
         if: always()
-        uses: huggingface/hf-workflows/.github/actions/post-slack@main 
+        uses: huggingface/hf-workflows/.github/actions/post-slack@main
         with:
           slack_channel: ${{ env.OUTPUT_SLACK_CHANNEL_ID }}
           title: 🤗 Results of the Integration tests - ${{ matrix.model-name }}

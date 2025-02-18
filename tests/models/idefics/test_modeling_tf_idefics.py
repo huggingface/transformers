@@ -20,7 +20,7 @@ import unittest
 from importlib import import_module
 
 from transformers import IdeficsConfig, is_tf_available, is_vision_available
-from transformers.testing_utils import TestCasePlus, is_pt_tf_cross_test, require_tf, require_vision, slow
+from transformers.testing_utils import TestCasePlus, require_tf, require_vision, slow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -419,11 +419,6 @@ class TFIdeficsModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestC
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        self.has_attentions = False
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
