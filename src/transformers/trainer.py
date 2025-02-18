@@ -2443,7 +2443,11 @@ class Trainer:
                 )
 
         # Update the references
-        self.state.init_training_references(self, train_dataloader, max_steps, num_train_epochs, trial)
+        for attr in ("model","optimizer","lr_scheduler"):
+            setattr(self.callback_handler, attr, getattr(self, attr))
+        self.callback_handler.train_dataloader = train_dataloader
+
+        self.state.init_training_references(self, max_steps, num_train_epochs, trial)
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0).to(args.device)
