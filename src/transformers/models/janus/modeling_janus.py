@@ -2310,3 +2310,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
 
         return outputs
+
+
+__all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration"]
