@@ -1124,35 +1124,9 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = getattr(transformers_module, class_name, None)
-            if attribute_class is not None:
-                args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
-            else:
-                if attribute_name == "tokenizer":
-                    autoclass = transformers_module.AutoTokenizer
-                elif attribute_name == "image_processor":
-                    autoclass = transformers_module.AutoImageProcessor
-                elif attribute_name == "feature_extractor":
-                    autoclass = transformers_module.AutoFeatureExtractor
-                elif attribute_name == "config":
-                    autoclass = transformers_module.AutoConfig
-                else:
-                    raise ValueError(
-                        f"The {cls.__name__} class has {attribute_name}_class {class_name}"
-                        f"but we could not find this class in the Transformers root. We also cannot "
-                        f"find an autoclass for {attribute_name}, and so Transformers doesn't know how "
-                        f"to load it!"
-                    )
-                try:
-                    args.append(autoclass.from_pretrained(pretrained_model_name_or_path, **kwargs))
-                except:  # noqa
-                    raise ValueError(
-                        f"The {cls.__name__} class has {attribute_name}_class {class_name}"
-                        f"but we could not find this class in the Transformers root. We also could "
-                        f"not load it with {autoclass.__name__}, and so Transformers doesn't know how "
-                        f"to initialize this module! If {class_name} is a custom code component, we recommend "
-                        f"registering it via the {autoclass.__name__}.register() method to resolve this error."
-                    )
+                attribute_class = getattr(transformers_module, class_name)
+
+            args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
 
     @property
