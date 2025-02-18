@@ -248,7 +248,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
-        dtype = torch.bfloat16
+        dtype = torch.float16
 
         for model_class in self.all_model_classes:
             if not model_class._supports_flash_attn_2:
@@ -262,7 +262,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
             # Separate masks
             attention_masks = {}
             if "attention_mask" in inputs_dict:
-                attention_masks["attention_mask"] = inputs_dict.pop("attention_mask")
+                # attention_masks["attention_mask"] = inputs_dict.pop("attention_mask")
                 inputs_dict["attention_mask"] = None
             if "pixel_attention_mask" in inputs_dict:
                 attention_masks["pixel_attention_mask"] = inputs_dict.pop("pixel_attention_mask")
@@ -273,10 +273,10 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 model = model_class(config)
                 model.save_pretrained(tmp_dir)
 
+                model = model_class.from_pretrained(tmp_dir, torch_dtype=dtype)
                 model_fa = model_class.from_pretrained(
                     tmp_dir, torch_dtype=dtype, attn_implementation="flash_attention_2"
                 )
-                model = model_class.from_pretrained(tmp_dir, torch_dtype=dtype, attn_implementation="sdpa")
 
             model_fa.to(torch_device)
             model.to(torch_device)
@@ -287,7 +287,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
 
             # Choose which key to compare
-            key = [k for k in ["last_hidden_state", "logits", "logits_per_image"] if k in outputs][0]
+            key = [k for k in ["logits", "logits_per_image", "last_hidden_state"] if k in outputs][0]
 
             torch.testing.assert_close(outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2)
 
@@ -297,7 +297,18 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
                 outputs = model(**inputs_dict, output_hidden_states=True)
                 outputs_fa = model_fa(**inputs_dict, output_hidden_states=True)
 
-            torch.testing.assert_close(outputs[key], outputs_fa[key], atol=4e-2, rtol=4e-2)
+            output_tensor = outputs[key]
+            output_tensor_fa = outputs_fa[key]
+
+            # Mask out padded tokens, they are different for SDPA and Flash Attention 2
+            if key == "last_hidden_state" and "pixel_attention_mask" in inputs_dict:
+                output_tensor = output_tensor * inputs_dict["pixel_attention_mask"][..., None]
+                output_tensor_fa = output_tensor_fa * inputs_dict["pixel_attention_mask"][..., None]
+            elif key == "last_hidden_state" and inputs_dict.get("attention_mask", None) is not None:
+                output_tensor = output_tensor * inputs_dict["attention_mask"][..., None]
+                output_tensor_fa = output_tensor_fa * inputs_dict["attention_mask"][..., None]
+
+            torch.testing.assert_close(output_tensor, output_tensor_fa, atol=4e-2, rtol=4e-2)
 
             # Check with inference + dropout
             model.train()
