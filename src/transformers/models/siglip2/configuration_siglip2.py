@@ -109,7 +109,7 @@ class Siglip2VisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Siglip2VisionModel`]. It is used to instantiate a
     Siglip2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the vision encoder of the Siglip2
-    [google/siglip2-base-patch-16-naflex-224](https://huggingface.co/google/siglip2-base-patch-16-naflex-224) architecture.
+    [google/siglip2-base-patch16-naflex](https://huggingface.co/google/siglip2-base-patch16-naflex) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
