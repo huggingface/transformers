@@ -132,6 +132,12 @@ class DFineConfig(RTDetrConfig):
                     f"Length of decoder_n_points list ({len(self.decoder_n_points)}) must match num_feature_levels ({self.num_feature_levels})."
                 )
 
+        head_dim = self.d_model // self.decoder_attention_heads
+        if head_dim * self.decoder_attention_heads != self.d_model:
+            raise ValueError(
+                f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
+            )
+
 
 class DFineMultiscaleDeformableAttention(nn.Module):
     def __init__(self, config: DFineConfig):

@@ -74,7 +74,7 @@ class DFineResNetPreTrainedModel(RTDetrResNetPreTrainedModel):
 
 
 class DFineResNetLearnableAffineBlock(nn.Module):
-    def __init__(self, scale_value=1.0, bias_value=0.0):
+    def __init__(self, scale_value: float = 1.0, bias_value: float = 0.0):
         super().__init__()
         self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
         self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
@@ -119,7 +119,9 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
 
 
 class DFineResNetConvLayerLight(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, use_learnable_affine_block=False):
+    def __init__(
+        self, in_channels: int, out_channels: int, kernel_size: int, use_learnable_affine_block: bool = False
+    ):
         super().__init__()
         self.conv1 = DFineResNetConvLayer(
             in_channels,
