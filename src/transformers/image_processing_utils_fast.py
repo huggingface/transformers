@@ -48,6 +48,12 @@ from .utils import (
     TensorType,
     add_start_docstrings,
     is_torch_available,
+    is_torch_cuda_available,
+    is_torch_mlu_available,
+    is_torch_mps_available,
+    is_torch_musa_available,
+    is_torch_npu_available,
+    is_torch_xpu_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
@@ -70,6 +76,25 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
+
+
+def get_best_available_device() -> "torch.device":
+    """
+    Get the best available torch device.
+    """
+    if is_torch_mlu_available():
+        return torch.device("mlu:0")
+    if is_torch_musa_available():
+        return torch.device("musa:0")
+    if is_torch_cuda_available():
+        return torch.device("cuda:0")
+    if is_torch_npu_available():
+        return torch.device("npu:0")
+    if is_torch_xpu_available(check_device=True):
+        return torch.device("xpu:0")
+    if is_torch_mps_available():
+        return torch.device("mps:0")
+    return torch.device("cpu")
 
 
 def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
@@ -139,6 +164,7 @@ class DefaultFastImageProcessorInitKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_convert_rgb: Optional[bool]
+    device: Optional["torch.device"]
 
 
 class DefaultFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorInitKwargs):
@@ -186,7 +212,9 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
-            Whether to convert the image to RGB."""
+            Whether to convert the image to RGB.
+        device (`torch.device`, *optional*):
+            The device to process the images on. If unset, it is set to the best available device."""
 
 BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
     Preprocess an image or batch of images.
@@ -233,7 +261,7 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
             - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
             - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         device (`torch.device`, *optional*):
-            The device to process the images on. If unset, the device is inferred from the input images."""
+            The device to process the images on. If unset, it is set to the best available device."""
 
 
 @add_start_docstrings(
@@ -270,6 +298,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
         crop_size = kwargs.pop("crop_size", self.crop_size)
         self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
+
+        self.device = kwargs.pop("device", get_best_available_device())
+
         for key in self.valid_init_kwargs.__annotations__.keys():
             kwarg = kwargs.pop(key, None)
             if kwarg is not None:
