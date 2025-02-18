@@ -54,9 +54,9 @@ class JanusVisionConfig(PretrainedConfig):
         projection_dropout=0.0,
         use_qk_norm = False,
         layerscale_value=None,
-        vision_use_head = True,
-        num_aligner_hidden_states=2,
+        use_vision_head = True,
         aligner_projection_size = 2048,
+        depth=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -82,9 +82,9 @@ class JanusVisionConfig(PretrainedConfig):
         self.layerscale_value = layerscale_value
         self.select_layer = select_layer
         self.select_feature = select_feature
-        self.vision_use_head = vision_use_head
+        self.use_vision_head = use_vision_head
         self.use_special_tokens = kwargs.get('use_special_tokens',False)
-        self.num_aligner_hidden_states = num_aligner_hidden_states
+        self.depth = depth
         self.aligner_projection_size = aligner_projection_size
 
 class JanusTextConfig(PretrainedConfig):
@@ -338,6 +338,10 @@ class JanusVQVAEConfig(PretrainedConfig):
         dropout: float = 0.0,
         attn_type: str = "vanilla",
         initializer_range=0.02,
+        aligner_projection_size = 2048,
+        depth=2,
+        hidden_act="gelu",
+        image_token_embed_size=2048,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -355,6 +359,10 @@ class JanusVQVAEConfig(PretrainedConfig):
         self.attn_type = attn_type
         self.initializer_range = initializer_range
         self.out_channels = out_channels
+        self.aligner_projection_size = aligner_projection_size
+        self.depth = depth
+        self.hidden_act = hidden_act
+        self.image_token_embed_size = image_token_embed_size
 
 
 class JanusConfig(PretrainedConfig):
