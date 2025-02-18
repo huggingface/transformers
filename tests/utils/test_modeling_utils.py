@@ -464,9 +464,11 @@ class ModelUtilsTest(TestCasePlus):
         # test that from_pretrained works with torch_dtype being strings like "float32" for PyTorch backend
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float32")
         self.assertEqual(model.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         model = AutoModel.from_pretrained(TINY_T5, torch_dtype="float16")
         self.assertEqual(model.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -481,15 +483,18 @@ class ModelUtilsTest(TestCasePlus):
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set torch_dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype=torch.float16)
         self.assertEqual(model.language_model.dtype, torch.float16)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set torch_dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -498,6 +503,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set the values as torch.dtype (not str)
         model = LlavaForConditionalGeneration.from_pretrained(
@@ -506,6 +512,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # should be able to set the values in configs directly and pass it to `from_pretrained`
         config = copy.deepcopy(model.config)
@@ -516,6 +523,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # but if the model has `_keep_in_fp32_modules` then those modules should be in fp32 no matter what
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
@@ -523,6 +531,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
+        self.assertIsInstance(model.config.torch_dtype, torch.dtype)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
