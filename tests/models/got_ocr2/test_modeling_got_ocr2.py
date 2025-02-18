@@ -256,12 +256,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_past_key_values_format(self):
         pass
 
-    @unittest.skip(
-        reason="GotOcr2 needs a dynamic control flow to pass pixel values to the forward function only in the first generation step"
-    )
-    def test_generate_compile_1_end_to_end(self):
-        pass
-
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass

@@ -32,21 +32,13 @@ The model can accept both images and videos as input. Here's an example code for
 
 ```python
 
-from PIL import Image
-import requests
 import torch
-from torchvision import io
-from typing import Dict
-from transformers.image_utils import load_images, load_video
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
 
 # Load the model in half-precision on the available device(s)
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", device_map="auto")
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
 
-# Image
-url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg"
-image = Image.open(requests.get(url, stream=True).raw)
 
 conversation = [
     {
@@ -54,6 +46,7 @@ conversation = [
         "content":[
             {
                 "type":"image",
+                "url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg"
             },
             {
                 "type":"text",
@@ -63,13 +56,14 @@ conversation = [
     }
 ]
 
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
 
-# Preprocess the inputs
-text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-# Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe this image.<|im_end|>\n<|im_start|>assistant\n'
-
-inputs = processor(text=[text_prompt], images=[image], padding=True, return_tensors="pt")
-inputs = inputs.to('cuda')
 
 # Inference: Generation of the output
 output_ids = model.generate(**inputs, max_new_tokens=128)
@@ -78,25 +72,24 @@ output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, cl
 print(output_text)
 
 # Video
-video = load_video(video="/path/to/video.mp4")
 conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "video"},
+            {"type": "video", "path": "/path/to/video.mp4"},
             {"type": "text", "text": "What happened in the video?"},
         ],
     }
 ]
 
-# Preprocess the inputs
-text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-# Excepted output: '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<|vision_start|><|video_pad|><|vision_end|>What happened in the video?<|im_end|>\n<|im_start|>assistant\n'
-
-# Qwen2.5VL modifies the time positional encoding (MRoPE) according to the video's frame rate (FPS).
-# Therefore, the video's FPS information needs to be provided as input.
-inputs = processor(text=[text_prompt], videos=[video], fps=[1.0], padding=True, return_tensors="pt")
-inputs = inputs.to('cuda')
+inputs = processor.apply_chat_template(
+    conversation,
+    video_fps=1,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
 
 # Inference: Generation of the output
 output_ids = model.generate(**inputs, max_new_tokens=128)
@@ -110,21 +103,12 @@ print(output_text)
 The model can batch inputs composed of mixed samples of various types such as images, videos, and text. Here is an example.
 
 ```python
-images = load_images([
-    "/path/to/image1.jpg",
-    "/path/to/image2.jpg",
-    "/path/to/image3.jpg",
-    "/path/to/image4.jpg",
-    "/path/to/image5.jpg",
-])
-video = load_video(video="/path/to/video.mp4")
-
 # Conversation for the first image
 conversation1 = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "path": "/path/to/image1.jpg"},
             {"type": "text", "text": "Describe this image."}
         ]
     }
@@ -135,8 +119,8 @@ conversation2 = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
-            {"type": "image"},
+            {"type": "image", "path": "/path/to/image2.jpg"},
+            {"type": "image", "path": "/path/to/image3.jpg"},
             {"type": "text", "text": "What is written in the pictures?"}
         ]
     }
@@ -156,9 +140,9 @@ conversation4 = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
-            {"type": "image"},
-            {"type": "video"},
+            {"type": "image", "path": "/path/to/image3.jpg"},
+            {"type": "image", "path": "/path/to/image4.jpg"},
+            {"type": "video", "path": "/path/to/video.jpg"},
             {"type": "text", "text": "What are the common elements in these medias?"},
         ],
     }
@@ -166,15 +150,15 @@ conversation4 = [
 
 conversations = [conversation1, conversation2, conversation3, conversation4]
 # Preparation for batch inference
-texts = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in conversations]
-inputs = processor(
-    text=texts,
-    images=images,
-    videos=[video],
-    padding=True,
-    return_tensors="pt",
-)
-inputs = inputs.to('cuda')
+ipnuts = processor.apply_chat_template(
+    conversations,
+    video_fps=1,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
+
 
 # Batch Inference
 output_ids = model.generate(**inputs, max_new_tokens=128)
@@ -279,11 +263,6 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 ## Qwen2_5_VLConfig
 
 [[autodoc]] Qwen2_5_VLConfig
-
-## Qwen2_5_VLImageProcessor
-
-[[autodoc]] Qwen2_5_VLImageProcessor
-    - preprocess
 
 ## Qwen2_5_VLProcessor
 

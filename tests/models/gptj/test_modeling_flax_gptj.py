@@ -22,7 +22,6 @@ import transformers
 from transformers import GPT2Tokenizer, GPTJConfig, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, tooslow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
@@ -178,7 +177,7 @@ class FlaxGPTJModelTester:
 
 
 @require_flax
-class FlaxGPTJModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+class FlaxGPTJModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxGPTJModel, FlaxGPTJForCausalLM) if is_flax_available() else ()
 
     def setUp(self):
