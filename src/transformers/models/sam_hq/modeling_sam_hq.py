@@ -806,17 +806,7 @@ class SamHQPositionalEmbedding(nn.Module):
         # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
         coordinates = 2 * coordinates - 1
         coordinates = coordinates.to(self.positional_embedding.dtype)
-        
-        # Reshape coordinates to 2D for matrix multiplication
-        original_shape = coordinates.shape
-        coordinates = coordinates.view(-1, 2)  # Flatten all dimensions except last
-        
-        # Perform matrix multiplication
         coordinates = coordinates @ self.positional_embedding
-        
-        # Reshape back to original dimensions
-        coordinates = coordinates.view(*original_shape[:-1], -1)
-        
         coordinates = 2 * np.pi * coordinates
         # outputs d_1 x ... x d_n x channel shape
         return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
