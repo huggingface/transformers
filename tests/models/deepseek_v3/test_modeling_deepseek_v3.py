@@ -14,21 +14,16 @@
 # limitations under the License.
 """Testing suite for the PyTorch DeepseekV3 model."""
 
-import tempfile
 import unittest
 
-import pytest
 from packaging import version
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, DeepseekV3Config, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -397,15 +392,21 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_contrastive_generate_low_memory(self):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_with_static_cache(self):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip("DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    @unittest.skip(
+        "DeepseekV3 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support."
+    )
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
