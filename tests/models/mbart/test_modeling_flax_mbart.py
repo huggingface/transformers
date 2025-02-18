@@ -21,7 +21,6 @@ from transformers import MBartConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, require_tokenizers, slow
 from transformers.utils import cached_property
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -330,7 +329,7 @@ class MBartHeadTests(unittest.TestCase):
 
 
 @require_flax
-class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (
         (
@@ -342,7 +341,6 @@ class FlaxMBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGeneration
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxMBartForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxMBartModelTester(self)

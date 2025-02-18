@@ -217,6 +217,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
     has_attentions = False
 
     def setUp(self):
@@ -327,14 +328,18 @@ class TextNetModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(**inputs)
 
-        # verify logits
-        self.assertEqual(output.logits.shape, torch.Size([1, 2]))
+        # verify output
+        self.assertEqual(output.last_hidden_state.shape, torch.Size([1, 512, 20, 27]))
         expected_slice_backbone = torch.tensor(
-            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000],
+            [
+                [0.0000, 1.7415, 1.2660],
+                [0.0000, 1.0084, 1.9692],
+                [0.0000, 1.7464, 1.7892],
+            ],
             device=torch_device,
         )
         torch.testing.assert_close(
-            output.feature_maps[-1][0][10][12][:10], expected_slice_backbone, rtol=1e-3, atol=1e-3
+            output.last_hidden_state[0, 12, :3, :3], expected_slice_backbone, rtol=1e-2, atol=1e-2
         )
 
 

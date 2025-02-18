@@ -130,7 +130,7 @@ from torch import nn
 from transformers import Trainer
 
 class CustomTrainer(Trainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         labels = inputs.pop("labels")
         # forward pass
         outputs = model(**inputs)
@@ -156,9 +156,7 @@ class EarlyStoppingCallback(TrainerCallback):
 
     def on_step_end(self, args, state, control, **kwargs):
         if state.global_step >= self.num_steps:
-            return {"should_training_stop": True}
-        else:
-            return {}
+            control.should_training_stop = True
 ```
 
 Then pass it to the [`Trainer`]'s `callback` parameter.
@@ -445,6 +443,97 @@ trainer.train()
 
 Note layerwise optimization is a bit experimental and does not support DDP (Distributed Data Parallel), thus you can run the training script only on a single GPU. Please see [this appropriate section](https://github.com/jiaweizzhao/GaLore?tab=readme-ov-file#train-7b-model-with-a-single-gpu-with-24gb-memory) for more details. Other features such as gradient clipping, DeepSpeed, etc might not be supported out of the box. Please [raise an issue on GitHub](https://github.com/huggingface/transformers/issues) if you encounter such issue.
 
+### APOLLO
+
+Approximated Gradient Scaling for Memory Efficient LLM Optimization (APOLLO) is a memory-efficient training strategy that allows full-parameter learning for both pre-training and fine-tuning, while maintaining AdamW-level performance with SGD-like memory efficiency.
+
+* **Ultra-low rank efficiency** → Requires much lower rank than GaLore—even rank 1 (APOLLO-Mini) suffices.
+* **No expensive SVD computations** → Unlike GaLore, APOLLO leverages random projection, avoiding training stalls.
+
+You can read more about the method in the [original repository](https://github.com/zhuhanqing/APOLLO) or the [APOLLO: SGD-like Memory, AdamW-level Performance](https://arxiv.org/abs/2412.05270).
+
+First, make sure to install APOLLO from its official repository:
+
+```bash
+pip install apollo-torch
+```
+
+Then, APOLLO optimizers can be used simply by setting `optim="apollo_adamw"` and specifying `optim_target_modules`.
+`optim_target_modules` can be a list of strings, regex or full path corresponding to the target module names you want to adapt. 
+Currently, only Linear layers are considered to use the APOLLO optimizers, i.e., included in `optim_target_modules,` while the remaining models are still using AdamW. 
+
+
+You can also enable layer-wise APOLLO by appending "layerwise" to the optimizer name (optim="apollo_adamw_layerwise"), the same as layer-wise GaLore. This saves additional memory for gradient by performing weight updates layer by layer.
+
+Below is an end-to-end example script (make sure to `pip install trl datasets`):
+
+```python
+import torch
+import datasets
+import trl
+
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
+
+train_dataset = datasets.load_dataset('imdb', split='train')
+
+args = TrainingArguments(
+    output_dir="./test-apollo",
+    max_steps=100,
+    per_device_train_batch_size=2,
+    optim="apollo_adamw",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"]
+)
+
+model_id = "google/gemma-2b"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
+
+trainer = trl.SFTTrainer(
+    model=model,
+    args=args,
+    train_dataset=train_dataset,
+    dataset_text_field='text',
+    max_seq_length=512,
+)
+
+trainer.train()
+```
+
+
+You can further customize APOLLO’s behavior by passing hyperparameters using `optim_args`.
+
+| Parameter         | Description |
+|------------------|-------------|
+| `rank` | Rank of the auxiliary sub-space used for gradient scaling. <br> **APOLLO (default=256)** → Works well for 1B and 7B models. <br> **APOLLO-Mini (default=1)** |
+| `scale_type` | How scaling factors are applied. <br> **`channel`** → Per-channel scaling (used in APOLLO). <br> **`tensor`** → Per-tensor scaling (used in APOLLO-Mini). |
+| `scale` | Adjusts gradient updates to stabilize training. <br> **APOLLO (default=1.0)** <br> **APOLLO-Mini (default=128)** |
+| `update_proj_gap` | Steps before updating projection matrices. Default: **200**. |
+| `proj` | Type of projection. Default: **`random`**. |
+
+
+<Tip>
+
+The `scale` parameter can be set to `n/r`, where `n` is the original space dimension and `r` is the low-rank space dimension.
+Alternatively, you can achieve a similar effect by adjusting the learning rate, while keeping scale at its default value.
+
+</Tip>
+
+For example, you can enable APOLLO-Mini (rank=1 for extreme memory efficiency) by passing `optim_args`:
+
+```python
+
+args = TrainingArguments(
+    output_dir="./test-galore",
+    max_steps=100,
+    per_device_train_batch_size=2,
+    optim="apollo_adamw",
+    optim_target_modules=[r".*.attn.*", r".*.mlp.*"],
+    optim_args="proj=random,rank=1,scale=128.0,scale_type=tensor,update_proj_gap=200",
+
+)
+```
+
 ### LOMO optimizer
 
 The LOMO optimizers have been introduced in [Full Parameter Fine-Tuning for Large Language Models with Limited Resources](https://hf.co/papers/2306.09782) and [AdaLomo: Low-memory Optimization with Adaptive Learning Rate](https://hf.co/papers/2310.10195).
@@ -544,13 +633,17 @@ trainer = Trainer(
 trainer.train()
 ```
 
-This script demonstrates how to fine-tune the `google/gemma-2b` model on the IMDB dataset using the GrokAdamW optimizer. The `TrainingArguments` are configured to use GrokAdamW, and the dataset is passed to the `Trainer` for training.
+This script demonstrates how to fine-tune the [google/gemma-2b](https://huggingface.co/google/gemma-2b) model on the IMDB dataset using the GrokAdamW optimizer. The `TrainingArguments` are configured to use GrokAdamW, and the dataset is passed to the `Trainer` for training.
 
-### Schedule Free Optimizer
+### Schedule-Free Optimizer
 
-The Schedule Free optimizers have been introduced in [The Road Less Scheduled](https://hf.co/papers/2405.15682).
+The Schedule-Free optimizers have been introduced in [The Road Less Scheduled](https://hf.co/papers/2405.15682).
+Supported optimizers for Schedule-Free are `schedule_free_radam`, `schedule_free_adamw` and `schedule_free_sgd`. First install schedulefree from pypi `pip install schedulefree`.
+
 Schedule-Free learning replaces the momentum of the base optimizer with a combination of averaging and interpolation, to completely remove the need to anneal the learning rate with a traditional schedule.
-Supported optimizers for SFO are `"schedule_free_adamw"` and `"schedule_free_sgd"`. First install schedulefree from pypi `pip install schedulefree`.
+Additionally, neither `warmup_steps` nor `warmup_ratio` parameters are required when using `schedule_free_radam`.
+
+By default, we recommend setting `lr_scheduler_type="constant"` in the `TrainingArguments`. Setting other `lr_scheduler_type` would also work, but combining Schedule-Free with other learning rate schedules is not well-studied both in research and in practice, as it may affect the optimizer's intended behavior and performance guarantees.
 
 Below is a simple script to demonstrate how to fine-tune [google/gemma-2b](https://huggingface.co/google/gemma-2b) on IMDB dataset in full precision:
 
@@ -566,7 +659,8 @@ args = TrainingArguments(
     output_dir="./test-schedulefree",
     max_steps=1000,
     per_device_train_batch_size=4,
-    optim="schedule_free_adamw",
+    optim="schedule_free_radam",
+    lr_scheduler_type="constant",
     gradient_checkpointing=True,
     logging_strategy="steps",
     logging_steps=1,
@@ -706,6 +800,29 @@ use_cpu: false
 ```
 
 </hfoption>
+<hfoption id="Tensor Parallelism with PyTorch 2">
+
+```yml
+compute_environment: LOCAL_MACHINE
+tp_config:
+  tp_size: 4
+distributed_type: TP
+downcast_bf16: 'no'
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 4
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
+
+```
+
+</hfoption>
 </hfoptions>
 
 The [`accelerate_launch`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-launch) command is the recommended way to launch your training script on a distributed system with Accelerate and [`Trainer`] with the parameters specified in `config_file.yaml`. This file is saved to the Accelerate cache folder and automatically loaded when you run `accelerate_launch`.
@@ -737,7 +854,7 @@ accelerate launch --num_processes=2 \
     --fsdp_transformer_layer_cls_to_wrap="BertLayer" \
     --fsdp_sharding_strategy=1 \
     --fsdp_state_dict_type=FULL_STATE_DICT \
-    ./examples/pytorch/text-classification/run_glue.py
+    ./examples/pytorch/text-classification/run_glue.py \
     --model_name_or_path google-bert/bert-base-cased \
     --task_name $TASK_NAME \
     --do_train \
