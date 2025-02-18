@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.0-cudnn8-devel-ubuntu22.04
+FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -65,7 +65,7 @@ RUN python3 -m pip install --no-cache-dir gguf
 # Add autoawq for quantization testing
 # >=v0.2.7 needed for compatibility with transformers > 4.46
 # RUN python3 -m pip install --no-cache-dir https://github.com/casper-hansen/AutoAWQ/releases/download/v0.2.7.post2/autoawq-0.2.7.post2-py3-none-any.whl
-RUN python3 -m pip install --no-cache-dir autoawq[kernels] 
+RUN python3 -m pip install --no-cache-dir autoawq
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
