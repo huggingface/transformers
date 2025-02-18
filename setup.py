@@ -473,7 +473,6 @@ setup(
 extras["tests_torch"] = deps_list()
 extras["tests_tf"] = deps_list()
 extras["tests_flax"] = deps_list()
-extras["tests_torch_and_tf"] = deps_list()
 extras["tests_torch_and_flax"] = deps_list()
 extras["tests_hub"] = deps_list()
 extras["tests_pipelines_torch"] = deps_list()

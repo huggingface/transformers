@@ -1148,7 +1148,6 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_torch_and_tf": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
     "tests_torch_and_flax": r"tests/models/.*/test_modeling_(?:flax|(?!tf)).*",
     "tests_tf": r"tests/models/.*/test_modeling_tf_.*",
     "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
