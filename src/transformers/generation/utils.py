@@ -420,6 +420,7 @@ class GenerationMixin:
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
 
         # 4. Create missing `position_ids` on the fly
+        encoder_attention_mask = attention_mask if self.config.is_encoder_decoder else None
         attention_mask = (
             kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
         )
@@ -489,6 +490,9 @@ class GenerationMixin:
                 )
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
+
+        if encoder_attention_mask is not None:
+            model_inputs["attention_mask"] = encoder_attention_mask
 
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
@@ -1470,7 +1474,6 @@ class GenerationMixin:
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
-            and input_ids_length != 0
             and not self.config.is_encoder_decoder
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
@@ -2824,8 +2827,12 @@ class GenerationMixin:
 
                 if not sequential:
                     # Expands model inputs top_k times, for batched forward passes (akin to beam search).
+                    # input_ids is required for expanding visual inputs in qwen2vl
                     _, model_kwargs = self._expand_inputs_for_generation(
-                        expand_size=top_k, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
+                        input_ids=input_ids,
+                        expand_size=top_k,
+                        is_encoder_decoder=self.config.is_encoder_decoder,
+                        **model_kwargs,
                     )
 
                 past_key_values = model_kwargs.get("past_key_values")
@@ -3186,6 +3193,7 @@ class GenerationMixin:
         model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), Cache):
             is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
+            is_compileable = is_compileable and not self.generation_config.disable_compile
             if is_compileable and (
                 self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
             ):
@@ -4516,7 +4524,7 @@ def _ranking_fast(
     return selected_idx
 
 
-def _split(data, full_batch_size: int, num_hidden_layers: int, split_size: int = None):
+def _split(data, full_batch_size: int, split_size: int = None):
     """
     Takes care of three cases:
     1. data is a tensor: e.g. last_hidden_state, pooler_output etc. split them on the batch_size dim
@@ -4534,7 +4542,7 @@ def _split(data, full_batch_size: int, num_hidden_layers: int, split_size: int =
     elif isinstance(data, DynamicCache) or (
         isinstance(data, EncoderDecoderCache) and isinstance(data.self_attention_cache, DynamicCache)
     ):
-        return data.batch_split(full_batch_size, split_size, num_hidden_layers)
+        return data.batch_split(full_batch_size, split_size)
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
         if isinstance(data[0], tuple):
@@ -4587,11 +4595,9 @@ def _split_model_inputs(
     keys_to_ignore = ["cache_position", "encoder_outputs", "logits_to_keep"]
     non_bool_keys = [k for k in keys if not isinstance(model_input[k], bool) and k not in keys_to_ignore]
 
-    num_hidden_layers = config.get_text_config().num_hidden_layers
-
     # we split the tensors and tuples of tensors
     data_split_list = [
-        {k: _split(model_input[k], full_batch_size, num_hidden_layers, split_size)[i] for k in non_bool_keys}
+        {k: _split(model_input[k], full_batch_size, split_size)[i] for k in non_bool_keys}
         for i in range(full_batch_size // split_size)
     ]
     # bool values are the same and replicated for each split
@@ -4628,7 +4634,6 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
 
     # Infer the class from the first object in the list
     model_output_cls = type(model_outputs[0])
-    num_hidden_layers = config.get_text_config().num_hidden_layers
 
     # Ensure all objects are of the same type
     if not all(isinstance(obj, model_output_cls) for obj in model_outputs):
@@ -4645,9 +4650,9 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
             return torch.cat(data, dim=0)
         # New cache format
         elif isinstance(data[0], DynamicCache):
-            return DynamicCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
+            return DynamicCache.from_batch_splits(data)
         elif isinstance(data[0], EncoderDecoderCache):
-            return EncoderDecoderCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
+            return EncoderDecoderCache.from_batch_splits(data)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):

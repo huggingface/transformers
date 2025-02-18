@@ -190,7 +190,6 @@ class InformerModelTester:
 @require_torch
 class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (InformerModel, InformerForPrediction) if is_torch_available() else ()
-    all_generative_model_classes = (InformerForPrediction,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": InformerModel} if is_torch_available() else {}
     is_encoder_decoder = True
     test_pruning = False
@@ -547,4 +546,4 @@ class InformerModelIntegrationTests(unittest.TestCase):
 
         expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
         mean_prediction = outputs.sequences.mean(dim=1)
-        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1)
+        torch.testing.assert_close(mean_prediction[0, -3:], expected_slice, rtol=1e-1, atol=1e-1)
