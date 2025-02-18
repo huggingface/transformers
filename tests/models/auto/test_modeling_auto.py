@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+import os
 import sys
 import tempfile
 import unittest
@@ -25,6 +26,7 @@ from huggingface_hub import Repository
 
 import transformers
 from transformers import BertConfig, GPT2Model, is_safetensors_available, is_torch_available
+from transformers.dynamic_module_utils import get_class_from_dynamic_module
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
@@ -589,3 +591,57 @@ class AutoModelTest(unittest.TestCase):
         # More precisely, it directly inherits from GenerationMixin. This check would fail prior to v4.45 (inheritance
         # patching was added in v4.45)
         self.assertTrue("GenerationMixin" in str(model.__class__.__bases__))
+
+    def test_get_class_from_dynamic_module_multiple_dots(self):
+        """
+        Test that get_class_from_dynamic_module correctly handles class references with multiple dots.
+        This test verifies the fix for handling module paths that contain multiple dots.
+        """
+        import shutil
+
+        from huggingface_hub import constants
+
+        # Create a mock module in the transformers cache directory
+        mock_module_content = """
+class NestedModel:
+    def __init__(self):
+        self.name = "nested_model"
+    """
+
+        # Create a temporary directory within the module cache
+        cache_dir = os.path.join(constants.HF_HOME, "modules", "transformers_modules")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        test_dir = os.path.join(cache_dir, "test_nested_module")
+        try:
+            # Create nested directory structure
+            os.makedirs(os.path.join(test_dir, "modeling", "nested"), exist_ok=True)
+
+            # Create the module file
+            module_path = os.path.join(test_dir, "modeling", "nested", "model.py")
+            with open(module_path, "w") as f:
+                f.write(mock_module_content)
+            print("#" * 500)
+            print(os.path.isfile(module_path))
+            print("writing to ", module_path)
+            print("#" * 500)
+            # Test with multiple dots in the path
+            class_reference = "modeling.nested.model.NestedModel"
+
+            # Get the class using the modified function
+            cls = get_class_from_dynamic_module(
+                class_reference=class_reference, pretrained_model_name_or_path=test_dir, local_files_only=True
+            )
+
+            # Verify the class was loaded correctly
+            self.assertIsNotNone(cls)
+            self.assertEqual(cls.__name__, "NestedModel")
+
+            # Create an instance to verify it works
+            instance = cls()
+            self.assertEqual(instance.name, "nested_model")
+
+        finally:
+            # Clean up
+            if os.path.exists(test_dir):
+                shutil.rmtree(test_dir)
