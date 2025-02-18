@@ -42,11 +42,16 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_gemma2 import Gemma2Config
+
+if is_torch_flex_attn_available():
+    from ...integrations.flex_attention import make_flex_block_causal_mask
+    from torch.nn.attention.flex_attention import BlockMask
 
 
 logger = logging.get_logger(__name__)
@@ -710,6 +715,13 @@ class Gemma2Model(Gemma2PreTrainedModel):
         # as it doesn't cause dynamic control issues.
         if self.config._attn_implementation == "flash_attention_2":
             return attention_mask
+        if self.config._attn_implementation == "flex_attention":
+            if isinstance(attention_mask, BlockMask):
+                return attention_mask
+            if isinstance(attention_mask, torch.Tensor):
+                attention_mask = make_flex_block_causal_mask(attention_mask)
+                return attention_mask # return BlockMask type specific to flex attention
+            return None
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
