@@ -262,20 +262,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    @unittest.skip(reason="Test has a segmentation fault on torch 1.8.0")
-    def test_export_to_onnx(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = FSMTModel(config).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (inputs_dict["input_ids"], inputs_dict["attention_mask"]),
-                f"{tmpdirname}/fsmt_test.onnx",
-                export_params=True,
-                opset_version=12,
-                input_names=["input_ids", "attention_mask"],
-            )
-
     def test_ensure_weights_are_shared(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
