@@ -884,10 +884,10 @@ WHISPER_INPUTS_DOCSTRING = r"""
         past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
             four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
-            in the cross-attention blocks (2) (if the model is used as an encoder-decoder). The `past_key_values` are
-            returned when `use_cache=True` is passed or when `config.use_cache=True`.
-            A [`~cache_utils.Cache`] instance or, more specifically, an [`~cache_utils.EncoderDecoderCache`] instance
-            if the model is used as an encoder-decoder.
+            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
+            when `config.use_cache=True`. It is usually a [`~cache_utils.EncoderDecoderCache`]. However, this model
+            can also be configured to behave as a decoder-only model, i.e. without cross-attention, in which case a
+            [`~cache_utils.Cache`] can be used.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
             that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
@@ -1186,14 +1186,14 @@ class WhisperDecoder(WhisperPreTrainedModel):
             past_key_values (`Cache`, *optional*):
                 Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
                 four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
-                in the cross-attention blocks (2) (if the model is used as an encoder-decoder). The `past_key_values` are
-                returned when `use_cache=True` is passed or when `config.use_cache=True`.
-                A [`~cache_utils.Cache`] instance or, more specifically, an [`~cache_utils.EncoderDecoderCache`] instance
-                if the model is used as an encoder-decoder.
+                in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
+                when `config.use_cache=True`. It is usually a [`~cache_utils.EncoderDecoderCache`]. However, this model
+                can also be configured to behave as a decoder-only model, i.e. without cross-attention, in which case a
+                [`~cache_utils.Cache`] can be used.
 
-                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `input_ids` of shape `(batch_size, sequence_length)`.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
@@ -1925,10 +1925,10 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
             past_key_values (`Cache`, *optional*):
-                Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There
-                are two sets of pre-computed hidden-states: the key and values states in the self-attention blocks.
+                Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+                two sets of pre-computed hidden-states: key and values states in the self-attention blocks.
                 The `past_key_values` are returned when `use_cache=True` is passed or when `config.use_cache=True`.
-                A [`~cache_utils.Cache`] instance.
+                It is a [`~cache_utils.Cache`] instance.
 
                 If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of

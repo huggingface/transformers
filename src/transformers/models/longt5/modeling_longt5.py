@@ -1431,15 +1431,29 @@ class LongT5Stack(LongT5PreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        # initialize past_key_values
-        return_self_attention_cache = False
+        # initialize `past_key_values`
+        # - if the model is an encoder-decoder or has encoder inputs passed, the cache will be an encoder-decoder cache
+        # - otherwise, a self-attention cache is used
+        # - if `use_cache` is False, e.g. when using the encoder only, we remove cache if it is passed
         if use_cache:
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
+            if not self.is_decoder:
+                raise ValueError(f"`use_cache` can only be set to `True` if {self} is not an encoder.")
+            if (
+                isinstance(past_key_values, Cache)
+                and not isinstance(past_key_values, EncoderDecoderCache)
+                and encoder_hidden_states is not None
+            ):
+                logger.warning_once(
+                    "You are passing a decoder-only cache to a model that is used as an encoder-decoder model. "
+                    "This behavior is deprecated and will be removed in v4.52. To avoid this warning, please pass an "
+                    "`EncoderDecoderCache` (e.g. `EncoderDecoderCache(past_key_values, DynamicCache())`)."
+                )
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        # if `use_cache` is False, e.g. when using the encoder only, remove cache if it is passed
+                if encoder_hidden_states is not None:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
         elif past_key_values is not None:
             logger.warning_once(
                 "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
@@ -1458,12 +1472,17 @@ class LongT5Stack(LongT5PreTrainedModel):
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.is_decoder:
+            decoder_cache = (
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values
+            )
             causal_mask = self._update_causal_mask(
-                attention_mask,
-                inputs_embeds,
-                cache_position,
-                past_key_values.self_attention_cache if past_key_values is not None else None,
-                output_attentions,
+                attention_mask=attention_mask,
+                input_tensor=inputs_embeds,
+                cache_position=cache_position,
+                past_key_values=decoder_cache,
+                output_attentions=output_attentions,
             )
         # We use local attention in encoder self-attention, otherwise standard self & cross attentions are used
         elif self.config.encoder_attention_type == "local":
@@ -1561,9 +1580,6 @@ class LongT5Stack(LongT5PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-
         if not return_dict:
             return tuple(
                 v
@@ -1794,11 +1810,13 @@ LONGT5_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`EncoderDecoderCache`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
             four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
             in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
-            when `config.use_cache=True`. An [`~cache_utils.EncoderDecoderCache`] instance.
+            when `config.use_cache=True`. It is usually a [`~cache_utils.EncoderDecoderCache`]. However, this model
+            can also be configured to behave as a decoder-only model, i.e. without cross-attention, in which case a
+            [`~cache_utils.Cache`] can be used.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
             that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
@@ -1948,7 +1966,7 @@ class LongT5Model(LongT5PreTrainedModel):
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
