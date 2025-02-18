@@ -699,6 +699,12 @@ class UMT5Stack(UMT5PreTrainedModel):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        # if `use_cache` is False, e.g. when using the encoder only, remove cache if it is passed
+        elif past_key_values is not None:
+            logger.warning_once(
+                "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
+            )
+            past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:

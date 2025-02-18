@@ -1382,6 +1382,12 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        # if `use_cache` is False, e.g. when using the encoder only, remove cache if it is passed
+        elif past_key_values is not None:
+            logger.warning_once(
+                "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
+            )
+            past_key_values = None
 
         past_key_values_length = 0
         if cache_position is not None:

@@ -404,6 +404,7 @@ class Pop2PianoAttention(nn.Module):
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
+                past_key_value.is_updated[self.layer_idx] = True
                 curr_past_key_value = past_key_value.cross_attention_cache
             else:
                 curr_past_key_value = past_key_value.self_attention_cache
@@ -425,17 +426,12 @@ class Pop2PianoAttention(nn.Module):
                 key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
 
         # compute scores, equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
         scores = torch.matmul(query_states, key_states.transpose(3, 2))
 
         if position_bias is None:
             key_length = key_states.shape[-2]
-            # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
-            real_seq_length = query_length if query_length is not None else cache_position[-1] + 1
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
                     (1, self.n_heads, seq_length, key_length), device=scores.device, dtype=scores.dtype
@@ -443,6 +439,8 @@ class Pop2PianoAttention(nn.Module):
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
             else:
+                # cache position is 0-indexed so we add 1 to get the real length of queries (aka with past)
+                real_seq_length = query_length if query_length is not None else cache_position[-1] + 1
                 position_bias = self.compute_bias(
                     real_seq_length, key_length, device=scores.device, cache_position=cache_position
                 )
@@ -842,6 +840,12 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+        # if `use_cache` is False, e.g. when using the encoder only, remove cache if it is passed
+        elif past_key_values is not None:
+            logger.warning_once(
+                "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
+            )
+            past_key_values = None
 
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
