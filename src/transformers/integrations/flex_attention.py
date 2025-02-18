@@ -126,7 +126,7 @@ def flex_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[Union[torch.Tensor, BlockMask]],
+    attention_mask: Union[torch.Tensor, BlockMask],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
