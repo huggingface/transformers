@@ -374,7 +374,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("roberta-prelayernorm", "RobertaPreLayerNormForMaskedLM"),
         ("roc_bert", "RoCBertForPreTraining"),
         ("rwkv", "RwkvForCausalLM"),
-        ("smolvlm", "SmolVLMForConditionalGeneration"),
         ("splinter", "SplinterForPreTraining"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),

@@ -160,71 +160,64 @@ class SmolVLMModel(Idefics3Model):
     ) -> torch.Tensor:
         """
         Merge text embeddings with image embeddings out-of-place (no in-place indexing).
-        The shapes are something like:
-          - input_ids:          (B, T)
-          - inputs_embeds:      (B, T, D)
-          - image_hidden_states:(N, S, D) where N is total images across the batch,
-            S is #patches (or #slots) per image, D is embedding dim.
+        The shapes are:
+          - input_ids:           (batch_size, text_seq_len)
+          - inputs_embeds:       (batch_size, text_seq_len, text_dim)
+          - image_hidden_states: (num_images, patches_per_image, img_dim) where num_images is the total
+                                 images across the batch and patches_per_image is the number of patches per image.
         Returns:
-          A tensor of (B, T, D).
+          A tensor of (batch_size, text_seq_len, text_dim).
         """
-
-        B, T, D_text = inputs_embeds.shape
-        N, S, D_img = image_hidden_states.shape
-
+    
+        batch_size, text_seq_len, text_dim = inputs_embeds.shape
+        num_images, patches_per_image, img_dim = image_hidden_states.shape
+    
         image_offset = 0
         merged_outputs: List[torch.Tensor] = []
-
+    
         # Iterate through each sample
         for b_idx, (cur_ids, cur_embeds) in enumerate(zip(input_ids, inputs_embeds)):
             # Find positions of <image> tokens in the text
             image_positions = (cur_ids == self.image_token_id).nonzero(as_tuple=True)[0]
             num_image_tokens = len(image_positions)
-
+    
             # If no <image> => text-only
             if num_image_tokens == 0:
-                # NOTE: this is important for DeepSpeed.
-                empty_slice = image_hidden_states[0][:0, :]  # shape (0, D)
+                empty_slice = image_hidden_states[0][:0, :]  # shape (0, text_dim)
                 merged_text_only = torch.cat([cur_embeds, empty_slice], dim=0)
                 merged_outputs.append(merged_text_only)
                 continue
-
-            # Typically, if each image is S embeddings, we expect the total # of <image> tokens
-            # in this sample to be multiple of S => each group of S tokens = 1 image
-            if num_image_tokens % S != 0:
+    
+            if num_image_tokens % patches_per_image != 0:
                 raise ValueError(
-                    f"Sample {b_idx} has {num_image_tokens} <image> tokens, not a multiple of S={S}. "
-                    "Cannot map them to blocks of shape (S, D)."
+                    f"Sample {b_idx} has {num_image_tokens} <image> tokens, not a multiple of patches_per_image={patches_per_image}. "
+                    "Cannot map them to blocks of shape (patches_per_image, img_dim)."
                 )
-
+    
             positions_list = image_positions.tolist()
-            chunks = [positions_list[i : i + S] for i in range(0, num_image_tokens, S)]
-
+            chunks = [positions_list[i : i + patches_per_image] for i in range(0, num_image_tokens, patches_per_image)]
+    
             segments = []
             text_start = 0
-
-            # For each chunk (each chunk => 1 image)
+    
+            # For each chunk (each chunk corresponds to 1 image)
             for chunk in chunks:
                 cur_block = image_hidden_states[image_offset]
                 image_offset += 1
-
-                # We'll iterate over the S positions in ascending order
-                for i_s, pos in enumerate(chunk):
+    
+                for i_patch, pos in enumerate(chunk):
                     if pos > text_start:
                         segments.append(cur_embeds[text_start:pos])
-                    # Then add one row from cur_block => shape (1, D)
-                    row_of_block = cur_block[i_s : i_s + 1, :]
+                    row_of_block = cur_block[i_patch : i_patch + 1, :]
                     segments.append(row_of_block)
                     text_start = pos + 1
-
-            # leftover text after the final <image> token
-            if text_start < T:
+    
+            if text_start < text_seq_len:
                 segments.append(cur_embeds[text_start:])
-
-            # cat them into a single (T_b, D) tensor
+    
             merged_sample = torch.cat(segments, dim=0)
             merged_outputs.append(merged_sample)
-
+    
         merged_outputs = torch.stack(merged_outputs)
         return merged_outputs
 
