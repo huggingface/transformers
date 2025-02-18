@@ -930,7 +930,7 @@ class SiglipTextTransformer(nn.Module):
         self.encoder = SiglipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-        self.head = nn.Linear(embed_dim, embed_dim)
+        self.head = nn.Linear(embed_dim, config.projection_size)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
