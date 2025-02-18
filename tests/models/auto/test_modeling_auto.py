@@ -594,52 +594,69 @@ class AutoModelTest(unittest.TestCase):
 
     def test_get_class_from_dynamic_module_multiple_dots(self):
         """
-        Test that get_class_from_dynamic_module correctly handles class references with multiple dots.
-        This test verifies the fix for handling module paths that contain multiple dots.
+        Test that get_class_from_dynamic_module correctly handles both single and multiple dots in class references.
+        Tests both flat and nested module structures.
         """
         import shutil
-
         from huggingface_hub import constants
 
-        # Create a mock module in the transformers cache directory
-        mock_module_content = """
+        # Create mock modules for both scenarios
+        nested_module_content = """
 class NestedModel:
     def __init__(self):
         self.name = "nested_model"
+    """
+
+        flat_module_content = """
+class FlatModel:
+    def __init__(self):
+        self.name = "flat_model"
     """
 
         # Create a temporary directory within the module cache
         cache_dir = os.path.join(constants.HF_HOME, "modules", "transformers_modules")
         os.makedirs(cache_dir, exist_ok=True)
 
-        test_dir = os.path.join(cache_dir, "test_nested_module")
+        test_dir = os.path.join(cache_dir, "test_module_imports")
         try:
             # Create nested directory structure
             os.makedirs(os.path.join(test_dir, "modeling", "nested"), exist_ok=True)
+            
+            # Create the nested module file
+            nested_path = os.path.join(test_dir, "modeling", "nested", "model.py")
+            with open(nested_path, "w") as f:
+                f.write(nested_module_content)
 
-            # Create the module file
-            module_path = os.path.join(test_dir, "modeling", "nested", "model.py")
-            with open(module_path, "w") as f:
-                f.write(mock_module_content)
-            print("#" * 500)
-            print(os.path.isfile(module_path))
-            print("writing to ", module_path)
-            print("#" * 500)
-            # Test with multiple dots in the path
-            class_reference = "modeling.nested.model.NestedModel"
+            # Create the flat module file
+            flat_path = os.path.join(test_dir, "modeling.py")
+            with open(flat_path, "w") as f:
+                f.write(flat_module_content)
 
-            # Get the class using the modified function
-            cls = get_class_from_dynamic_module(
-                class_reference=class_reference, pretrained_model_name_or_path=test_dir, local_files_only=True
+            # Test case 1: Multiple dots (nested structure)
+            nested_class = get_class_from_dynamic_module(
+                class_reference="modeling.nested.model.NestedModel",
+                pretrained_model_name_or_path=test_dir,
+                local_files_only=True
             )
 
-            # Verify the class was loaded correctly
-            self.assertIsNotNone(cls)
-            self.assertEqual(cls.__name__, "NestedModel")
+            # Verify nested class
+            self.assertIsNotNone(nested_class)
+            self.assertEqual(nested_class.__name__, "NestedModel")
+            nested_instance = nested_class()
+            self.assertEqual(nested_instance.name, "nested_model")
 
-            # Create an instance to verify it works
-            instance = cls()
-            self.assertEqual(instance.name, "nested_model")
+            # Test case 2: Single dot (flat structure)
+            flat_class = get_class_from_dynamic_module(
+                class_reference="modeling.FlatModel",
+                pretrained_model_name_or_path=test_dir,
+                local_files_only=True
+            )
+
+            # Verify flat class
+            self.assertIsNotNone(flat_class)
+            self.assertEqual(flat_class.__name__, "FlatModel")
+            flat_instance = flat_class()
+            self.assertEqual(flat_instance.name, "flat_model")
 
         finally:
             # Clean up
