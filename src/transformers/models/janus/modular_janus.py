@@ -383,7 +383,7 @@ class JanusVisionEncoderLayer(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.self_attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
@@ -415,7 +415,7 @@ class JanusVisionEncoderLayer(nn.Module):
         """
         # Pre-Norm before attention .
         norm_hidden_states = self.layer_norm1(hidden_states)
-        attn_output, attn_weights = self.self_attn(
+        attn_output, attn_weights = self.attn(
             norm_hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
 
@@ -448,12 +448,12 @@ class JanusVisionAttentionPoolLatent(nn.Module):
         self.latent = nn.Parameter(torch.zeros(1, self.latent_len, self.hidden_size))
 
         # Linear layers for QKV projection
-        self.q_proj = nn.Linear(self.hidden_size, self.hidden_size)
-        self.kv_proj = nn.Linear(self.hidden_size, self.hidden_size * 2)
-        self.proj = nn.Linear(self.hidden_size, self.hidden_size)
+        self.q = nn.Linear(self.hidden_size, self.hidden_size)
+        self.kv = nn.Linear(self.hidden_size, self.hidden_size * 2)
+        self.projection_layer = nn.Linear(self.hidden_size, self.hidden_size)
 
         # Normalization & MLP
-        self.norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = JanusVisionMLP(config)
 
         self.proj_drop = nn.Dropout(getattr(config, "dropout", 0.0))
@@ -465,10 +465,10 @@ class JanusVisionAttentionPoolLatent(nn.Module):
         q_latent = self.latent.expand(batch_size, -1, -1)  # (B, latent_len, hidden_size)
 
         # Compute Q projection from latent tokens
-        query_states = self.q_proj(q_latent)  # (B, latent_len, hidden_size)
+        query_states = self.q(q_latent)  # (B, latent_len, hidden_size)
 
         # Compute combined KV projection
-        kv = self.kv_proj(hidden_states)
+        kv = self.kv(hidden_states)
         key_states, value_states = kv.view(batch_size, seq_len, 2, self.num_heads, self.head_dim).unbind(2)
 
         key_states = key_states.transpose(1, 2)
@@ -490,10 +490,10 @@ class JanusVisionAttentionPoolLatent(nn.Module):
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(batch_size, self.latent_len, self.hidden_size)
 
-        output = self.proj(attn_output)
+        output = self.projection_layer(attn_output)
         output = self.proj_drop(output)
 
-        output = output + self.mlp(self.norm(output))
+        output = output + self.mlp(self.layer_norm(output))
 
         return output[:, 0]
 
@@ -512,10 +512,10 @@ class JanusVisionTransformer(SiglipVisionTransformer,nn.Module):
     def __init__(self, config: JanusVisionConfig):
         nn.Module.__init__()
         self.config = config
-        self.post_layernorm = nn.LayerNorm(config.hidden_size)
         self.embeddings = JanusVisionEmbeddings(config)
+        self.post_layernorm = nn.LayerNorm(config.hidden_size)
         self.encoder = JanusVisionEncoder(config)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        self.use_head = True if not hasattr(config, "use_vision_head") else config.use_vision_head
         if self.use_head:
             self.head = JanusVisionAttentionPoolLatent(config)
 
@@ -525,7 +525,7 @@ class JanusVisionAlignerMLP(nn.Module):
 
         self.fc1 = nn.Linear(config.hidden_size, config.aligner_projection_size)
         self.hidden_layers = nn.ModuleList([
-            nn.Linear(config.aligner_projection_size, config.aligner_projection_size) for _ in range(1, config.num_aligner_hidden_states)
+            nn.Linear(config.aligner_projection_size, config.aligner_projection_size) for _ in range(1, config.depth)
         ])
         self.activation_fn = ACT2FN[config.hidden_act]
 
@@ -537,7 +537,7 @@ class JanusVisionAlignerMLP(nn.Module):
         return hidden_states
 
 class JanusVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
-    def __init__(self, config):
+    def __init__(self, config:JanusVQVAEConfig):
         super().__init__(config)
         self.quant_state_dims = [config.resolution // 2 ** (len(config.channel_multiplier) - 1)] * 2
 
@@ -789,6 +789,36 @@ class JanusImageVocabularyMapping(ChameleonImageVocabularyMapping):
             mapping[k] = v
         return mapping
 
+class JanusVQVAEAligner(nn.Module):
+    def __init__(self, config:JanusVQVAEConfig):
+        super().__init__()
+
+        self.fc1 = nn.Linear(config.embed_dim, config.aligner_projection_size)
+        self.hidden_layers = nn.ModuleList([
+            nn.Linear(config.aligner_projection_size, config.aligner_projection_size) for _ in range(1, config.depth)
+        ])
+        self.activation_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_states):
+        hidden_states = self.fc1(hidden_states)
+        for layer in self.hidden_layers:
+            hidden_states = self.activation_fn(hidden_states)
+            hidden_states = layer(hidden_states)
+        return hidden_states
+
+class JanusVQVAEHead(nn.Module):
+    def __init__(self, config: JanusVQVAEConfig):
+        super().__init__()
+        self.proj_out = nn.Linear(config.image_token_embed_size, config.aligner_projection_size)
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.vision_head = nn.Linear(config.aligner_projection_size, config.num_embeddings)
+
+    def forward(self,hidden_states:torch.Tensor)->torch.tensor:
+        hidden_states = self.proj_out(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.vision_head(hidden_states)
+        return hidden_states
+
 class JanusTextModel(LlamaModel):
     pass
 class JanusTextForCausalLM(LlamaForCausalLM, JanusPreTrainedModel, GenerationMixin):
@@ -802,13 +832,18 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["language_model.lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
 
-    def __init__(self, config):
+    def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.vision_model = JanusVisionTransformer(config.vision_config)
-        self.language_model = JanusTextForCausalLM(config.text_config)
         self.aligner = JanusVisionAlignerMLP(config.vision_config)
+
         self.vqmodel = JanusVQVAE(config.vq_config)
-        # self.vocabulary_mapping = JanusImageVocabularyMapping(config.vocabulary_map)
+        self.gen_aligner = JanusVQVAEAligner(config.vq_config)
+        self.gen_embed = nn.Embedding(config.vq_config.num_embeddings, config.vq_config.embed_dim)
+        self.gen_head = JanusVQVAEHead(config.vq_config)
+
+        self.language_model = JanusTextForCausalLM(config.text_config)
+
 
         # Initialize weights and apply final processing
         # self.post_init()
@@ -856,12 +891,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         if pixel_values is not None:
             image_embeds = self.get_image_embeddings(pixel_values)
             special_image_mask = input_ids == 100581
-            image_embeds_flat = image_embeds.reshape(-1, 2048)
+            # Flatten the image embeddings and mask.
+            image_embeds = image_embeds.reshape(-1, 2048)
             special_image_mask = special_image_mask.unsqueeze(-1).expand(-1, -1, 2048)
 
             text_embeds = self.get_input_embeddings(input_ids)
             image_embeds = image_embeds.to(text_embeds.device, text_embeds.dtype)
-            inputs_embeds = text_embeds.masked_scatter(special_image_mask, image_embeds_flat)
+            inputs_embeds = text_embeds.masked_scatter(special_image_mask, image_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -874,6 +910,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            labels=labels,
         )
 
         return outputs
