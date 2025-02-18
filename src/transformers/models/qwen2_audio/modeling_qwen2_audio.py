@@ -158,8 +158,6 @@ class Qwen2AudioAttention(nn.Module):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
                 past_key_value = past_key_value.self_attention_cache
@@ -179,6 +177,9 @@ class Qwen2AudioAttention(nn.Module):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
 
@@ -261,8 +262,6 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
                 past_key_value = past_key_value.self_attention_cache
@@ -282,6 +281,9 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]
         #  We would need to refactor the KV cache to be able to avoid many of these transpose/reshape/view.
@@ -378,8 +380,6 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
                 past_key_value = past_key_value.self_attention_cache
@@ -399,6 +399,9 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                if is_cross_attention:
+                    past_key_value.is_updated[self.layer_idx] = True
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it

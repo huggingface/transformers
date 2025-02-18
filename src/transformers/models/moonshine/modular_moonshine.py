@@ -331,8 +331,6 @@ class MoonshineAttention(GlmAttention):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
                 past_key_value = past_key_value.cross_attention_cache
             else:
                 past_key_value = past_key_value.self_attention_cache
@@ -357,6 +355,8 @@ class MoonshineAttention(GlmAttention):
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
+                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
+                past_key_value.is_updated[self.layer_idx] = True
 
         if not is_cross_attention:
             cos, sin = position_embeddings
