@@ -46,11 +46,10 @@ if is_torch_available():
         SwitchTransformersTop1Router,
     )
     from transformers.models.switch_transformers.modeling_switch_transformers import (
+        SwitchTransformersSparseMLP,
         load_balancing_loss_func,
         router_z_loss_func,
-        SwitchTransformersSparseMLP
     )
-
 
 
 class SwitchTransformersModelTester:
