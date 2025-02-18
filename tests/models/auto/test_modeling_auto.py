@@ -598,6 +598,7 @@ class AutoModelTest(unittest.TestCase):
         Tests both flat and nested module structures.
         """
         import shutil
+
         from huggingface_hub import constants
 
         # Create mock modules for both scenarios
@@ -621,7 +622,7 @@ class FlatModel:
         try:
             # Create nested directory structure
             os.makedirs(os.path.join(test_dir, "modeling", "nested"), exist_ok=True)
-            
+
             # Create the nested module file
             nested_path = os.path.join(test_dir, "modeling", "nested", "model.py")
             with open(nested_path, "w") as f:
@@ -636,7 +637,7 @@ class FlatModel:
             nested_class = get_class_from_dynamic_module(
                 class_reference="modeling.nested.model.NestedModel",
                 pretrained_model_name_or_path=test_dir,
-                local_files_only=True
+                local_files_only=True,
             )
 
             # Verify nested class
@@ -647,9 +648,7 @@ class FlatModel:
 
             # Test case 2: Single dot (flat structure)
             flat_class = get_class_from_dynamic_module(
-                class_reference="modeling.FlatModel",
-                pretrained_model_name_or_path=test_dir,
-                local_files_only=True
+                class_reference="modeling.FlatModel", pretrained_model_name_or_path=test_dir, local_files_only=True
             )
 
             # Verify flat class
