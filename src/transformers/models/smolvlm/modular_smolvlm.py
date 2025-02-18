@@ -88,6 +88,7 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "smolvlm_vision"
     pass
 
@@ -137,6 +138,7 @@ class SmolVLMConfig(Idefics3Config):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "smolvlm"
     pass
 
