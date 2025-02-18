@@ -238,3 +238,22 @@ class TFXGLMModelLanguageGenerationTest(unittest.TestCase):
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
+
+    def test_loss_with_padding(self):
+        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
+        model = TFXGLMForCausalLM.from_pretrained("facebook/xglm-564M")
+
+        tokenizer.padding_side = "right"
+
+        sequence = "Sequence"
+
+        tokenized_non_padded = tokenizer(sequence, return_tensors="tf")
+        labels_non_padded = tokenized_non_padded.input_ids
+        loss_non_padded = model(tokenized_non_padded, labels=labels_non_padded).loss
+
+        tokenized_padded = tokenizer(sequence, padding="max_length", max_length=16, return_tensors="tf")
+        labels_padded = tokenized_padded.input_ids
+        labels_padded = tf.where(labels_padded == tokenizer.pad_token_id, -100, labels_padded)
+        loss_padded = model(tokenized_padded, labels=labels_padded).loss
+
+        tf.debugging.assert_near(loss_non_padded, loss_padded, atol=1e-3)
