@@ -234,15 +234,15 @@ class MoonshineAttention(nn.Module):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_value.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_value.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
             key_states = (
                 self.k_proj(current_states)
@@ -255,7 +255,7 @@ class MoonshineAttention(nn.Module):
                 .transpose(1, 2)
             )
             if is_cross_attention and past_key_value is not None:
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -267,7 +267,7 @@ class MoonshineAttention(nn.Module):
 
             if past_key_value is not None:
                 cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
 
