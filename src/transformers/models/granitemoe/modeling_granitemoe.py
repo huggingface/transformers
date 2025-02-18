@@ -1119,7 +1119,7 @@ class GraniteMoeModel(GraniteMoePreTrainedModel):
         output_attentions: bool,
     ):
         if "flash_attention" in self.config._attn_implementation:
-            if attention_mask is not None and (attention_mask == 0.0).any()
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
