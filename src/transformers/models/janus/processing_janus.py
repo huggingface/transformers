@@ -44,12 +44,6 @@ DEFAULT_SYSTEM_PROMPT = (
         "and assist the user with a variety of tasks using natural language.\n\n"
     )
 
-# messages = [{"role":"User",
-#   "content":[{'type':"text","text":"<image_placeholder>\nConvert the formula into latex code.\n"}]},
-#   {"role": "Assistant", "content": " "},
-# ]
-# Here as  a hack I have added \n after user content but ideally chat template should add it
-
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
@@ -69,18 +63,21 @@ class JanusProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_tensors":"pt"
-        }
+        },
+        "common_kwargs": {
+            "return_tensors":"pt"
+        },
     }
 
 class JanusProcessor(ProcessorMixin):
     r"""
-    Constructs a PaliGemma processor which wraps a PaliGemma image processor and a PaliGemma tokenizer into a single processor.
+    Constructs a Janus processor which wraps a Janus Image Processor and a Llama tokenizer into a single processor.
 
-    [`JanusProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`LlamaTokenizerFast`]. See the
+    [`JanusProcessor`] offers all the functionalities of [`JanusImageProcessor`] and [`LlamaTokenizerFast`]. See the
     [`~JanusProcessor.__call__`] and [`~JanusProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`SiglipImageProcessor`], *optional*):
+        image_processor ([`JanusImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -99,8 +96,8 @@ class JanusProcessor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
-        self.num_image_tokens = 576 # revert back to 576 or fetch from pre_processor config
-        self.image_start_token = "<begin_of_image>"
+        self.num_image_tokens = 576
+        self.image_start_token = "<begin_of_image>" # Can be Hardcoded as it won't change.
         self.image_end_token = "<end_of_image>"
         self.use_default_system_prompt = use_default_system_prompt
 
@@ -127,52 +124,21 @@ class JanusProcessor(ProcessorMixin):
             elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        # Replace the image token with explanded imaeg tokens.
+        # Replace the image token with expanded image tokens.
         prompt_strings = []
         one_img_tokens = self.image_start_token + (IMAGE_TOKEN * self.num_image_tokens) + self.image_end_token
-        for sample in text:
-            sample = sample.strip()
-            sample = sample.replace(IMAGE_TOKEN, one_img_tokens)
+        for prompt in text:
+            prompt = prompt.replace(IMAGE_TOKEN, one_img_tokens)
             if self.use_default_system_prompt:
-                sample = DEFAULT_SYSTEM_PROMPT + sample
-            prompt_strings.append(sample)
+                prompt = DEFAULT_SYSTEM_PROMPT + prompt
+            prompt_strings.append(prompt)
 
 
         data = self.tokenizer(prompt_strings,**output_kwargs['text_kwargs'])
 
+        # Process images if pixel values are provided.
         if images is not None:
-            # How to pass image kwargs and it returns the pixel values aso append it to the output.
-            data['pixel_values'] = self.image_processor(images=images,return_tensors="pt")['pixel_values']
-
-        input_ids = data["input_ids"]
-        batch_size, _ = input_ids.shape
-
-        # Compute special tokens IDs
-        image_token_id = self.tokenizer.vocab.get(IMAGE_TOKEN)
-        image_start_id = self.tokenizer.vocab.get(self.image_start_token)
-
-        # Compute image sequence mask
-        images_seq_mask = (input_ids == image_token_id)
-
-        # Compute image embedding mask dynamically
-        max_n_images = max(1,len(images))
-        images_emb_mask = torch.zeros((batch_size, max_n_images, self.num_image_tokens + 1), dtype=torch.bool)
-
-        for i in range(batch_size):
-            img_positions = (input_ids[i] == image_start_id).nonzero(as_tuple=True)[0]
-            for j, start_idx in enumerate(img_positions):
-                end_idx = start_idx + self.num_image_tokens + 1  # Account for <image_beg>
-                images_emb_mask[i, j, : min(end_idx - start_idx, self.num_image_tokens + 1)] = True
-
-        # Process images if provided
-        if images is not None:
-            data["pixel_values"] = self.image_processor(images=images, return_tensors="pt")["pixel_values"]
-
-        # Add masks to the output
-        data.update({
-            "images_seq_mask": images_seq_mask,
-            "images_emb_mask": images_emb_mask
-        })
+            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["common_kwargs"])["pixel_values"]
 
         return BatchFeature(data=data)
 

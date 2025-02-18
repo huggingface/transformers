@@ -17,7 +17,7 @@ import math
 import warnings
 from functools import cached_property
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union, List, Dict
 
 import numpy as np
 import torch
@@ -61,6 +61,18 @@ from ..vit.modeling_vit import ViTPatchEmbeddings
 from ..dinov2_with_registers.modeling_dinov2_with_registers  import Dinov2WithRegistersLayerScale, Dinov2WithRegistersDropPath
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionTransformer, SiglipVisionModel, SiglipMultiheadAttentionPoolingHead
 from ..llama.modeling_llama import LlamaModel, LlamaForCausalLM
+from transformers.models.blip.image_processing_blip import BlipImageProcessor
+
+
+from PIL import Image
+from ...image_transforms import (
+    resize,
+)
+from ...image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+    to_numpy_array,
+)
 
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -383,7 +395,8 @@ class JanusVisionEncoderLayer(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        # self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        self.attn = JanusVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
@@ -890,14 +903,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         if pixel_values is not None:
             image_embeds = self.get_image_embeddings(pixel_values)
-            special_image_mask = input_ids == 100581
+            image_attention_mask = input_ids == 100581
+
             # Flatten the image embeddings and mask.
             image_embeds = image_embeds.reshape(-1, 2048)
-            special_image_mask = special_image_mask.unsqueeze(-1).expand(-1, -1, 2048)
+            image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, 2048)
 
             text_embeds = self.get_input_embeddings(input_ids)
             image_embeds = image_embeds.to(text_embeds.device, text_embeds.dtype)
-            inputs_embeds = text_embeds.masked_scatter(special_image_mask, image_embeds)
+            inputs_embeds = text_embeds.masked_scatter(image_attention_mask, image_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -915,3 +929,97 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         return outputs
 
+
+# Modular Image Processor of Janus.
+
+def expand2square(pil_img, background_color):
+    width, height = pil_img.size
+    if width == height:
+        return pil_img
+    elif width > height:
+        result = Image.new(pil_img.mode, (width, width), background_color)
+        result.paste(pil_img, (0, (width - height) // 2))
+        return result
+    else:
+        result = Image.new(pil_img.mode, (height, height), background_color)
+        result.paste(pil_img, ((height - width) // 2, 0))
+        return result
+    
+class JanusImageProcessor(BlipImageProcessor):
+
+    def __init__(self,
+        do_resize: bool = True,
+        size: Dict[str, int] = None,
+        min_size: int = 14,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        do_rescale: bool = True,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = True,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        do_convert_rgb: bool = None,
+        **kwargs,):
+        super().__init__(**kwargs)
+
+        self.min_size = min_size
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple([int(x * 255) for x in image_mean])
+
+    def resize(
+        self,
+        image: np.ndarray,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Resize an image to dynamically calculated size.
+
+        Args:
+            image (`np.ndarray`):
+                Image to resize.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BICUBIC`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
+        """
+        # Remove the size arg from kwargs as we will be dynamically calculating the output size.
+        _ = kwargs.pop('size',None)
+        height, width, _ = image.shape
+        max_size = max(height, width)
+        output_size = [
+            max(int(height / max_size * self.image_size), self.min_size),
+            max(int(width / max_size * self.image_size), self.min_size),
+        ]
+
+        image = resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            return_numpy=False,
+            **kwargs,
+        )
+        # expand and pad the images
+        image = expand2square(image, self.background_color)
+        image = to_numpy_array(image)
+        return image
+
+__all__ = ["JanusImageProcessor",]

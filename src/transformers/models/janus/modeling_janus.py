@@ -447,19 +447,13 @@ class JanusVisionMLP(nn.Module):
         return hidden_states
 
 
-JANUS_VISION_ATTENTION_CLASSES = {
-    "eager": JanusVisionAttention,
-    "sdpa": JanusVisionSdpaAttention,
-    "flash_attention_2": JanusVisionFlashAttention2,
-}
-
-
 class JanusVisionEncoderLayer(nn.Module):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        # self.attn = JANUS_VISION_ATTENTION_CLASSES[config._attn_implementation](config=config)
+        self.attn = JanusVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
@@ -917,7 +911,7 @@ class JanusVQVAEVectorQuantizer(nn.Module):
     and allowing for post-hoc remapping of indices.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: JanusVQVAEConfig):
         super().__init__()
         self.num_embeddings = config.num_embeddings
         self.embedding_dim = config.embed_dim
@@ -954,15 +948,14 @@ class JanusVQVAEVectorQuantizer(nn.Module):
 
         return hidden_state_quant, loss, min_encoding_indices
 
-    def get_codebook_entry(self, image_tokens: torch.LongTensor, shape=None) -> torch.FloatTensor:
+    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
         batch_size = image_tokens.shape[0]
         emb_dim: int = self.embedding.weight.shape[-1]
-        print(emb_dim,"emb_dim",self.quant_state_dims)
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
 
         # reshape back to match original input shape
-        hidden_state_quant = hidden_state_quant.view((batch_size, *shape, emb_dim))
+        hidden_state_quant = hidden_state_quant.view((batch_size, *self.quant_state_dims, emb_dim))
         hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
 
         return hidden_state_quant
@@ -1286,7 +1279,7 @@ class JanusVQVAE(JanusPreTrainedModel):
         quant, emb_loss, indices = self.quantize(hidden_states)
         return quant, emb_loss, indices
 
-    def decode(self, image_tokens: torch.LongTensor, shape) -> torch.FloatTensor:
+    def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
         """
         Decodes quantized token IDs into pixel values.
         Args:
@@ -1296,14 +1289,13 @@ class JanusVQVAE(JanusPreTrainedModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 Pixel values decoded from the token IDs.
         """
-        # if image_tokens.shape[1] != self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]:
-        #     raise ValueError(
-        #         f"Expected `image_tokens` to have shape `(batch_size, {self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]})`, "
-        #         f"but got shape `{image_tokens.shape}`."
-            # )
-        codebook_entry = self.quantize.get_codebook_entry(image_tokens, shape)
+        if image_tokens.shape[1] != self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]:
+            raise ValueError(
+                f"Expected `image_tokens` to have shape `(batch_size, {self.quantize.quant_state_dims[0] * self.quantize.quant_state_dims[1]})`, "
+                f"but got shape `{image_tokens.shape}`."
+            )
+        codebook_entry = self.quantize.get_codebook_entry(image_tokens)
         hidden_states = self.post_quant_conv(codebook_entry)
-        print(hidden_states[0][0:5])
         pixel_values = self.decoder(hidden_states)
         return pixel_values
 
@@ -2293,14 +2285,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         if pixel_values is not None:
             image_embeds = self.get_image_embeddings(pixel_values)
-            special_image_mask = input_ids == 100581
+            image_attention_mask = input_ids == 100581
+
             # Flatten the image embeddings and mask.
             image_embeds = image_embeds.reshape(-1, 2048)
-            special_image_mask = special_image_mask.unsqueeze(-1).expand(-1, -1, 2048)
+            image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, 2048)
 
             text_embeds = self.get_input_embeddings(input_ids)
             image_embeds = image_embeds.to(text_embeds.device, text_embeds.dtype)
-            inputs_embeds = text_embeds.masked_scatter(special_image_mask, image_embeds)
+            inputs_embeds = text_embeds.masked_scatter(image_attention_mask, image_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
