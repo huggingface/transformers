@@ -1155,10 +1155,10 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        intermediate_embeddings: List[torch.Tensor],
+        intermediate_embeddings: Optional[List[torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
-        attention_similarity: torch.Tensor = None,
-        target_embedding: torch.Tensor = None,
+        attention_similarity: Optional[torch.Tensor] = None,
+        target_embedding: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Predict high-quality masks given image and prompt embeddings.
@@ -1194,23 +1194,25 @@ class SamHQMaskDecoder(nn.Module):
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
 
-        if intermediate_embeddings is not None:
-            if len(intermediate_embeddings) == 0:
-                raise ValueError("`intermediate_embeddings` must be provided and cannot be empty.")
-            if not isinstance(intermediate_embeddings, list):
-                raise ValueError("`intermediate_embeddings` must be a list.")
+        has_intermediate = intermediate_embeddings is not None and len(intermediate_embeddings) > 0
 
-        vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2).contiguous()
+        if has_intermediate:
+            vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2).contiguous()
+        else:
+            vit_features = None
 
         embed_encode = self.encoder_conv1(image_embeddings)
         embed_encode = self.activation(self.encoder_norm(embed_encode))
         embed_encode = self.encoder_conv2(embed_encode)
 
-        compressed_vit_features = self.compress_vit_conv1(vit_features)
-        compressed_vit_features = self.activation(self.compress_vit_norm(compressed_vit_features))
-        compressed_vit_features = self.compress_vit_conv2(compressed_vit_features)
+        if has_intermediate:
+            compressed_vit_features = self.compress_vit_conv1(vit_features)
+            compressed_vit_features = self.activation(self.compress_vit_norm(compressed_vit_features))
+            compressed_vit_features = self.compress_vit_conv2(compressed_vit_features)
 
-        hq_features = embed_encode + compressed_vit_features
+            hq_features = embed_encode + compressed_vit_features
+        else:
+            hq_features = embed_encode
 
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hq_token.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
