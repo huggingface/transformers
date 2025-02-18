@@ -1284,13 +1284,16 @@ class SamHQMaskDecoder(nn.Module):
             mask_slice = slice(1, self.num_mask_tokens - 1)
             iou_pred = iou_pred[:, :, mask_slice]
 
-            iou_pred, max_iou_idx = torch.max(iou_pred, dim=1)
-            iou_pred = iou_pred.unsqueeze(1)
+            # Get the highest scoring iou prediction
+            iou_pred, max_iou_idx = torch.max(iou_pred, dim=2)  # Changed from dim=1
+            iou_pred = iou_pred.unsqueeze(2)  # Add mask dimension back
 
             masks_multi = masks[:, :, mask_slice, :, :]
-            batch_indices = torch.arange(masks_multi.size(0)).unsqueeze(1).expand(-1, masks_multi.size(1))
-            point_indices = torch.arange(masks_multi.size(1)).unsqueeze(0).expand(masks_multi.size(0), -1)
-            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(1)
+                # Select the mask with highest IoU prediction for each point
+            batch_size, point_batch_size = masks_multi.shape[:2]
+            batch_indices = torch.arange(batch_size, device=masks_multi.device)[:, None]
+            point_indices = torch.arange(point_batch_size, device=masks_multi.device)[None, :]
+            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(2)
         else:
             mask_slice = slice(0, 1)
             iou_pred = iou_pred[:, :, mask_slice]
