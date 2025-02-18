@@ -42,7 +42,7 @@ class SmolVLMVisionConfig(Idefics3VisionConfig):
     This is the configuration class to store the configuration of a [`SmolVLMVisionModel`]. It is used to instantiate a
     SmolVLM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
-    [google/siglip-so400m-patch14-384](https://huggingface.co/google/siglip-so400m-patch14-384) used in the SmolVLM model
+    [google/siglip-so400m-patch14-384](https://huggingface.co/google/siglip-so400m-patch14-384) used in SmolVLM
     [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
