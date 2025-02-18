@@ -250,7 +250,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_model_pt_chat_template_image_url(self):
-        pipe = pipeline("image-text-to-text", model="llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+        pipe = pipeline("image-text-to-text", model="llava-hf/llava-interleave-qwen-0.5b-hf")
         messages = [
             {
                 "role": "user",
@@ -266,7 +266,7 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
             }
         ]
         outputs = pipe(text=messages, return_full_text=False, max_new_tokens=10)[0]["generated_text"]
-        self.assertEqual(outputs, "The image captures the iconic Statue of Liberty, a")
+        self.assertEqual(outputs, "A statue of liberty in the foreground of a city")
 
     @slow
     @require_torch
