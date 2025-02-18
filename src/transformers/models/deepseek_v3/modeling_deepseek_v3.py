@@ -145,7 +145,7 @@ class DeepseekV3TopkRouter(nn.Module):
         self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.e_score_correction_bias = nn.Parameter(torch.empty((self.n_routed_experts)))
+        self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts)))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
