@@ -1394,17 +1394,29 @@ class UdopStack(UdopPreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        # initialize past_key_values
-        return_self_attention_cache = False
+        # initialize `past_key_values`
+        # - if the model is an encoder-decoder or has encoder inputs passed, the cache will be an encoder-decoder cache
+        # - otherwise, a self-attention cache is used
+        # - if `use_cache` is False, e.g. when using the encoder only, we remove cache if it is passed
         if use_cache:
             if not self.is_decoder:
-                raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
+                raise ValueError(f"`use_cache` can only be set to `True` if {self} is not an encoder.")
+            if (
+                isinstance(past_key_values, Cache)
+                and not isinstance(past_key_values, EncoderDecoderCache)
+                and encoder_hidden_states is not None
+            ):
+                logger.warning_once(
+                    "You are passing a decoder-only cache to a model that is used as an encoder-decoder model. "
+                    "This behavior is deprecated and will be removed in v4.52. To avoid this warning, please pass an "
+                    "`EncoderDecoderCache` (e.g. `EncoderDecoderCache(past_key_values, DynamicCache())`)."
+                )
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        # if `use_cache` is False, e.g. when using the encoder only, remove cache if it is passed
+                if encoder_hidden_states is not None:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
         elif past_key_values is not None:
             logger.warning_once(
                 "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
@@ -1423,12 +1435,17 @@ class UdopStack(UdopPreTrainedModel):
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
+            decoder_cache = (
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values
+            )
             causal_mask = self._update_causal_mask(
-                attention_mask,
-                inputs_embeds,
-                cache_position,
-                past_key_values.self_attention_cache if past_key_values is not None else None,
-                output_attentions,
+                attention_mask=attention_mask,
+                input_tensor=inputs_embeds,
+                cache_position=cache_position,
+                past_key_values=decoder_cache,
+                output_attentions=output_attentions,
             )
         else:
             causal_mask = attention_mask[:, None, None, :]
@@ -1501,9 +1518,6 @@ class UdopStack(UdopPreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-
         if not return_dict:
             return tuple(
                 v
