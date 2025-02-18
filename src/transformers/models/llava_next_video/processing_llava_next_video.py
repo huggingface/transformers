@@ -37,8 +37,6 @@ class LlavaNextVideoProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
         },
-        "image_kwargs": {},
-        "videos_kwargs": {},
         "common_kwargs": {
             "return_tensors": "pt",
         },
