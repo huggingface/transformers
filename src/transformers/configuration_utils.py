@@ -65,9 +65,10 @@ class PretrainedConfig(PushToHubMixin):
 
     - **model_type** (`str`) -- An identifier for the model type, serialized into the JSON file, and used to recreate
       the correct object in [`~transformers.AutoConfig`].
-    - **is_composition** (`bool`) -- Whether the config class is composed of multiple sub-configs. In this case the
-      config has to be initialized from two or more configs of type [`~transformers.PretrainedConfig`] like:
-      [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`].
+    - **has_no_defaults_at_init** (`bool`) -- Whether the config class can be initialized without providing input arguments.
+      Some configurations requires inputs to be defined at init and have no default values, usually these are composite configs,
+      (but not necessarily) such as [`~transformers.EncoderDecoderConfig`] or [`~RagConfig`]. They have to be initialized from
+      two or more configs of type [`~transformers.PretrainedConfig`].
     - **keys_to_ignore_at_inference** (`List[str]`) -- A list of keys to ignore by default when looking at dictionary
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
@@ -197,7 +198,7 @@ class PretrainedConfig(PushToHubMixin):
     model_type: str = ""
     base_config_key: str = ""
     sub_configs: Dict[str, "PretrainedConfig"] = {}
-    is_composition: bool = False
+    has_no_defaults_at_init: bool = False
     attribute_map: Dict[str, str] = {}
     base_model_tp_plan: Optional[Dict[str, Any]] = None
     base_model_pp_plan: Optional[Dict[str, Tuple[List[str]]]] = None
@@ -820,7 +821,7 @@ class PretrainedConfig(PushToHubMixin):
         default_config_dict = PretrainedConfig().to_dict()
 
         # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+        class_config_dict = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
 
         serializable_config_dict = {}
 
@@ -1181,6 +1182,12 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
+    print(
+        config_obj.__class__.__name__,
+        default.get("head_dim", None),
+        dict_a.get("head_dim", None),
+        dict_b.get("head_dim", None),
+    )
     for key, value in dict_a.items():
         obj_value = getattr(config_obj, str(key), None)
         if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):

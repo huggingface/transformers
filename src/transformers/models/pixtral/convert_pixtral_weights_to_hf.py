@@ -158,7 +158,6 @@ def convert_mistral_model(input_dir, output_dir):
             hidden_act="silu",
             sliding_window=None,
             tie_word_embeddings=False,
-            is_composition=True,
             rms_norm_eps=1e-5,
         )
     else:
