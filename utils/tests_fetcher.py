@@ -730,6 +730,8 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
     while len(imported_modules) > 0:
         new_modules = []
         for module, imports in imported_modules:
+            if "models" in module.split("/") and module.split("/")[-1].startswith("convert_"):
+                continue
             # If we end up in an __init__ we are often not actually importing from this init (except in the case where
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
@@ -780,7 +782,9 @@ def create_reverse_dependency_tree() -> List[Tuple[str, str]]:
     Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
     """
     cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py"))
+    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
+    all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
 
@@ -898,7 +902,9 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
     # Start from the example deps init.
     example_deps, examples = init_test_examples_dependencies()
     # Add all modules and all tests to all examples
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py")) + examples
+    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
+    all_modules += list(PATH_TO_TESTS.glob("**/*.py")) + examples
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
