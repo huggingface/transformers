@@ -72,8 +72,8 @@ pipeline(text=messages, max_new_tokens=50, return_full_text=False)
 
 For multimodal models that accept images like [LLaVA](./model_doc/llava), include the following in `content` as shown below.
 
-- `"type": "image"` means the content is an image.
-- `"url": ""` is a link to the image, but it could also be a file path (`"path"`). Images are automatically loaded, processed, and prepared into pixel values as inputs to the model.
+- The content `"type"` can be an `"image"` or `"text"`.
+- For images, it can be a link to the image (`"url"`), a file path (`"path"`), or `"base64"`. Images are automatically loaded, processed, and prepared into pixel values as inputs to the model.
 
 ```python
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
@@ -109,8 +109,11 @@ These inputs are now ready to be used in [`~GenerationMixin.generate`].
 
 Some vision models also support video inputs. The message format is very similar to the format for [image inputs](#image-inputs).
 
-- `"type": "video"` means the content is a video.
-- `"url": ""` is a link to the video, , but it could also be a file path (`"path"`). Videos loaded from a URL can only be decoded with [PyAV](https://pyav.basswood-io.com/docs/stable/) or [Decord](https://github.com/dmlc/decord).
+- The content `"type"` should be `"video"` to indicate the the content is a video.
+- For videos, it can be a link to the video (`"url"`) or it could be a file path (`"path"`). Videos loaded from a URL can only be decoded with [PyAV](https://pyav.basswood-io.com/docs/stable/) or [Decord](https://github.com/dmlc/decord).
+
+> [!WARNING]
+> Loading a video from `"url"` is only supported by the PyAV or Decord backends.
 
 ```python
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
@@ -134,12 +137,17 @@ messages = [
 ]
 ```
 
-Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. There are a few extra parameters to include in [`~ProcessorMixin.apply_chat_template`].
+Pass `messages` to [`~ProcessorMixin.apply_chat_template`] to tokenize the input content. There are a few extra parameters to include in [`~ProcessorMixin.apply_chat_template`] that controls the sampling process.
 
-- `num_frames` controls how many frames to uniformly sample from the video. Each checkpoint has a maximum frame count it was pretrained with and exceeding this count can significantly lower generation quality. It's important to choose a frame count that fits both the model capacity and your hardware resources. If `num_frames` isn't specified, the entire video is loaded without any frame sampling.
-- `video_load_backend` refers to a specific framework to load a video. It supports [PyAV](https://pyav.basswood-io.com/docs/stable/), [Decord](https://github.com/dmlc/decord), [OpenCV](https://github.com/opencv/opencv), and [torchvision](https://pytorch.org/vision/stable/index.html).
+The `video_load_backend` parameter refers to a specific framework to load a video. It supports [PyAV](https://pyav.basswood-io.com/docs/stable/), [Decord](https://github.com/dmlc/decord), [OpenCV](https://github.com/opencv/opencv), and [torchvision](https://pytorch.org/vision/stable/index.html).
 
-The example below uses Decord as the backend because it is a bit faster than PyAV.
+The examples below uses Decord as the backend because it is a bit faster than PyAV.
+
+<hfoptions id="sampling">
+<hfoption id="fixed number of frames">
+
+The `num_frames` parameter controls how many frames to uniformly sample from the video. Each checkpoint has a maximum frame count it was pretrained with and exceeding this count can significantly lower generation quality. It's important to choose a frame count that fits both the model capacity and your hardware resources. If `num_frames` isn't specified, the entire video is loaded without any frame sampling.
+
 
 ```python
 processed_chat = processor.apply_chat_template(
@@ -155,6 +163,87 @@ print(processed_chat.keys())
 ```
 
 These inputs are now ready to be used in [`~GenerationMixin.generate`].
+
+</hfoption>
+<hfoption id="fps">
+
+For longer videos, it may be better to sample more frames for better representation with the `video_fps` parameter. This determines how many frames per second to extract. As an example, if a video is 10 seconds long and `video_fps=2`, then the model samples 20 frames. In other words, 2 frames are uniformly sampled every 10 seconds.
+
+```py
+processed_chat = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    video_fps=32,
+    video_load_backend="decord",
+)
+print(processed_chat.keys())
+```
+
+</hfoption>
+<hfoption id="custom frame sampling">
+
+Some models don't sample frames *uniformly* and require more complex logic to determine which frames to use. For example, the model may have an *adaptive frame selection* or if the model prioritizes *key moments* in a video rather than evenly spaced frames.
+
+If a model has a different sampling strategy, you can write a function that customizes frame selection. The function should include the following requirements.
+
+- Use the `sample_indices_fn` parameter to pass a callable function for sampling.
+- If provided, this function *overrides* the standard `num_frames` and `fps` parameters.
+- The function receives all the parameters passed to `load_video` and must return valid frame indices to sample from.
+
+An example function is shown below. This gives you full control over frame selection, making the model more adaptable to different video scenarios.
+
+```py
+def sample_indices_fn(metadata, **kwargs):
+    # samples only the first and the second frame
+    return [0, 1]
+
+processed_chat = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    sample_indices_fn=sample_indices_fn,
+    video_load_backend="decord",
+)
+print(processed_chat.keys())
+```
+
+</hfoption>
+<hfoption id="list of image frames">
+
+Videos may also exist as a set of sampled frames stored as images rather than the full video file.
+
+In this case, pass a list of image file paths and the processor automatically concatenates them into a video. Make sure all images are the same size since they are assumed to be from the same video.
+
+```py
+frames_paths = ["/path/to/frame0.png", "/path/to/frame5.png", "/path/to/frame10.png"]
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+      "role": "user",
+      "content": [
+            {"type": "video", "path": frames_paths},
+            {"type": "text", "text": "What do you see in this video?"},
+        ],
+    },
+]
+
+processed_chat = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+)
+print(processed_chat.keys())
+```
+
+</hfoption>
+</hfoptions>
 
 ## Template configuration
 
