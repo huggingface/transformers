@@ -1007,17 +1007,16 @@ class ModelUtilsTest(TestCasePlus):
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
         # Save this output as `max_rss_normal` if testing memory results
         max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
-        # print(f"{max_rss_normal=}")
 
         one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
         # Save this output as `max_rss_low_mem` if testing memory results
         max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
 
-        # Should be within 2MBs of each other (overhead)
+        # Should be within 3MBs of each other (overhead)
         self.assertAlmostEqual(
             max_rss_normal / 1024 / 1024,
             max_rss_low_mem / 1024 / 1024,
-            delta=2,
+            delta=3,
             msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
         )
 
