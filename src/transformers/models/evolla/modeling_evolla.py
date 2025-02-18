@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
@@ -345,8 +345,10 @@ class EvollaAttention(nn.Module):
         attention_dropout: float,
         attention_bias: bool,
         layer_idx: int,
+        _attn_implementation: str,
     ):
         super().__init__()
+        self._attn_implementation = _attn_implementation
         self.layer_idx = layer_idx
         self.head_dim = hidden_size // num_attention_heads
         self.num_key_value_groups = num_attention_heads // num_key_value_heads
@@ -387,14 +389,14 @@ class EvollaAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-        # if self.config._attn_implementation != "eager":
-        #     if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-        #         logger.warning_once(
-        #             "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-        #             'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-        #         )
-        #     else:
-        #         attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if self._attn_implementation != "eager":
+            if self._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -426,6 +428,7 @@ class EvollaDecoderLayer(nn.Module):
         mlp_bias: bool,
         hidden_act: str,
         layer_idx: int,
+        _attn_implementation: str,
     ):
         super().__init__()
         self.hidden_size = hidden_size
@@ -437,6 +440,7 @@ class EvollaDecoderLayer(nn.Module):
             attention_dropout=attention_dropout,
             attention_bias=attention_bias,
             layer_idx=layer_idx,
+            _attn_implementation=_attn_implementation,
         )
 
         self.mlp = EvollaMLP(
@@ -755,6 +759,7 @@ class EvollaLLM(nn.Module):
                     mlp_bias=mlp_bias,
                     hidden_act=hidden_act,
                     layer_idx=layer_idx,
+                    _attn_implementation=config._attn_implementation,
                 )
                 for layer_idx in range(num_hidden_layers)
             ]
