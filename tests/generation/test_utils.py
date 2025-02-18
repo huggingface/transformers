@@ -1263,7 +1263,7 @@ class GenerationTesterMixin:
                     "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
-                    *VLM_CLASS_NAMES, # shouldn't suggest image tokens
+                    *VLM_CLASS_NAMES,  # shouldn't suggest image tokens
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1277,7 +1277,6 @@ class GenerationTesterMixin:
 
             config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
-            logits_processors = self._get_logits_processor_kwargs(config=model.config)
             # Sets assisted generation arguments such that:
             # a) no EOS is generated, to ensure generation doesn't break early
             # b) the prompt lookup tries to give the model 2 tokens, to ensure the input preparation of
@@ -1297,10 +1296,10 @@ class GenerationTesterMixin:
                 "use_cache": True,
             }
 
-            output_greedy = model.generate(**generation_kwargs, **inputs_dict, **logits_processors)
+            output_greedy = model.generate(**generation_kwargs, **inputs_dict)
 
             generation_kwargs.update({"prompt_lookup_num_tokens": 2})  # see b)
-            output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict, **logits_processors)
+            output_prompt_lookup = model.generate(**generation_kwargs, **inputs_dict)
 
             # The two outputs must match and their shape must be as expected
             self._check_similar_generate_outputs(output_greedy, output_prompt_lookup)
