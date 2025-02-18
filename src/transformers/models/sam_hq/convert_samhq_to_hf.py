@@ -97,6 +97,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_decoder.embedding_maskfeature.0": "mask_decoder.mask_conv1",
     "mask_decoder.embedding_maskfeature.1": "mask_decoder.mask_norm",
     "mask_decoder.embedding_maskfeature.3": "mask_decoder.mask_conv2",
+    "mask_decoder.hf_mlp": "mask_decoder.hq_mask_mlp",
 }
 
 
@@ -106,7 +107,7 @@ def replace_keys(state_dict):
     state_dict.pop("pixel_std", None)
 
     output_hypernetworks_mlps_pattern = r".*.output_hypernetworks_mlps.(\d+).layers.(\d+).*"
-    hf_mlp_layers_pattern = r".*hf_mlp.layers.(\d+).*"
+    hf_mlp_layers_pattern = r".*hq_mask_mlp.layers.(\d+).*"
 
     for key, value in state_dict.items():
         new_key = key
@@ -253,7 +254,7 @@ if __name__ == "__main__":
 
     checkpoint_path = args.checkpoint_path
     if checkpoint_path is None:
-        checkpoint_path = hf_hub_download("Uminosachi/sam-hq", f"{args.model_name}.pth")
+        checkpoint_path = hf_hub_download("lkeab/hq-sam", f"{args.model_name}.pth")
 
     convert_sam_hq_checkpoint(
         args.model_name,
