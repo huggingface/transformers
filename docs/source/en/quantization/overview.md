@@ -38,6 +38,8 @@ Use the Space below to help you pick a quantization method depending on your har
 | [FBGEMM_FP8](./fbgemm_fp8.md)                 | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8             | 🔴               | 🟢                          | 🟢                      | https://github.com/pytorch/FBGEMM       |
 | [torchao](./torchao.md)                       | 🟢                   |                 | 🟢        | 🔴        | 🟡 | 🔴              |                 | 4/8         |                  | 🟢🔴                        | 🟢                      | https://github.com/pytorch/ao       |
 | [VPTQ](./vptq.md)                             | 🔴                   | 🔴              |     🟢     | 🟡        | 🔴                                 | 🔴              | 🟢              | 1/8         | 🔴               | 🟢                          | 🟢                      | https://github.com/microsoft/VPTQ            |
+| [FINEGRAINED_FP8](./finegrained_fp8.md)                 | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8             | 🔴               | 🟢                          | 🟢                      |        |
+| [SpQR](./spqr.md)                          | 🔴                       |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3              |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
 
 ## Resources
 
