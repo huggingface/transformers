@@ -279,8 +279,7 @@ class WhisperAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -290,23 +289,23 @@ class WhisperAttention(nn.Module):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_value.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_value.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -382,8 +381,7 @@ class WhisperFlashAttention2(WhisperAttention):
         if output_attentions:
             raise ValueError("WhisperFlashAttention2 attention does not support output_attentions")
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -393,23 +391,23 @@ class WhisperFlashAttention2(WhisperAttention):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_value.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_value.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
@@ -499,8 +497,7 @@ class WhisperSdpaAttention(WhisperAttention):
                 cache_position=cache_position,
             )
 
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
+        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -510,23 +507,23 @@ class WhisperSdpaAttention(WhisperAttention):
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
             if is_cross_attention:
-                past_key_value = past_key_value.cross_attention_cache
+                curr_past_key_value = past_key_value.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                curr_past_key_value = past_key_value.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
         if is_cross_attention and past_key_value and is_updated:
             # reuse k,v, cross_attentions
-            key_states = past_key_value.key_cache[self.layer_idx]
-            value_states = past_key_value.value_cache[self.layer_idx]
+            key_states = curr_past_key_value.key_cache[self.layer_idx]
+            value_states = curr_past_key_value.value_cache[self.layer_idx]
         else:
             key_states = self._shape(self.k_proj(current_states), -1, bsz)
             value_states = self._shape(self.v_proj(current_states), -1, bsz)
             if past_key_value is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = curr_past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
