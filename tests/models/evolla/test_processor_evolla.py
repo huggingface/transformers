@@ -19,9 +19,7 @@ import unittest
 
 from transformers import (
     AutoProcessor,
-    EsmTokenizer,
     EvollaProcessor,
-    LlamaTokenizerFast,
 )
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available, is_vision_available
@@ -47,10 +45,7 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        protein_tokenizer = EsmTokenizer.from_pretrained("westlake-repl/SaProt_35M_AF2")
-        tokenizer = LlamaTokenizerFast.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
-
-        processor = EvollaProcessor(protein_tokenizer, tokenizer)
+        processor = EvollaProcessor.from_pretrained("westlake-repl/Evolla-10B-hf")
 
         processor.save_pretrained(self.tmpdirname)
 
