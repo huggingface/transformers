@@ -535,6 +535,8 @@ def get_class_from_dynamic_module(
         repo_id = pretrained_model_name_or_path
     last_dot_index = class_reference.rfind(".")
     module_file, class_name = (class_reference[:last_dot_index], class_reference[last_dot_index + 1 :])
+    # Convert remaining dots to path separators
+    module_file = module_file.replace(".", os.path.sep)
 
     if code_revision is None and pretrained_model_name_or_path == repo_id:
         code_revision = revision
