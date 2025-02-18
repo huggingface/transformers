@@ -477,6 +477,11 @@ class ModelUtilsTest(TestCasePlus):
         Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
         Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
         """
+        # Load without dtype specified
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
+        self.assertEqual(model.language_model.dtype, torch.float32)
+        self.assertEqual(model.vision_tower.dtype, torch.float32)
+
         # should be able to set torch_dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
