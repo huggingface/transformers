@@ -208,7 +208,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
 
 
 class DFineGate(nn.Module):
-    def __init__(self, d_model):
+    def __init__(self, d_model: int):
         super().__init__()
         self.gate = nn.Linear(2 * d_model, 2 * d_model)
         self.norm = nn.LayerNorm(d_model)
@@ -637,7 +637,7 @@ def distance2bbox(points, distance: torch.Tensor, reg_scale: float) -> torch.Ten
 
 
 class DFineMLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act="relu"):
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, act: str="relu"):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
@@ -669,7 +669,7 @@ class DFineLQE(nn.Module):
 
 class DFineConvNormLayer(RTDetrConvNormLayer):
     def __init__(
-        self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None
+        self, config: DFineConfig, in_channels: int, out_channels: int, kernel_size: int, stride: int, groups: int=1, padding: int=None, activation: str=None
     ):
         super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=activation)
         self.conv = nn.Conv2d(
@@ -727,7 +727,7 @@ class DFineCSPRepLayer(nn.Module):
 
 class DFineRepNCSPELAN4(nn.Module):
     # csp-elan
-    def __init__(self, config: DFineConfig, act="silu", numb_blocks=3):
+    def __init__(self, config: DFineConfig, act: str="silu", numb_blocks: int=3):
         super().__init__()
         conv1_dim = config.encoder_hidden_dim * 2
         conv2_dim = config.encoder_hidden_dim
@@ -758,11 +758,11 @@ class DFineRepNCSPELAN4(nn.Module):
 
 
 class DFineSCDown(nn.Module):
-    def __init__(self, config: DFineConfig, k, s):
+    def __init__(self, config: DFineConfig, kernel_size: int, stride: int):
         super().__init__()
         self.conv1 = DFineConvNormLayer(config, config.encoder_hidden_dim, config.encoder_hidden_dim, 1, 1)
         self.conv2 = DFineConvNormLayer(
-            config, config.encoder_hidden_dim, config.encoder_hidden_dim, k, s, config.encoder_hidden_dim
+            config, config.encoder_hidden_dim, config.encoder_hidden_dim, kernel_size, stride, config.encoder_hidden_dim
         )
 
     def forward(self, input_features: torch.Tensor) -> torch.Tensor:
