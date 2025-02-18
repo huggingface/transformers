@@ -781,10 +781,8 @@ def _crop_past_key_values(model, past_key_values, max_length):
     new_past = []
 
     # `Cache` instances
-    if isinstance(past_key_values, DynamicCache):
+    if isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
         past_key_values.crop(max_length)
-    elif isinstance(past_key_values, EncoderDecoderCache):
-        past_key_values.self_attention_cache.crop(max_length)
 
     # legacy cache instances
     elif model.config.is_encoder_decoder:
