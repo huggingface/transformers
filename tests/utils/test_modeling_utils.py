@@ -1003,6 +1003,9 @@ class ModelUtilsTest(TestCasePlus):
 
         mname = "hf-internal-testing/tiny-random-bert"
 
+        # let's do it once to get a local cache first
+        AutoModel.from_pretrained(mname, low_cpu_mem_usage=False)
+
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
         # Save this output as `max_rss_normal` if testing memory results
