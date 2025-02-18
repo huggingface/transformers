@@ -176,7 +176,7 @@ After resizing, the image is split into a sequence of patches, and a mask with p
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SigLIP.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SigLIP2.
 
 - [Zero-shot image classification task guide](../tasks/zero_shot_image_classification)
 - Demo notebook for SigLIP2 can be found [here](https://github.com/qubvel/transformers-notebooks/tree/master/notebooks/SigLIP2_inference.ipynb). 🌎

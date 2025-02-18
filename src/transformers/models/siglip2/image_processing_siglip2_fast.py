@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for SigLIP."""
+"""Fast Image processor class for SigLIP2."""
 
 import math
 from functools import lru_cache
@@ -130,7 +130,7 @@ def pad_along_first_dim(
 
 
 @add_start_docstrings(
-    "Constructs a fast SigLIP image processor.",
+    "Constructs a fast SigLIP2 image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
 class Siglip2ImageProcessorFast(BaseImageProcessorFast):
