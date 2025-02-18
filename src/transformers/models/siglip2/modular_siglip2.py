@@ -569,7 +569,12 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
         sequence_output = outputs[0]
 
         # average pool the patch tokens
-        sequence_output = torch.mean(sequence_output, dim=1)
+        if pixel_attention_mask is not None:
+            pool_mask = pixel_attention_mask[..., None].to(sequence_output.device)
+            sequence_output = torch.sum(sequence_output * pool_mask, dim=1) / torch.sum(pool_mask, dim=1)
+        else:
+            sequence_output = torch.mean(sequence_output, dim=1)
+
         # apply classifier
         logits = self.classifier(sequence_output)
 
