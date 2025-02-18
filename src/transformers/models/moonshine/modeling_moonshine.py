@@ -230,6 +230,8 @@ class MoonshineAttention(nn.Module):
             self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
         )
 
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
@@ -842,7 +844,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1274,24 +1276,15 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+        past_key_values (`EncoderDecoderCache`, *optional*):
+            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+            four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
+            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
+            when `config.use_cache=True`. It is a [`~cache_utils.EncoderDecoderCache`] instance.
 
-            Two formats are allowed:
-            - a [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-            cache format.
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids`
-            of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors than the
@@ -1403,7 +1396,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1541,7 +1534,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
