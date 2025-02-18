@@ -29,8 +29,10 @@ class EfficientLoFTRConfig(PretrainedConfig):
         mlp_activation_function: str = "leaky_relu",
         coarse_matching_skip_softmax: bool = False,
         coarse_matching_threshold: float = 0.2,
+        coarse_matching_temperature: float = 0.1,
+        coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
-        batch_norm_eps: float = 0.0,
+        batch_norm_eps: float = 1e-5,
         hidden_size: int = 256,
         rope_type: str = "2d",
         rope_theta=10000.0,
@@ -52,6 +54,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.mlp_activation_function = mlp_activation_function
         self.coarse_matching_skip_softmax = coarse_matching_skip_softmax
         self.coarse_matching_threshold = coarse_matching_threshold
+        self.coarse_matching_temperature = coarse_matching_temperature
+        self.coarse_matching_border_removal = coarse_matching_border_removal
         self.fine_kernel_size = fine_kernel_size
         self.batch_norm_eps = batch_norm_eps
         self.hidden_size = hidden_size

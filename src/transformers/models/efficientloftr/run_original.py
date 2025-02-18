@@ -15,17 +15,6 @@ from transformers.models.efficientloftr.original_eloftr import EfficientLoFTR
 
 torch.manual_seed(42)
 
-def read_image(image_path: pathlib.Path) -> np.ndarray:
-    return cv2.imread(str(image_path))
-
-
-def preprocess_image(image: np.ndarray, w: int, h: int, device) -> Tensor:
-    image = cv2.resize(image, (w, h)).astype(np.float32)
-    image /= 255.0
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-    image = torch.from_numpy(image)
-    return image.reshape((1, 1, h, w)).to(device)
-
 device = "cuda"
 url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
 image1 = Image.open(requests.get(url_image1, stream=True).raw)

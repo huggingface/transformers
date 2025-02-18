@@ -344,7 +344,9 @@ def _compute_llama3_parameters(
 
     return inv_freq_llama, attention_factor
 
-def _compute_2d_parameters(config: Optional[PretrainedConfig] = None,
+
+def _compute_2d_parameters(
+    config: Optional[PretrainedConfig] = None,
     device: Optional["torch.device"] = None,
     seq_len: Optional[int] = None,
     **rope_kwargs,
@@ -381,8 +383,10 @@ def _compute_2d_parameters(config: Optional[PretrainedConfig] = None,
     attention_factor = 1.0  # Unused in this type of RoPE
 
     # Compute the inverse frequencies
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 1, dtype=torch.int64).float().to(device) / dim))
+    # inv_freq = 1.0 / (base ** (torch.arange(0, dim, 1, dtype=torch.int64).float().to(device) / dim))
+    inv_freq = torch.exp(torch.arange(0, dim, 1, dtype=torch.int64, device=device).float() * (-math.log(base) / dim))
     return inv_freq, attention_factor
+
 
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this dictionary to enable custom RoPE

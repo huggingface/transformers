@@ -85,6 +85,25 @@ def conv_bn(in_channels, out_channels, kernel_size, stride, padding, groups=1):
     result.add_module("bn", nn.BatchNorm2d(num_features=out_channels))
     return result
 
+class ConvBN(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride, padding, groups=1):
+        super().__init__()
+
+        self.conv = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            groups=groups,
+            bias=False,
+        )
+        self.bn = nn.BatchNorm2d(num_features=out_channels)
+
+    def forward(self, hidden_states):
+        out_conv = self.conv(hidden_states)
+        out_norm = self.bn(out_conv)
+        return out_norm
 
 class RepVGGBlock(nn.Module):
     def __init__(
@@ -101,7 +120,7 @@ class RepVGGBlock(nn.Module):
         self.rbr_identity = (
             nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
         )
-        self.rbr_dense = conv_bn(
+        self.rbr_dense = ConvBN(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=3,
@@ -109,7 +128,7 @@ class RepVGGBlock(nn.Module):
             padding=1,
             groups=1,
         )
-        self.rbr_1x1 = conv_bn(
+        self.rbr_1x1 = ConvBN(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=1,
@@ -124,7 +143,10 @@ class RepVGGBlock(nn.Module):
         else:
             id_out = self.rbr_identity(inputs)
 
-        return self.nonlinearity(self.rbr_dense(inputs) + self.rbr_1x1(inputs) + id_out)
+        out_dense = self.rbr_dense(inputs)
+        out_1x1 = self.rbr_1x1(inputs)
+
+        return self.nonlinearity(out_dense + out_1x1 + id_out)
 
     #   This func derives the equivalent kernel and bias in a DIFFERENTIABLE way.
     #   You can get the equivalent kernel and bias at any time and do whatever you want,
@@ -293,13 +315,13 @@ class RoPEPositionEncodingSine(nn.Module):
     This is a sinusoidal position encoding that generalized to 2-dimensional images
     """
 
-    def __init__(self, d_model, max_shape=(256, 256), npe=None, ropefp16=True):
+    def __init__(self, d_model, max_shape=(80, 60), npe=None, ropefp16=False):
         """
         Args:
             max_shape (tuple): for 1/8 featmap, the max length of 256 corresponds to 2048 pixels
         """
         super().__init__()
-
+        ropefp16 = False
         i_position = torch.ones(max_shape).cumsum(0).float().unsqueeze(-1)  # [H, 1]
         j_position = torch.ones(max_shape).cumsum(1).float().unsqueeze(-1)  # [W, 1]
 
@@ -312,16 +334,22 @@ class RoPEPositionEncodingSine(nn.Module):
         )  # train_res_H, train_res_W, test_res_H, test_res_W
         i_position, j_position = i_position * train_res_H / test_res_H, j_position * train_res_W / test_res_W
 
-        div_term = torch.exp(torch.arange(0, d_model // 4, 1).float() * (-math.log(10000.0) / (d_model // 4)))
+        div_term = torch.exp(torch.arange(0, d_model // 4, 1, dtype=torch.int64).float() * (-math.log(10000.0) / (d_model // 4)))
         div_term = div_term[None, None, :]  # [1, 1, C//4]
+        # sin = torch.zeros(*max_shape, d_model // 2, dtype=torch.float16 if ropefp16 else torch.float32)
+        # cos = torch.zeros(*max_shape, d_model // 2, dtype=torch.float16 if ropefp16 else torch.float32)
+        # sin[:, :, 0::2] = torch.sin(i_position * div_term).half() if ropefp16 else torch.sin(i_position * div_term)
+        # sin[:, :, 1::2] = torch.sin(j_position * div_term).half() if ropefp16 else torch.sin(j_position * div_term)
+        # cos[:, :, 0::2] = torch.cos(i_position * div_term).half() if ropefp16 else torch.cos(i_position * div_term)
+        # cos[:, :, 1::2] = torch.cos(j_position * div_term).half() if ropefp16 else torch.cos(j_position * div_term)
+        #
 
-        sin = torch.zeros(*max_shape, d_model // 2, dtype=torch.float16 if ropefp16 else torch.float32)
-        cos = torch.zeros(*max_shape, d_model // 2, dtype=torch.float16 if ropefp16 else torch.float32)
-        sin[:, :, 0::2] = torch.sin(i_position * div_term).half() if ropefp16 else torch.sin(i_position * div_term)
-        sin[:, :, 1::2] = torch.sin(j_position * div_term).half() if ropefp16 else torch.sin(j_position * div_term)
-        cos[:, :, 0::2] = torch.cos(i_position * div_term).half() if ropefp16 else torch.cos(i_position * div_term)
-        cos[:, :, 1::2] = torch.cos(j_position * div_term).half() if ropefp16 else torch.cos(j_position * div_term)
+        emb = torch.zeros(*max_shape, d_model // 2)
+        emb[:, :, 0::2] = i_position * div_term
+        emb[:, :, 1::2] = j_position * div_term
 
+        sin = emb.sin()
+        cos = emb.cos()
         sin = sin.repeat_interleave(2, dim=-1)
         cos = cos.repeat_interleave(2, dim=-1)
 
@@ -500,7 +528,7 @@ class AG_RoPE_EncoderLayer(nn.Module):
             else nn.Identity()
         )
         if self.rope:
-            self.rope_pos_enc = RoPEPositionEncodingSine(d_model, max_shape=(256, 256), npe=npe, ropefp16=True)
+            self.rope_pos_enc = RoPEPositionEncodingSine(d_model, npe=npe, ropefp16=True)
 
         # multi-head attention
         self.q_proj = nn.Linear(d_model, d_model, bias=False)
@@ -532,13 +560,22 @@ class AG_RoPE_EncoderLayer(nn.Module):
         H1, W1 = source.size(-2), source.size(-1)
 
         # Aggragate feature
-        query, source = (
-            self.norm1(self.aggregate(x).permute(0, 2, 3, 1)),
-            self.norm1(self.max_pool(source).permute(0, 2, 3, 1)),
-        )  # [N, H, W, C]
+        aggregated_x = self.aggregate(x)
+        aggregated_x = aggregated_x.permute(0, 2, 3, 1)
+        normed_x = self.norm1(aggregated_x)
+        aggregated_source = self.max_pool(source)
+        aggregated_source = aggregated_source.permute(0, 2, 3, 1)
+        normed_source = self.norm1(aggregated_source)
+        # query, source = (
+        #     self.norm1(self.aggregate(x).permute(0, 2, 3, 1)),
+        #     self.norm1(self.max_pool(source).permute(0, 2, 3, 1)),
+        # )  # [N, H, W, C]
         if x_mask is not None:
             x_mask, source_mask = map(lambda x: self.max_pool(x.float()).bool(), [x_mask, source_mask])
-        query, key, value = self.q_proj(query), self.k_proj(source), self.v_proj(source)
+        # query, key, value = self.q_proj(query), self.k_proj(source), self.v_proj(source)
+        query = self.q_proj(normed_x)
+        key = self.k_proj(normed_source)
+        value = self.v_proj(normed_source)
 
         # Positional encoding
         if self.rope:
@@ -916,7 +953,7 @@ class CoarseMatching(nn.Module):
         mkpts1_c = mkpts1_c[mconf != 0]
         mconf = mconf[mconf != 0]
 
-        return m_bids, mkpts0_c, mkpts1_c, mconf, b_ids, i_ids, j_ids, scale0, scale1
+        return mkpts0_c, mkpts1_c, mconf, b_ids, i_ids, j_ids, scale0, scale1
 
 
 def conv1x1(in_planes, out_planes, stride=1):
@@ -1100,14 +1137,7 @@ class FineMatching(nn.Module):
         # compute coordinates from heatmap
         coords_normalized = dsnt.spatial_expectation2d(heatmap[None], True)[0]
 
-        if bs == 1:
-            scale1 = scale
-        else:
-            scale1 = (
-                scale * scale1[b_ids][: len(mconf), ...][:, None, :].expand(-1, -1, 2).reshape(-1, 2)
-                if scale0 is not None
-                else scale
-            )
+        scale1 = scale
 
         # compute subpixel-level absolute kpt coords
         mkpts0_f, mkpts1_f = self.get_fine_match_local(coords_normalized, scale1, mkpts0_c, mkpts1_c)
@@ -1225,7 +1255,7 @@ class EfficientLoFTR(nn.Module):
         feat_c1 = rearrange(feat_c1, "n c h w -> n (h w) c")
 
         # 3. match coarse-level
-        conf_matrix, m_bids, mkpts0_c, mkpts1_c, mconf, b_ids, i_ids, j_ids, scale0, scale1 = self.coarse_matching(
+        conf_matrix, mkpts0_c, mkpts1_c, mconf, b_ids, i_ids, j_ids, scale0, scale1 = self.coarse_matching(
             feat_c0,
             feat_c1,
             hw0_i,
@@ -1251,7 +1281,7 @@ class EfficientLoFTR(nn.Module):
             feat_f0_unfold, feat_f1_unfold, hw0_i, hw0_f, mkpts0_c, mkpts1_c, mconf, b_ids, scale0, scale1, bs
         )
 
-        output = format_output(mkpts0_f, mkpts1_f, mconf, m_bids, hw0_i)
+        output = format_output(mkpts0_f, mkpts1_f, mconf, b_ids, hw0_i)
 
         return output
 

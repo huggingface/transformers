@@ -1,8 +1,9 @@
 import math
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.nn.utils.rnn import pad_sequence
 
 from ...activations import ACT2CLS, ACT2FN
 from ...configuration_utils import PretrainedConfig
@@ -11,47 +12,86 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ..llama.modeling_llama import LlamaAttention, apply_rotary_pos_emb, eager_attention_forward
+from ..cohere.modeling_cohere import apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..rt_detr_v2.modeling_rt_detr_v2 import RTDetrV2ConvNormLayer
+from ..superglue.modeling_superglue import KeypointMatchingOutput
 from ..superpoint.modeling_superpoint import SuperPointPreTrainedModel
 
-
-if TYPE_CHECKING:
-    from ..superglue.modeling_superglue import KeypointMatchingOutput
 
 logger = logging.get_logger(__name__)
 
 
-def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> Tuple[torch.Tensor, torch.Tensor]:
+def format_output(matching_keypoints, mconf, m_bids, hw0_i):
+    keypoints0 = matching_keypoints[0]
+    keypoints1 = matching_keypoints[1]
+    scores = mconf
+    batch_idx = m_bids
+
+    h, w = hw0_i
+    keypoints0[:, 0] = keypoints0[:, 0] / w
+    keypoints1[:, 0] = keypoints1[:, 0] / w
+    keypoints0[:, 1] = keypoints0[:, 1] / h
+    keypoints1[:, 1] = keypoints1[:, 1] / h
+
+    unique_values, counts = torch.unique_consecutive(batch_idx, return_counts=True)
+    split_keypoints0 = torch.split(keypoints0, counts.tolist())
+    split_keypoints1 = torch.split(keypoints1, counts.tolist())
+    split_scores = torch.split(scores, counts.tolist())
+    split_mask = [torch.ones(size, device=keypoints0.device) for size in counts.tolist()]
+    split_indices = [torch.arange(size, device=keypoints0.device) for size in counts.tolist()]
+
+    keypoints0 = pad_sequence(split_keypoints0, batch_first=True)
+    keypoints1 = pad_sequence(split_keypoints1, batch_first=True)
+    keypoints = torch.stack([keypoints0, keypoints1], dim=1)
+    matching_scores = pad_sequence(split_scores, batch_first=True)
+    matching_scores = torch.stack([matching_scores, matching_scores], dim=1)
+    mask = pad_sequence(split_mask, batch_first=True)
+    mask = torch.stack([mask, mask], dim=1)
+    matches = pad_sequence(split_indices, batch_first=True)
+    matches = torch.stack([matches, matches], dim=1)
+
+    output = KeypointMatchingOutput(
+        loss=None,
+        matches=matches,
+        matching_scores=matching_scores,
+        keypoints=keypoints,
+        mask=mask,
+        hidden_states=None,
+        attentions=None,
+    )
+
+    return output
+
+def get_matches_from_scores(scores: torch.Tensor, threshold: float, border_removal: int):
     """obtain matches from a score matrix [Bx M+1 x N+1]"""
-    batch_size, _, _ = scores.shape
+    batch_size, h0, w0, h1, w1 = scores.shape
+
+    scores = scores.reshape(batch_size, h0 * w0, h1 * w1)
+
     # For each keypoint, get the best match
-    max0 = scores.max(2)
-    max1 = scores.max(1)
-    matches0 = max0.indices
-    matches1 = max1.indices
+    max0 = scores.max(2, keepdim=True).values
+    max1 = scores.max(1, keepdim=True).values
 
-    # Mutual check for matches
-    indices0 = torch.arange(matches0.shape[1], device=matches0.device)[None]
-    indices1 = torch.arange(matches1.shape[1], device=matches1.device)[None]
-    mutual0 = indices0 == matches1.gather(1, matches0)
-    mutual1 = indices1 == matches0.gather(1, matches1)
+    # 1. Thresholding
+    mask = scores > threshold
 
-    # Get matching scores and filter based on mutual check and thresholding
-    max0 = max0.values.exp()
-    zero = max0.new_tensor(0)
-    matching_scores0 = torch.where(mutual0, max0, zero)
-    matching_scores1 = torch.where(mutual1, matching_scores0.gather(1, matches1), zero)
-    valid0 = mutual0 & (matching_scores0 > threshold)
-    valid1 = mutual1 & valid0.gather(1, matches1)
+    # 2. Border removal
+    mask = mask.reshape(batch_size, h0, w0, h1, w1)
+    mask = mask_border(mask, border_removal, False)
+    mask = mask.reshape(batch_size, h0 * w0, h1 * w1)
 
-    # Filter matches based on mutual check and thresholding of scores
-    matches0 = torch.where(valid0, matches0, -1)
-    matches1 = torch.where(valid1, matches1, -1)
-    matches = torch.stack([matches0, matches1]).transpose(0, 1)
-    matching_scores = torch.stack([matching_scores0, matching_scores1]).transpose(0, 1)
+    # 3. Mutual nearest neighbors
+    mask = mask * (scores == max0) * (scores == max1)
 
-    return matches, matching_scores
+    # 4. Fine coarse matches
+    mask_values, mask_indices = mask.max(dim=2)
+    batch_ids, matched_indices_0 = torch.where(mask_values)
+    matched_indices_1 = mask_indices[batch_ids, matched_indices_0]
+    matching_scores = scores[batch_ids, matched_indices_0, matched_indices_1]
+
+    matched_indices = torch.stack([matched_indices_0, matched_indices_1], dim=0)
+    return matched_indices, matching_scores, batch_ids
 
 
 class EfficientLoFTRConfig(PretrainedConfig):
@@ -74,8 +114,10 @@ class EfficientLoFTRConfig(PretrainedConfig):
         mlp_activation_function: str = "leaky_relu",
         coarse_matching_skip_softmax: bool = False,
         coarse_matching_threshold: float = 0.2,
+        coarse_matching_temperature: float = 0.1,
+        coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
-        batch_norm_eps: float = 0.0,
+        batch_norm_eps: float = 1e-5,
         hidden_size: int = 256,
         rope_type: str = "2d",
         rope_theta=10000.0,
@@ -97,6 +139,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.mlp_activation_function = mlp_activation_function
         self.coarse_matching_skip_softmax = coarse_matching_skip_softmax
         self.coarse_matching_threshold = coarse_matching_threshold
+        self.coarse_matching_temperature = coarse_matching_temperature
+        self.coarse_matching_border_removal = coarse_matching_border_removal
         self.fine_kernel_size = fine_kernel_size
         self.batch_norm_eps = batch_norm_eps
         self.hidden_size = hidden_size
@@ -118,7 +162,7 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, device=None):
+    def __init__(self, config: EfficientLoFTRConfig, device="cpu"):
         super().__init__()
         self.config = config
         self.rope_type = config.rope_type
@@ -135,12 +179,12 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         i_position_ids = torch.ones(h, w, device=x.device).cumsum(0).float().unsqueeze(-1)
         j_position_ids = torch.ones(h, w, device=x.device).cumsum(1).float().unsqueeze(-1)
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, None, None, :].float().expand(b, 1, 1, -1)
+        inv_freq_expanded = self.inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
-            emb = torch.zeros(b, h, w, self.config.hidden_size // 2, device=x.device)
+            emb = torch.zeros(1, h, w, self.config.hidden_size // 2)
             emb[:, :, :, 0::2] = i_position_ids * inv_freq_expanded
             emb[:, :, :, 1::2] = j_position_ids * inv_freq_expanded
 
@@ -153,6 +197,9 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
         cos = cos * self.attention_scaling
         sin = sin * self.attention_scaling
+
+        sin = sin.to(x.device)
+        cos = cos.to(x.device)
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -179,9 +226,11 @@ class EfficientLoFTRRepVGGBlock(nn.Module):
         self.activation = nn.Identity() if activation is None else ACT2FN[activation]
 
     def forward(self, hidden_states):
-        hidden_states = self.conv1(hidden_states) + self.conv2(hidden_states)
         if self.identity is not None:
-            hidden_states = hidden_states + self.identity(hidden_states)
+            identity_out = self.identity(hidden_states)
+        else:
+            identity_out = 0
+        hidden_states = self.conv1(hidden_states) + self.conv2(hidden_states) + identity_out
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
@@ -309,14 +358,14 @@ class EfficientLoFTRAttention(LlamaAttention):
         current_attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
         key_states = self.k_proj(current_states).view(batch_size, seq_len, -1, dim)
-        value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim)
+        value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
         if position_embeddings is not None:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
 
-        query_states = query_states.view(batch_size, seq_len, -1, self.head_dim)
-        key_states = key_states.view(batch_size, seq_len, -1, self.head_dim)
+        query_states = query_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -370,8 +419,10 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         self.mlp = EfficientLoFTRMLP(config)
 
     def get_positional_embeddings_slice(self, hidden_states, positional_embeddings):
-        _, h, w, _ = hidden_states.shape
-        positional_embeddings = tuple(tensor[:, :h, :w, :] for tensor in positional_embeddings)
+        batch_size, h, w, _ = hidden_states.shape
+        positional_embeddings = tuple(
+            tensor[:, :h, :w, :].expand(batch_size, -1, -1, -1) for tensor in positional_embeddings
+        )
         return positional_embeddings
 
     def forward(
@@ -388,13 +439,12 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
             hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask
         )
 
-        # (batch_size, channels, h, w) -> (batch_size, h, w, channels)
-        position_embeddings = tuple(tensor.permute(0, 2, 3, 1) for tensor in position_embeddings)
-        position_embeddings = self.get_positional_embeddings_slice(aggregated_hidden_states, position_embeddings)
-
         attention_hidden_states = aggregated_hidden_states.reshape(batch_size, -1, channels)
         encoder_hidden_states = encoder_hidden_states.reshape(batch_size, -1, channels)
-        position_embeddings = tuple(tensor.reshape(batch_size, -1, channels) for tensor in position_embeddings)
+
+        if position_embeddings is not None:
+            position_embeddings = self.get_positional_embeddings_slice(aggregated_hidden_states, position_embeddings)
+            position_embeddings = tuple(tensor.reshape(batch_size, -1, channels) for tensor in position_embeddings)
 
         # Multi head attention
         attention_outputs = self.attention(
@@ -445,18 +495,9 @@ class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
         if attention_mask is not None:
             attention_mask = attention_mask.reshape(-1, c, h, w)
 
-        # hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask = self.self_aggregation(
-        #     hidden_states, attention_mask
-        # )
-
-        # (batch_size, 2, channels, h, w) -> (batch_size * 2, channels, h, w)
-        position_embeddings = tuple(tensor.reshape(-1, c, h, w) for tensor in position_embeddings)
-
         self_attention_outputs = self.self_attention(
             hidden_states,
             attention_mask,
-            # encoder_hidden_states,
-            # encoder_attention_mask,
             position_embeddings=position_embeddings,
         )
         hidden_states = self_attention_outputs[0]
@@ -471,7 +512,6 @@ class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
             attention_mask,
             encoder_hidden_states,
             encoder_attention_mask,
-            position_embeddings=position_embeddings,
         )
 
         hidden_states = cross_attention_outputs[0]
@@ -587,14 +627,14 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
         fine_features0 = nn.functional.unfold(
             fine_features0, kernel_size=self.fine_kernel_size, stride=stride, padding=0
         )
-        _, _, l = fine_features0.shape
-        fine_features0 = fine_features0.reshape(batch_size, -1, self.fine_kernel_size**2, l)
+        _, _, seq_len = fine_features0.shape
+        fine_features0 = fine_features0.reshape(batch_size, -1, self.fine_kernel_size**2, seq_len)
         fine_features0 = fine_features0.permute(0, 3, 2, 1)
 
         fine_features1 = nn.functional.unfold(
             fine_features1, kernel_size=self.fine_kernel_size + 2, stride=stride, padding=1
         )
-        fine_features1 = fine_features1.reshape(batch_size, -1, (self.fine_kernel_size + 2) ** 2, l)
+        fine_features1 = fine_features1.reshape(batch_size, -1, (self.fine_kernel_size + 2) ** 2, seq_len)
         fine_features1 = fine_features1.permute(0, 3, 2, 1)
 
         return fine_features0, fine_features1
@@ -684,6 +724,25 @@ def spatial_expectation2d(input: torch.Tensor, normalized_coordinates: bool = Tr
 
     return output.view(batch_size, channels, 2)  # BxNx2
 
+def mask_border(m, b: int, v):
+    """Mask borders with value
+    Args:
+        m (torch.Tensor): [N, H0, W0, H1, W1]
+        b (int)
+        v (m.dtype)
+    """
+    if b <= 0:
+        return m
+
+    m[:, :b] = v
+    m[:, :, :b] = v
+    m[:, :, :, :b] = v
+    m[:, :, :, :, :b] = v
+    m[:, -b:] = v
+    m[:, :, -b:] = v
+    m[:, :, :, -b:] = v
+    m[:, :, :, :, -b:] = v
+    return m
 
 @add_start_docstrings(
     "SuperGlue model taking images as inputs and outputting the matching of them.",
@@ -706,7 +765,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         # self.post_init()
 
-    def coarse_matching(self, coarse_features, mask=None):
+    def coarse_matching(self, coarse_features: torch.Tensor, coarse_scale: float, mask=None):
         """
         For each image pair, compute the matching confidence between each coarse element (by default (image_height / 8)
         * (image_width / 8 elements)) from the first image to the second image.
@@ -730,6 +789,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         coarse_features1 = coarse_features[:, 1]
 
         similarity = coarse_features0 @ coarse_features1.transpose(-1, -2)
+        similarity = similarity / self.config.coarse_matching_temperature
         # TODO mask
 
         if self.config.coarse_matching_skip_softmax:
@@ -737,12 +797,28 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         else:
             confidence = nn.functional.softmax(similarity, 1) * nn.functional.softmax(similarity, 2)
 
-        # TODO mask
-        matches, matching_scores = get_matches_from_scores(confidence, self.config.coarse_matching_threshold)
+        confidence = confidence.reshape(batch_size, h, w, h, w)
+        matched_indices, matching_scores, batch_ids = get_matches_from_scores(
+            confidence, self.config.coarse_matching_threshold, self.config.coarse_matching_border_removal
+        )
 
-        return matches, matching_scores
+        matched_keypoints = torch.stack([matched_indices % w, matched_indices // w], dim=-1) * coarse_scale
 
-    def get_first_stage_fine_matching(self, fine_confidence, coarse_grid, fine_kernel_size, fine_window_size):
+        return (
+            matched_keypoints,
+            matching_scores,
+            batch_ids,
+            matched_indices,
+        )
+
+    def get_first_stage_fine_matching(
+        self,
+        fine_confidence,
+        coarse_matched_keypoints,
+        fine_kernel_size,
+        fine_window_size,
+        fine_scale,
+    ):
         """
         For each coarse pixel, retrieve the highest fine confidence score and index.
         The index represents the matching between a pixel position in the fine window in the first image and a pixel
@@ -760,9 +836,9 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         Returns:
 
         """
-        batch_size, seq_len, _, _ = fine_confidence.shape
+        num_matches, _, _ = fine_confidence.shape
 
-        fine_confidence = fine_confidence.reshape(batch_size, seq_len, -1)
+        fine_confidence = fine_confidence.reshape(num_matches, -1)
         values, indices = torch.max(fine_confidence, dim=-1)
         indices = indices[..., None]
         indices_0 = indices // fine_window_size
@@ -775,15 +851,15 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             device=fine_confidence.device,
             dtype=fine_confidence.dtype,
         )
-        grid = grid.reshape(batch_size, 1, -1, 2).expand(-1, seq_len, -1, -1)
-        delta_0 = torch.gather(grid, 2, indices_0.unsqueeze(-1).expand(-1, -1, -1, 2))
-        delta_1 = torch.gather(grid, 2, indices_1.unsqueeze(-1).expand(-1, -1, -1, 2))
+        grid = grid - (fine_kernel_size // 2) + 0.5
+        grid = grid.reshape(1, -1, 2).expand(num_matches, -1, -1)
+        delta_0 = torch.gather(grid, 1, indices_0.unsqueeze(-1).expand(-1, -1, 2)).squeeze(1)
+        delta_1 = torch.gather(grid, 1, indices_1.unsqueeze(-1).expand(-1, -1, 2)).squeeze(1)
 
-        coarse_grid = coarse_grid.reshape(batch_size, -1, 2)
-        fine_matches_0 = coarse_grid[:, :, None, :] + delta_0
-        fine_matches_0 = fine_matches_0.reshape(batch_size, -1, 2)
-        fine_matches_1 = coarse_grid[:, :, None, :] + delta_1
-        fine_matches_1 = fine_matches_1.reshape(batch_size, -1, 2)
+        fine_matches_0 = coarse_matched_keypoints[0] + delta_0 * fine_scale
+        fine_matches_0 = fine_matches_0.reshape(num_matches, 2)
+        fine_matches_1 = coarse_matched_keypoints[1] + delta_1 * fine_scale
+        fine_matches_1 = fine_matches_1.reshape(num_matches, 2)
 
         indices = torch.stack([indices_0, indices_1], dim=0)
         fine_matches = torch.stack([fine_matches_0, fine_matches_1], dim=0)
@@ -791,7 +867,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         return indices, fine_matches
 
     def get_second_stage_fine_matching(
-        self, indices, confidence, fine_kernel_size, fine_window_size, coordinates, fine_scale
+        self, indices, fine_matches, confidence, fine_kernel_size, fine_window_size, fine_scale
     ):
         """
         For the given position in their respective fine windows, retrieve the 3x3 fine confidences around this position.
@@ -809,44 +885,52 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         Returns:
 
         """
-        batch_size, seq_len, _, _ = confidence.shape
-        indices_0 = indices[:, 0]
-        indices_1 = indices[:, 1]
+        num_matches, _, _ = confidence.shape
+        indices_0 = indices[0]
+        indices_1 = indices[1]
         indices_1_i = indices_1 // fine_kernel_size
         indices_1_j = indices_1 % fine_kernel_size
 
-        # batch_ids, seq_ids and indices_0 of shape (batch_size, seq_len, 3, 3)
-        batch_ids = torch.arange(batch_size, device=indices_0.device)[..., None, None, None].expand(-1, seq_len, 3, 3)
-        seq_ids = torch.arange(seq_len, device=indices_0.device)[None, ..., None, None].expand(batch_size, -1, 3, 3)
-        indices_0 = indices_0[..., None].expand(-1, -1, 3, 3)
+        matches_indices = torch.arange(num_matches, device=indices_0.device)
+
+        # matches_indices, indices_0, indices_1_i, indices_1_j of shape (num_matches, 3, 3)
+        matches_indices = matches_indices[..., None, None].expand(-1, 3, 3)
+        indices_0 = indices_0[..., None].expand(-1, 3, 3)
+        indices_1_i = indices_1_i[..., None].expand(-1, 3, 3)
+        indices_1_j = indices_1_j[..., None].expand(-1, 3, 3)
 
         delta = create_grid(3, 3, normalized_coordinates=True, device=indices_0.device).to(torch.long)
+        delta = delta[None, ...]
 
-        # indices_1_i and indices_1_j of shape (batch_size, seq_len, 3, 3)
-        indices_1_i = indices_1_i[..., None].expand(-1, -1, 3, 3) + delta[None, ..., 1]
-        indices_1_j = indices_1_j[..., None].expand(-1, -1, 3, 3) + delta[None, ..., 0]
+        indices_1_i = indices_1_i + delta[..., 1]
+        indices_1_j = indices_1_j + delta[..., 0]
 
         confidence = confidence.reshape(
-            batch_size, seq_len, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2
+            num_matches, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2
         )
         # (batch_size, seq_len, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2) -> (batch_size, seq_len, 3, 3)
-        confidence = confidence[batch_ids, seq_ids, indices_0, indices_1_i, indices_1_j]
-        confidence = confidence.reshape(batch_size, seq_len, 9)
+        confidence = confidence[matches_indices, indices_0, indices_1_i, indices_1_j]
+        confidence = confidence.reshape(num_matches, 9)
         confidence = nn.functional.softmax(confidence / self.config.fine_matching_regress_temperature, dim=-1)
 
-        heatmap = confidence.reshape(batch_size, seq_len, 3, 3)
-        fine_coordinates_normalized = spatial_expectation2d(heatmap, True)
+        heatmap = confidence.reshape(1, -1, 3, 3)
+        fine_coordinates_normalized = spatial_expectation2d(heatmap, True)[0]
 
-        coordinates = coordinates.reshape(batch_size, seq_len, 2)
-        fine_coordinates_0 = coordinates[:, 0]
-        fine_coordinates_1 = coordinates[:, 1] + (fine_coordinates_normalized * (3 // 2) * fine_scale)
+        fine_coordinates_0 = fine_matches[0]
+        fine_coordinates_1 = fine_matches[1] + (fine_coordinates_normalized * (3 // 2) * fine_scale)
 
         fine_coordinates = torch.stack([fine_coordinates_0, fine_coordinates_1], dim=0)
 
         return fine_coordinates, confidence
 
     def fine_matching(
-        self, fine_features0, fine_features1, coarse_matches, coarse_matching_scores, coarse_coordinates, fine_scale
+        self,
+        fine_features0,
+        fine_features1,
+        coarse_matched_keypoints,
+        coarse_matching_scores,
+        batch_ids,
+        fine_scale,
     ):
         """
         For each coarse pixel with a corresponding window of fine features, compute the matching confidence between fine
@@ -874,43 +958,49 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         Returns:
 
         """
-        if torch.all(coarse_matches == -1):
-            return coarse_matches, coarse_matching_scores
+        num_matches, fine_window_size, fine_hidden_size = fine_features0.shape
 
-        batch_size, seq_len, fine_window_size, fine_hidden_size = fine_features0.shape
+        if num_matches == 0:
+            fine_confidence = torch.empty(0, fine_window_size, fine_window_size, device=fine_features0.device)
+            return fine_confidence, coarse_matched_keypoints
+
         fine_kernel_size = int(math.sqrt(fine_window_size))
 
-        fine_features0 = fine_features0[..., : -self.config.fine_matching_slicedim]
-        fine_features1 = fine_features1[..., : -self.config.fine_matching_slicedim]
-        fine_features0 = fine_features0 / fine_features0.shape[-1] ** 0.5
-        fine_features1 = fine_features1 / fine_features1.shape[-1] ** 0.5
-        first_stage_fine_confidence = fine_features0 @ fine_features1.transpose(-1, -2)
-        first_stage_fine_confidence = nn.functional.softmax(first_stage_fine_confidence, 2) * nn.functional.softmax(
-            first_stage_fine_confidence, 3
+        first_stage_fine_features0 = fine_features0[..., : -self.config.fine_matching_slicedim]
+        first_stage_fine_features1 = fine_features1[..., : -self.config.fine_matching_slicedim]
+        first_stage_fine_features0 = first_stage_fine_features0 / first_stage_fine_features0.shape[-1] ** 0.5
+        first_stage_fine_features1 = first_stage_fine_features1 / first_stage_fine_features1.shape[-1] ** 0.5
+        first_stage_fine_confidence = first_stage_fine_features0 @ first_stage_fine_features1.transpose(-1, -2)
+        first_stage_fine_confidence = nn.functional.softmax(first_stage_fine_confidence, 1) * nn.functional.softmax(
+            first_stage_fine_confidence, 2
         )
         first_stage_fine_confidence = first_stage_fine_confidence.reshape(
-            batch_size, seq_len, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2
+            num_matches, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2
         )
         first_stage_fine_confidence = first_stage_fine_confidence[..., 1:-1, 1:-1]
         first_stage_fine_confidence = first_stage_fine_confidence.reshape(
-            batch_size, seq_len, fine_window_size, fine_window_size
+            num_matches, fine_window_size, fine_window_size
         )
 
-        fine_indices, fine_coordinates = self.get_first_stage_fine_matching(
-            first_stage_fine_confidence, coarse_coordinates, fine_kernel_size, fine_window_size
+        fine_indices, fine_matches = self.get_first_stage_fine_matching(
+            first_stage_fine_confidence,
+            coarse_matched_keypoints,
+            fine_kernel_size,
+            fine_window_size,
+            fine_scale,
         )
 
-        f_fine_features0 = fine_features0[..., -self.config.fine_matching_slicedim :]
-        f_fine_features1 = fine_features1[..., -self.config.fine_matching_slicedim :]
-        f_fine_features1 = f_fine_features1 / self.config.fine_matching_slicedim**0.5
-        second_stage_fine_confidence = f_fine_features0 @ f_fine_features1.transpose(-1, -2)
+        second_stage_fine_features0 = fine_features0[..., -self.config.fine_matching_slicedim :]
+        second_stage_fine_features1 = fine_features1[..., -self.config.fine_matching_slicedim :]
+        second_stage_fine_features1 = second_stage_fine_features1 / self.config.fine_matching_slicedim**0.5
+        second_stage_fine_confidence = second_stage_fine_features0 @ second_stage_fine_features1.transpose(-1, -2)
 
         fine_coordinates, second_stage_fine_confidence = self.get_second_stage_fine_matching(
             fine_indices,
+            fine_matches,
             second_stage_fine_confidence,
             fine_kernel_size,
             fine_window_size,
-            fine_coordinates,
             fine_scale,
         )
 
@@ -936,33 +1026,36 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         mul = self.config.resolution[0] // self.config.resolution[1]  # TODO
         coarse_channels, coarse_height, coarse_width = coarse_features.shape[-3:]
         fine_height = coarse_height * mul
-        fine_width = coarse_width * mul
         fine_scale = height / fine_height
 
         # 2. Coarse-level LoFTR module
-        coarse_mask0 = coarse_mask1 = None  # mask is useful in training
         position_embeddings = self.rotary_emb(coarse_features)
         coarse_features = coarse_features.reshape(batch_size, 2, coarse_channels, coarse_height, coarse_width)
-        position_embeddings = tuple(
-            tensor.reshape(batch_size, 2, coarse_channels, coarse_height, coarse_width)
-            for tensor in position_embeddings
-        )
 
         coarse_features = self.local_feature_transformer(coarse_features, position_embeddings=position_embeddings)
-        coarse_matches, coarse_matching_scores = self.coarse_matching(coarse_features)
+        coarse_scale = height / coarse_height
+        (
+            coarse_matched_keypoints,
+            coarse_matching_scores,
+            batch_ids,
+            matched_indices,
+        ) = self.coarse_matching(coarse_features, coarse_scale)
 
         # 4. fine-level refinement
         fine_features0, fine_features1 = self.refinement_layer(coarse_features, residual_features)
+        fine_features0 = fine_features0[batch_ids, matched_indices[0]]
+        fine_features1 = fine_features1[batch_ids, matched_indices[1]]
 
         # 5. match fine-level
-        coarse_coordinates = create_grid(
-            coarse_height, coarse_width, device=coarse_features.device, dtype=coarse_features.dtype
-        )
-        coarse_coordinates = coarse_coordinates.reshape(batch_size, 1, coarse_height, coarse_width, 2)
         matching_keypoints, first_stage_matching_scores, second_stage_matching_scores = self.fine_matching(
-            fine_features0, fine_features1, coarse_coordinates, coarse_matching_scores, coarse_coordinates, fine_scale
+            fine_features0,
+            fine_features1,
+            coarse_matched_keypoints,
+            coarse_matching_scores,
+            batch_ids,
+            fine_scale,
         )
 
-        matching_keypoints = matching_keypoints * mul
+        output = format_output(matching_keypoints, coarse_matching_scores, batch_ids, (height, width))
 
-        return matching_keypoints, first_stage_matching_scores
+        return output

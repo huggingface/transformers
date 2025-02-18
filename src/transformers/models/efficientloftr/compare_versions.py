@@ -61,44 +61,44 @@ def plot_pair(outputs, image1, image2, name="default.png"):
     plt.savefig(name, dpi=300, bbox_inches='tight')
     plt.close()
 
-device = "cuda"
-url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
-image1 = Image.open(requests.get(url_image1, stream=True).raw)
-url_image2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
-image2 = Image.open(requests.get(url_image2, stream=True).raw)
-
-images = [image1, image2]
-
-image_processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
-pixel_values = image_processor(images, return_tensors="pt").to(device)
-
-print(pixel_values)
-print(pixel_values["pixel_values"].shape)
-
-with torch.no_grad():
-    eloftr_config = OmegaConf.load("original_config.yaml")
-    eloftr_weights = "eloftr.pth"
-    original_model = hydra.utils.instantiate(eloftr_config)
-    original_model.to(device)
-    original_model.eval()
-    torch.manual_seed(42)
-    original_outputs = original_model(**pixel_values)
-    print(original_outputs)
-
-    image_sizes = [[(image.height, image.width) for image in images]]
-    outputs = image_processor.post_process_keypoint_matching(original_outputs, image_sizes)
-    print(outputs)
-    plot_pair(outputs, image1, image2, "original")
-
-    modified_eloftr_config = OmegaConf.load("modified_config.yaml")
-    modified_model = hydra.utils.instantiate(modified_eloftr_config)
-    modified_model.to(device)
-    modified_model.eval()
-    torch.manual_seed(42)
-    modified_outputs = modified_model(**pixel_values)
-    print(modified_outputs)
-
-    assert torch.allclose(original_outputs.keypoints, modified_outputs.keypoints)
-    assert torch.allclose(original_outputs.matches, modified_outputs.matches)
-    assert torch.allclose(original_outputs.matching_scores, modified_outputs.matching_scores)
-
+# device = "cuda"
+# url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
+# image1 = Image.open(requests.get(url_image1, stream=True).raw)
+# url_image2 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_26757027_6717084061.jpg"
+# image2 = Image.open(requests.get(url_image2, stream=True).raw)
+#
+# images = [image1, image2]
+#
+# image_processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
+# pixel_values = image_processor(images, return_tensors="pt").to(device)
+#
+# print(pixel_values)
+# print(pixel_values["pixel_values"].shape)
+#
+# with torch.no_grad():
+#     eloftr_config = OmegaConf.load("original_config.yaml")
+#     eloftr_weights = "eloftr.pth"
+#     original_model = hydra.utils.instantiate(eloftr_config)
+#     original_model.to(device)
+#     original_model.eval()
+#     torch.manual_seed(42)
+#     original_outputs = original_model(**pixel_values)
+#     print(original_outputs)
+#
+#     image_sizes = [[(image.height, image.width) for image in images]]
+#     outputs = image_processor.post_process_keypoint_matching(original_outputs, image_sizes)
+#     print(outputs)
+#     plot_pair(outputs, image1, image2, "original")
+#
+#     modified_eloftr_config = OmegaConf.load("modified_config.yaml")
+#     modified_model = hydra.utils.instantiate(modified_eloftr_config)
+#     modified_model.to(device)
+#     modified_model.eval()
+#     torch.manual_seed(42)
+#     modified_outputs = modified_model(**pixel_values)
+#     print(modified_outputs)
+#
+#     assert torch.allclose(original_outputs.keypoints, modified_outputs.keypoints)
+#     assert torch.allclose(original_outputs.matches, modified_outputs.matches)
+#     assert torch.allclose(original_outputs.matching_scores, modified_outputs.matching_scores)
+#
