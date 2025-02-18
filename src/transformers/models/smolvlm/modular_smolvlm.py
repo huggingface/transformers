@@ -168,56 +168,56 @@ class SmolVLMModel(Idefics3Model):
         Returns:
           A tensor of (batch_size, text_seq_len, text_dim).
         """
-    
+
         batch_size, text_seq_len, text_dim = inputs_embeds.shape
         num_images, patches_per_image, img_dim = image_hidden_states.shape
-    
+
         image_offset = 0
         merged_outputs: List[torch.Tensor] = []
-    
+
         # Iterate through each sample
         for b_idx, (cur_ids, cur_embeds) in enumerate(zip(input_ids, inputs_embeds)):
             # Find positions of <image> tokens in the text
             image_positions = (cur_ids == self.image_token_id).nonzero(as_tuple=True)[0]
             num_image_tokens = len(image_positions)
-    
+
             # If no <image> => text-only
             if num_image_tokens == 0:
                 empty_slice = image_hidden_states[0][:0, :]  # shape (0, text_dim)
                 merged_text_only = torch.cat([cur_embeds, empty_slice], dim=0)
                 merged_outputs.append(merged_text_only)
                 continue
-    
+
             if num_image_tokens % patches_per_image != 0:
                 raise ValueError(
                     f"Sample {b_idx} has {num_image_tokens} <image> tokens, not a multiple of patches_per_image={patches_per_image}. "
                     "Cannot map them to blocks of shape (patches_per_image, img_dim)."
                 )
-    
+
             positions_list = image_positions.tolist()
             chunks = [positions_list[i : i + patches_per_image] for i in range(0, num_image_tokens, patches_per_image)]
-    
+
             segments = []
             text_start = 0
-    
+
             # For each chunk (each chunk corresponds to 1 image)
             for chunk in chunks:
                 cur_block = image_hidden_states[image_offset]
                 image_offset += 1
-    
+
                 for i_patch, pos in enumerate(chunk):
                     if pos > text_start:
                         segments.append(cur_embeds[text_start:pos])
                     row_of_block = cur_block[i_patch : i_patch + 1, :]
                     segments.append(row_of_block)
                     text_start = pos + 1
-    
+
             if text_start < text_seq_len:
                 segments.append(cur_embeds[text_start:])
-    
+
             merged_sample = torch.cat(segments, dim=0)
             merged_outputs.append(merged_sample)
-    
+
         merged_outputs = torch.stack(merged_outputs)
         return merged_outputs
 
@@ -235,6 +235,7 @@ class SmolVLMModel(Idefics3Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, SmolVLMBaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -267,14 +268,14 @@ class SmolVLMModel(Idefics3Model):
             raise ValueError("When first calling the model, if input_embeds are passed, input_ids should not be None.")
 
         if inputs_embeds is None:
-            inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(self.device)
+            inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
         # START VISUAL INPUTS INTEGRATION
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
         elif pixel_values is not None:
             batch_size, num_images, num_channels, height, width = pixel_values.shape
-            pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
+            pixel_values = pixel_values
             pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
 
             # Remove padding images - padding images are full 0.
