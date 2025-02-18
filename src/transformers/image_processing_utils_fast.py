@@ -300,7 +300,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
 
         self.device = kwargs.pop("device", get_best_available_device())
-        print("self.device: ", self.device)
 
         for key in self.valid_init_kwargs.__annotations__.keys():
             kwarg = kwargs.pop(key, None)
