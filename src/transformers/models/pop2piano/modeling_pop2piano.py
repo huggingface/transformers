@@ -394,18 +394,22 @@ class Pop2PianoAttention(nn.Module):
         # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
         batch_size, seq_length = hidden_states.shape[:2]
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
 
         query_states = self.q(hidden_states)
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:

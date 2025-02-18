@@ -139,7 +139,7 @@ class Qwen2AudioAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -147,7 +147,8 @@ class Qwen2AudioAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -155,11 +156,14 @@ class Qwen2AudioAttention(nn.Module):
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
@@ -235,7 +239,7 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -250,7 +254,8 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
         if output_attentions:
             raise ValueError("Qwen2AudioFlashAttention2 attention does not support output_attentions")
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -258,11 +263,14 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
         query_states = torch.reshape(self.q_proj(hidden_states), (bsz, tgt_len, self.num_heads, self.head_dim))
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
@@ -344,7 +352,7 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -367,7 +375,8 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
                 cache_position=cache_position,
             )
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -375,11 +384,14 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states

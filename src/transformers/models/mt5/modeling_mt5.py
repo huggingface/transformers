@@ -356,18 +356,22 @@ class MT5Attention(nn.Module):
         # Mask is (batch_size, 1, 1, key_length) (non-causal encoder) or (batch_size, 1, seq_length, key_length) (causal decoder)
         batch_size, seq_length = hidden_states.shape[:2]
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
 
         query_states = self.q(hidden_states)
         query_states = query_states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
@@ -989,17 +993,29 @@ class MT5Stack(MT5PreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        # initialize past_key_values
-        return_self_attention_cache = False
+        # initialize `past_key_values`
+        # - if the model is an encoder-decoder or has encoder inputs passed, the cache will be an encoder-decoder cache
+        # - otherwise, a self-attention cache is used
+        # - if `use_cache` is False, e.g. when using the encoder only, we remove cache if it is passed
         if use_cache:
             if not self.is_decoder:
-                raise ValueError(f"`use_cache` can only be set to `True` if {self} is used as a decoder")
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
+                raise ValueError(f"`use_cache` can only be set to `True` if {self} is not an encoder.")
+            if (
+                isinstance(past_key_values, Cache)
+                and not isinstance(past_key_values, EncoderDecoderCache)
+                and encoder_hidden_states is not None
+            ):
+                logger.warning_once(
+                    "You are passing a decoder-only cache to a model that is used as an encoder-decoder model. "
+                    "This behavior is deprecated and will be removed in v4.52. To avoid this warning, please pass an "
+                    "`EncoderDecoderCache` (e.g. `EncoderDecoderCache(past_key_values, DynamicCache())`)."
+                )
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        # if `use_cache` is False, e.g. when using the encoder only, remove cache if it is passed
+                if encoder_hidden_states is not None:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
         elif past_key_values is not None:
             logger.warning_once(
                 "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
@@ -1017,15 +1033,20 @@ class MT5Stack(MT5PreTrainedModel):
             mask_seq_length = past_key_values_length + seq_length
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
-        if self.config.is_decoder:
-            causal_mask = self._update_causal_mask(
-                attention_mask,
-                inputs_embeds,
-                cache_position,
-                past_key_values.self_attention_cache if past_key_values is not None else None,
-                output_attentions,
+        if self.is_decoder:
+            decoder_cache = (
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values
             )
-        elif attention_mask is not None:
+            causal_mask = self._update_causal_mask(
+                attention_mask=attention_mask,
+                input_tensor=inputs_embeds,
+                cache_position=cache_position,
+                past_key_values=decoder_cache,
+                output_attentions=output_attentions,
+            )
+        elif attention_mask is not None:  # Encoder: we don't want a causal mask
             causal_mask = attention_mask[:, None, None, :]
             causal_mask = causal_mask.to(dtype=inputs_embeds.dtype)
             causal_mask = (1.0 - causal_mask) * torch.finfo(inputs_embeds.dtype).min
@@ -1147,9 +1168,6 @@ class MT5Stack(MT5PreTrainedModel):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-
         if not return_dict:
             return tuple(
                 v
@@ -1585,7 +1603,7 @@ class MT5Model(MT5PreTrainedModel):
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,

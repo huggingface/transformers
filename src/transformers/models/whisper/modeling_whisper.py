@@ -271,7 +271,7 @@ class WhisperAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -279,7 +279,8 @@ class WhisperAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -287,11 +288,14 @@ class WhisperAttention(nn.Module):
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
@@ -366,7 +370,7 @@ class WhisperFlashAttention2(WhisperAttention):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -381,7 +385,8 @@ class WhisperFlashAttention2(WhisperAttention):
         if output_attentions:
             raise ValueError("WhisperFlashAttention2 attention does not support output_attentions")
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -389,11 +394,14 @@ class WhisperFlashAttention2(WhisperAttention):
         query_states = torch.reshape(self.q_proj(hidden_states), (bsz, tgt_len, self.num_heads, self.head_dim))
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
@@ -474,7 +482,7 @@ class WhisperSdpaAttention(WhisperAttention):
         self,
         hidden_states: torch.Tensor,
         key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_value: Optional[Cache] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
@@ -497,7 +505,8 @@ class WhisperSdpaAttention(WhisperAttention):
                 cache_position=cache_position,
             )
 
-        # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
+        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
+        # the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -505,11 +514,14 @@ class WhisperSdpaAttention(WhisperAttention):
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                curr_past_key_value = past_key_value.cross_attention_cache
-            else:
-                curr_past_key_value = past_key_value.self_attention_cache
+            if isinstance(past_key_value, EncoderDecoderCache):
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
+            else:  # Model being used as decoder-only
+                curr_past_key_value = past_key_value
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
@@ -685,7 +697,7 @@ class WhisperDecoderLayer(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
         cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[EncoderDecoderCache] = None,
+        past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
         cache_position: Optional[torch.LongTensor] = None,
@@ -703,7 +715,7 @@ class WhisperDecoderLayer(nn.Module):
                 `(encoder_attention_heads,)`.
             cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
                 size `(decoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_value (`Cache`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -869,15 +881,17 @@ WHISPER_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`EncoderDecoderCache`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
             four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
-            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
-            when `config.use_cache=True`. An [`~cache_utils.EncoderDecoderCache`] instance.
+            in the cross-attention blocks (2) (if the model is used as an encoder-decoder). The `past_key_values` are
+            returned when `use_cache=True` is passed or when `config.use_cache=True`.
+            A [`~cache_utils.Cache`] instance or, more specifically, an [`~cache_utils.EncoderDecoderCache`] instance
+            if the model is used as an encoder-decoder.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -1169,15 +1183,17 @@ class WhisperDecoder(WhisperPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
 
-            past_key_values (`EncoderDecoderCache`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
                 four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
-                in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
-                when `config.use_cache=True`. An [`~cache_utils.EncoderDecoderCache`] instance.
+                in the cross-attention blocks (2) (if the model is used as an encoder-decoder). The `past_key_values` are
+                returned when `use_cache=True` is passed or when `config.use_cache=True`.
+                A [`~cache_utils.Cache`] instance or, more specifically, an [`~cache_utils.EncoderDecoderCache`] instance
+                if the model is used as an encoder-decoder.
 
-                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+                all `input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
@@ -1216,14 +1232,27 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        return_self_attention_cache = False
+        # initialize `past_key_values`
+        # - if the model is an encoder-decoder or has encoder inputs passed, the cache will be an encoder-decoder cache
+        # - otherwise, a self-attention cache is used
+        # - if `use_cache` is False, e.g. when using the encoder only, we remove cache if it is passed
         if use_cache:
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
+            if (
+                isinstance(past_key_values, Cache)
+                and not isinstance(past_key_values, EncoderDecoderCache)
+                and encoder_hidden_states is not None
+            ):
+                logger.warning_once(
+                    "You are passing a decoder-only cache to a model that is used as an encoder-decoder model. "
+                    "This behavior is deprecated and will be removed in v4.52. To avoid this warning, please pass an "
+                    "`EncoderDecoderCache` (e.g. `EncoderDecoderCache(past_key_values, DynamicCache())`)."
+                )
                 past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
-        # if `use_cache` is False, e.g. when using the encoder only, remove cache if it is passed
+                if encoder_hidden_states is not None:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
         elif past_key_values is not None:
             logger.warning_once(
                 "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
@@ -1257,12 +1286,17 @@ class WhisperDecoder(WhisperPreTrainedModel):
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        decoder_cache = (
+            past_key_values.self_attention_cache
+            if isinstance(past_key_values, EncoderDecoderCache)
+            else past_key_values
+        )
         causal_mask = self._update_causal_mask(
-            attention_mask,
-            inputs_embeds,
-            cache_position,
-            past_key_values.self_attention_cache if past_key_values is not None else None,
-            output_attentions,
+            attention_mask=attention_mask,
+            input_tensor=inputs_embeds,
+            cache_position=cache_position,
+            past_key_values=decoder_cache,
+            output_attentions=output_attentions,
         )
 
         if self.gradient_checkpointing and self.training:
@@ -1334,8 +1368,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = past_key_values if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
         if not return_dict:
             return tuple(
                 v
@@ -1563,7 +1595,7 @@ class WhisperModel(WhisperPreTrainedModel):
         decoder_head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
+        past_key_values: Optional[Cache] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1861,7 +1893,7 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
         encoder_outputs: Optional[Tuple[torch.FloatTensor]] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1892,16 +1924,15 @@ class WhisperForCausalLM(WhisperPreTrainedModel, GenerationMixin):
                 Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional
-                tensors are only required when the model is used as a decoder in a Sequence to Sequence model. Contains
-                pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-                blocks) that can be used (see `past_key_values` input) to speed up sequential decoding. If
-                `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-                don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-                `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            past_key_values (`Cache`, *optional*):
+                Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There
+                are two sets of pre-computed hidden-states: the key and values states in the self-attention blocks.
+                The `past_key_values` are returned when `use_cache=True` is passed or when `config.use_cache=True`.
+                A [`~cache_utils.Cache`] instance.
+
+                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all `input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
