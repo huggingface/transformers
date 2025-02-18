@@ -1,5 +1,15 @@
 """
 Inspired by torchtune's flex attention implementation
+
+Citation:
+@software{torchtune,
+  title = {torchtune: PyTorch's finetuning library},
+  author = {torchtune maintainers and contributors},
+  url = {https//github.com/pytorch/torchtune},
+  license = {BSD-3-Clause},
+  month = apr,
+  year = {2024}
+}
 """
 
 from typing import Optional, Tuple, Union
