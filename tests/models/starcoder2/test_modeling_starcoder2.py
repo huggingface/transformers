@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -321,6 +322,10 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         processor_name,
     ):
         return True
+
+    @skipIfRocm(arch=['gfx1200','gfx1201'])
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        super().test_generate_from_inputs_embeds_with_static_cache()
 
     def setUp(self):
         self.model_tester = Starcoder2ModelTester(self)

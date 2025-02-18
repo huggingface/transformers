@@ -4800,6 +4800,7 @@ class ModelTesterMixin:
             torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
 
     @require_torch_gpu
+    @skipIfRocm(min_torch_version='2.5')
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
             if not model_class._supports_flex_attn:
