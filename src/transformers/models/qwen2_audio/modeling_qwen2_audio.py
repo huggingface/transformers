@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -856,6 +856,9 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         self.multi_modal_projector = Qwen2AudioMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
@@ -893,18 +896,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.tie_weights
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.resize_token_embeddings
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
 
     def _merge_input_ids_with_audio_features(
         self, audio_features, num_audio_tokens, inputs_embeds, input_ids, attention_mask, labels
@@ -1337,54 +1328,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
             }
         )
         return model_inputs
-
-    def _update_model_kwargs_for_generation(
-        self,
-        outputs: ModelOutput,
-        model_kwargs: Dict[str, Any],
-        is_encoder_decoder: bool = False,
-        num_new_tokens: int = 1,
-    ) -> Dict[str, Any]:
-        # update past_key_values keeping its naming used in model code
-        cache_name, cache = self._extract_past_from_model_output(outputs)
-        model_kwargs[cache_name] = cache
-        if getattr(outputs, "state", None) is not None:
-            model_kwargs["state"] = outputs.state
-
-        # update attention_mask
-        if getattr(outputs, "attention_mask", None) is not None:
-            model_kwargs["attention_mask"] = outputs.attention_mask
-
-        # update token_type_ids with last value
-        if "token_type_ids" in model_kwargs:
-            token_type_ids = model_kwargs["token_type_ids"]
-            model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
-
-        if not is_encoder_decoder:
-            # update attention mask
-            if "attention_mask" in model_kwargs:
-                attention_mask = model_kwargs["attention_mask"]
-                model_kwargs["attention_mask"] = torch.cat(
-                    [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-                )
-        else:
-            # update decoder attention mask
-            if "decoder_attention_mask" in model_kwargs:
-                decoder_attention_mask = model_kwargs["decoder_attention_mask"]
-                model_kwargs["decoder_attention_mask"] = torch.cat(
-                    [decoder_attention_mask, decoder_attention_mask.new_ones((decoder_attention_mask.shape[0], 1))],
-                    dim=-1,
-                )
-
-        if model_kwargs.get("use_cache", True):
-            model_kwargs["cache_position"] = model_kwargs["cache_position"][-1:] + num_new_tokens
-        else:
-            past_positions = model_kwargs.pop("cache_position")
-            new_positions = torch.arange(
-                past_positions[-1] + 1, past_positions[-1] + num_new_tokens + 1, dtype=past_positions.dtype
-            ).to(past_positions.device)
-            model_kwargs["cache_position"] = torch.cat((past_positions, new_positions))
-        return model_kwargs
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)

@@ -107,7 +107,6 @@ class NewTaskModelPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    _supports_cache_class = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
@@ -248,9 +247,6 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    def tie_weights(self):
-        return self.language_model.tie_weights()
 
     def _update_causal_mask(
         self,
@@ -456,11 +452,9 @@ class NewTaskModelForNewTask(NewTaskModelPreTrainedModel, GenerationMixin):
         return model_inputs
 
     def resize_token_embeddings(
-        self,
-        new_num_tokens: Optional[int] = None,
-        pad_to_multiple_of=None,
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None, mean_resizing=True
     ) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 
         # Update vocab size
         self.config.text_config.vocab_size = model_embeds.num_embeddings

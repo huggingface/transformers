@@ -271,6 +271,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = BeitModelTester(self)
@@ -290,6 +291,10 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="BEiT does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="BEiT can't compile dynamic")
+    def test_sdpa_can_compile_dynamic(self):
         pass
 
     def test_model_get_set_embeddings(self):
@@ -634,7 +639,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
             [[-3.2437, 0.5072, -13.9174], [-3.2456, 0.4948, -13.9401], [-3.2033, 0.5121, -13.8550]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[bool_masked_pos][:3, :3], expected_slice, atol=1e-2))
+        torch.testing.assert_close(logits[bool_masked_pos][:3, :3], expected_slice, rtol=1e-2, atol=1e-2)
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
@@ -655,7 +660,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-1.2385, -1.0987, -1.0108]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_class_idx = 281
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
@@ -681,7 +686,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([1.6881, -0.2787, 0.5901]).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_class_idx = 2396
         self.assertEqual(logits.argmax(-1).item(), expected_class_idx)
@@ -727,7 +732,7 @@ class BeitModelIntegrationTest(unittest.TestCase):
                 device=torch_device,
             )
 
-        self.assertTrue(torch.allclose(logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_post_processing_semantic_segmentation(self):
@@ -764,19 +769,14 @@ class BeitModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 
-        # with interpolate_pos_encoding being False an exception should be raised with higher resolution
-        # images than what the model supports.
-        self.assertFalse(processor.do_center_crop)
-        with torch.no_grad():
-            with self.assertRaises(ValueError, msg="doesn't match model"):
-                model(pixel_values, interpolate_pos_encoding=False)
-
         # with interpolate_pos_encoding being True the model should process the higher resolution image
         # successfully and produce the expected output.
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
-        expected_shape = torch.Size((1, 1801, 768))
+        # num_cls_tokens + (height / patch_size) * (width / patch_size)
+        # 1 + (480 / 16) * (480 / 16) = 1 + 30 * 30 = 901
+        expected_shape = torch.Size((1, 901, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 

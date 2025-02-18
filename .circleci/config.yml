@@ -13,6 +13,7 @@ jobs:
     check_circleci_user:
         docker:
             - image: python:3.10-slim
+        resource_class: small
         parallelism: 1
         steps:
             - run: echo $CIRCLE_PROJECT_USERNAME
@@ -57,7 +58,7 @@ jobs:
             - run:
                 name: "Prepare pipeline parameters"
                 command: |
-                    python utils/process_test_artifacts.py 
+                    python utils/process_test_artifacts.py
 
             # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
             # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
@@ -109,7 +110,7 @@ jobs:
             - run:
                 name: "Prepare pipeline parameters"
                 command: |
-                    python utils/process_test_artifacts.py 
+                    python utils/process_test_artifacts.py
 
             # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
             # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
@@ -169,7 +170,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/installed.txt
             - run: python utils/check_copies.py
-            - run: python utils/check_modular_conversion.py
+            - run: python utils/check_modular_conversion.py --num_workers 4
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
