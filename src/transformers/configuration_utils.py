@@ -1182,12 +1182,6 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     """
     diff = {}
     default = config_obj.__class__().to_dict() if config_obj is not None else {}
-    print(
-        config_obj.__class__.__name__,
-        default.get("head_dim", None),
-        dict_a.get("head_dim", None),
-        dict_b.get("head_dim", None),
-    )
     for key, value in dict_a.items():
         obj_value = getattr(config_obj, str(key), None)
         if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
