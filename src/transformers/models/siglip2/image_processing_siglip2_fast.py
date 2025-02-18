@@ -21,7 +21,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -30,7 +30,6 @@ from ...image_utils import (
     TensorType,
 )
 from ...utils import (
-    add_start_docstrings,
     filter_out_non_signature_kwargs,
     is_torch_available,
     is_torchvision_available,
@@ -129,11 +128,41 @@ def pad_along_first_dim(
     return tensor, mask
 
 
-@add_start_docstrings(
-    "Constructs a fast SigLIP2 image processor.",
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-)
 class Siglip2ImageProcessorFast(BaseImageProcessorFast):
+    r"""
+    Constructs a fast SigLIP2 image processor.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's dimensions to fit `max_num_patches` according to given `patch_size`.
+            Can be overridden by `do_resize` in the `preprocess` method.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+            Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
+            the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
+            method.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image by the specified mean and standard deviation. Can be overridden by
+            `do_normalize` in the `preprocess` method.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch the image will be split to.
+        max_num_patches (`int`, *optional*, defaults to 256):
+            The image will be resized to have at most this number of patches,
+            and then padded in "patch" dimension to match this number exactly.
+    """
+
     def __init__(
         self,
         do_resize: bool = True,
