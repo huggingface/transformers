@@ -172,6 +172,8 @@
     title: EETQ
   - local: quantization/fbgemm_fp8
     title: FBGEMM
+  - local: quantization/finegrained_fp8
+    title: Fine-grained FP8
   - local: gguf
     title: GGUF
   - local: quantization/gptq
@@ -186,6 +188,8 @@
     title: Quanto
   - local: quantization/torchao
     title: torchao
+  - local: quantization/spqr
+    title: SpQR
   - local: quantization/vptq
     title: VPTQ
   - local: quantization/contribute
