@@ -78,7 +78,7 @@ inputs = processor.apply_chat_template(
 ).to(model.device)
 
 output_ids = model.generate(**inputs, max_new_tokens=128)
-generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+generated_texts = processor.batch_decode(output_ids, skip_special_tokens=True)
 print(generated_texts)
 
 
