@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -20,13 +20,8 @@ from transformers.models.siglip.modeling_siglip import (
     SiglipVisionModelOutput,
     SiglipVisionTransformer,
 )
-from transformers.models.siglip.processing_siglip import SiglipProcessor
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
-from ...processing_utils import ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -105,106 +100,6 @@ class Siglip2VisionConfig(SiglipVisionConfig):
 
 class Siglip2Config(SiglipConfig):
     pass
-
-
-class Siglip2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 64,
-        },
-        "images_kwargs": {},
-    }
-
-
-# Update: docstring SiglipTokenizer->GemmaTokenizerFast
-# Update: image_processor_class and tokenizer_class
-class Siglip2Processor(SiglipProcessor):
-    r"""
-    Constructs a Siglip2 processor which wraps a Siglip2 image processor and a Gemma tokenizer into a single processor.
-
-    [`Siglip2Processor`] offers all the functionalities of [`Siglip2ImageProcessor`] and [`GemmaTokenizerFast`]. See the
-    [`~Siglip2Processor.__call__`] and [`~Siglip2Processor.decode`] for more information.
-
-    Args:
-        image_processor ([`Siglip2ImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`GemmaTokenizerFast`]):
-            The tokenizer is a required input.
-    """
-
-    image_processor_class = "Siglip2ImageProcessor"
-    tokenizer_class = "GemmaTokenizerFast"
-
-    # Update docstring: SiglipTokenizer->GemmaTokenizerFast, add `pixel_attention_mask` and `spatial_shapes`
-    def __call__(
-        self,
-        images: Optional[Union[ImageInput, List[ImageInput], List[List[ImageInput]]]] = None,
-        text: Optional[Union[TextInput, "PreTokenizedInput", List[TextInput], List["PreTokenizedInput"]]] = None,
-        audio=None,
-        videos=None,
-        **kwargs: Unpack[Siglip2ProcessorKwargs],
-    ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to GemmaTokenizerFast's [`~GemmaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` argument to
-        Siglip2ImageProcessor's [`~Siglip2ImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `max_length`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*, defaults to 64):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*, defaults to `True`):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'pt'`):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_attention_mask** -- Attention mask for the pixel values. Returned when `images` is not `None`.
-            - **spatial_shapes** -- The number of horizontal and vertical patches per image.
-              Returned when `images` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            Siglip2ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        # extract args to use with modular
-        padding = output_kwargs["text_kwargs"]["padding"]
-        max_length = output_kwargs["text_kwargs"]["max_length"]
-        truncation = output_kwargs["text_kwargs"]["truncation"]
-        return_tensors = output_kwargs["common_kwargs"]["return_tensors"]
-        return super().__call__(text, images, padding, max_length, truncation, return_tensors)
 
 
 class Siglip2VisionOutput(SiglipVisionModelOutput):
@@ -616,7 +511,6 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
 
 
 __all__ = [
-    "Siglip2Processor",
     "Siglip2Config",
     "Siglip2TextConfig",
     "Siglip2VisionConfig",
