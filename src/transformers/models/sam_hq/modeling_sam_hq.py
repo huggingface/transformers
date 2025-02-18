@@ -1282,15 +1282,19 @@ class SamHQMaskDecoder(nn.Module):
 
         if multimask_output:
             mask_slice = slice(1, self.num_mask_tokens - 1)
-            iou_pred = iou_pred[:, :, mask_slice]  # Shape: (batch_size, num_boxes, num_masks)
-            masks_multi = masks[:, :, mask_slice, :, :]  # Shape: (batch_size, num_boxes, num_masks, H, W)
-            
-            # Keep all predictions for each box
-            masks_sam = masks_multi
+            iou_pred = iou_pred[:, :, mask_slice]
+
+            iou_pred, max_iou_idx = torch.max(iou_pred, dim=1)
+            iou_pred = iou_pred.unsqueeze(1)
+
+            masks_multi = masks[:, :, mask_slice, :, :]
+            batch_indices = torch.arange(masks_multi.size(0)).unsqueeze(1).expand(-1, masks_multi.size(1))
+            point_indices = torch.arange(masks_multi.size(1)).unsqueeze(0).expand(masks_multi.size(0), -1)
+            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(1)
         else:
             mask_slice = slice(0, 1)
-            iou_pred = iou_pred[:, :, mask_slice]  # Shape: (batch_size, num_boxes, 1)
-            masks_sam = masks[:, :, mask_slice, :, :]  # Shape: (batch_size, num_boxes, 1, H, W)
+            iou_pred = iou_pred[:, :, mask_slice]
+            masks_sam = masks[:, :, mask_slice, :, :]
 
         masks_hq = masks[:, :, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
         if hq_token_only:
