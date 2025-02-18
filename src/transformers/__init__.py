@@ -403,7 +403,7 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.depth_pro": ["DepthProConfig"],
     "models.detr": ["DetrConfig"],
-    "models.d_fine": ["DFineConfig", "DFineResNetConfig", "DFineResNetStageConfig"],
+    "models.d_fine": ["DFineConfig", "DFineResNetConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
@@ -5439,7 +5439,7 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
-    from .models.d_fine import DFineConfig, DFineResNetConfig, DFineResNetStageConfig
+    from .models.d_fine import DFineConfig, DFineResNetConfig
     from .models.dab_detr import (
         DabDetrConfig,
     )
