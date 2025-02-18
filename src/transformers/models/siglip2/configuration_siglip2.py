@@ -50,6 +50,8 @@ class Siglip2TextConfig(PretrainedConfig):
             The id of the beginning-of-sequence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 49407):
             The id of the end-of-sequence token in the vocabulary.
+        projection_size (`int`, *optional*, defaults to `hidden_size`):
+            The size of the projection head.
 
     Example:
 
@@ -85,6 +87,7 @@ class Siglip2TextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=49406,
         eos_token_id=49407,
+        projection_size=None,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -98,6 +101,7 @@ class Siglip2TextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
+        self.projection_size = projection_size if projection_size is not None else hidden_size
 
 
 class Siglip2VisionConfig(PretrainedConfig):
