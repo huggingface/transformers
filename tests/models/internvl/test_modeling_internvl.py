@@ -304,6 +304,32 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
+    def test_qwen2_small_model_integration_forward(self):
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
+        model = InternVLForConditionalGeneration.from_pretrained(
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+        )
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        prompt = "<|im_start|>user\n<image>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+
+        # Forward
+        with torch.inference_mode():
+            output = model(**inputs)
+
+        actual_logits = output.logits[0, -1, :5].cpu()
+        expected_logits = torch.tensor([11.5000, 9.8750, 14.0625, 9.8125, 8.2500], dtype=torch.bfloat16)
+        self.assertTrue(
+            torch.allclose(actual_logits, expected_logits, atol=0.1),
+            f"Actual logits: {actual_logits}"
+            f"\nExpected logits: {expected_logits}"
+            f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
+        )
+
+    @slow
+    @require_torch_gpu
     def test_qwen2_small_model_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
@@ -485,7 +511,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
-    def test_qwen2_small_model_integration_interlaced_images_videos(self):
+    def test_qwen2_small_model_integration_interleaved_images_videos(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
@@ -601,6 +627,36 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             )
         expected_output = "The image shows two cats sleeping on a pink couch. They are lying side by side, with their"
         self.assertEqual(decoded_output, expected_output)
+
+    @slow
+    @require_torch_gpu
+    def test_llama_small_model_integration_forward(self):
+        processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
+        model = InternVLForConditionalGeneration.from_pretrained(
+            self.small_model_checkpoint, device_map=torch_device, torch_dtype=torch.bfloat16
+        )
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        image = Image.open(requests.get(url, stream=True).raw)
+
+        prompt = "<|im_start|>user\n<image>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device)
+
+        # Forward
+        with torch.inference_mode():
+            output = model(**inputs)
+
+        actual_logits = output.logits[0, -1, :5].cpu()
+        expected_logits = torch.tensor([-9.8750, -0.4258, 1.4844, -10.3125, -10.3125], dtype=torch.bfloat16)
+        # The original implementation and the transformers implementation do not match exactly, hence the higher tolerance.
+        # The difference is likely due to the different implementations of the attention mechanism (different order of operations)
+        # between the transformers Llama model and the original InternLM model.
+        # The difference has almost no effect on the output tokens, but it does affect the logits a lot more.
+        self.assertTrue(
+            torch.allclose(actual_logits, expected_logits, atol=1),
+            f"Actual logits: {actual_logits}"
+            f"\nExpected logits: {expected_logits}"
+            f"\nDifference: {torch.abs(actual_logits - expected_logits)}",
+        )
 
     @slow
     @require_torch_gpu
@@ -785,7 +841,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_gpu
     @require_bitsandbytes
-    def test_llama_small_model_integration_interlaced_images_videos(self):
+    def test_llama_small_model_integration_interleaved_images_videos(self):
         processor = AutoProcessor.from_pretrained(self.small_model_checkpoint)
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device

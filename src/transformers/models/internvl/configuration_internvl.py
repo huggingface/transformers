@@ -20,19 +20,19 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 class InternVLVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`BeitModel`]. It is used to instantiate an BEiT
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the BEiT
-    [microsoft/beit-base-patch16-224-pt22k](https://huggingface.co/microsoft/beit-base-patch16-224-pt22k) architecture.
+    This is the configuration class to store the configuration of a [`InternVLVisionModel`]. It is used to instantiate an InternVLVisionModel
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
+    a similar configuration to that of the InternVL2_5-1B-MPO.
+    e.g. [yonigozlan/InternVL2_5-1B-MPO-hf](https://huggingface.co/yonigozlan/InternVL2_5-1B-MPO-hf)
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        intermediate_size (`int`, *optional*, defaults to 4096):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
@@ -43,17 +43,17 @@ class InternVLVisionConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
+        image_size (`int`, *optional*, defaults to 448):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         use_mask_token (`bool`, *optional*, defaults to `False`):
             Whether to use a mask token for masked image modeling.
-        use_absolute_position_embeddings (`bool`, *optional*, defaults to `False`):
+        use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to use BERT-style absolute position embeddings.
         use_relative_position_bias (`bool`, *optional*, defaults to `False`):
             Whether to use T5-style relative position embeddings in the self-attention layers.
@@ -67,16 +67,16 @@ class InternVLVisionConfig(PretrainedConfig):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
 
-    Example:TODO
+    Example:
 
     ```python
-    >>> from transformers import BeitConfig, BeitModel
+    >>> from transformers import InternVLVisionConfig, InternVLVisionModel
 
-    >>> # Initializing a BEiT beit-base-patch16-224-pt22k style configuration
-    >>> configuration = BeitConfig()
+    >>> # Initializing a InternVLVisionModel ../InternVLTest-1B style configuration
+    >>> configuration = InternVLVisionConfig()
 
-    >>> # Initializing a model (with random weights) from the beit-base-patch16-224-pt22k style configuration
-    >>> model = BeitModel(configuration)
+    >>> # Initializing a model (with random weights) from the ../InternVLTest-1B configuration
+    >>> model = InternVLVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -87,20 +87,20 @@ class InternVLVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
+        hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        intermediate_size=4096,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=224,
-        patch_size=16,
+        layer_norm_eps=1e-06,
+        image_size=448,
+        patch_size=14,
         num_channels=3,
         use_mask_token=False,
-        use_absolute_position_embeddings=False,
+        use_absolute_position_embeddings=True,
         use_relative_position_bias=False,
         use_shared_relative_position_bias=False,
         layer_scale_init_value=0.1,
@@ -137,7 +137,7 @@ class InternVLConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`InternVLForConditionalGeneration`]. It is used to instantiate a
     InternVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of InternVL2_5-1B-MPO.
-    e.g. [OpenGVLab/InternVL2_5-1B-MPO](https://huggingface.co/OpenGVLab/InternVL2_5-1B-MPO)
+    e.g. [yonigozlan/InternVL2_5-1B-MPO-hf](https://huggingface.co/yonigozlan/InternVL2_5-1B-MPO-hf)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -165,7 +165,13 @@ class InternVLConfig(PretrainedConfig):
     >>> from transformers import InternVLForConditionalGeneration, InternVLConfig
 
     >>> # Initializing a InternVL style configuration
-    >>> configuration = InternVLConfig() TODO
+    >>> configuration = InternVLConfig()
+
+    >>> # Initializing a model (with random weights) from the ../InternVLTest-1B configuration
+    >>> model = InternVLForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "internvl"
@@ -219,70 +225,21 @@ class InternVLConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"](
-                _attn_implementation="flash_attention_2",
-                attention_dropout=0.0,
-                bad_words_ids=None,
-                begin_suppress_tokens=None,
+                _attn_implementation="eager",
                 bos_token_id=151643,
-                chunk_size_feed_forward=0,
-                cross_attention_hidden_size=None,
-                decoder_start_token_id=None,
-                diversity_penalty=0.0,
-                do_sample=False,
-                early_stopping=False,
-                encoder_no_repeat_ngram_size=0,
                 eos_token_id=151645,
-                exponential_decay_length_penalty=None,
-                finetuning_task=None,
-                forced_bos_token_id=None,
-                forced_eos_token_id=None,
                 hidden_act="silu",
                 hidden_size=896,
                 initializer_range=0.02,
                 intermediate_size=4864,
-                is_decoder=False,
-                is_encoder_decoder=False,
-                length_penalty=1.0,
-                max_length=20,
                 max_position_embeddings=32768,
                 max_window_layers=21,
-                min_length=0,
-                no_repeat_ngram_size=0,
                 num_attention_heads=14,
-                num_beam_groups=1,
-                num_beams=1,
                 num_hidden_layers=24,
                 num_key_value_heads=2,
-                num_return_sequences=1,
-                output_attentions=False,
-                output_hidden_states=False,
-                output_scores=False,
-                pad_token_id=None,
-                prefix=None,
-                problem_type=None,
-                pruned_heads={},
-                remove_invalid_values=False,
-                repetition_penalty=1.0,
-                return_dict=True,
-                return_dict_in_generate=False,
                 rms_norm_eps=1e-06,
                 rope_theta=1000000.0,
-                sep_token_id=None,
-                sliding_window=32768,
-                suppress_tokens=None,
-                task_specific_params=None,
-                temperature=1.0,
-                tf_legacy_loss=False,
-                tie_encoder_decoder=False,
-                tie_word_embeddings=False,
-                tokenizer_class=None,
-                top_k=50,
-                top_p=1.0,
                 torch_dtype="bfloat16",
-                typical_p=1.0,
-                use_bfloat16=True,
-                use_cache=True,
-                use_sliding_window=False,
                 vocab_size=151674,
             )
 

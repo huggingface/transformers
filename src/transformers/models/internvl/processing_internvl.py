@@ -47,11 +47,11 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
 
 class InternVLProcessor(ProcessorMixin):
     r"""
-    Constructs a InternVL processor which wraps a [`GotOcr2ImageProcessor`] and
+    Constructs a InternVL processor which wraps a [`AutoImageProcessor`] and
     [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~InternVLProcessor.__call__`] and [`~InternVLProcessor.decode`] for more information.
     Args:
-        image_processor ([`GotOcr2ImageProcessor`], *optional*):
+        image_processor ([`AutoImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -150,7 +150,7 @@ class InternVLProcessor(ProcessorMixin):
             video_index = 0
             processed_text = []
             image_video_patches = []  # List to store processed image/video patches
-            # Support interlaced image and video in prompts:
+            # Support interleaved image and video in prompts:
             # Processed patches of images and videos are inserted in `image_video_patches` in the order they appear in the prompts
             for prompt in text:
                 new_prompt = prompt
@@ -187,7 +187,7 @@ class InternVLProcessor(ProcessorMixin):
                         new_prompt = new_prompt.replace("<video>", video_prompt, 1)
                         video_index += 1
                 processed_text.append(new_prompt)
-            # Concatenate the interlaced image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
+            # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
             image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
             text = processed_text
 

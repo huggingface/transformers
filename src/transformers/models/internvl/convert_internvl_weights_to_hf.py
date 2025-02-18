@@ -47,6 +47,11 @@ UNNECESSARY_CONFIG_KEYS = [
     "_name_or_path",
     "auto_map",
     "use_bfloat16",
+    "use_flash_attn",
+    "qk_normalization",
+    "qkv_bias",
+    "bias",
+    "norm_type",
 ]
 
 # fmt: off
@@ -177,7 +182,7 @@ def get_internvl_config(input_base_path):
         text_config=language_config_class(**llm_config),
         vision_config=InternVLVisionConfig(**vision_config),
         image_token_index=image_token_index,
-        # force default attention implementation to eager as the original model doesn't sdpa
+        # force default attention implementation to eager as the original model doesn't use sdpa
         attn_implementation="eager",
     )
 
@@ -186,12 +191,15 @@ def write_model(
     model_path,
     input_base_path,
     push_to_hub=False,
+    hub_dir=None,
 ):
     os.makedirs(model_path, exist_ok=True)
 
     config = get_internvl_config(input_base_path)
     config.architectures = ["InternVLForConditionalGeneration"]
     config.save_pretrained(model_path)
+    if push_to_hub:
+        config.push_to_hub(hub_dir, use_temp_dir=True)
     print("Model config saved successfully...")
 
     # ------------------------------------------------------------
@@ -251,6 +259,8 @@ def write_model(
 
     print("Saving the model.")
     model.save_pretrained(model_path)
+    if push_to_hub:
+        model.push_to_hub(hub_dir, use_temp_dir=True)
 
     # generation config
     if LM_TYPE_CORRESPONDENCE[input_base_path] == "llama":
@@ -261,9 +271,9 @@ def write_model(
             eos_token_id=92542,
         )
         generation_config.save_pretrained(model_path)
+        if push_to_hub:
+            generation_config.push_to_hub(hub_dir, use_temp_dir=True)
 
-    # if push_to_hub:
-    #     model.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
     # del state_dict, model
 
     # # Safety check: reload the converted model
@@ -274,6 +284,9 @@ def write_model(
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
     processor.save_pretrained(model_path)
+    if push_to_hub:
+        processor.push_to_hub(hub_dir, use_temp_dir=True)
+
     messages = [
         {
             "role": "user",
@@ -297,7 +310,7 @@ def write_model(
     del model
 
 
-def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None):
+def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None, hub_dir: str = None):
     if LM_TYPE_CORRESPONDENCE[path] == "qwen2":
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", return_token_type_ids=False)
         tokenizer.model_max_length = CONTEXT_LENGTH
@@ -330,12 +343,11 @@ def write_tokenizer(save_dir: str, push_to_hub: bool = False, path: str = None):
 
     tokenizer.chat_template = chat_template
     tokenizer.save_pretrained(save_dir)
+    if push_to_hub:
+        tokenizer.push_to_hub(hub_dir, use_temp_dir=True)
 
-    # if push_to_hub:
-    #     tokenizer.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
 
-
-def write_image_processor(save_dir: str, push_to_hub: bool = False):
+def write_image_processor(save_dir: str, push_to_hub: bool = False, hub_dir: str = None):
     image_processor = GotOcr2ImageProcessor(
         do_resize=True,
         size={"height": 448, "width": 448},
@@ -349,20 +361,25 @@ def write_image_processor(save_dir: str, push_to_hub: bool = False):
     )
 
     image_processor.save_pretrained(save_dir)
-    # if push_to_hub:
-    #     image_processor.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
+    if push_to_hub:
+        image_processor.push_to_hub(hub_dir, use_temp_dir=True)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        default="OpenGVLab/InternVL2_5-8B-MPO",
+        default="OpenGVLab/InternVL2_5-1B-MPO",
         help="Location of original InternVL model",
     )
     parser.add_argument(
         "--output_dir",
-        default="InternVLTest-8B",
+        default="InternVLTest-1B",
+        help="Location to write HF model and processors",
+    )
+    parser.add_argument(
+        "--hub_dir",
+        default="yonigozlan/InternVL2_5-1B-MPO-hf",
         help="Location to write HF model and processors",
     )
 
@@ -374,16 +391,19 @@ def main():
         save_dir=args.output_dir,
         push_to_hub=args.push_to_hub,
         path=args.input_dir,
+        hub_dir=args.hub_dir,
     )
 
     write_image_processor(
         save_dir=args.output_dir,
         push_to_hub=args.push_to_hub,
+        hub_dir=args.hub_dir,
     )
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         push_to_hub=args.push_to_hub,
+        hub_dir=args.hub_dir,
     )
 
 
