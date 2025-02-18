@@ -33,8 +33,8 @@ class SmolVLMVisionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`SmolVLMVisionModel`]. It is used to instantiate a
     SmolVLM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
-    [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the SmolVLM model
-    [HuggingFaceM4/SmolVLM-8B-Llama3](https://huggingface.co/HuggingFaceM4/SmolVLM-8B-Llama3).
+    [google/siglip-so400m-patch14-384](https://huggingface.co/google/siglip-so400m-patch14-384) used in the SmolVLM model
+    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -70,10 +70,10 @@ class SmolVLMVisionConfig(PretrainedConfig):
     >>> from transformers.models.smolvlm.modeling_smolvlm import SmolVLMVisionTransformer
     >>> from transformers.models.smolvlm.configuration_smolvlm import SmolVLMVisionConfig
 
-    >>> # Initializing a SmolVLMVisionConfig with google/siglip-base-patch16-224 style configuration
+    >>> # Initializing a SmolVLMVisionConfig with google/siglip-so400m-patch14-384 style configuration
     >>> configuration = SmolVLMVisionConfig()
 
-    >>> # Initializing a SmolVLMVisionTransformer (with random weights) from the google/siglip-base-patch16-224 style configuration
+    >>> # Initializing a SmolVLMVisionTransformer (with random weights) from the google/siglip-so400m-patch14-384 style configuration
     >>> model = SmolVLMVisionTransformer(configuration)
 
     >>> # Accessing the model configuration
@@ -118,7 +118,7 @@ class SmolVLMConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`SmolVLMModel`]. It is used to instantiate a
     SmolVLM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the SmolVLM
-    [HuggingFaceM4/SmolVLM-8B-Llama3](https://huggingface.co/HuggingFaceM4/SmolVLM-8B-Llama3) architecture.
+    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

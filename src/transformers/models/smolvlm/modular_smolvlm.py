@@ -38,6 +38,56 @@ logger = logging.get_logger(__name__)
 
 
 class SmolVLMVisionConfig(Idefics3VisionConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`SmolVLMVisionModel`]. It is used to instantiate a
+    SmolVLM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the SigLIP checkpoint
+    [google/siglip-so400m-patch14-384](https://huggingface.co/google/siglip-so400m-patch14-384) used in the SmolVLM model
+    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 1152):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 32):
+            The size (resolution) of each patch.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers.models.smolvlm.modeling_smolvlm import SmolVLMVisionTransformer
+    >>> from transformers.models.smolvlm.configuration_smolvlm import SmolVLMVisionConfig
+
+    >>> # Initializing a SmolVLMVisionConfig with google/siglip-so400m-patch14-384 style configuration
+    >>> configuration = SmolVLMVisionConfig()
+
+    >>> # Initializing a SmolVLMVisionTransformer (with random weights) from the google/siglip-so400m-patch14-384 style configuration
+    >>> model = SmolVLMVisionTransformer(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "smolvlm_vision"
     pass
 
@@ -51,6 +101,42 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
 
 
 class SmolVLMConfig(Idefics3Config):
+    r"""
+    This is the configuration class to store the configuration of a [`SmolVLMModel`]. It is used to instantiate a
+    SmolVLM model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the model of the SmolVLM
+    [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should cache the key/value pairs of the attention mechanism. Only
+            relevant if `config.is_decoder=True`.
+        image_token_id (`int`, *optional*, defaults to 128257):
+            The id of the "image" token.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether or not to tie the word embeddings with the token embeddings.
+        vision_config (`IdeficsVisionConfig` or `dict`, *optional*, defaults to `IdeficsVisionConfig`):
+            Custom vision config or dict for the vision tower
+        text_config (`PretrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
+            Custom text config or dict for the text model
+        scale_factor (`int`, *optional*, defaults to 2):
+            The scale factor for the image encoder.
+        pad_token_id (`int`, *optional*, defaults to 128002):
+            The id of the padding token.
+
+    Example:
+    ```python
+    >>> from transformers import SmolVLMModel, SmolVLMConfig
+    >>> # Initializing configuration
+    >>> configuration = SmolVLMConfig()
+    >>> # Initializing a model from the configuration
+    >>> model = SmolVLMModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "smolvlm"
     pass
 
@@ -282,6 +368,56 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         self.model = SmolVLMModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+
+    def forward(self, **super_kwargs):
+        r"""
+        Args:
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or `model.image_token_id` (where `model` is your instance of `SmolVLMForConditionalGeneration`).
+                Tokens with indices set to `model.image_token_id` are ignored (masked), the loss is only
+                computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import requests
+        >>> import torch
+        >>> from PIL import Image
+        >>> from io import BytesIO
+
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
+        >>> from transformers.image_utils import load_image
+
+        >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
+        >>> image1 = load_image("https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg")
+        >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+        >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
+
+        >>> processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
+
+        >>> # Create inputs
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "video", "path": path/to/video},
+        ...             {"type": "text", "text": "What is happening in this video?"},
+        ...         ]
+        ...     }
+        ... ]
+
+        >>> inputs = processor.apply_chat_template([messages], add_generation_prompt=True)
+
+        >>> # Generate
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=256)
+        >>> generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+        >>> print(generated_texts)
+        ```"""
+        super().forward(**super_kwargs)
 
 
 __all__ = [

@@ -1147,7 +1147,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         >>> from PIL import Image
         >>> from io import BytesIO
 
-        >>> from transformers import AutoProcessor, AutoModelForVision2Seq
+        >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> from transformers.image_utils import load_image
 
         >>> # Note that passing the image urls (instead of the actual pil images) to the processor is also possible
@@ -1155,42 +1155,27 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
         >>> image2 = load_image("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
         >>> image3 = load_image("https://cdn.britannica.com/68/170868-050-8DDE8263/Golden-Gate-Bridge-San-Francisco.jpg")
 
-        >>> processor = AutoProcessor.from_pretrained("HuggingFaceM4/SmolVLM-8B-Llama3")
-        >>> model = AutoModelForVision2Seq.from_pretrained("HuggingFaceM4/SmolVLM-8B-Llama3", torch_dtype=torch.bfloat16, device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+        >>> model = AutoModelForImageTextToText.from_pretrained("HuggingFaceTB/SmolVLM2-2.2B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
 
         >>> # Create inputs
         >>> messages = [
         ...     {
         ...         "role": "user",
         ...         "content": [
-        ...             {"type": "image"},
-        ...             {"type": "text", "text": "In this image, we can see the city of New York, and more specifically the Statue of Liberty."},
-        ...             {"type": "image"},
-        ...             {"type": "text", "text": "What can we see in this image?"},
-        ...         ]
-        ...     },
-        ...     {
-        ...         "role": "user",
-        ...         "content": [
-        ...             {"type": "image"},
-        ...             {"type": "text", "text": "In which city is that bridge located?"},
+        ...             {"type": "video", "path": path/to/video},
+        ...             {"type": "text", "text": "What is happening in this video?"},
         ...         ]
         ...     }
         ... ]
 
-        >>> prompts = [processor.apply_chat_template([message], add_generation_prompt=True) for message in messages]
-        >>> images = [[image1, image2], [image3]]
-        >>> inputs = processor(text=prompts, images=images, padding=True, return_tensors="pt").to(model.device)
+        >>> inputs = processor.apply_chat_template([messages], add_generation_prompt=True)
 
         >>> # Generate
         >>> generated_ids = model.generate(**inputs, max_new_tokens=256)
         >>> generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        >>> print(generated_texts[0])
-        Assistant: There are buildings, trees, lights, and water visible in this image.
-
-        >>> print(generated_texts[1])
-        Assistant: The bridge is in San Francisco.
+        >>> print(generated_texts)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
