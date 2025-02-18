@@ -1651,7 +1651,7 @@ class SamHQModel(SamHQPreTrainedModel):
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
             hq_token_only=hq_token_only,
-            intermediate_embeddings=intermediate_embeddings[0].unsqueeze(0),
+            intermediate_embeddings=intermediate_embeddings,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
             output_attentions=output_attentions,
