@@ -1022,4 +1022,7 @@ class JanusImageProcessor(BlipImageProcessor):
         image = to_numpy_array(image)
         return image
 
-__all__ = ["JanusImageProcessor",]
+__all__ = ["JanusImageProcessor",
+           "JanusPreTrainedModel",
+           "JanusForConditionalGeneration",
+           ]
