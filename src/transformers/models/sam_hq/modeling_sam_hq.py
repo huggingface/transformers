@@ -1282,22 +1282,15 @@ class SamHQMaskDecoder(nn.Module):
 
         if multimask_output:
             mask_slice = slice(1, self.num_mask_tokens - 1)
-            iou_pred = iou_pred[:, :, mask_slice]
-
-            # Get the highest scoring iou prediction
-            iou_pred, max_iou_idx = torch.max(iou_pred, dim=2)  # Changed from dim=1
-            iou_pred = iou_pred.unsqueeze(2)  # Add mask dimension back
-
-            masks_multi = masks[:, :, mask_slice, :, :]
-                # Select the mask with highest IoU prediction for each point
-            batch_size, point_batch_size = masks_multi.shape[:2]
-            batch_indices = torch.arange(batch_size, device=masks_multi.device)[:, None]
-            point_indices = torch.arange(point_batch_size, device=masks_multi.device)[None, :]
-            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(2)
+            iou_pred = iou_pred[:, :, mask_slice]  # Shape: (batch_size, num_boxes, num_masks)
+            masks_multi = masks[:, :, mask_slice, :, :]  # Shape: (batch_size, num_boxes, num_masks, H, W)
+            
+            # Keep all predictions for each box
+            masks_sam = masks_multi
         else:
             mask_slice = slice(0, 1)
-            iou_pred = iou_pred[:, :, mask_slice]
-            masks_sam = masks[:, :, mask_slice, :, :]
+            iou_pred = iou_pred[:, :, mask_slice]  # Shape: (batch_size, num_boxes, 1)
+            masks_sam = masks[:, :, mask_slice, :, :]  # Shape: (batch_size, num_boxes, 1, H, W)
 
         masks_hq = masks[:, :, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
         if hq_token_only:
