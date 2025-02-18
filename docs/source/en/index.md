@@ -111,6 +111,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
 |                           [CvT](model_doc/cvt)                           |       ✅        |         ✅         |      ❌      |
 |                      [DAB-DETR](model_doc/dab-detr)                      |       ✅        |         ❌         |      ❌      |
+|                          [D-FINE](model_doc/d_fine)                      |       ✅        |         ❌         |      ❌      |
 |                           [DAC](model_doc/dac)                           |       ✅        |         ❌         |      ❌      |
 |                   [Data2VecAudio](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
 |                    [Data2VecText](model_doc/data2vec)                    |       ✅        |         ❌         |      ❌      |
