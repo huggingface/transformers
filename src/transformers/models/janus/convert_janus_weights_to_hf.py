@@ -13,6 +13,7 @@
 # limitations under the License.
 import argparse
 import glob
+import re
 
 import torch
 from huggingface_hub import file_exists, hf_hub_download, snapshot_download
@@ -24,9 +25,6 @@ from transformers import (
     AutoImageProcessor,
     AutoTokenizer,
     JanusConfig,
-    JanusForConditionalGeneration,
-    LlavaProcessor,
-    SiglipVisionConfig,
 )
 
 
@@ -49,130 +47,67 @@ Example for creating the old state dict file with Python:
     torch.save(model.state_dict(), "tmp/hf_models/janus-v1.5-7b/model_state_dict.bin")
 """
 
-KEYS_TO_MODIFY_MAPPING = {
-    "model.vision_tower.": "",
-    ".vision_resampler": "",  # all lmms-lab models do avg pooling, so no vision_resampler
-    "model.mm_projector": "multi_modal_projector",
-    "model": "model.model",
-    "vision_model.model": "vision_model",
-    "lm_head": "language_model.lm_head",
-    "model.model": "language_model.model",
-    "multi_modal_projector.0": "multi_modal_projector.linear_1",
-    "multi_modal_projector.2": "multi_modal_projector.linear_2",
+# Refactor later
+vision_mappings = {
+    "vision_model.vision_tower.blocks": "vision_model.vision_tower.layers",
+    "vision_model.vision_tower.pos_embed": "vision_model.embeddings.position_embeddings",
+    "vision_model.vision_tower.patch_embed.proj": "vision_model.embeddings.patch_embeddings.projection",
+    "vision_model.vision_tower.norm": "vision_model.post_layernorm",
+    "vision_model.vision_tower.attn_pool": "vision_model.head",
+    "proj":"projection_layer",
+    "norm":"layer_norm",
+    "norm1":"layer_norm1",
+    "norm2":"layer_norm2",
 }
 
 
-def load_original_state_dict(model_id):
-    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+other_mappings = {
+    # VQ Model prefix conversion
+    "res": "block",
+    "mid.0": "mid.block_1",
+    "mid.1": "mid.attn_1",
+    "mid.2": "mid.block_2",
 
-    original_state_dict = {}
-    for path in glob.glob(f"{directory_path}/*"):
-        if path.endswith(".safetensors"):
-            with safe_open(path, framework="pt", device="cpu") as f:
-                for key in f.keys():
-                    original_state_dict[key] = f.get_tensor(key)
-
-    # tied wieghts so lm.head is not saved. Let's clone to load state dict
-    if "lm_head.weight" not in original_state_dict:
-        original_state_dict["lm_head.weight"] = original_state_dict["model.embed_tokens.weight"].clone()
-
-    if "model.image_newline" in original_state_dict:
-        # not used in the original implementation because "merge_type=flat"
-        del original_state_dict["model.image_newline"]
-    return original_state_dict
+    # Aligner module changes
+    "layers.0": "fc1",
+    "layers.2": "hidden_layers.0",
+    "gen_head.output_mlp_projector": "gen_head.proj_out",
+}
 
 
-# used only for janus-interlave
-# for ex: Qwen/Qwen1.5-0.5B-Chat google/siglip-so400m-patch14-384 lmms-lab/janus-next-interleave-qwen-0.5b
-def convert_state_dict_to_hf(state_dict):
-    new_state_dict = {}
-    for key, value in state_dict.items():
-        if key.endswith(".inv_freq"):
-            continue
-        for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
-            if key_to_modify in key:
-                key = key.replace(key_to_modify, new_key)
+def convert_key(old_key, vision_mappings, other_mappings):
 
-        new_state_dict[key] = value
-    return new_state_dict
+    # No conversion as language model is same.
+    if "language_model" in old_key:
+        return old_key
 
+    new_key = old_key
+    new_key = new_key.replace("gen_vision_model", "vqmodel")
 
-def convert_janus_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
-    torch.set_default_dtype(torch.float16)
-    text_config = AutoConfig.from_pretrained(text_model_id)
-
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
-    if "Qwen" not in text_model_id:  # qwen already has a pad token
-        tokenizer.add_special_tokens({"pad_token": "<pad>"})
-
-    image_processor = AutoImageProcessor.from_pretrained(vision_model_id)
-    processor = LlavaProcessor(tokenizer=tokenizer, image_processor=image_processor)
-
-    if "siglip" in vision_model_id:
-        vision_config = SiglipVisionConfig(
-            hidden_size=1152,
-            image_size=384,
-            intermediate_size=4304,
-            num_attention_heads=16,
-            num_hidden_layers=26,
-            patch_size=14,
-            vision_use_head=False,
-        ).to_dict()
+    if "vision_model" in new_key:
+        for old, new in vision_mappings.items():
+            if re.search(rf'\b{re.escape(old)}\b', new_key):
+                new_key = new_key.replace(old, new)
+        new_key = new_key.replace("vision_tower", "encoder")
     else:
-        vision_config = None
+        for old, new in other_mappings.items():
+            new_key = new_key.replace(old, new)
 
-    config = JanusConfig(
-        text_config=text_config,
-        vision_config=vision_config,
-    )
+        if "encoder" in new_key:
+            new_key = new_key.replace("conv_blocks", "down")
+        elif "decoder" in new_key:
+            new_key = new_key.replace("conv_blocks", "up")
 
-    # llms-lab interleeave models do not use any selection startegy except for last hidden state
-    if "Qwen" in text_model_id:
-        config.image_token_index = 151646
-        if "siglip" in vision_model_id:
-            config.vision_feature_select_strategy = "full"
-            config.vision_feature_layer = -1
-    else:
-        config.pad_token_id = 32001
-        config.image_token_index = 32000
+    return new_key
 
-    with torch.device("meta"):
-        model = JanusForConditionalGeneration(config)
 
-    # Some janus variants like microsoft/janus-med-v1.5-mistral-7b use safetensors to store weights
-    if file_exists(old_state_dict_id, "model_state_dict.bin"):
-        state_dict_path = hf_hub_download(old_state_dict_id, "model_state_dict.bin")
-        state_dict = torch.load(state_dict_path, map_location="cpu", weights_only=True)
-    else:
-        state_dict = load_original_state_dict(old_state_dict_id)
+def convert_state_dict(old_state_dict, vision_mappings, other_mappings):
+    return {convert_key(k, vision_mappings, other_mappings): v for k, v in old_state_dict.items()}
 
-    state_dict = convert_state_dict_to_hf(state_dict)
-    model.load_state_dict(state_dict, strict=True, assign=True)
+old_weights = torch.hub.load_state_dict_from_url("https://huggingface.co/deepseek-ai/Janus-Pro-1B/resolve/main/pytorch_model.bin", map_location="cpu")
 
-    pre_expansion_embeddings = model.language_model.model.embed_tokens.weight.data
-    mu = torch.mean(pre_expansion_embeddings, dim=0).float()
-    n = pre_expansion_embeddings.size()[0]
-    sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
-
-    # We add an image token so we resize the model and pad to 64 for performance reasons
-    pad_shape = 64
-    vocab_size = config.text_config.vocab_size
-    model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
-    model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
-        tuple(
-            (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0]))
-        ),
-        dim=0,
-    )
-    model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
-        dim=0,
-    )
-
-    model.push_to_hub(output_hub_path)
-    processor.push_to_hub(output_hub_path)
+new_weights = convert_state_dict(old_weights,vision_mappings, other_mappings )
+torch.save(new_weights, "temp/full_model.pth")
 
 
 def main():
@@ -197,8 +132,6 @@ def main():
         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
     )
     args = parser.parse_args()
-    convert_janus_llama_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
-
 
 if __name__ == "__main__":
     main()
