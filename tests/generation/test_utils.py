@@ -1417,7 +1417,8 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,
                 "use_cache": True,
             }
-            output_assisted = model.generate(**generation_kwargs, **inputs_dict)
+            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
+            output_assisted = model.generate(**generation_kwargs, **inputs_dict, **logits_processor_kwargs)
 
             self._check_generate_outputs(output_assisted, config, use_cache=True)
 
@@ -2314,11 +2315,14 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,
                 "output_scores": True,
             }
+            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
 
             # Setting logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, logits_to_keep=0)
+            with_all_logits = model.generate(
+                **generation_kwargs, **inputs_dict, **logits_processor_kwargs, logits_to_keep=0
+            )
             # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
-            without_all_logits = model.generate(**inputs_dict, **generation_kwargs)
+            without_all_logits = model.generate(**inputs_dict, **generation_kwargs, **logits_processor_kwargs)
 
             self._check_similar_generate_outputs(with_all_logits, without_all_logits)
 
