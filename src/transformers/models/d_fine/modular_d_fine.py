@@ -89,8 +89,6 @@ class DFineConfig(RTDetrConfig):
 
     def __init__(
         self,
-        d_model=256,
-        encoder_attention_heads=8,
         eval_idx=-1,
         layer_scale=1,
         max_num_bins=32,
@@ -103,6 +101,7 @@ class DFineConfig(RTDetrConfig):
         decoder_method="default",
         **super_kwargs,
     ):
+        super().__init__(**super_kwargs)
         # add the new attributes with the given values or defaults
         self.eval_idx = eval_idx
         self.layer_scale = layer_scale
@@ -114,17 +113,6 @@ class DFineConfig(RTDetrConfig):
         self.top_prob_values = top_prob_values
         self.lqe_hidden_dim = lqe_hidden_dim
         self.lqe_layers = lqe_layers
-
-        super().__init__(**super_kwargs)
-
-        del self.d_model
-        del self.encoder_attention_heads
-
-        if not hasattr(self, "d_model"):
-            self.d_model = d_model
-
-        if not hasattr(self, "encoder_attention_heads"):
-            self.encoder_attention_heads = encoder_attention_heads
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:
@@ -679,10 +667,6 @@ class DFineLQE(nn.Module):
         return scores
 
 
-class DFineVggBlock(RTDetrRepVggBlock):
-    pass
-
-
 class DFineConvNormLayer(RTDetrConvNormLayer):
     def __init__(
         self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None
@@ -702,9 +686,9 @@ class DFineConvNormLayer(RTDetrConvNormLayer):
 class DFineRepVggBlock(RTDetrRepVggBlock):
     def __init__(self, config: DFineConfig, in_channels: int, out_channels: int):
         super().__init__(config)
-
-        self.conv1 = DFineConvNormLayer(config, in_channels, out_channels, 3, 1, padding=1)
-        self.conv2 = DFineConvNormLayer(config, in_channels, out_channels, 1, 1, padding=0)
+        hidden_channels = in_channels
+        self.conv1 = DFineConvNormLayer(config, hidden_channels, out_channels, 3, 1, padding=1)
+        self.conv2 = DFineConvNormLayer(config, hidden_channels, out_channels, 1, 1, padding=0)
 
 
 class DFineCSPRepLayer(nn.Module):

@@ -1925,25 +1925,6 @@ class DFineLQE(nn.Module):
         return scores
 
 
-class DFineVggBlock(nn.Module):
-    """
-    RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
-    """
-
-    def __init__(self, config: DFineConfig):
-        super().__init__()
-
-        activation = config.activation_function
-        hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
-        self.conv1 = DFineConvNormLayer(config, hidden_channels, hidden_channels, 3, 1, padding=1)
-        self.conv2 = DFineConvNormLayer(config, hidden_channels, hidden_channels, 1, 1, padding=0)
-        self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
-
-    def forward(self, x):
-        y = self.conv1(x) + self.conv2(x)
-        return self.activation(y)
-
-
 class DFineConvNormLayer(nn.Module):
     def __init__(
         self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None
@@ -1977,10 +1958,9 @@ class DFineRepVggBlock(nn.Module):
         super().__init__()
 
         activation = config.activation_function
-        hidden_channels = int(config.encoder_hidden_dim * config.hidden_expansion)
-
-        self.conv1 = DFineConvNormLayer(config, in_channels, out_channels, 3, 1, padding=1)
-        self.conv2 = DFineConvNormLayer(config, in_channels, out_channels, 1, 1, padding=0)
+        hidden_channels = in_channels
+        self.conv1 = DFineConvNormLayer(config, hidden_channels, out_channels, 3, 1, padding=1)
+        self.conv2 = DFineConvNormLayer(config, hidden_channels, out_channels, 1, 1, padding=0)
         self.activation = nn.Identity() if activation is None else ACT2CLS[activation]()
 
     def forward(self, x):
