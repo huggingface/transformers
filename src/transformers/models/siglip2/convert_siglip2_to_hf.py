@@ -24,6 +24,7 @@ import re
 
 import numpy as np
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw
 
 from transformers import GemmaTokenizerFast, Siglip2Config, Siglip2ImageProcessor, Siglip2Model, Siglip2Processor
@@ -47,16 +48,23 @@ COMMON_CONFIG_PARAMS = {
         "num_hidden_layers": 24,
         "num_attention_heads": 16,
     },
+    "so400m": {
+        "hidden_size": 1152,
+        "intermediate_size": 4304,
+        "num_hidden_layers": 27,
+        "num_attention_heads": 16,
+    },
 }
 
 MODEL_NAME_TO_CHECKPOINT_PATH = {
     # base checkpoints
-    "siglip2-base-patch-16-naflex-256": "./checkpoints/siglip2/siglip2_b16_naflex.npz",
+    "siglip2-base-patch16-naflex": "gv-hf/siglip2/siglip2_b16_naflex.npz",
+    "siglip2-so400m-patch16-naflex": "gv-hf/siglip2/siglip2_so400m16_naflex.npz",
 }
 
 # fmt: off
 EXPECTED_OUTPUTS = {
-    "siglip2-base-patch-16-naflex-256": torch.tensor([
+    "siglip2-base-patch16-naflex": torch.tensor([
         [  1.0195,  -0.0280,  -1.4468],
         [ -4.5395,  -6.2269,  -1.5667],
         [  4.1757,   5.0358,   3.5159],
@@ -64,6 +72,15 @@ EXPECTED_OUTPUTS = {
         [  2.4409,   3.1058,   4.5491],
         [-12.3230, -13.7355, -13.4632],
         [  1.1520,   1.1687,  -1.9647],
+    ]),
+    "siglip2-so400m-patch16-naflex": torch.tensor([
+        [  0.9422,   0.5540,  -2.4405],
+        [ -7.3522,  -9.4931,  -6.3499],
+        [  5.7852,   6.7288,   7.7893],
+        [  9.9881,  10.8136,   9.2121],
+        [  5.3660,   5.7746,   8.4130],
+        [-12.7218, -14.2631, -13.6442],
+        [  0.6384,   0.4278,  -0.9022],
     ]),
 }
 # fmt: on
@@ -136,9 +153,9 @@ def get_siglip2_config(model_name: str) -> Siglip2Config:
     Create a configuration for the Siglip2 model based on the model name.
     """
 
-    _, variant, _, patch_size, _, num_patches = model_name.split("-")
-    patch_size = int(patch_size)
-    num_patches = int(num_patches)
+    _, variant, patch, _ = model_name.split("-")
+    patch_size = int(patch[-2:])
+    num_patches = 256
 
     common_options = COMMON_CONFIG_PARAMS[variant]
     vision_config = {
@@ -322,6 +339,9 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     config = get_siglip2_config(model_name)
 
     checkpoint = MODEL_NAME_TO_CHECKPOINT_PATH[model_name]
+    if not os.path.exists(checkpoint):
+        org, repo_id, *filepath = checkpoint.split("/")
+        checkpoint = hf_hub_download(repo_id=f"{org}/{repo_id}", filename="/".join(filepath))
 
     print(f"Loading checkpoint from {checkpoint}...")
     data = np.load(checkpoint)
@@ -394,14 +414,14 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="siglip2-base-patch-16-naflex-256",
+        default="siglip2-base-patch16-naflex",
         type=str,
         choices=MODEL_NAME_TO_CHECKPOINT_PATH.keys(),
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="./checkpoints/siglip2-hf/",
+        default="checkpoints/",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
