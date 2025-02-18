@@ -19,7 +19,6 @@ import timeout_decorator  # noqa
 from transformers import OPTConfig, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -203,7 +202,7 @@ class FlaxOPTModelTester:
 
 
 @require_flax
-class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxOPTModelTest(FlaxModelTesterMixin, unittest.TestCase):
     all_model_classes = (FlaxOPTModel, FlaxOPTForCausalLM) if is_flax_available() else ()
 
     def setUp(self):
