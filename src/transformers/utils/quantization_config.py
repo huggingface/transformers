@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import dataclasses
 import importlib.metadata
 import json
 import os
@@ -1538,6 +1539,21 @@ class TorchAoConfig(QuantizationConfigMixin):
     def __repr__(self):
         config_dict = self.to_dict()
         return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary, converting any `torchao.dtypes.Layout`
+        dataclasses to simple dicts.
+
+        Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        d = super().to_dict()
+        if "quant_type_kwargs" in d and "layout" in d["quant_type_kwargs"]:
+            layout = d["quant_type_kwargs"]["layout"]
+            layout = dataclasses.asdict(layout)
+            d["quant_type_kwargs"]["layout"] = layout
+        return d
 
 
 @dataclass
