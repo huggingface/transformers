@@ -145,17 +145,6 @@ class DFineConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        # add the new attributes with the given values or defaults
-        self.eval_idx = eval_idx
-        self.layer_scale = layer_scale
-        self.max_num_bins = max_num_bins
-        self.reg_scale = reg_scale
-        self.depth_mult = depth_mult
-        self.decoder_offset_scale = decoder_offset_scale
-        self.decoder_method = decoder_method
-        self.top_prob_values = top_prob_values
-        self.lqe_hidden_dim = lqe_hidden_dim
-        self.lqe_layers = lqe_layers
         self.initializer_range = initializer_range
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
@@ -200,6 +189,7 @@ class DFineConfig(PretrainedConfig):
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
+        self.encoder_attention_heads = encoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
         self.dropout = dropout
         self.activation_dropout = activation_dropout
@@ -211,6 +201,8 @@ class DFineConfig(PretrainedConfig):
         self.encoder_activation_function = encoder_activation_function
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
+        # decoder
+        self.d_model = d_model
         self.num_queries = num_queries
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_in_channels = decoder_in_channels
@@ -241,12 +233,17 @@ class DFineConfig(PretrainedConfig):
         self.weight_loss_bbox = weight_loss_bbox
         self.weight_loss_giou = weight_loss_giou
         self.eos_coefficient = eos_coefficient
-
-        if not hasattr(self, "d_model"):
-            self.d_model = d_model
-
-        if not hasattr(self, "encoder_attention_heads"):
-            self.encoder_attention_heads = encoder_attention_heads
+        # add the new attributes with the given values or defaults
+        self.eval_idx = eval_idx
+        self.layer_scale = layer_scale
+        self.max_num_bins = max_num_bins
+        self.reg_scale = reg_scale
+        self.depth_mult = depth_mult
+        self.decoder_offset_scale = decoder_offset_scale
+        self.decoder_method = decoder_method
+        self.top_prob_values = top_prob_values
+        self.lqe_hidden_dim = lqe_hidden_dim
+        self.lqe_layers = lqe_layers
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:
