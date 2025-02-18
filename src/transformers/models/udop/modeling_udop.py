@@ -130,11 +130,13 @@ UDOP_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`EncoderDecoderCache`, *optional*):
+        past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
             four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
             in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
-            when `config.use_cache=True`. An [`~cache_utils.EncoderDecoderCache`] instance.
+            when `config.use_cache=True`. It is usually a [`~cache_utils.EncoderDecoderCache`]. However, this model
+            can also be configured to behave as a decoder-only model, i.e. without cross-attention, in which case a
+            [`~cache_utils.Cache`] can be used.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
             that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
