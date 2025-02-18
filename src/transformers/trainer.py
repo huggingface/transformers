@@ -2443,7 +2443,7 @@ class Trainer:
                 )
 
         # Update the references
-        for attr in ("model","optimizer","lr_scheduler"):
+        for attr in ("model", "optimizer", "lr_scheduler"):
             setattr(self.callback_handler, attr, getattr(self, attr))
         self.callback_handler.train_dataloader = train_dataloader
 
