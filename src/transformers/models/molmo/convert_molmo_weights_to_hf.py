@@ -172,6 +172,7 @@ def write_model(
         rope_theta=original_config["rope_theta"],
         vocab_size=original_config["vocab_size"] + 128 if variant != "7B-O" else original_config["vocab_size"] + 202,
         tie_word_embeddings=original_config["tie_word_embeddings"],
+        use_qk_norm=True if variant == "7B-O" else False
     )
 
     # vision and pooling args should be same across al model checkpoints which are the default values
@@ -240,6 +241,8 @@ def write_model(
                 ).clone()
                 state_dict[new_key.replace("qkv_proj", "v_proj")] = v_proj.clone()
             del state_dict[new_key]
+        elif "q_norm" in new_key or "k_norm" in new_key:
+            state_dict[new_key] = state_dict[new_key].reshape(config.text_config.num_attention_heads, -1)
 
     gc.collect()
     print("Loading the checkpoint in a Molmo model.")
