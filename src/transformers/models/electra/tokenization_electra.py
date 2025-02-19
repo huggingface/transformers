@@ -204,11 +204,15 @@ class ElectraTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+        cls_token_id = int(str(self.cls_token_id))
+        sep_token_id = int(str(self.sep_token_id))
+        result = [cls_token_id]
+        result.extend(int(str(x)) for x in token_ids_0)
+        result.append(sep_token_id)
+        if token_ids_1 is not None:
+            result.extend(int(str(x)) for x in token_ids_1)
+            result.append(sep_token_id)
+        return result
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -460,20 +464,7 @@ class WordpieceTokenizer:
         self.max_input_chars_per_word = max_input_chars_per_word
 
     def tokenize(self, text):
-        """
-        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
-        tokenization using the given vocabulary.
-
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
-
-        Args:
-            text: A single token or whitespace separated tokens. This should have
-                already been passed through *BasicTokenizer*.
-
-        Returns:
-            A list of wordpiece tokens.
-        """
-
+        """Tokenizes a piece of text into its word pieces."""
         output_tokens = []
         for token in whitespace_tokenize(text):
             chars = list(token)
