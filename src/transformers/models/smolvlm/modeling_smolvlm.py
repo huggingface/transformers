@@ -801,7 +801,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         self.text_model.set_input_embeddings(value)
 
     def inputs_merger(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_hidden_states: torch.FloatTensor
     ):
         """
         This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
@@ -821,58 +821,27 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         Returns:
           A tensor of (batch_size, text_seq_len, text_dim).
         """
+        _, patch_size, _ = image_hidden_states.shape
 
-        batch_size, text_seq_len, text_dim = inputs_embeds.shape
-        num_images, patches_per_image, img_dim = image_hidden_states.shape
+        image_mask = input_ids == self.image_token_id
+        num_image_tokens = image_mask.sum(dim=1)
+        if not torch.all(num_image_tokens % patch_size == 0):
+            raise ValueError("At least one sample has <image> tokens not divisible by patch_size.")
 
-        image_offset = 0
-        merged_outputs: List[torch.Tensor] = []
+        blocks_per_sample = num_image_tokens // patch_size
 
-        # Iterate through each sample
-        for b_idx, (cur_ids, cur_embeds) in enumerate(zip(input_ids, inputs_embeds)):
-            # Find positions of <image> tokens in the text
-            image_positions = (cur_ids == self.image_token_id).nonzero(as_tuple=True)[0]
-            num_image_tokens = len(image_positions)
+        offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
+        block_offset = offsets[:-1]
+        row_cum = image_mask.cumsum(dim=-1)
+        chunk_idx = (row_cum - 1) // patch_size
+        local_idx = (row_cum - 1) % patch_size
+        block_idx = block_offset.unsqueeze(1) + chunk_idx
 
-            # If no <image> => text-only
-            if num_image_tokens == 0:
-                empty_slice = image_hidden_states[0][:0, :]  # shape (0, text_dim)
-                merged_text_only = torch.cat([cur_embeds, empty_slice], dim=0)
-                merged_outputs.append(merged_text_only)
-                continue
+        image_embeds = torch.zeros_like(inputs_embeds)
+        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
 
-            if num_image_tokens % patches_per_image != 0:
-                raise ValueError(
-                    f"Sample {b_idx} has {num_image_tokens} <image> tokens, not a multiple of patches_per_image={patches_per_image}. "
-                    "Cannot map them to blocks of shape (patches_per_image, img_dim)."
-                )
-
-            positions_list = image_positions.tolist()
-            chunks = [positions_list[i : i + patches_per_image] for i in range(0, num_image_tokens, patches_per_image)]
-
-            segments = []
-            text_start = 0
-
-            # For each chunk (each chunk corresponds to 1 image)
-            for chunk in chunks:
-                cur_block = image_hidden_states[image_offset]
-                image_offset += 1
-
-                for i_patch, pos in enumerate(chunk):
-                    if pos > text_start:
-                        segments.append(cur_embeds[text_start:pos])
-                    row_of_block = cur_block[i_patch : i_patch + 1, :]
-                    segments.append(row_of_block)
-                    text_start = pos + 1
-
-            if text_start < text_seq_len:
-                segments.append(cur_embeds[text_start:])
-
-            merged_sample = torch.cat(segments, dim=0)
-            merged_outputs.append(merged_sample)
-
-        merged_outputs = torch.stack(merged_outputs)
-        return merged_outputs
+        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
+        return merged_embeds
 
     @add_start_docstrings_to_model_forward(
         """
