@@ -26,7 +26,7 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
-from .auto_factory import _LazyAutoMapping
+from .auto_factory import _LazyAutoMapping, ALL_CUSTOM_CLASSES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -402,3 +402,5 @@ class AutoFeatureExtractor:
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
+        if feature_extractor_class.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[feature_extractor_class.__name__] = feature_extractor_class

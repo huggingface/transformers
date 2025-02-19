@@ -29,7 +29,7 @@ from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
 from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, get_file_from_repo, logging
-from .auto_factory import _LazyAutoMapping
+from .auto_factory import _LazyAutoMapping, ALL_CUSTOM_CLASSES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -377,3 +377,5 @@ class AutoProcessor:
             processor_class ([`FeatureExtractorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
+        if processor_class.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[processor_class.__name__] = processor_class

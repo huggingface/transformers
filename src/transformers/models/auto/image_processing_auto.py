@@ -36,7 +36,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from .auto_factory import _LazyAutoMapping
+from .auto_factory import _LazyAutoMapping, ALL_CUSTOM_CLASSES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -629,3 +629,7 @@ class AutoImageProcessor:
         IMAGE_PROCESSOR_MAPPING.register(
             config_class, (slow_image_processor_class, fast_image_processor_class), exist_ok=exist_ok
         )
+        if slow_image_processor_class is not None and slow_image_processor_class.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[slow_image_processor_class.__name__] = slow_image_processor_class
+        if fast_image_processor_class is not None and fast_image_processor_class.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[fast_image_processor_class.__name__] = fast_image_processor_class
