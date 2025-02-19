@@ -269,13 +269,17 @@ class TorchAoTest(unittest.TestCase):
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         input_ids = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static", disable_compile=True)
+        output = quantized_model.generate(
+            **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static", disable_compile=True
+        )
         quantized_model.finalize_autoquant()
 
         check_autoquantized(self, quantized_model.model.layers[0].self_attn.v_proj)
 
         EXPECTED_OUTPUT = 'What are we having for dinner?\n\n10. "Dinner is ready'
-        output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static", disable_compile=True)
+        output = quantized_model.generate(
+            **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static", disable_compile=True
+        )
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
 
