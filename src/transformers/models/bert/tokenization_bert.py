@@ -202,13 +202,11 @@ class BertTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
-        cls_token_id = int(str(self.cls_token_id))
-        sep_token_id = int(str(self.sep_token_id))
-        token_ids_0 = [int(str(x)) for x in token_ids_0]
         if token_ids_1 is None:
-            return [cls_token_id] + token_ids_0 + [sep_token_id]
-        token_ids_1 = [int(str(x)) for x in token_ids_1]
-        return [cls_token_id] + token_ids_0 + [sep_token_id] + token_ids_1 + [sep_token_id]
+            return [self.cls_token_id] + list(token_ids_0) + [self.sep_token_id]
+        cls = [self.cls_token_id]
+        sep = [self.sep_token_id]
+        return cls + list(token_ids_0) + sep + list(token_ids_1) + sep
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -539,7 +537,7 @@ class BidirectionalWordpieceTokenizer(WordpieceTokenizer):
                 if cur_substr is None:
                     is_bad_forward = True
                     break
-                forward_sub_tokens.append((cur_substr, int(self.vocab[cur_substr])))
+                forward_sub_tokens.append((cur_substr, self.vocab[cur_substr]))
                 start = end
 
             # Backward tokenization
@@ -560,7 +558,7 @@ class BidirectionalWordpieceTokenizer(WordpieceTokenizer):
                 if cur_substr is None:
                     is_bad_backward = True
                     break
-                backward_sub_tokens.append((cur_substr[::-1], int(self.backward_vocab[cur_substr])))
+                backward_sub_tokens.append((cur_substr[::-1], self.backward_vocab[cur_substr]))
                 start = end
 
             # Choose better tokenization
