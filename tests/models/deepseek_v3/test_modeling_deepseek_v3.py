@@ -414,6 +414,22 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_sdpa_equivalence(self):
         pass
 
+    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
+    def test_generate_compilation_all_outputs(self):
+        pass
+
+    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
+    def test_generate_compile_model_forward(self):
+        pass
+
+    @unittest.skip("Deepseek-V3 uses MLA so it is not compatible with the standard cache format")
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
