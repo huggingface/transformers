@@ -649,9 +649,11 @@ class ModuleMapper(CSTVisitor, ABC):
             self.current_function = None
 
     def visit_If(self, node):
-        for stmt in node.body.body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
-                self.imports.append(node)
+        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
+        if m.matches(parent_node, m.Module()):
+            for stmt in node.body.body:
+                if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
+                    self.imports.append(node)
 
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
