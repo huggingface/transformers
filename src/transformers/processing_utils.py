@@ -26,6 +26,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
+import models.auto.configuration_auto
 import models.auto.modeling_auto
 import numpy as np
 import typing_extensions
@@ -1134,8 +1135,8 @@ class ProcessorMixin(PushToHubMixin):
     def get_possibly_dynamic_module(module_name):
         if hasattr(transformers_module, module_name):
             return getattr(transformers_module, module_name)
-        elif module_name in models.auto.modeling_auto.ALL_CUSTOM_CLASSES:
-            return models.auto.modeling_auto.ALL_CUSTOM_CLASSES[module_name]
+        elif module_name in models.auto.configuration_auto.ALL_CUSTOM_CLASSES:
+            return models.auto.configuration_auto.ALL_CUSTOM_CLASSES[module_name]
         else:
             raise ValueError(
                 f"Could not find module {module_name} in `transformers`. If this is a custom class, "
