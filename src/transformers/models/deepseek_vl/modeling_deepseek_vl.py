@@ -1,7 +1,5 @@
 
 
-from _utils import show_tensor
-
 from typing import List, Optional, Tuple, Union
 from copy import deepcopy
 
@@ -108,16 +106,41 @@ class DeepseekVLVisionModel(nn.Module):
 
         return low_res_last_hidden_state, high_res_last_hidden_state
 
-
+# VL Adaptor: https://github.com/deepseek-ai/DeepSeek-VL/blob/681bffb4519856ad27cc17531aacde31ddf6f1a7/deepseek_vl/models/projector.py#L27
 class DeepseekVLAlignerModel(nn.Module):
     def __init__(self, config: DeepseekVLAlignerConfig):
         super().__init__()
         self.config = config
 
-    def forward(self, vision_encodings: Tuple[torch.Tensor, Optional[torch.Tensor]]):
-        low_res_encodings, high_res_encodings = vision_encodings
+        if self.config.projector_type == "low_high_hybrid_split_mlp_gelu":
+            mlp_depth = self.config.depth
+            self.low_up_proj = nn.Linear(self.config.input_dim, self.config.n_embed // 2)
+            self.high_up_proj = nn.Linear(self.config.input_dim, self.config.n_embed // 2)
 
-        show_tensor(high_res_encodings, name="high_res_encodings")
+            projector_modules = []
+            for _ in range(1, mlp_depth):
+                projector_modules.append(nn.GELU())
+                projector_modules.append(nn.Linear(self.config.n_embed, self.config.n_embed))
+            projector_modules = nn.Sequential(**projector_modules)
+
+        else:
+            raise ValueError(f"Unknown projector type: {self.config.projector_type}")
+
+        self.layers = projector_modules
+
+    def forward(self, vision_encodings: Tuple[torch.Tensor, Optional[torch.Tensor]]):
+        if isinstance(vision_encodings, Tuple):
+            low_res_encodings, high_res_encodings = vision_encodings
+            high_res_encodings = self.high_up_proj(high_res_encodings)
+            low_res_encodings = self.low_up_proj(low_res_encodings)
+            x = torch.concat([high_res_encodings, low_res_encodings], dim=-1)
+        else:
+            x = vision_encodings
+        
+        return self.layers(x)
+
+
+        # show_tensor(high_res_encodings, name="high_res_encodings")
         # show_tensor(low_res_encodings, name="low_res_encodings")
 
         """
