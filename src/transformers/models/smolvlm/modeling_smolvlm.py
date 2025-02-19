@@ -801,7 +801,7 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         self.text_model.set_input_embeddings(value)
 
     def inputs_merger(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_hidden_states: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
     ):
         """
         This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.

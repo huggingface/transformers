@@ -158,7 +158,7 @@ class SmolVLMModel(Idefics3Model):
     """
 
     def inputs_merger(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_hidden_states: torch.FloatTensor
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
     ):
         _, patch_size, _ = image_hidden_states.shape
 
