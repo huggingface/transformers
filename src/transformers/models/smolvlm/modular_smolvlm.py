@@ -160,24 +160,6 @@ class SmolVLMModel(Idefics3Model):
     def inputs_merger(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_hidden_states: torch.FloatTensor
     ):
-        """
-        This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
-        The merging happens as follows:
-        - The text token sequence is: `tok_1 tok_2 tok_3 <fake_token_around_image> <image> <image> ... <image> <fake_token_around_image> tok_4`.
-        - We get the image hidden states for the image through the vision encoder and that hidden state, after a pixel shuffle operation, is then projected into the text embedding space.
-        We thus have a sequence of image hidden states of size (1, image_seq_len, hidden_dim), where 1 is for batch_size of 1 image and hidden_dim is the hidden_dim of the LM transformer.
-        - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
-        - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
-
-        Merge text embeddings with image embeddings out-of-place (no in-place indexing).
-        The shapes are:
-          - input_ids:           (batch_size, text_seq_len)
-          - inputs_embeds:       (batch_size, text_seq_len, text_dim)
-          - image_hidden_states: (num_images, patches_per_image, img_dim) where num_images is the total
-                                 images across the batch and patches_per_image is the number of patches per image.
-        Returns:
-          A tensor of (batch_size, text_seq_len, text_dim).
-        """
         _, patch_size, _ = image_hidden_states.shape
 
         image_mask = input_ids == self.image_token_id
