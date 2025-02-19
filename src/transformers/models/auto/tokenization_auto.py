@@ -37,13 +37,13 @@ from ...utils import (
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
+    ALL_CUSTOM_CLASSES,
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     config_class_to_model_type,
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
-from .modeling_auto import ALL_CUSTOM_CLASSES
 
 
 if is_tokenizers_available():
