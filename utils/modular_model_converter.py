@@ -649,8 +649,8 @@ class ModuleMapper(CSTVisitor, ABC):
             self.current_function = None
 
     def visit_If(self, node):
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        if m.matches(parent_node, m.Module()):
+        # If we are inside a function, do not add the import to the list of imports
+        if self.current_function is None:
             for stmt in node.body.body:
                 if m.matches(stmt, m.SimpleStatementLine(body=[m.ImportFrom() | m.Import()])):
                     self.imports.append(node)
