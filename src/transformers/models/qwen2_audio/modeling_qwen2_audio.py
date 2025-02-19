@@ -16,14 +16,14 @@
 
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache, StaticCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -35,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_qwen2_audio import Qwen2AudioConfig, Qwen2AudioEncoderConfig
 
@@ -58,12 +59,15 @@ class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
             Language modeling loss (for next-token prediction).
         logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+            two sets of pre-computed hidden-states: key and values states in the self-attention blocks.
+            The `past_key_values` are returned when `use_cache=True` is passed or when `config.use_cache=True`.
+            It is a [`~cache_utils.Cache`] instance.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `input_ids` of shape `(batch_size, sequence_length)`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -81,13 +85,12 @@ class Qwen2AudioCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[Cache] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     attention_mask: Optional[torch.FloatTensor] = None
 
 
-# Copied from transformers.models.whisper.modeling_whisper.WhisperAttention with Whisper->Qwen2Audio
 class Qwen2AudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -135,6 +138,9 @@ class Qwen2AudioAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    @deprecate_kwarg("key_value_states", version="4.52")
+    @deprecate_kwarg("past_key_value", version="4.52")
+    @deprecate_kwarg("cache_position", version="4.52")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -146,43 +152,12 @@ class Qwen2AudioAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
-        # the decoder
-        is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states) * self.scaling, tgt_len, bsz)
-
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-            else:  # Model being used as decoder-only
-                curr_past_key_value = past_key_value
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self._shape(self.k_proj(current_states), -1, bsz)
-            value_states = self._shape(self.v_proj(current_states), -1, bsz)
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3))
 
@@ -216,10 +191,9 @@ class Qwen2AudioAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, None
 
 
-# Copied from transformers.models.whisper.modeling_whisper.WhisperFlashAttention2 with Whisper->Qwen2Audio
 class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
     """
     Qwen2Audio flash attention module. This module inherits from `Qwen2AudioAttention` as the weights of the module stays
@@ -235,6 +209,9 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
+    @deprecate_kwarg("key_value_states", version="4.52")
+    @deprecate_kwarg("past_key_value", version="4.52")
+    @deprecate_kwarg("cache_position", version="4.52")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -245,51 +222,16 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if isinstance(past_key_value, StaticCache):
-            raise ValueError(
-                "The `static` cache implementation is not compatible with `attn_implementation='flash_attention_2'`. "
-                "Use `attn_implementation='sdpa'` in the meantime, and open an issue at https://github.com/huggingface/transformers"
-            )
         # Qwen2AudioFlashAttention2 attention does not support output_attentions
         if output_attentions:
             raise ValueError("Qwen2AudioFlashAttention2 attention does not support output_attentions")
 
-        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
-        # the decoder
-        is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = torch.reshape(self.q_proj(hidden_states), (bsz, tgt_len, self.num_heads, self.head_dim))
-
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-            else:  # Model being used as decoder-only
-                curr_past_key_value = past_key_value
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self._shape(self.k_proj(current_states), -1, bsz)
-            value_states = self._shape(self.v_proj(current_states), -1, bsz)
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]
         #  We would need to refactor the KV cache to be able to avoid many of these transpose/reshape/view.
@@ -343,11 +285,13 @@ class Qwen2AudioFlashAttention2(Qwen2AudioAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights, None
 
 
-# Copied from transformers.models.whisper.modeling_whisper.WhisperSdpaAttention with Whisper->Qwen2Audio
 class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
+    @deprecate_kwarg("key_value_states", version="4.52")
+    @deprecate_kwarg("past_key_value", version="4.52")
+    @deprecate_kwarg("cache_position", version="4.52")
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -375,42 +319,12 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
                 cache_position=cache_position,
             )
 
-        # if key_value_states (encoder hidden states) are provided this layer is used as a cross-attention layer for
-        # the decoder
-        is_cross_attention = key_value_states is not None
         bsz, tgt_len, _ = hidden_states.size()
 
         # get query proj
         query_states = self._shape(self.q_proj(hidden_states), tgt_len, bsz)
-
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
-                if is_cross_attention:
-                    curr_past_key_value = past_key_value.cross_attention_cache
-                else:
-                    curr_past_key_value = past_key_value.self_attention_cache
-            else:  # Model being used as decoder-only
-                curr_past_key_value = past_key_value
-
-        # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.key_cache[self.layer_idx]
-            value_states = curr_past_key_value.value_cache[self.layer_idx]
-        else:
-            key_states = self._shape(self.k_proj(current_states), -1, bsz)
-            value_states = self._shape(self.v_proj(current_states), -1, bsz)
-            if past_key_value is not None:
-                # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
-                # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         causal_mask = attention_mask
         if attention_mask is not None:  # no matter the length, we just slice it
@@ -446,7 +360,7 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
 
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, None, None
 
 
 QWEN2AUDIO_ATTENTION_CLASSES = {
@@ -827,17 +741,15 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+            two sets of pre-computed hidden-states: key and values states in the self-attention blocks.
+            The `past_key_values` are returned when `use_cache=True` is passed or when `config.use_cache=True`.
+            It is a [`~cache_utils.Cache`] instance.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `input_ids` of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -863,7 +775,7 @@ QWEN2AUDIO_INPUTS_DOCSTRING = r"""
 class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMixin):
     def __init__(self, config: Qwen2AudioConfig):
         super().__init__(config)
-        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)  # Usually a `Qwen2AudioEncoder` instance
 
         self.multi_modal_projector = Qwen2AudioMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
@@ -1115,7 +1027,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         attention_mask: Optional[torch.Tensor] = None,
         feature_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,

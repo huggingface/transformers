@@ -25,7 +25,7 @@ from ..utils import is_sklearn_available
 if is_sklearn_available():
     from sklearn.metrics import roc_curve
 
-from ..cache_utils import DynamicCache, EncoderDecoderCache
+from ..cache_utils import Cache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor
 
@@ -781,7 +781,7 @@ def _crop_past_key_values(model, past_key_values, max_length):
     new_past = []
 
     # `Cache` instances
-    if isinstance(past_key_values, (DynamicCache, EncoderDecoderCache)):
+    if isinstance(past_key_values, (Cache)):
         past_key_values.crop(max_length)
 
     # legacy cache instances
