@@ -113,6 +113,8 @@ class DeepseekV3Config(PretrainedConfig):
             strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
             `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum.
+        rope_interleave (`bool`, *optional*, defaults to `True`):
+            Whether to interleave the rotary position embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
