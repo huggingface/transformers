@@ -38,9 +38,11 @@ Tips:
 ```
 "<s>[INST][IMG]\nWhat are the things I should be cautious about when I visit this place?[/INST]"
 ```
-Then, the processor will replace each `[IMG]` token with a number of `[IMG]` tokens that depend on the height and the width of each image. Each *row* of the image is separated by an `[IMG_BREAK]` token, and each image is separated by an `[IMG_END]` token. It's advised to use the `apply_chat_template` method of the processor, which takes care of all of this. See the [usage section](#usage) for more info.
+Then, the processor will replace each `[IMG]` token with a number of `[IMG]` tokens that depend on the height and the width of each image. Each *row* of the image is separated by an `[IMG_BREAK]` token, and each image is separated by an `[IMG_END]` token. It's advised to use the `apply_chat_template` method of the processor, which takes care of all of this and formats the text for you. If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the [usage section](#usage) for more info.
+
 
 This model was contributed by [amyeroberts](https://huggingface.co/amyeroberts) and [ArthurZ](https://huggingface.co/ArthurZ). The original code can be found [here](https://github.com/vllm-project/vllm/pull/8377).
+
 
 ## Usage
 
@@ -48,28 +50,30 @@ At inference time, it's advised to use the processor's `apply_chat_template` met
 
 ```python
 from transformers import AutoProcessor, LlavaForConditionalGeneration
-from PIL import Image
 
 model_id = "mistral-community/pixtral-12b"
 processor = AutoProcessor.from_pretrained(model_id)
-model = LlavaForConditionalGeneration.from_pretrained(model_id).to("cuda")
-
-url_dog = "https://picsum.photos/id/237/200/300"
-url_mountain = "https://picsum.photos/seed/picsum/200/300"
+model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="cuda")
 
 chat = [
     {
       "role": "user", "content": [
         {"type": "text", "content": "Can this animal"}, 
-        {"type": "image"}, 
+        {"type": "image", "ur": "https://picsum.photos/id/237/200/300"}, 
         {"type": "text", "content": "live here?"}, 
-        {"type": "image"}
+        {"type": "image", "url": "https://picsum.photos/seed/picsum/200/300"}
       ]
     }
 ]
 
-prompt = processor.apply_chat_template(chat)
-inputs = processor(text=prompt, images=[url_dog, url_mountain], return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(
+    chat,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device)
+
 generate_ids = model.generate(**inputs, max_new_tokens=500)
 output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 ```

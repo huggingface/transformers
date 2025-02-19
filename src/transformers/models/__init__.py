@@ -118,6 +118,7 @@ from . import (
     gptj,
     granite,
     granitemoe,
+    granitemoeshared,
     grounding_dino,
     groupvit,
     helium,

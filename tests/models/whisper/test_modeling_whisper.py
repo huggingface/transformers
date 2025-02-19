@@ -376,7 +376,6 @@ class WhisperModelTester:
 @require_torch
 class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperModel, WhisperForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (WhisperForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "audio-classification": WhisperForAudioClassification,
@@ -3966,7 +3965,6 @@ class WhisperStandaloneDecoderModelTester:
 @require_torch
 class WhisperStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (WhisperDecoder, WhisperForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (WhisperForCausalLM,) if is_torch_available() else ()
     fx_comptatible = False
     test_pruning = False
     is_encoder_decoder = False

@@ -170,7 +170,7 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/installed.txt
             - run: python utils/check_copies.py
-            - run: python utils/check_modular_conversion.py
+            - run: python utils/check_modular_conversion.py --num_workers 4
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
