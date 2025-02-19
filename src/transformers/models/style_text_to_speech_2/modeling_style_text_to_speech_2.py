@@ -745,7 +745,7 @@ class StyleTextToSpeech2Generator(nn.Module):
             window=self.window.to(har_source.device)
         )
         
-        mask = torch.arange(inverse_transform.size(1), device=inverse_transform.device)[None, :] < torch.tensor(input_lengths, device=inverse_transform.device)[:, None]
+        mask = torch.arange(inverse_transform.size(1), device=inverse_transform.device)[None, :] < torch.tensor(har_source_lengths, device=inverse_transform.device)[:, None]
         inverse_transform = inverse_transform * mask
             
         return inverse_transform, har_source_lengths
