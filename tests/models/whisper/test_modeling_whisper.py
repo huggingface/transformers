@@ -43,7 +43,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_flax_available, is_torch_available, is_torchaudio_available
+from transformers.utils import cached_property, is_torch_available, is_torchaudio_available
 from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -152,7 +152,6 @@ if is_torch_available():
 
 if is_torchaudio_available():
     import torchaudio
-
 
 
 def prepare_whisper_inputs_dict(

@@ -27,7 +27,6 @@ from pytest import mark
 
 from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig
 from transformers.testing_utils import (
-    is_flax_available,
     require_flash_attn,
     require_torch,
     require_torch_gpu,

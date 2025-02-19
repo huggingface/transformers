@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import is_flax_available, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from ..bert.test_modeling_bert import BertModelTester
