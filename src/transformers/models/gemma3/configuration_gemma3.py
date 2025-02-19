@@ -286,6 +286,7 @@ class Gemma3VisionConfig(PretrainedConfig):
         num_mm_tokens_per_image_prepool: int = 4096,
         num_mm_tokens_per_image: int = 256,
         apply_stop_gradient: bool = True,
+        vision_use_head=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -312,6 +313,7 @@ class Gemma3VisionConfig(PretrainedConfig):
         self.num_mm_tokens_per_image_prepool = num_mm_tokens_per_image_prepool
         self.num_mm_tokens_per_image = num_mm_tokens_per_image
         self.apply_stop_gradient = apply_stop_gradient
+        self.vision_use_head = vision_use_head
 
 
 class Gemma3Config(PretrainedConfig):
@@ -330,33 +332,18 @@ class Gemma3Config(PretrainedConfig):
         elif isinstance(text_config, Gemma3TextConfig):
             self.text_config = text_config
         else:
-            raise ValueError("text_config much be None or compatible with initializing a Gemma3TextConfig.")
+            raise ValueError("text_config must be None or compatible with initializing a Gemma3TextConfig.")
 
-        """
-            Gemma 3 FLAX                SigLIP HF
-            compression_type    ==>
-            width               ==>     hidden_size
-            mlp_dim             ==>     intermediate_size
-            num_heads           ==>     num_attention_heads
-            depth               ==>     num_hidden_layers
-            patch_size          ==>     patch_size
-            posemb              ==>
-            rep_size            ==>
-            dropout             ==>     attention_dropout
-            pool_type           ==>
-            head_zeroinit       ==>
-            scan                ==>
-            remat_policy        ==>
-            dtype_mm            ==>
-            output_length       ==>
-        """
-        if vision_config is None:
-            self.vision_config = Gemma3VisionConfig()
-            logger.info("vision_config is None, using default SigLIP vision config.")
-        elif isinstance(vision_config, dict):
+        if isinstance(vision_config, dict):
             self.vision_config = Gemma3VisionConfig(**vision_config)
         elif isinstance(vision_config, Gemma3VisionConfig):
             self.vision_config = vision_config
+        else:
+            self.vision_config = None
+            logger.info(
+                "vision_config is None or incompatible with Gemma3VisionConfig intialization. Gemma3 will be limited "
+                "to text tasks."
+            )
 
         super().__init__(**kwargs)
 

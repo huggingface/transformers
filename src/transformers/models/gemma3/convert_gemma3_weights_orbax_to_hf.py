@@ -74,32 +74,68 @@ _VARIANT_GEMMA_3_12B = "gemma3_12b"
 _VARIANT_GEMMA_3_27B = "gemma3_27b"
 _VARIANTS = {
     _VARIANT_GEMMA_3_1B: Gemma3Config(
-        text_config=Gemma3TextConfig(),
+        text_config=Gemma3TextConfig(
+            vocab_size=262_144,
+            hidden_size=1152,
+            intermediate_size=6912,
+            num_attention_heads=4,
+            num_hidden_layers=26,
+            num_key_value_heads=1,
+            attention_pattern=DEFAULT_ATTENION_PATTERN,
+            sliding_window=1024,
+            rope_global_base_freq=1_000_000,
+            rope_local_base_freq=10_000,
+            attn_logit_softcapping=None,
+        ),
         vision_config=None,
     ),
     _VARIANT_GEMMA_3_4B: Gemma3Config(
         text_config=Gemma3TextConfig(
             vocab_size=262_144,
-            num_hidden_layers=34,
-            num_attention_heads=8,
-            num_key_value_heads=4,
-            hidden_size=2_560,
+            hidden_size=2560,
             intermediate_size=10_240,
+            num_attention_heads=8,
+            num_hidden_layers=34,
+            num_key_value_heads=4,
             attention_pattern=DEFAULT_ATTENION_PATTERN,
-            sliding_window=1_024,
+            sliding_window=1024,
             rope_global_base_freq=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
         ),
-        vision_config=Gemma3VisionConfig(vision_use_head=False),
+        vision_config=Gemma3VisionConfig(),
     ),
     _VARIANT_GEMMA_3_12B: Gemma3Config(
-        text_config=Gemma3TextConfig(),
-        vision_config=Gemma3VisionConfig(vision_use_head=False),
+        text_config=Gemma3TextConfig(
+            vocab_size=262_144,
+            hidden_size=3840,
+            intermediate_size=3840 * 8 // 2,
+            num_attention_heads=16,
+            num_hidden_layers=48,
+            num_key_value_heads=8,
+            attention_pattern=DEFAULT_ATTENION_PATTERN,
+            sliding_window=1024,
+            rope_global_base_freq=1_000_000,
+            rope_local_base_freq=10_000,
+            attn_logit_softcapping=None,
+        ),
+        vision_config=Gemma3VisionConfig(),
     ),
     _VARIANT_GEMMA_3_27B: Gemma3Config(
-        text_config=Gemma3TextConfig(),
-        vision_config=Gemma3VisionConfig(vision_use_head=False),
+        text_config=Gemma3TextConfig(
+            vocab_size=262_144,
+            hidden_size=3576,
+            intermediate_size=5376 * 8 // 2,
+            num_attention_heads=32,
+            num_hidden_layers=62,
+            num_key_value_heads=16,
+            attention_pattern=DEFAULT_ATTENION_PATTERN,
+            sliding_window=1024,
+            rope_global_base_freq=1_000_000,
+            rope_local_base_freq=10_000,
+            attn_logit_softcapping=None,
+        ),
+        vision_config=Gemma3VisionConfig(),
     ),
 }
 
@@ -434,18 +470,13 @@ def main(*args):
     config = result.config
 
     with accelerate.init_empty_weights():
-        if config.vision_config is not None:
-            model = Gemma3ForConditionalGeneration(config)
-        else:
+        if config.vision_config is None:
             model = Gemma3ForCausalLM(config=config.text_config)
+        else:
+            model = Gemma3ForConditionalGeneration(config)
 
     model.load_state_dict(hf_tree, assign=True, strict=True)
     model.config.torch_dtype = dtype
-    logging.info(
-        "Does this model have an inintended config param? %s",
-        model.config._name_or_path,
-    )
-    # del model.config._name_or_path  # pylint: disable=protected-access
 
     model.save_pretrained(_OUTPUT_PATH.value, safe_serialization=True)
     del hf_tree
