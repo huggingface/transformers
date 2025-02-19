@@ -46,17 +46,22 @@ class FastConfig(PretrainedConfig):
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         neck_in_channels (`List[int]`, *optional*, defaults to `[64, 128, 256, 512]`):
-            Denotes the in channels of FASTRepConvLayer in neck module.
+            Denotes the in channels of FastRepConvLayer in neck module.
         neck_out_channels (`List[int]`, *optional*, defaults to `[128, 128, 128, 128]`):
-            Denotes the out channels of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
-        neck_kernel_size (`List[int]`, *optional*, defaults to `[[3, 3], [3, 3], [3, 3], [3, 3]]`):
-            Denotes the kernel_size of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
-        neck_stride (`List[int]`, *optional*, defaults to `[1, 1, 1, 1]`):
-            Denotes the neck_stride of FASTRepConvLayer in neck module. Should be of same length of `neck_in_channels`
+            Denotes the number of output channels for each FastRepConvLayer in the neck module. 
+            This list should be of the same length as `neck_in_channels`.
+        neck_kernel_size (`List[Tuple[int, int]]`, *optional*, defaults to `[(3, 3), (3, 3), (3, 3), (3, 3)]`):
+            Denotes the kernel size for each FastRepConvLayer in the neck module. 
+            This list should be of the same length as `neck_in_channels`. 
+            Each element is a tuple of two integers, specifying the height and width of the kernel.
+        neck_stride (`List[Tuple[int, int]]`, *optional*, defaults to `[(1, 1), (1, 1), (1, 1), (1, 1)]`):
+            Denotes the stride for each FastRepConvLayer in the neck module. 
+            This list should be of the same length as `neck_in_channels`. 
+            Each element is a tuple of two integers, specifying the stride along the height and width.
         head_pooling_size (`int`, *optional*, defaults to 9):
-            Denotes the pooling size of head layer
-        head_dropout_ratio (`int`, *optional*, defaults to 0):
-            Denotes the dropout ratio used in dropout layer of head layer..
+            Denotes the pooling size for the head layer. This integer specifies the size of the pooling window.
+        head_dropout_ratio (`float`, *optional*, defaults to 0.0):
+            Denotes the dropout ratio used in the dropout layer of the head. Should be a float between 0 and 1, where 0 means no dropout and 1 means full dropout.
         head_conv_in_channels (`int`, *optional*, defaults to 512):
             Denotes the in channels of first conv layer in head layer.
         head_conv_out_channels (`int`, *optional*, defaults to 128):
@@ -85,7 +90,8 @@ class FastConfig(PretrainedConfig):
             Whether to replace stride with dilation in the last convolutional block (DC5). Only supported when
             `use_timm_backbone` = `True`.
         initializer_range (`float`, *optional*, defaults to 0.02):
-            Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+            Standard deviation for normal distribution weight initialization, with a mean of 0.0.
+
 
     Examples:
 
@@ -102,19 +108,15 @@ class FastConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    r"""
-    [jadechoghari/fast-tiny](https://huggingface.co/jadechoghari/fast-tiny)
-    """
-
     def __init__(
         self,
         use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
-        neck_in_channels=[64, 128, 256, 512],
-        neck_out_channels=[128, 128, 128, 128],
-        neck_kernel_size=[[3, 3], [3, 3], [3, 3], [3, 3]],
-        neck_stride=[1, 1, 1, 1],
+        neck_in_channels=None,
+        neck_out_channels=None,
+        neck_kernel_size=None,
+        neck_stride=None,
         head_pooling_size=9,
         head_dropout_ratio=0,
         head_conv_in_channels=512,
@@ -133,6 +135,15 @@ class FastConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        if neck_in_channels is None:
+            neck_in_channels = [64, 128, 256, 512]
+        if neck_out_channels is None:
+            neck_out_channels = [128, 128, 128, 128]
+        if neck_kernel_size is None:
+            neck_kernel_size = [[3, 3], [3, 3], [3, 3], [3, 3]]
+        if neck_stride is None:
+            neck_stride = [1, 1, 1, 1]
 
         if backbone_config is not None and use_timm_backbone:
             raise ValueError("You can't specify both `backbone_config` and `use_timm_backbone`.")

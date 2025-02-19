@@ -366,14 +366,14 @@ class FastImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
-    def _max_pooling(self, x, scale=1):
-        if scale == 1:
-            x = nn.MaxPool2d(kernel_size=self.pooling_size, stride=1, padding=(self.pooling_size - 1) // 2)(x)
-        elif scale == 2:
-            x = nn.MaxPool2d(kernel_size=self.pooling_size // 2 + 1, stride=1, padding=(self.pooling_size // 2) // 2)(
-                x
-            )
-        return x
+    def _max_pooling(self, input_tensor, scale=1):
+        kernel_size = self.pooling_size // 2 + 1 if scale == 2 else self.pooling_size
+        padding = (self.pooling_size // 2) // 2 if scale == 2 else (self.pooling_size - 1) // 2
+        
+        pooling = nn.MaxPool2d(kernel_size=kernel_size, stride=1, padding=padding)
+        
+        pooled_output = pooling(input_tensor)
+        return pooled_output
 
     def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", img_size=None):
         scale = 2
