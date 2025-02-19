@@ -131,7 +131,7 @@ class GroundingDinoImageLoss(ImageLoss):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
-    def __init__(self, matcher, focal_alpha, class_reduction, losses):
+    def __init__(self, matcher, focal_alpha, losses):
         nn.Module.__init__(self)
         self.matcher = matcher
         self.focal_alpha = focal_alpha
