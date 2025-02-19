@@ -281,7 +281,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 
 和时间较长的测试一样，还有其他环境变量在测试过程中，在默认情况下是未启用的：
 - `RUN_CUSTOM_TOKENIZERS`: 启用自定义分词器的测试。
-- `RUN_PT_FLAX_CROSS_TESTS`: 启用 PyTorch + Flax 整合的测试。
 
 更多环境变量和额外信息可以在 [testing_utils.py](src/transformers/testing_utils.py) 中找到。
 
