@@ -18,13 +18,14 @@ Callbacks to use with the Trainer class and customize the training loop.
 
 import dataclasses
 import json
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
+from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -149,6 +150,43 @@ class TrainerState:
         with open(json_path, "r", encoding="utf-8") as f:
             text = f.read()
         return cls(**json.loads(text))
+
+    def compute_steps(self, args, max_steps):
+        """
+        Calculates and stores the absolute value for logging,
+        eval, and save steps based on if it was a proportion
+        or not.
+        """
+        for step_kind in ("logging", "eval", "save"):
+            num_steps = getattr(args, f"{step_kind}_steps")
+            if num_steps is not None:
+                if num_steps < 1:
+                    num_steps = math.ceil(max_steps * num_steps)
+                setattr(self, f"{step_kind}_steps", num_steps)
+
+    def init_training_references(self, trainer, train_dataloader, max_steps, num_train_epochs, trial):
+        """
+        Stores the initial training references needed in `self`
+        """
+        for attr in ("model", "optimizer", "lr_scheduler"):
+            setattr(self, attr, getattr(trainer, attr))
+
+        self.train_dataloader = train_dataloader
+        if trainer.hp_name is not None and trainer._trial is not None:
+            # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
+            # parameter to Train when using DDP.
+            self.trial_name = trainer.hp_name(trainer._trial)
+        self.trial_params = None
+        if trial is not None:
+            from transformers.integrations import hp_params
+
+            assignments = trial.assignments if trainer.hp_search_backend == HPSearchBackend.SIGOPT else trial
+            self.trial_params = hp_params(assignments)
+
+        self.max_steps = max_steps
+        self.num_train_epochs = num_train_epochs
+        self.is_local_process_zero = trainer.is_local_process_zero()
+        self.is_world_process_zero = trainer.is_world_process_zero()
 
 
 class ExportableState:
@@ -707,10 +745,14 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
             self.early_stopping_patience_counter += 1
 
     def on_train_begin(self, args, state, control, **kwargs):
-        assert args.load_best_model_at_end, "EarlyStoppingCallback requires load_best_model_at_end = True"
+        if not args.load_best_model_at_end:
+            logger.warning(
+                "Using EarlyStoppingCallback without load_best_model_at_end=True. "
+                "Once training is finished, the best model will not be loaded automatically."
+            )
         assert (
             args.metric_for_best_model is not None
-        ), "EarlyStoppingCallback requires metric_for_best_model is defined"
+        ), "EarlyStoppingCallback requires metric_for_best_model to be defined"
         assert (
             args.eval_strategy != IntervalStrategy.NO
         ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"

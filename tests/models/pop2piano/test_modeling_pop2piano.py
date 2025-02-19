@@ -26,7 +26,6 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import (
     require_essentia,
     require_librosa,
-    require_onnx,
     require_scipy,
     require_torch,
     slow,
@@ -507,6 +506,7 @@ class Pop2PianoModelTester:
 @require_torch
 class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Pop2PianoForConditionalGeneration,) if is_torch_available() else ()
+    # Doesn't run generation tests. Has custom generation method with a different interface
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {"automatic-speech-recognition": Pop2PianoForConditionalGeneration} if is_torch_available() else {}
@@ -610,20 +610,6 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @require_onnx
-    def test_export_to_onnx(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        model = Pop2PianoForConditionalGeneration(config_and_inputs[0]).to(torch_device)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            torch.onnx.export(
-                model,
-                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
-                f"{tmpdirname}/Pop2Piano_test.onnx",
-                export_params=True,
-                opset_version=14,
-                input_names=["input_ids", "decoder_input_ids"],
-            )
-
     def test_pass_with_input_features(self):
         input_features = BatchFeature(
             {
@@ -691,7 +677,7 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
             [[1.0475305318832397, 0.29052114486694336, -0.47778210043907166], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]
         )
 
-        self.assertTrue(torch.allclose(outputs[0, :3, :3], EXPECTED_OUTPUTS, atol=1e-4))
+        torch.testing.assert_close(outputs[0, :3, :3], EXPECTED_OUTPUTS, rtol=1e-4, atol=1e-4)
 
     @slow
     @require_essentia

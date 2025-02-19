@@ -245,13 +245,15 @@ Check out the [preprocess](./preprocessing) tutorial for more details about toke
 
 <frameworkcontent>
 <pt>
-🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. For text (or sequence) classification, you should load [`AutoModelForSequenceClassification`]:
+🤗 Transformers provides a simple and unified way to load pretrained instances. This means you can load an [`AutoModel`] like you would load an [`AutoTokenizer`]. The only difference is selecting the correct [`AutoModel`] for the task. For text (or sequence) classification, you should load [`AutoModelForSequenceClassification`].
+
+By default, the weights are loaded in full precision (torch.float32) regardless of the actual data type the weights are stored in such as torch.float16. Set `torch_dtype="auto"` to load the weights in the data type defined in a model's `config.json` file to automatically load the most memory-optimal data type.
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
 >>> model_name = "nlptown/bert-base-multilingual-uncased-sentiment"
->>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name)
+>>> pt_model = AutoModelForSequenceClassification.from_pretrained(model_name, torch_dtype="auto")
 ```
 
 <Tip>
@@ -416,12 +418,12 @@ All models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn
 
 Depending on your task, you'll typically pass the following parameters to [`Trainer`]:
 
-1. You'll start with a [`PreTrainedModel`] or a [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module):
+1. You'll start with a [`PreTrainedModel`] or a [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module). Set `torch_dtype="auto"` to automatically load the most memory-efficient data type the weights are stored in.
 
    ```py
    >>> from transformers import AutoModelForSequenceClassification
 
-   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
+   >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased", torch_dtype="auto")
    ```
 
 2. [`TrainingArguments`] contains the model hyperparameters you can change like learning rate, batch size, and the number of epochs to train for. The default values are used if you don't specify any training arguments:
@@ -550,6 +552,32 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> model.compile(optimizer='adam')  # No loss argument!
    >>> model.fit(tf_dataset)  # doctest: +SKIP
    ```
+
+
+## Chat with text generation models
+
+If you're working with a model that generates text as an output, you can also engage in a multi-turn conversation with
+it through the `transformers-cli chat` command. This is the fastest way to interact with a model, e.g. for a
+qualitative assessment (aka vibe check).
+
+This CLI is implemented on top of our `AutoClass` abstraction, leveraging our [text generation](llm_tutorial.md) and
+[chat](chat_templating.md) tooling, and thus will be compatible with any 🤗 Transformers model. If you have the library
+[installed](installation.md), you can launch the chat session on your terminal with
+
+```bash
+transformers-cli chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+```
+
+For a full list of options to launch the chat, type
+
+```bash
+transformers-cli chat -h
+```
+
+After the chat is launched, you will enter an interactive session with the model. There are special commands for this
+session as well, such as `clear` to reset the conversation. Type `help` at any moment to display all special chat
+commands, and `exit` to terminate the session.
+
 
 ## What's next?
 
