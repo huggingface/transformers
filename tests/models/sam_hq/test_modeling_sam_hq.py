@@ -14,6 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch SAM-HQ model."""
 
+import tempfile
 import unittest
 
 import requests
@@ -190,7 +191,6 @@ class SamHQModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
-        
 
         return config, pixel_values
 
@@ -247,7 +247,7 @@ class SamHQModelTester:
         model.eval()
         with torch.no_grad():
             image_embeddings = model.get_image_embeddings(pixel_values)
-        self.parent.assertEqual(image_embeddings[0][0].shape, (self.output_channels , 12, 12))
+        self.parent.assertEqual(image_embeddings[0][0].shape, (self.output_channels, 12, 12))
 
     def create_and_check_get_image_and_intermediate_embeddings(self, config, pixel_values):
         model = SamHQModel(config=config)
@@ -256,20 +256,20 @@ class SamHQModelTester:
         with torch.no_grad():
             image_embeddings, intermediate_embeddings = model.get_image_embeddings(pixel_values)
 
-        self.parent.assertEqual(image_embeddings[0].shape, (self.output_channels , 12, 12))
-        self.parent.assertEqual(intermediate_embeddings[0][0].shape, (12, 12,self.hidden_size))
+        self.parent.assertEqual(image_embeddings[0].shape, (self.output_channels, 12, 12))
+        self.parent.assertEqual(intermediate_embeddings[0][0].shape, (12, 12, self.hidden_size))
 
     def create_and_check_get_image_intermediate_embeddings(self, config, pixel_values):
         model = SamHQModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            image_embeddings,intermediate_embeddings = model.get_image_embeddings(pixel_values)
+            image_embeddings, intermediate_embeddings = model.get_image_embeddings(pixel_values)
 
         self.parent.assertIsInstance(intermediate_embeddings, list)
         self.parent.assertTrue(len(intermediate_embeddings) > 0)
         for embedding in intermediate_embeddings:
-            self.parent.assertEqual(embedding.shape, (self.batch_size,12, 12, self.hidden_size))
+            self.parent.assertEqual(embedding.shape, (self.batch_size, 12, 12, self.hidden_size))
 
     def create_and_check_get_image_hidden_states(self, config, pixel_values):
         model = SamHQModel(config=config)
@@ -304,7 +304,6 @@ class SamHQModelTester:
         config, pixel_values = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
-
 
 
 @require_torch
@@ -476,7 +475,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_name = "sushmanth/sam_hq_vit_b"
         model = SamHQModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-    
+
     @require_torch_sdpa
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="SamHQModel can't be compiled dynamic yet")
@@ -521,7 +520,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.vision_encoder.config._attn_implementation == "eager")
                 self.assertTrue(model_eager.mask_decoder.config._attn_implementation == "eager")
-                
+
                 # Verify SDPA/eager layer presence
                 has_sdpa = False
                 for name, submodule in model_sdpa.named_modules():
@@ -536,11 +535,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                            raise ValueError("The eager model should not have SDPA attention layers")
-                        
-
-
-    
+                        raise ValueError("The eager model should not have SDPA attention layers")
 
 
 def prepare_image():
@@ -856,7 +851,3 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)
-
-
-
-    

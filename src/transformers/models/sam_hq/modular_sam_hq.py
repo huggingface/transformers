@@ -20,29 +20,18 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-
-
-from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ..sam.configuration_sam import SamConfig, SamPromptEncoderConfig, SamVisionConfig,SamMaskDecoderConfig
+from ..sam.configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
-    SamAttention,
     SamFeedForward,
     SamImageSegmentationOutput,
     SamLayerNorm,
-    SamMaskEmbedding,
-    SamMLPBlock,
-    SamPatchEmbeddings,
     SamPositionalEmbedding,
     SamPreTrainedModel,
     SamPromptEncoder,
-    SamTwoWayAttentionBlock,
     SamTwoWayTransformer,
-    SamVisionAttention,
     SamVisionEncoder,
     SamVisionEncoderOutput,
-    SamVisionLayer,
-    SamVisionNeck,
 )
 
 
@@ -135,8 +124,6 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
 @dataclass
 class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
     pass
-
-
 
 
 class SamHQVisionEncoder(SamVisionEncoder):
@@ -595,7 +582,6 @@ class SamHQModel(SamHQPreTrainedModel):
         )
         image_embeddings = vision_output[0]
         intermediate_embeddings = vision_output[1]
-        
 
         return image_embeddings, intermediate_embeddings
 
@@ -787,5 +773,11 @@ class SamHQModel(SamHQPreTrainedModel):
         )
 
 
-
-__all__ = ["SamHQVisionConfig","SamHQMaskDecoderConfig","SamHQPromptEncoderConfig","SamHQConfig","SamHQModel", "SamHQPreTrainedModel"]
+__all__ = [
+    "SamHQVisionConfig",
+    "SamHQMaskDecoderConfig",
+    "SamHQPromptEncoderConfig",
+    "SamHQConfig",
+    "SamHQModel",
+    "SamHQPreTrainedModel",
+]
