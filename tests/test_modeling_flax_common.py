@@ -21,7 +21,7 @@ from typing import List, Tuple
 
 import numpy as np
 
-from transformers import is_flax_available, is_torch_available
+from transformers import is_flax_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import CaptureLogger, require_flax
 from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, logging
@@ -47,9 +47,6 @@ if is_flax_available():
     from transformers.modeling_flax_utils import FLAX_WEIGHTS_INDEX_NAME, FLAX_WEIGHTS_NAME
 
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
-
-if is_torch_available():
-    pass
 
 
 def ids_tensor(shape, vocab_size, rng=None):

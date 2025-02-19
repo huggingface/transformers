@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 from huggingface_hub import HfFolder, snapshot_download
 
-from transformers import BertConfig, is_flax_available, is_torch_available
+from transformers import BertConfig, is_flax_available
 from transformers.testing_utils import (
     TOKEN,
     CaptureLogger,
@@ -39,9 +39,6 @@ if is_flax_available():
     from transformers import FlaxBertModel
 
     os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
-
-if is_torch_available():
-    pass
 
 
 @require_flax

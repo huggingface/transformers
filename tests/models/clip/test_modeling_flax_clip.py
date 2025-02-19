@@ -4,7 +4,7 @@ import unittest
 
 import numpy as np
 
-from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, is_flax_available, is_torch_available
+from transformers import CLIPConfig, CLIPTextConfig, CLIPVisionConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -19,9 +19,6 @@ if is_flax_available():
         FlaxCLIPTextModelWithProjection,
         FlaxCLIPVisionModel,
     )
-
-if is_torch_available():
-    pass
 
 
 class FlaxCLIPVisionModelTester:

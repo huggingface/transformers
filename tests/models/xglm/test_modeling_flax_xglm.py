@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import XGLMConfig, XGLMTokenizer, is_flax_available, is_torch_available
+from transformers import XGLMConfig, XGLMTokenizer, is_flax_available
 from transformers.testing_utils import require_flax, require_sentencepiece, slow
 
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
@@ -28,10 +28,6 @@ if is_flax_available():
     import numpy as np
 
     from transformers.models.xglm.modeling_flax_xglm import FlaxXGLMForCausalLM, FlaxXGLMModel
-
-
-if is_torch_available():
-    pass
 
 
 @require_flax
