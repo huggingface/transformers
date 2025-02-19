@@ -28,12 +28,12 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
+    ALL_CUSTOM_CLASSES,
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
-from .modeling_auto import ALL_CUSTOM_CLASSES
 
 
 logger = logging.get_logger(__name__)

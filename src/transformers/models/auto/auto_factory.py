@@ -33,8 +33,12 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
-from .modeling_auto import ALL_CUSTOM_CLASSES
+from .configuration_auto import (
+    ALL_CUSTOM_CLASSES,
+    AutoConfig,
+    model_type_to_module_name,
+    replace_list_option_in_docstrings,
+)
 
 
 if is_torch_available():
