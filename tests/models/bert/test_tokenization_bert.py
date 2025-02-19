@@ -23,6 +23,7 @@ from transformers.models.bert.tokenization_bert import (
     BasicTokenizer,
     BertTokenizer,
     WordpieceTokenizer,
+    BidirectionalWordpieceTokenizer,
     _is_control,
     _is_punctuation,
     _is_whitespace,
@@ -196,6 +197,16 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         for i, token in enumerate(vocab_tokens):
             vocab[token] = i
         tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
+            
+    def test_bidirectional_wordpiece_tokenizer(self):
+        vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
+        vocab = {token: i for i, token in enumerate(vocab_tokens)}
+        
+        tokenizer = BidirectionalWordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
+        
+        self.assertListEqual(tokenizer.tokenize(""), [])
+        self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
+        self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
 
         self.assertListEqual(tokenizer.tokenize(""), [])
 
