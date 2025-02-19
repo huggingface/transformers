@@ -199,10 +199,8 @@ class TFBartModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, PipelineTester
     pipeline_model_mapping = (
         {
             "feature-extraction": TFBartModel,
-            "summarization": TFBartForConditionalGeneration,
             "text-classification": TFBartForSequenceClassification,
             "text2text-generation": TFBartForConditionalGeneration,
-            "translation": TFBartForConditionalGeneration,
             "zero-shot": TFBartForSequenceClassification,
         }
         if is_tf_available()

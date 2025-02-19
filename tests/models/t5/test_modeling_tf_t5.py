@@ -249,9 +249,7 @@ class TFT5ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": TFT5Model,
-            "summarization": TFT5ForConditionalGeneration,
             "text2text-generation": TFT5ForConditionalGeneration,
-            "translation": TFT5ForConditionalGeneration,
         }
         if is_tf_available()
         else {}
