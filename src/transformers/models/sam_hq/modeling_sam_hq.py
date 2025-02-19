@@ -1147,7 +1147,6 @@ class SamHQMaskDecoder(nn.Module):
         self.mask_norm = SamHQLayerNorm(self.hidden_size // 4, data_format="channels_first")
         self.mask_conv2 = nn.Conv2d(self.hidden_size // 4, self.hidden_size // 8, kernel_size=3, stride=1, padding=1)
 
-
     def forward(
         self,
         image_embeddings: torch.Tensor,
