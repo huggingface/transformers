@@ -179,6 +179,7 @@ class DeepseekV3Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
+        rope_interleave=True,
         attention_bias=False,
         attention_dropout=0.0,
         **kwargs,
@@ -205,6 +206,7 @@ class DeepseekV3Config(PretrainedConfig):
         self.num_experts_per_tok = num_experts_per_tok
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
+        self.rope_interleave = rope_interleave
 
         # for backward compatibility
         if num_key_value_heads is None:

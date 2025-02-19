@@ -20,6 +20,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
+    rotate_half,
 )
 from .configuration_deepseek_v3 import DeepseekV3Config
 
@@ -33,6 +34,40 @@ class DeepseekV3RMSNorm(LlamaRMSNorm):
 
 class DeepseekV3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
+
+
+def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    b, h, s, d = q.shape
+    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
+    b, h, s, d = k.shape
+    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 def yarn_get_mscale(scale=1, mscale=1):
@@ -226,7 +261,10 @@ class DeepseekV3Attention(nn.Module):
         k_rot = k_rot.view(batch_size, 1, seq_length, self.qk_rope_head_dim)
 
         cos, sin = position_embeddings
-        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        if self.config.rope_interleave:
+            q_rot, k_rot = apply_rotary_pos_emb_interleave(q_pass, k_pass, cos, sin)
+        else:
+            q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
         k_rot = k_rot.expand(*k_pass.shape[:-1], -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
@@ -332,57 +370,58 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
 
 
 class DeepseekV3Model(LlamaModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self._register_load_state_dict_pre_hook(self.load_pre_hook)
-        self._register_state_dict_hook(self.load_hook)
-        self.post_init()
+    pass
+    # def __init__(self, config):
+    #     super().__init__(config)
+    #     self._register_load_state_dict_pre_hook(self.load_pre_hook)
+    #     self._register_state_dict_hook(self.load_hook)
+    #     self.post_init()
 
-    def load_pre_hook(self, state_dict, prefix, *args):
-        """
-        Weights have to be permuted for correct rope formulation. We can't do this in the weights
-        as every other framework already uses the `Llama` original function (which is copyrighted btw).
-        And I am not even sure it's better.... anyways end of my rant
-        """
+    # def load_pre_hook(self, state_dict, prefix, *args):
+    #     """
+    #     Weights have to be permuted for correct rope formulation. We can't do this in the weights
+    #     as every other framework already uses the `Llama` original function (which is copyrighted btw).
+    #     And I am not even sure it's better.... anyways end of my rant
+    #     """
 
-        def permute_for_rope(input_tensor):
-            """
-            When you go from the complex ROPE formulation to sin and cos one, you need
-            to permute the query and key weights (to avoid doing it on the fly)
-            """
-            n_heads, dim1, dim2 = input_tensor.shape[0], input_tensor.shape[1], input_tensor.shape[2]
-            input_tensor = input_tensor.reshape(n_heads * dim1, dim2)
-            input_tensor = input_tensor.view(n_heads, dim1 // 2, 2, dim2)
-            input_tensor = input_tensor.transpose(1, 2).reshape(n_heads, dim1, dim2)
-            return input_tensor
+    #     def permute_for_rope(input_tensor):
+    #         """
+    #         When you go from the complex ROPE formulation to sin and cos one, you need
+    #         to permute the query and key weights (to avoid doing it on the fly)
+    #         """
+    #         n_heads, dim1, dim2 = input_tensor.shape[0], input_tensor.shape[1], input_tensor.shape[2]
+    #         input_tensor = input_tensor.reshape(n_heads * dim1, dim2)
+    #         input_tensor = input_tensor.view(n_heads, dim1 // 2, 2, dim2)
+    #         input_tensor = input_tensor.transpose(1, 2).reshape(n_heads, dim1, dim2)
+    #         return input_tensor
 
-        def permute_layer_for_rope(key, num_heads, head_dim, rope_dim):
-            weight = state_dict[key]
-            weight = weight.view(num_heads, head_dim, -1)
-            weight_rot = weight[:, -rope_dim:]
-            weight_rot = permute_for_rope(weight_rot)
-            weight[:, -rope_dim:] = weight_rot
-            weight = weight.view(-1, weight.shape[-1])
-            state_dict[key] = weight
+    #     def permute_layer_for_rope(key, num_heads, head_dim, rope_dim):
+    #         weight = state_dict[key]
+    #         weight = weight.view(num_heads, head_dim, -1)
+    #         weight_rot = weight[:, -rope_dim:]
+    #         weight_rot = permute_for_rope(weight_rot)
+    #         weight[:, -rope_dim:] = weight_rot
+    #         weight = weight.view(-1, weight.shape[-1])
+    #         state_dict[key] = weight
 
-        for k in state_dict:
-            if "q_b_proj." in k:
-                permute_layer_for_rope(
-                    k,
-                    num_heads=self.config.num_attention_heads,
-                    head_dim=self.config.qk_head_dim,
-                    rope_dim=self.config.qk_rope_head_dim,
-                )
-            if "kv_a_proj_with_mqa." in k:
-                permute_layer_for_rope(
-                    k,
-                    num_heads=1,
-                    head_dim=self.config.kv_lora_rank + self.config.qk_rope_head_dim,
-                    rope_dim=self.config.qk_rope_head_dim,
-                )
+    #     for k in state_dict:
+    #         if "q_b_proj." in k:
+    #             permute_layer_for_rope(
+    #                 k,
+    #                 num_heads=self.config.num_attention_heads,
+    #                 head_dim=self.config.qk_head_dim,
+    #                 rope_dim=self.config.qk_rope_head_dim,
+    #             )
+    #         if "kv_a_proj_with_mqa." in k:
+    #             permute_layer_for_rope(
+    #                 k,
+    #                 num_heads=1,
+    #                 head_dim=self.config.kv_lora_rank + self.config.qk_rope_head_dim,
+    #                 rope_dim=self.config.qk_rope_head_dim,
+    #             )
 
-    def load_hook(self, module, state_dict, prefix, *args):
-        self.load_pre_hook(state_dict, prefix, *args)
+    # def load_hook(self, module, state_dict, prefix, *args):
+    #     self.load_pre_hook(state_dict, prefix, *args)
 
 
 class DeepseekV3ForCausalLM(LlamaForCausalLM):
