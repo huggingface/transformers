@@ -463,7 +463,7 @@ class VitDetLayer(nn.Module):
         patch_size = config.patch_size
         patch_size = patch_size if isinstance(patch_size, (list, tuple)) else (patch_size, patch_size)
 
-        input_size = (config.image_size[0] // config.patch_size[0], config.image_size[1] // config.patch_size[1])
+        input_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
         self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = VitDetAttention(
             config, input_size=input_size if window_size == 0 else (window_size, window_size)
