@@ -504,30 +504,12 @@ class ImageProcessingMixin(PushToHubMixin):
         return f"{self.__class__.__name__} {self.to_json_string()}"
 
     @classmethod
-    def register_for_auto_class(cls, auto_class="AutoImageProcessor"):
+    def register_for_auto_class(cls, **kwargs):
         """
-        Register this class with a given auto class. This should only be used for custom image processors as the ones
-        in the library are already mapped with `AutoImageProcessor `.
-
-        <Tip warning={true}>
-
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
-
-        Args:
-            auto_class (`str` or `type`, *optional*, defaults to `"AutoImageProcessor "`):
-                The auto class to register this new image processor with.
+        Register this class with a given auto class. This should only be used for custom configurations as the ones in
+        the library are already mapped with `AutoImageProcessor`.
         """
-        if not isinstance(auto_class, str):
-            auto_class = auto_class.__name__
-
-        import transformers.models.auto as auto_module
-
-        if not hasattr(auto_module, auto_class):
-            raise ValueError(f"{auto_class} is not a valid auto class.")
-
-        cls._auto_class = auto_class
+        cls._auto_class = "AutoImageProcessor"
 
     def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
         """

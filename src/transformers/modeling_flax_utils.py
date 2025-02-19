@@ -1225,30 +1225,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
 
     @classmethod
-    def register_for_auto_class(cls, auto_class="FlaxAutoModel"):
+    def register_for_auto_class(cls, **kwargs):
         """
-        Register this class with a given auto class. This should only be used for custom models as the ones in the
-        library are already mapped with an auto class.
-
-        <Tip warning={true}>
-
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
-
-        Args:
-            auto_class (`str` or `type`, *optional*, defaults to `"FlaxAutoModel"`):
-                The auto class to register this new model with.
+        Register this class with a given auto class. This should only be used for custom configurations as the ones in
+        the library are already mapped with `FlaxAutoModel`.
         """
-        if not isinstance(auto_class, str):
-            auto_class = auto_class.__name__
-
-        import transformers.models.auto as auto_module
-
-        if not hasattr(auto_module, auto_class):
-            raise ValueError(f"{auto_class} is not a valid auto class.")
-
-        cls._auto_class = auto_class
+        cls._auto_class = "FlaxAutoModel"
 
 
 # To update the docstring, we need to copy the method, otherwise we change the original docstring.
