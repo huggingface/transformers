@@ -23,10 +23,8 @@ Table stakes:
 - INT4
 """
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 import dataclasses
-import enum
-import re
 from typing import Any
 
 from absl import app
@@ -45,6 +43,7 @@ from .configuration_gemma3 import (
     Gemma3TextConfig,
     Gemma3VisionConfig,
 )
+from .modeling_gemma3 import Gemma3ForCausalLM, Gemma3ForConditionalGeneration
 
 # ==== Internal Constants and Classes ====
 
@@ -54,11 +53,20 @@ _DTYPES = {
     "float16": torch.float16,
 }
 
-_SIGLIP_BASE = 'SigLiPFromPatches_0/siglip_encoder'
+_SIGLIP_BASE = "SigLiPFromPatches_0/siglip_encoder"
 _SIGLIP_EMBEDDING = "SigLiPFromPatches_0/siglip_encoder/embedding"
-_SIGLIP_TRANSFORMER_ENCODER_BLOCK = "SigLiPFromPatches_0/siglip_encoder/Transformer/encoderblock_"
+_SIGLIP_TRANSFORMER_ENCODER_BLOCK = (
+    "SigLiPFromPatches_0/siglip_encoder/Transformer/encoderblock_"
+)
 _SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN = len(_SIGLIP_TRANSFORMER_ENCODER_BLOCK)
-_SIGLIP_TRANSFORMER_ENCODER_NORM = "SigLiPFromPatches_0/siglip_encoder/Transformer/encoder_norm"
+_SIGLIP_TRANSFORMER_ENCODER_NORM = (
+    "SigLiPFromPatches_0/siglip_encoder/Transformer/encoder_norm"
+)
+
+_TRANSFORMER_DECODER_BLOCK = "transformer/layer_"
+_TRANSFORMER_DECODER_BLOCK_LEN = len(_TRANSFORMER_DECODER_BLOCK)
+_TRANSFORMER_EMBEDDER = "transformer/embedder"
+_TRANSFORMER_FINAL_NORM = "transformer/final_norm"
 
 _VARIANT_GEMMA_3_1B = "gemma3_1b"
 _VARIANT_GEMMA_3_4B = "gemma3_4b"
@@ -83,15 +91,15 @@ _VARIANTS = {
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
         ),
-        vision_config=Gemma3VisionConfig(),
+        vision_config=Gemma3VisionConfig(vision_use_head=False),
     ),
     _VARIANT_GEMMA_3_12B: Gemma3Config(
         text_config=Gemma3TextConfig(),
-        vision_config=Gemma3VisionConfig(),
+        vision_config=Gemma3VisionConfig(vision_use_head=False),
     ),
     _VARIANT_GEMMA_3_27B: Gemma3Config(
         text_config=Gemma3TextConfig(),
-        vision_config=Gemma3VisionConfig(),
+        vision_config=Gemma3VisionConfig(vision_use_head=False),
     ),
 }
 
@@ -142,32 +150,40 @@ _VARIANT = flags.DEFINE_enum(
 
 
 def _convert_siglip_weight(
-      config: Gemma3VisionConfig,
-      paths: Sequence[str],
-      weights: Any,
-) -> tuple[str, Any]:
+    config: Gemma3VisionConfig,
+    paths: Sequence[str],
+    weights: np.ndarray,
+) -> tuple[str, np.ndarray]:
     path, prop = paths
-    normalized_path: str = ''
-    updated_weights: Any = None
+    normalized_path: str = ""
+    updated_weights: np.ndarray = None
 
     if path == _SIGLIP_BASE:
-        normalized_path = 'vision_tower.vision_model.embeddings.position_embedding.weight'
+        normalized_path = (
+            "vision_model.vision_model.embeddings.position_embedding.weight"
+        )
         updated_weights = weights.reshape(-1, config.hidden_size)
     elif path == _SIGLIP_EMBEDDING:
         if prop == "kernel":
-            normalized_path = "vision_tower.vision_model.embeddings.patch_embedding.weight"
+            normalized_path = (
+                "vision_model.vision_model.embeddings.patch_embedding.weight"
+            )
             updated_weights = weights.transpose(3, 2, 0, 1)
         elif prop == "bias":
-            normalized_path = "vision_tower.vision_model.embeddings.patch_embedding.bias"
+            normalized_path = (
+                "vision_model.vision_model.embeddings.patch_embedding.bias"
+            )
             updated_weights = weights
         else:
-            raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+            raise ValueError(
+                f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
+            )
     elif path.startswith(_SIGLIP_TRANSFORMER_ENCODER_BLOCK):
         encoder_block_path = path[_SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN:]
         next_path_seperator_idx = encoder_block_path.find("/")
         layer_idx = encoder_block_path[:next_path_seperator_idx]
         encoder_block_path = encoder_block_path[next_path_seperator_idx:]
-        normalized_path = f"vision_tower.vision_model.encoder.layers.{layer_idx}"
+        normalized_path = f"vision_model.vision_model.encoder.layers.{layer_idx}"
 
         if encoder_block_path.startswith("/LayerNorm"):
             normalized_path += ".layer_norm1" if path.endswith("_0") else ".layer_norm2"
@@ -179,9 +195,13 @@ def _convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
+                raise ValueError(
+                    f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`."
+                )
         elif encoder_block_path.startswith("/MlpBlock_0"):
-            normalized_path += ".mlp.fc1" if "/Dense_0" in encoder_block_path else ".mlp.fc2"
+            normalized_path += (
+                ".mlp.fc1" if "/Dense_0" in encoder_block_path else ".mlp.fc2"
+            )
 
             if prop == "kernel":
                 normalized_path += ".weight"
@@ -190,7 +210,9 @@ def _convert_siglip_weight(
                 normalized_path += ".bias"
                 updated_weights = weights
             else:
-                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+                raise ValueError(
+                    f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
+                )
         elif encoder_block_path.startswith("/MultiHeadDotProductAttention_0"):
             if encoder_block_path.endswith("/key"):
                 normalized_path += ".self_attn.k_proj"
@@ -201,7 +223,9 @@ def _convert_siglip_weight(
             elif encoder_block_path.endswith("/value"):
                 normalized_path += ".self_attn.v_proj"
             else:
-                raise ValueError(f"Upexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0.")
+                raise ValueError(
+                    f"Upexpected path `{path}` in SigLIP Transformer MultiHeadDotProductAttention_0."
+                )
 
             if prop == "bias":
                 normalized_path += ".bias"
@@ -210,138 +234,161 @@ def _convert_siglip_weight(
                 normalized_path += ".weight"
                 updated_weights = weights.reshape(-1, config.hidden_size).transpose()
             else:
-                raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
+                raise ValueError(
+                    f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`."
+                )
         else:
-            raise ValueError(f"Upexpected path `{path}` in SigLIP Transformer Encoder Block.")
+            raise ValueError(
+                f"Upexpected path `{path}` in SigLIP Transformer Encoder Block."
+            )
     elif path == _SIGLIP_TRANSFORMER_ENCODER_NORM:
         if prop == "scale":
-            normalized_path = "vision_tower.vision_model.post_layernorm.weight"
+            normalized_path = "vision_model.vision_model.post_layernorm.weight"
             updated_weights = weights.transpose()
         elif prop == "bias":
-            normalized_path = "vision_tower.vision_model.post_layernorm.bias"
+            normalized_path = "vision_model.vision_model.post_layernorm.bias"
             updated_weights = weights
         else:
-            raise ValueError(f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`.")
+            raise ValueError(
+                f"Upexpected member, `{prop}`, for path `{path}`. Should be `bias` or `scale`."
+            )
     else:
         raise ValueError(f"Upexpected path `{path}`.")
 
     return normalized_path, updated_weights
 
 
-layer_names = """
-"('transformer/embedder', 'input_embedding')"
-"('transformer/embedder', 'mm_input_embedding_extra')"
-"('transformer/embedder', 'mm_output_embedding')"
-"('transformer/embedder/mm_input_projection', 'w')"
-"('transformer/embedder/mm_soft_embedding_norm', 'scale')"
-"('transformer/final_norm', 'scale')"
-"('transformer/layer_i/', 'w')"
-"('transformer/layer_i/', 'scale')"
-"('transformer/layer_i/', 'w')"
-"('transformer/layer_i/', 'w')"
-"('transformer/layer_i/', 'scale')"
-"('transformer/layer_i/', 'w')"
-"('transformer/layer_i/', 'w')"
-"('transformer/layer_i/', 'scale')"
-"('transformer/layer_i/', 'scale')"
-"('transformer/layer_i/', 'scale')"
-"('transformer/layer_i/', 'scale')"
-"""
-
-_TRANSFORMER_DECODER_BLOCK = "transformer/layer_"
-_TRANSFORMER_DECODER_BLOCK_LEN = len(_TRANSFORMER_DECODER_BLOCK)
-_TRANSFORMER_EMBEDDER = "transformer/embedder"
-_TRANSFORMER_FINAL_NORM = "transformer/final_norm"
-
-
 def _convert_transformer_weights(
     config: Gemma3TextConfig,
     paths: Sequence[str],
-    weights: Any
-) -> tuple[str, Any]:
+    weights: np.ndarray,
+) -> Iterator[Sequence[str, np.ndarray]]:
     path, prop = paths
-    normalized_path: str = ''
-    updated_weights: Any = None
+    converted_paths: list[str] = []
+    converted_weights: list[Any] = []
+
+    attn_head_dim = config.num_attention_heads * config.head_dim
+    kv_head_dim = config.num_key_value_heads * config.head_dim
 
     if path == _TRANSFORMER_EMBEDDER:
-        if prop == "inpup_embedding":
-            normalized_path = "language_model.model.embed_tokens.weight"
-            updated_weights = weights
+        if prop == "input_embedding":
+            converted_paths = [
+                "language_model.model.embed_tokens.weight",
+                "language_model.lm_head.weight",
+            ]
+            converted_weights = [weights, weights]
+        elif prop == "mm_input_embedding_extra":
+            return zip([], [])
+        elif prop == "mm_output_embedding":
+            return zip([], [])
         else:
-            pass
-    elif _TRANSFORMER_EMBEDDER in path:
-        pass
+            raise ValueError(f"Upexpected member, {prop}, in Embedder.")
+    elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
+        if path.endswith("/mm_input_projection"):
+            return zip([], [])
+        if path.endswith("/mm_soft_embedding_norm"):
+            return zip([], [])
+        else:
+            raise ValueError(f"Upexpected subpath, `{path}`, in Embedder.")
     elif path == _TRANSFORMER_FINAL_NORM:
-        normalized_path = "language_model.model.norm.weight"
-        updated_weights = weights
+        converted_paths = ["language_model.model.norm.weight"]
+        converted_weights = [weights]
     elif path.startswith(_TRANSFORMER_DECODER_BLOCK):
         decoder_block_path = path[_TRANSFORMER_DECODER_BLOCK_LEN:]
         next_path_seperator_idx = decoder_block_path.find("/")
         layer_idx = decoder_block_path[:next_path_seperator_idx]
         decoder_block_path = decoder_block_path[next_path_seperator_idx:]
 
-        normalized_path = f"vision_tower.vision_model.encoder.layers.{layer_idx}"
+        base_path = f"language_model.model.layers.{layer_idx}"
 
         if path.endswith("attn/attn_vec_einsum"):
-            pass
+            converted_paths = [f"{base_path}.self_attn.o_proj.weight"]
+            converted_weights = [
+                weights.transpose(2, 0, 1).reshape(config.hidden_size, attn_head_dim)
+            ]
         elif path.endswith("attn/_key_norm"):
-            pass
+            converted_paths = [f"{base_path}.self_attn.k_norm.weight"]
+            converted_weights = [weights]
         elif path.endswith("attn/kv_einsum"):
-            pass
+            converted_paths = [
+                f"{base_path}.self_attn.k_proj.weight",
+                f"{base_path}.self_attn.v_proj.weight",
+            ]
+            k_proj_weights, v_proj_weights = weights
+            converted_weights = [
+                k_proj_weights.transpose(0, 2, 1).reshape(
+                    kv_head_dim, config.hidden_size
+                ),
+                v_proj_weights.transpose(0, 2, 1).reshape(
+                    kv_head_dim, config.hidden_size
+                ),
+            ]
         elif path.endswith("attn/q_einsum"):
-            pass
+            converted_paths = [f"{base_path}.self_attn.q_proj.weight"]
+            converted_weights = [
+                weights.transpose(0, 2, 1).reshape(attn_head_dim, config.hidden_size)
+            ]
         elif path.endswith("attn/_query_norm"):
-            pass
+            converted_paths = [f"{base_path}.self_attn.q_norm.weight"]
+            converted_weights = [weights]
         elif path.endswith("mlp/gating_einsum"):
-            pass
+            converted_paths = [
+                f"{base_path}.mlp.gate_proj.weight",
+                f"{base_path}.mlp.up_proj.weight",
+            ]
+            gate_proj_weight, up_proj_weight = weights
+            converted_weights = [gate_proj_weight, up_proj_weight]
         elif path.endswith("mlp/linear"):
-            pass
+            converted_paths = [f"{base_path}.mlp.down_proj.weight"]
+            converted_weights = [weights.transpose()]
         elif path.endswith("post_attention_norm"):
-            pass
+            converted_paths = [f"{base_path}.post_attention_layernorm.weight"]
+            converted_weights = [weights]
         elif path.endswith("post_ffw_norm"):
-            pass
+            converted_paths = [f"{base_path}.post_feedforward_layernorm.weight"]
+            converted_weights = [weights]
         elif path.endswith("pre_attention_norm"):
-            pass
+            converted_paths = [f"{base_path}.input_layernorm.weight"]
+            converted_weights = [weights]
         elif path.endswith("pre_ffw_norm"):
-            pass
+            converted_paths = [f"{base_path}.pre_feedforward_layernorm.weight"]
+            converted_weights = [weights]
         else:
             raise ValueError(f"Upexpected path `{path}` in Decoder Block.")
     else:
         raise ValueError(f"Upexpected path `{path}`.")
 
-    return normalized_path, updated_weights
+    if (cpl := len(converted_paths)) != (cwl := len(converted_weights)):
+        raise ValueError(
+            "The `converted_paths` and `converted_weights` should be the same "
+            f"length. Got {cpl} and {cwl}, respectively, for {path}."
+        )
+
+    return zip(converted_paths, converted_weights)
 
 
 def transpose_reshape(x: torch.Tensor) -> torch.Tensor:
-  x = x.transpose(1, 2)
-  return x.reshape(x.shape[0] * x.shape[1], x.shape[2]).contiguous()
+    x = x.transpose(1, 2)
+    return x.reshape(x.shape[0] * x.shape[1], x.shape[2]).contiguous()
 
 
 @dataclasses.dataclass(frozen=True)
 class ConversionResult:
-  state_tree: dict[str, torch.Tensor]
-  config: Gemma3Config
+    state_tree: dict[str, torch.Tensor]
+    config: Gemma3Config
 
 
 def convert(
-    variant: str,
     checkpoint_path: str,
     config: Gemma3Config,
     target_dtype: torch.dtype,
-    tokenizer: GemmaTokenizer,
 ) -> ConversionResult:
-  """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
-  checkpointer = obc.PyTreeCheckpointer()
-  ckpt = checkpointer.restore(checkpoint_path)
-  hf_tree: dict[str, torch.Tensor] = {}
+    """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
+    checkpointer = obc.PyTreeCheckpointer()
+    ckpt = checkpointer.restore(checkpoint_path)
+    hf_tree: dict[str, torch.Tensor] = {}
 
-  for paths, value in tree.flatten_with_path(ckpt):
-    if paths[0].startswith('SigLiPFromPatches_'):
-        path, weights = _convert_siglip_weight(config=config.vision_config, paths=paths, weights=value)
-    else:
-        path, weights = _convert_transformer_weights(config=config.text_config, paths=paths, weights=value)
-
-    if path and weights is not None:
+    def update_tree(path: str, weights: np.ndarray) -> None:
         logging.info(
             "%s converted from shape=%s to shape=%s with dtype=%s",
             path,
@@ -349,66 +396,64 @@ def convert(
             weights.shape,
             weights.dtype,
         )
-        hf_tree[path] = weights
+        hf_tree[path] = torch.from_numpy(weights.astype("float32")).type(target_dtype)
 
-  return ConversionResult(state_tree=hf_tree, config=config)
+    for paths, value in tree.flatten_with_path(ckpt):
+        if paths[0].startswith("SigLiPFromPatches_"):
+            if config.vision_config is None:
+                continue
 
+            path, weights = _convert_siglip_weight(
+                config=config.vision_config, paths=paths, weights=value
+            )
+            update_tree(path, weights)
+        else:
+            for path, weights in _convert_transformer_weights(
+                config=config.text_config, paths=paths, weights=value
+            ):
+                if config.vision_config is None:
+                    path = path[len("language_model."):]
 
-def validate(
-    path: str,
-    gemma_model_cls: Any
-):
-  """Runs some sample prompts through the model."""
-  model = gemma_model_cls.from_pretrained(path)
-  tokenizer = GemmaTokenizer.from_pretrained(path)
-  prompts = [
-      "import sys; sys.",
-      (
-          '<|fim_prefix|>import <|fim_suffix|>\nif __name__ == "__main__":\n '
-          " sys.exit(0)\n<|fim_middle|>"
-      ),
-  ]
-  for prompt in prompts:
-    logging.info("Prompt: %s", prompt)
-    inputs = tokenizer(prompt, return_tensors="pt")
-    logging.info("Inputs: %s", inputs)
-    generate_ids = model.generate(inputs.input_ids, max_new_tokens=30)
-    logging.info("Generates: %s", generate_ids)
-    r = tokenizer.batch_decode(generate_ids, skip_special_token=True)[0]
-    logging.info("All together: %s", r)
+                update_tree(path, weights)
+
+    return ConversionResult(state_tree=hf_tree, config=config)
 
 
 def main(*args):
-  del args
+    del args
 
-  variant = _VARIANT.value
-  dtype = _PRECISION.value
-  logging.info('Converting Gemma 3 (%s) @ %s', variant, dtype)
-  tokenizer = GemmaTokenizer(_TOKENIZER_PATH.value)
+    variant = _VARIANT.value
+    dtype = _PRECISION.value
+    logging.info("Converting Gemma 3 (%s) @ %s", variant, dtype)
+    tokenizer = GemmaTokenizer(_TOKENIZER_PATH.value)
 
-  config = _VARIANTS[variant]
-  logging.info('Gemma 3 (%s) configured as: %s', variant, config)
-  result = convert(
-      variant, _CHECKPOINT_PATH.value, config, getattr(torch, dtype), tokenizer
-  )
-  hf_tree = result.state_tree
-  config = result.config
+    config = _VARIANTS[variant]
+    logging.info("Gemma 3 (%s) configured as: %s", variant, config)
+    result = convert(_CHECKPOINT_PATH.value, config, getattr(torch, dtype))
+    hf_tree = result.state_tree
+    config = result.config
 
-  # with accelerate.init_empty_weights():
-  #   model = gemma_model_cls(config)
-  # model.load_state_dict(hf_tree, assign=True, strict=True)
-  # model.config.torch_dtype = dtype
-  # del model.config._name_or_path  # pylint: disable=protected-access
+    with accelerate.init_empty_weights():
+        if config.vision_config is not None:
+            model = Gemma3ForConditionalGeneration(config)
+        else:
+            model = Gemma3ForCausalLM(config=config.text_config)
 
-  # model.save_pretrained(_OUTPUT_PATH.value, safe_serialization=True)
-  # del hf_tree
-  # del model
+    model.load_state_dict(hf_tree, assign=True, strict=True)
+    model.config.torch_dtype = dtype
+    logging.info(
+        "Does this model have an inintended config param? %s",
+        model.config._name_or_path,
+    )
+    # del model.config._name_or_path  # pylint: disable=protected-access
 
-  tokenizer.save_pretrained(_OUTPUT_PATH.value)
-  del tokenizer
+    model.save_pretrained(_OUTPUT_PATH.value, safe_serialization=True)
+    del hf_tree
+    del model
 
-  # validate(_OUTPUT_PATH.value, gemma_model_cls)
+    tokenizer.save_pretrained(_OUTPUT_PATH.value)
+    del tokenizer
 
 
 if __name__ == "__main__":
-  app.run(main)
+    app.run(main)
