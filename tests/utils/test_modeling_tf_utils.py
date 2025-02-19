@@ -33,7 +33,6 @@ from transformers.testing_utils import (  # noqa: F401
     USER,
     CaptureLogger,
     TemporaryHubRepo,
-    _tf_gpu_memory_limit,
     is_staging_test,
     require_safetensors,
     require_tf,
@@ -67,20 +66,6 @@ if is_tf_available():
     from transformers.tf_utils import stable_softmax
 
     tf.config.experimental.enable_tensor_float_32_execution(False)
-
-    if _tf_gpu_memory_limit is not None:
-        gpus = tf.config.list_physical_devices("GPU")
-        for gpu in gpus:
-            # Restrict TensorFlow to only allocate x GB of memory on the GPUs
-            try:
-                tf.config.set_logical_device_configuration(
-                    gpu, [tf.config.LogicalDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
-                )
-                logical_gpus = tf.config.list_logical_devices("GPU")
-                print("Logical GPUs", logical_gpus)
-            except RuntimeError as e:
-                # Virtual devices must be set before GPUs have been initialized
-                print(e)
 
 
 @require_tf
