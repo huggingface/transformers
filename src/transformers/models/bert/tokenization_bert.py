@@ -509,7 +509,8 @@ class BidirectionalWordpieceTokenizer(WordpieceTokenizer):
 
     def __init__(self, vocab, unk_token="[UNK]", max_input_chars_per_word=100):
         super().__init__(vocab=vocab, unk_token=unk_token, max_input_chars_per_word=max_input_chars_per_word)
-        self.backward_vocab = {k[::-1]: v for k, v in vocab.items()}
+        self.forward_vocab = vocab
+        self.backward_vocab = {k[::-1]: v for k, v in self.forward_vocab.items()}
 
     def tokenize(self, text):
         """Tokenizes a piece of text into its word pieces using bidirectional tokenization.
@@ -544,14 +545,14 @@ class BidirectionalWordpieceTokenizer(WordpieceTokenizer):
                     substr = "".join(chars[start:end])
                     if start > 0:
                         substr = "##" + substr
-                    if substr in self.vocab:
+                    if substr in self.forward_vocab:
                         cur_substr = substr
                         break
                     end -= 1
                 if cur_substr is None:
                     is_bad_forward = True
                     break
-                forward_sub_tokens.append((cur_substr, self.vocab[cur_substr]))
+                forward_sub_tokens.append((cur_substr, self.forward_vocab[cur_substr]))
                 start = end
 
             # Backward tokenization
