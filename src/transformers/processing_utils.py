@@ -40,7 +40,6 @@ from .image_utils import (
     load_video,
 )
 
-
 if is_vision_available():
     from .image_utils import PILImageResampling
 
@@ -470,9 +469,9 @@ class ProcessorMixin(PushToHubMixin):
             # Nothing is ever going to be an instance of "AutoXxx", in that case we check the base class.
             class_name = AUTO_TO_BASE_CLASS_MAPPING.get(class_name, class_name)
             if isinstance(class_name, tuple):
-                proper_class = tuple(getattr(transformers_module, n) for n in class_name if n is not None)
+                proper_class = tuple(self.get_possibly_dynamic_module(n) for n in class_name if n is not None)
             else:
-                proper_class = getattr(transformers_module, class_name)
+                proper_class = self.get_possibly_dynamic_module(class_name)
 
             if not isinstance(arg, proper_class):
                 raise TypeError(
@@ -1117,17 +1116,29 @@ class ProcessorMixin(PushToHubMixin):
                         f"Only the `tokenizer_class` attribute can have a tuple of classes. "
                         f" Got {attribute_name} with {class_name}."
                     )
-                classes = tuple(getattr(transformers_module, n, None) if n is not None else None for n in class_name)
+                classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = getattr(transformers_module, class_name)
+                attribute_class = cls.get_possibly_dynamic_module(class_name)
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
+
+    @staticmethod
+    def get_possibly_dynamic_module(module_name):
+        if hasattr(transformers_module, module_name):
+            return getattr(transformers_module, module_name)
+        elif module_name in transformers_module.models.auto.auto_factory.ALL_CUSTOM_CLASSES:
+            return transformers_module.models.auto.auto_factory.ALL_CUSTOM_CLASSES[module_name]
+        else:
+            raise ValueError(f"Could not find module {module_name} in `transformers`. If this is a custom class, "
+                             f"it should be registered using the relevant `AutoClass.register()` function so that "
+                             f"other functions can find it!")
+
 
     @property
     def model_input_names(self):
