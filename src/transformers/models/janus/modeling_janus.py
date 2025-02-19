@@ -953,6 +953,7 @@ class JanusVQVAEVectorQuantizer(nn.Module):
         emb_dim: int = self.embedding.weight.shape[-1]
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
+        hidden_state_quant = F.normalize(hidden_state_quant, p=2, dim=-1)
 
         # reshape back to match original input shape
         hidden_state_quant = hidden_state_quant.view((batch_size, *self.quant_state_dims, emb_dim))
@@ -1223,12 +1224,12 @@ class JanusVQVAEDecoder(nn.Module):
         hidden_state = self.mid.block_2(hidden_state)
 
         # upsampling
-        for i_level in reversed(range(self.num_resolutions)):
+        for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks + 1):
                 hidden_state = self.up[i_level].block[i_block](hidden_state)
                 if len(self.up[i_level].attn) > 0:
                     hidden_state = self.up[i_level].attn[i_block](hidden_state)
-            if i_level != 0:
+            if i_level != self.num_resolutions - 1:
                 hidden_state = self.up[i_level].upsample(hidden_state)
 
         hidden_state = self.norm_out(hidden_state)

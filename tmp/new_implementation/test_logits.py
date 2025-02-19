@@ -6,6 +6,7 @@ functions that generate images are called will change
 """
 
 import argparse
+import gc
 import os
 import PIL.Image
 import torch
@@ -17,12 +18,15 @@ def main(args):
     enable_full_determinism(0)
 
     # Emu3 example also loads this class like this in tests and in the docs, instead of using Auto
-    model = JanusForConditionalGeneration(JanusConfig())
-    # use bfloat16
+    model = JanusForConditionalGeneration(JanusConfig(vq_config={"resolution": 384}))
+    # bfloat16 has a problem regarding the cuda implementation of triu on my local device (this does not happen when
+    # running on remote multi-gpu)
     # model = model.eval().to(dtype=torch.bfloat16, device="cuda")
     model = model.eval().to(device="cuda")
-    torch.load(args.model_path)
-
+    d = torch.load(args.model_path)
+    # delete the key vqmodel.quantize.codebook_used
+    del d["vqmodel.quantize.codebook_used"]
+    model.load_state_dict(d)
     answers = torch.load(args.answers_file)
     # TODO: These parameters are passed via inference code directly in the Janus codebase, change later
     parallel_size = 4
@@ -63,9 +67,29 @@ def main(args):
             # No need for the following, as llm is being abstracted away
             # inputs_embeds = answers["inputs_embeds_list"][i].cuda()
 
-    dec = model.gen_vision.decode_code(generated_tokens.to(dtype=torch.int),
-                                                shape=[parallel_size, 8, img_size // patch_size, img_size // patch_size])
-    assert torch.isclose(dec.cpu(), answers["dec"], atol=1e-3).all()
+
+    del model.vision_model
+    del model.aligner
+    del model.gen_aligner
+    del model.gen_embed
+    del model.gen_head
+    del model.language_model
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # decoding normally is not matching, see intermediate steps
+    # dec = model.vqmodel.decode(generated_tokens.to(dtype=torch.int))
+    # assert torch.isclose(dec.cpu(), answers["dec"], atol=1e-3).all()
+
+    codebook_entry = model.vqmodel.quantize.get_codebook_entry(generated_tokens.to(dtype=torch.int))
+    assert torch.isclose(codebook_entry.cpu(), answers["dec_quant_b"], atol=1e-3).all()
+    hidden_states = model.vqmodel.post_quant_conv(codebook_entry)
+    assert torch.isclose(hidden_states.cpu(), answers["dec_quant"], atol=1e-3).all()
+    pixel_values = model.vqmodel.decoder(answers["dec_quant"].cuda())
+    # This does not match. I believe it is due to different cuda versions between my docker container to run Janus
+    # and the env in which I was developing transformers
+    assert torch.isclose(pixel_values.cpu(), answers["dec_dec"], atol=1e-3).all()
+
     # No need for the rest of the code, they are all operations that do not depend on the model
 
 if __name__ == '__main__':
