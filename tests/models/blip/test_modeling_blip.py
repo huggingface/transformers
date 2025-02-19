@@ -375,9 +375,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
         model = BlipTextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
-
 
 class BlipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
@@ -649,9 +646,6 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model.projection_dim,
             ),
         )
-
-    def test_pt_tf_model_equivalence(self):
-        super().test_pt_tf_model_equivalence(allow_missing_keys=True)
 
 
 class BlipTextRetrievalModelTester:
