@@ -1915,3 +1915,6 @@ class AutoModelWithLMHead(_AutoModelWithLMHead):
             FutureWarning,
         )
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+
+ALL_CUSTOM_CLASSES = {}

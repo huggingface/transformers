@@ -26,6 +26,7 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, Union
 
+import models.auto.modeling_auto
 import numpy as np
 import typing_extensions
 
@@ -39,6 +40,7 @@ from .image_utils import (
     load_image,
     load_video,
 )
+
 
 if is_vision_available():
     from .image_utils import PILImageResampling
@@ -1132,13 +1134,14 @@ class ProcessorMixin(PushToHubMixin):
     def get_possibly_dynamic_module(module_name):
         if hasattr(transformers_module, module_name):
             return getattr(transformers_module, module_name)
-        elif module_name in transformers_module.models.auto.auto_factory.ALL_CUSTOM_CLASSES:
-            return transformers_module.models.auto.auto_factory.ALL_CUSTOM_CLASSES[module_name]
+        elif module_name in models.auto.modeling_auto.ALL_CUSTOM_CLASSES:
+            return models.auto.modeling_auto.ALL_CUSTOM_CLASSES[module_name]
         else:
-            raise ValueError(f"Could not find module {module_name} in `transformers`. If this is a custom class, "
-                             f"it should be registered using the relevant `AutoClass.register()` function so that "
-                             f"other functions can find it!")
-
+            raise ValueError(
+                f"Could not find module {module_name} in `transformers`. If this is a custom class, "
+                f"it should be registered using the relevant `AutoClass.register()` function so that "
+                f"other functions can find it!"
+            )
 
     @property
     def model_input_names(self):
