@@ -58,21 +58,7 @@ class DetrImageProcessorFast(metaclass=DummyObject):
         requires_backends(self, ["torchvision"])
 
 
-class Mask2FormerImageProcessorFast(metaclass=DummyObject):
-    _backends = ["torchvision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torchvision"])
-
-
 class LlavaImageProcessorFast(metaclass=DummyObject):
-    _backends = ["torchvision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torchvision"])
-
-
-class MaskFormerImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
@@ -87,6 +73,20 @@ class LlavaNextImageProcessorFast(metaclass=DummyObject):
 
 
 class LlavaOnevisionImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
+class Mask2FormerImageProcessorFast(metaclass=DummyObject):
+    _backends = ["torchvision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torchvision"])
+
+
+class MaskFormerImageProcessorFast(metaclass=DummyObject):
     _backends = ["torchvision"]
 
     def __init__(self, *args, **kwargs):
