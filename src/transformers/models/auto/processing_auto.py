@@ -375,8 +375,9 @@ class AutoProcessor:
         Args:
             config_class ([`PretrainedConfig`]):
                 The configuration corresponding to the model to register.
-            processor_class ([`FeatureExtractorMixin`]): The processor to register.
+            processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
         if processor_class.__name__ not in ALL_CUSTOM_CLASSES:
             ALL_CUSTOM_CLASSES[processor_class.__name__] = processor_class
+        processor_class._auto_class = "AutoProcessor"

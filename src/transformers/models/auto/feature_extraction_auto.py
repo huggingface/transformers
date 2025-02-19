@@ -405,3 +405,4 @@ class AutoFeatureExtractor:
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
         if feature_extractor_class.__name__ not in ALL_CUSTOM_CLASSES:
             ALL_CUSTOM_CLASSES[feature_extractor_class.__name__] = feature_extractor_class
+        feature_extractor_class._auto_class = "AutoFeatureExtractor"
