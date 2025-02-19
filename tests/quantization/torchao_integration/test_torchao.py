@@ -30,7 +30,11 @@ if is_torch_available():
     import torch
 
 if is_torchao_available():
-    from torchao.dtypes import AffineQuantizedTensor, Int4CPULayout, TensorCoreTiledLayout
+    from torchao.dtypes import (
+        AffineQuantizedTensor,
+        Int4CPULayout,
+        TensorCoreTiledLayout,
+    )
 
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
@@ -80,6 +84,16 @@ class TorchAoConfigTest(unittest.TestCase):
         """
         quantization_config = TorchAoConfig("int4_weight_only", modules_to_not_convert=["conv"], group_size=8)
         repr(quantization_config)
+
+    def test_json_serializable(self):
+        """
+        Check that the config dict can be JSON serialized.
+        """
+        quantization_config = TorchAoConfig("int4_weight_only", group_size=32, layout=TensorCoreTiledLayout())
+        d = quantization_config.to_dict()
+        self.assertIsInstance(d["quant_type_kwargs"]["layout"], dict)
+        self.assertTrue("inner_k_tiles" in d["quant_type_kwargs"]["layout"])
+        quantization_config.to_json_string(use_diff=False)
 
 
 @require_torchao
