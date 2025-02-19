@@ -22,8 +22,8 @@ from transformers.models.bert.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
     BertTokenizer,
-    WordpieceTokenizer,
     BidirectionalWordpieceTokenizer,
+    WordpieceTokenizer,
     _is_control,
     _is_punctuation,
     _is_whitespace,
@@ -31,7 +31,6 @@ from transformers.models.bert.tokenization_bert import (
 from transformers.testing_utils import require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin, filter_non_english
-
 
 @require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
@@ -196,22 +195,16 @@ class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab = {}
         for i, token in enumerate(vocab_tokens):
             vocab[token] = i
-        tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
-            
+        _ = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
+
     def test_bidirectional_wordpiece_tokenizer(self):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
         vocab = {token: i for i, token in enumerate(vocab_tokens)}
-        
+
         tokenizer = BidirectionalWordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
-        
-        self.assertListEqual(tokenizer.tokenize(""), [])
-        self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
-        self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
 
         self.assertListEqual(tokenizer.tokenize(""), [])
-
         self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
-
         self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
 
     def test_is_whitespace(self):
