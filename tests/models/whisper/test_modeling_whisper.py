@@ -1069,10 +1069,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             self.assertTrue(models_equal)
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as test recently became flaky
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
     def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
         # We override with a slightly higher tol value, as test recently became flaky
         super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
