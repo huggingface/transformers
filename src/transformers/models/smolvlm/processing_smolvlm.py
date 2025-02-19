@@ -17,7 +17,6 @@ Processor class for SmolVLM.
 """
 
 import copy
-import re
 from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
@@ -25,7 +24,6 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
     VideoInput,
-    is_valid_image,
     make_batched_videos,
     make_nested_list_of_images,
 )
@@ -50,18 +48,6 @@ if is_num2words_available():
     from num2words import num2words
 else:
     num2words = None
-
-
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-def is_str(val) -> bool:
-    return isinstance(val, str)
-
-
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
 
 
 def _prompt_split_image(
@@ -130,8 +116,6 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-SmolVLMProcessorKwargs.__annotations__["images_kwargs"] = SmolVLMImagesKwargs  # python 3.8 compatibility
-
 
 class SmolVLMProcessor(ProcessorMixin):
     r"""
@@ -174,7 +158,7 @@ class SmolVLMProcessor(ProcessorMixin):
         self.default_max_frames = image_processor.video_sampling["max_frames"]
         self.default_fps = image_processor.video_sampling["fps"]
         # Matches one or more occurrences of <row_x_col_y> tags (where x and y are digits, optionally surrounded by newline characters
-        self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
+        #self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
 
         if not num2words:
             raise ImportError(
@@ -424,7 +408,7 @@ class SmolVLMProcessor(ProcessorMixin):
         refer to the docstring of this method for more information.
         """
         batched_decode_output = self.tokenizer.batch_decode(*args, **kwargs)
-        return [self._regex_to_remove_extra_special_tokens.sub("<image>", s) for s in batched_decode_output]
+        return batched_decode_output
 
     def decode(self, *args, **kwargs):
         """
@@ -432,7 +416,7 @@ class SmolVLMProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         decode_output = self.tokenizer.decode(*args, **kwargs)
-        return self._regex_to_remove_extra_special_tokens.sub("<image>", decode_output)
+        return decode_output
 
     @property
     def model_input_names(self):
