@@ -106,8 +106,6 @@ class GroundingDinoConfig(PretrainedConfig):
         disable_custom_kernels (`bool`, *optional*, defaults to `False`):
             Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
             kernels are not supported by PyTorch ONNX export.
-        class_reduction (`str`, *optional*, defaults to `"sum"`):
-            The reduction method for the classification loss. One of `"mean"` or `"sum"`.
         max_text_len (`int`, *optional*, defaults to 256):
             The maximum length of the text input.
         text_enhancer_dropout (`float`, *optional*, defaults to 0.0):
@@ -188,7 +186,6 @@ class GroundingDinoConfig(PretrainedConfig):
         focal_alpha=0.25,
         disable_custom_kernels=False,
         # other parameters
-        class_reduction="sum",
         max_text_len=256,
         text_enhancer_dropout=0.0,
         fusion_droppath=0.1,
@@ -278,7 +275,6 @@ class GroundingDinoConfig(PretrainedConfig):
         self.fusion_droppath = fusion_droppath
         self.fusion_dropout = fusion_dropout
         # Others
-        self.class_reduction = class_reduction
         self.embedding_init_target = embedding_init_target
         self.query_dim = query_dim
         self.decoder_bbox_embed_share = decoder_bbox_embed_share

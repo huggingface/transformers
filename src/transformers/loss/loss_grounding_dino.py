@@ -18,7 +18,6 @@ def sigmoid_focal_loss(
     targets: torch.Tensor,
     num_boxes: int,
     num_queries: int,
-    reduction: str = "mean",
     alpha: float = 0.25,
     gamma: float = 2,
 ):
@@ -35,8 +34,6 @@ def sigmoid_focal_loss(
             The total number of boxes in the batch.
         num_queries (`int`):
             The number of query boxes per image.
-        reduction (`str`, *optional*, defaults to `'mean'`):
-            Specifies the redction to apply to the loss. Can be either `'mean'`, or `'sum'`.
         alpha (`float`, *optional*, defaults to 0.25):
             Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
         gamma (`int`, *optional*, defaults to 2):
@@ -55,12 +52,7 @@ def sigmoid_focal_loss(
         alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
         loss = alpha_t * loss
 
-    if reduction == "mean":
-        return loss.sum() / num_queries / num_boxes
-    elif reduction == "sum":
-        return loss.sum() / num_boxes
-    else:
-        raise ValueError(f"{reduction} is not a valid reduction method")
+    return loss.sum() / num_boxes
 
 
 class GroundingDinoHungarianMatcher(HungarianMatcher):
@@ -135,8 +127,6 @@ class GroundingDinoImageLoss(ImageLoss):
             Module able to compute a matching between targets and proposals.
         focal_alpha (`float`):
             Alpha parameter in focal loss.
-        class_reduction (`str`):
-            Specifies the reduction to apply to the label loss. Can be either `'mean'` or `'sum'`
         losses (`List[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
@@ -145,7 +135,6 @@ class GroundingDinoImageLoss(ImageLoss):
         nn.Module.__init__(self)
         self.matcher = matcher
         self.focal_alpha = focal_alpha
-        self.class_reduction = class_reduction
         self.losses = losses
 
     def _get_target_classes_one_hot(self, outputs, targets, indices):
@@ -194,7 +183,6 @@ class GroundingDinoImageLoss(ImageLoss):
             targets=target_classes_onehot,
             num_boxes=num_boxes,
             num_queries=num_queries,
-            reduction=self.class_reduction,
             alpha=self.focal_alpha,
             gamma=2,
         )
@@ -226,7 +214,6 @@ def GroundingDinoForObjectDetectionLoss(
     criterion = GroundingDinoImageLoss(
         matcher=matcher,
         focal_alpha=config.focal_alpha,
-        class_reduction=config.class_reduction,
         losses=losses,
     )
     criterion.to(device)

@@ -794,9 +794,10 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
         text_inputs = tokenizer([prompt, prompt], return_tensors="pt")
         image_inputs = image_processor(images=ds["image"], annotations=ds["annotations"], return_tensors="pt")
 
-        # Passing class_reduction="sum" and auxiliary_loss=True to compare with the expected loss
+        # Passing auxiliary_loss=True to compare with the expected loss
         model = GroundingDinoForObjectDetection.from_pretrained(
-            "IDEA-Research/grounding-dino-tiny", auxiliary_loss=True, class_reduction="sum"
+            "IDEA-Research/grounding-dino-tiny",
+            auxiliary_loss=True,
         )
         # Interested in the loss only
         model.eval()
