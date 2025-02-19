@@ -237,7 +237,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_generate_continue_from_past_key_values(self):
         super().test_generate_continue_from_past_key_values()
 
-    @skipIfRocm(arch=['gfx942','gfx1201','gfx1200'])
+    @skipIfRocm(arch=['gfx942','gfx1201','gfx1200','gfx90a'])
     def test_generate_with_static_cache(self):
         super().test_generate_with_static_cache()
 
