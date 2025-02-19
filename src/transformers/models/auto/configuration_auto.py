@@ -24,6 +24,7 @@ from typing import List, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
+from .auto_factory import ALL_CUSTOM_CLASSES
 
 
 logger = logging.get_logger(__name__)
@@ -1139,3 +1140,5 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
+        if config.__class__.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[config.__class__.__name__] = config.__class__

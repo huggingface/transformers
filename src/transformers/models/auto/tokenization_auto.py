@@ -35,7 +35,7 @@ from ...utils import (
     logging,
 )
 from ..encoder_decoder import EncoderDecoderConfig
-from .auto_factory import _LazyAutoMapping
+from .auto_factory import _LazyAutoMapping, ALL_CUSTOM_CLASSES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -1024,3 +1024,7 @@ class AutoTokenizer:
                 fast_tokenizer_class = existing_fast
 
         TOKENIZER_MAPPING.register(config_class, (slow_tokenizer_class, fast_tokenizer_class), exist_ok=exist_ok)
+        if slow_tokenizer_class is not None and slow_tokenizer_class.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[slow_tokenizer_class.__name__] = slow_tokenizer_class
+        if fast_tokenizer_class is not None and fast_tokenizer_class.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[fast_tokenizer_class.__name__] = fast_tokenizer_class

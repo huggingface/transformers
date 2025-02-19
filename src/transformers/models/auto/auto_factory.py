@@ -42,6 +42,8 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+ALL_CUSTOM_CLASSES = {}
+
 
 CLASS_DOCSTRING = """
     This is a generic model class that will be instantiated as one of the model classes of the library when created
@@ -587,6 +589,8 @@ class _BaseAutoModelClass:
                 "one of those so they match!"
             )
         cls._model_mapping.register(config_class, model_class, exist_ok=exist_ok)
+        if model_class.__name__ not in ALL_CUSTOM_CLASSES:
+            ALL_CUSTOM_CLASSES[model_class.__name__] = model_class
 
 
 class _BaseAutoBackboneClass(_BaseAutoModelClass):
