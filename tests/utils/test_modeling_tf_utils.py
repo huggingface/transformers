@@ -26,7 +26,7 @@ import unittest.mock as mock
 from huggingface_hub import HfFolder, snapshot_download
 from requests.exceptions import HTTPError
 
-from transformers import is_tf_available, is_torch_available
+from transformers import is_tf_available
 from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import (  # noqa: F401
     TOKEN,
@@ -81,9 +81,6 @@ if is_tf_available():
             except RuntimeError as e:
                 # Virtual devices must be set before GPUs have been initialized
                 print(e)
-
-if is_torch_available():
-    pass
 
 
 @require_tf

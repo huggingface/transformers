@@ -22,7 +22,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_tf_available, is_torch_available
+from transformers import is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from ...test_modeling_tf_common import ids_tensor
@@ -49,9 +49,6 @@ if is_tf_available():
         TFRobertaModel,
     )
     from transformers.modeling_tf_outputs import TFBaseModelOutput
-
-if is_torch_available():
-    pass
 
 
 @require_tf

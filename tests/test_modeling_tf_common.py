@@ -29,7 +29,7 @@ from typing import List, Tuple
 
 from datasets import Dataset
 
-from transformers import is_tf_available, is_torch_available
+from transformers import is_tf_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (  # noqa: F401
     CaptureLogger,
@@ -86,9 +86,6 @@ if is_tf_available():
             except RuntimeError as e:
                 # Virtual devices must be set before GPUs have been initialized
                 print(e)
-
-if is_torch_available():
-    pass
 
 
 def _config_zero_init(config):

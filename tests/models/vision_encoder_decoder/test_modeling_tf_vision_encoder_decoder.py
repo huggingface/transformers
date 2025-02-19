@@ -22,7 +22,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_tf_available, is_torch_available, is_vision_available
+from transformers import is_tf_available, is_vision_available
 from transformers.testing_utils import (
     require_tf,
     require_vision,
@@ -49,9 +49,6 @@ if is_tf_available():
         VisionEncoderDecoderConfig,
     )
     from transformers.modeling_tf_outputs import TFBaseModelOutput
-
-if is_torch_available():
-    pass
 
 if is_vision_available():
     from PIL import Image
