@@ -40,6 +40,7 @@ Before you begin, make sure you have all the necessary libraries installed:
 ```bash
 pip install transformers bitsandbytes>=0.39.0 -q
 ```
+Bitsandbytes supports multiple backends in addition to CUDA-based GPUs. Refer to the multi-backend installation [guide](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend) to learn more.
 
 
 ## Generate text
@@ -101,9 +102,11 @@ Next, you need to preprocess your text input with a [tokenizer](tokenizer_summar
 
 ```py
 >>> from transformers import AutoTokenizer
+>>> from accelerate.test_utils.testing import get_backend
 
+>>> DEVICE, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", padding_side="left")
->>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to(DEVICE)
 ```
 
 The `model_inputs` variable holds the tokenized text input, as well as the attention mask. While [`~generation.GenerationMixin.generate`] does its best effort to infer the attention mask when it is not passed, we recommend passing it whenever possible for optimal results.
@@ -122,7 +125,7 @@ Finally, you don't need to do it one sequence at a time! You can batch your inpu
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
 >>> model_inputs = tokenizer(
 ...     ["A list of colors: red, blue", "Portugal is"], return_tensors="pt", padding=True
-... ).to("cuda")
+... ).to(DEVICE)
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ['A list of colors: red, blue, green, yellow, orange, purple, pink,',
@@ -152,7 +155,7 @@ If not specified in the [`~generation.GenerationConfig`] file, `generate` return
 
 
 ```py
->>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to(DEVICE)
 
 >>> # By default, the output will contain up to 20 tokens
 >>> generated_ids = model.generate(**model_inputs)
@@ -174,7 +177,7 @@ By default, and unless specified in the [`~generation.GenerationConfig`] file, `
 >>> from transformers import set_seed
 >>> set_seed(42)
 
->>> model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to(DEVICE)
 
 >>> # LLM + greedy decoding = repetitive, boring output
 >>> generated_ids = model.generate(**model_inputs)
@@ -196,7 +199,7 @@ LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt
 >>> # which is shorter, has padding on the right side. Generation fails to capture the logic.
 >>> model_inputs = tokenizer(
 ...     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-... ).to("cuda")
+... ).to(DEVICE)
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 33333333333'
@@ -206,7 +209,7 @@ LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt
 >>> tokenizer.pad_token = tokenizer.eos_token  # Most LLMs don't have a pad token by default
 >>> model_inputs = tokenizer(
 ...     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
-... ).to("cuda")
+... ).to(DEVICE)
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 '1, 2, 3, 4, 5, 6,'
@@ -223,7 +226,7 @@ Some models and tasks expect a certain input prompt format to work properly. Whe
 ... )
 >>> set_seed(0)
 >>> prompt = """How many helicopters can a human eat in one sitting? Reply as a thug."""
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer([prompt], return_tensors="pt").to(DEVICE)
 >>> input_length = model_inputs.input_ids.shape[1]
 >>> generated_ids = model.generate(**model_inputs, max_new_tokens=20)
 >>> print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])
@@ -239,7 +242,7 @@ Some models and tasks expect a certain input prompt format to work properly. Whe
 ...     },
 ...     {"role": "user", "content": "How many helicopters can a human eat in one sitting?"},
 ... ]
->>> model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to("cuda")
+>>> model_inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(DEVICE)
 >>> input_length = model_inputs.shape[1]
 >>> generated_ids = model.generate(model_inputs, do_sample=True, max_new_tokens=20)
 >>> print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_tokens=True)[0])

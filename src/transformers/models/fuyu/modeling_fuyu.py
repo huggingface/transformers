@@ -239,6 +239,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -327,6 +328,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             labels=labels,
             use_cache=use_cache,
             return_dict=return_dict,
+            **kwargs,
         )
 
         return outputs

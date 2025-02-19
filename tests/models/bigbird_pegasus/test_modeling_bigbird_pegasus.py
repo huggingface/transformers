@@ -250,7 +250,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (BigBirdPegasusForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": BigBirdPegasusModel,
@@ -792,7 +791,6 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (BigBirdPegasusForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

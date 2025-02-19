@@ -64,18 +64,19 @@ Here's how to use the model for zero-shot object detection:
 
 >>> results = processor.post_process_grounded_object_detection(
 ...     outputs,
-...     threshold=0.4,
+...     inputs.input_ids,
+...     box_threshold=0.4,
 ...     text_threshold=0.3,
-...     target_sizes=[(image.height, image.width)]
+...     target_sizes=[image.size[::-1]]
 ... )
->>> # Retrieve the first image result
+
+# Retrieve the first image result
 >>> result = results[0]
->>> for box, score, text_label in zip(result["boxes"], result["scores"], result["text_labels"]):
+>>> for box, score, labels in zip(result["boxes"], result["scores"], result["labels"]):
 ...     box = [round(x, 2) for x in box.tolist()]
-...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
-Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.28]
-Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
-Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
+...     print(f"Detected {labels} with confidence {round(score.item(), 3)} at location {box}")
+Detected a cat with confidence 0.468 at location [344.78, 22.9, 637.3, 373.62]
+Detected a cat with confidence 0.426 at location [11.74, 51.55, 316.51, 473.22]
 ```
 
 ## Grounded SAM

@@ -15,6 +15,7 @@ import warnings
 from typing import Dict, Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
+from ..utils import logging
 from ..utils.quantization_config import (
     AqlmConfig,
     AwqConfig,
@@ -23,15 +24,18 @@ from ..utils.quantization_config import (
     CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
+    FineGrainedFP8Config,
     GPTQConfig,
     HiggsConfig,
     HqqConfig,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
+    SpQRConfig,
     TorchAoConfig,
     VptqConfig,
 )
+from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bitnet import BitNetHfQuantizer
@@ -40,10 +44,12 @@ from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
+from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
+from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
 
@@ -63,6 +69,8 @@ AUTO_QUANTIZER_MAPPING = {
     "torchao": TorchAoHfQuantizer,
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
+    "spqr": SpQRHfQuantizer,
+    "fp8": FineGrainedFP8HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -80,7 +88,11 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "torchao": TorchAoConfig,
     "bitnet": BitNetConfig,
     "vptq": VptqConfig,
+    "spqr": SpQRConfig,
+    "fp8": FineGrainedFP8Config,
 }
+
+logger = logging.get_logger(__name__)
 
 
 class AutoQuantizationConfig:
@@ -195,3 +207,55 @@ class AutoHfQuantizer:
             warnings.warn(warning_msg)
 
         return quantization_config
+
+    @staticmethod
+    def supports_quant_method(quantization_config_dict):
+        quant_method = quantization_config_dict.get("quant_method", None)
+        if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
+            suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
+            quant_method = QuantizationMethod.BITS_AND_BYTES + suffix
+        elif quant_method is None:
+            raise ValueError(
+                "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
+            )
+
+        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING.keys():
+            logger.warning(
+                f"Unknown quantization type, got {quant_method} - supported types are:"
+                f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
+                "To remove the warning, you can delete the quantization_config attribute in config.json"
+            )
+            return False
+        return True
+
+
+def register_quantization_config(method: str):
+    """Register a custom quantization configuration."""
+
+    def register_config_fn(cls):
+        if method in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(f"Config '{method}' already registered")
+
+        if not issubclass(cls, QuantizationConfigMixin):
+            raise ValueError("Config must extend QuantizationConfigMixin")
+
+        AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
+        return cls
+
+    return register_config_fn
+
+
+def register_quantizer(name: str):
+    """Register a custom quantizer."""
+
+    def register_quantizer_fn(cls):
+        if name in AUTO_QUANTIZER_MAPPING:
+            raise ValueError(f"Quantizer '{name}' already registered")
+
+        if not issubclass(cls, HfQuantizer):
+            raise ValueError("Quantizer must extend HfQuantizer")
+
+        AUTO_QUANTIZER_MAPPING[name] = cls
+        return cls
+
+    return register_quantizer_fn
