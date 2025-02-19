@@ -796,7 +796,7 @@ class GroundingDinoModelIntegrationTests(unittest.TestCase):
 
         # Passing class_reduction="sum" and auxiliary_loss=True to compare with the expected loss
         model = GroundingDinoForObjectDetection.from_pretrained(
-            "IDEA-Research/grounding-dino-tiny", auxiliary_loss=True, class_loss_reduction="sum"
+            "IDEA-Research/grounding-dino-tiny", auxiliary_loss=True, class_reduction="sum"
         )
         # Interested in the loss only
         model.eval()
