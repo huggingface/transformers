@@ -32,7 +32,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_tensorflow_probability, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -521,11 +521,6 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    @require_tensorflow_probability
-    @unittest.skip(reason="tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
-    def test_pt_tf_model_equivalence(self):
-        pass
 
     @unittest.skip(reason="tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
     def test_tf_from_pt_safetensors(self):

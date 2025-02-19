@@ -61,7 +61,6 @@ NOT_DEVICE_TESTS = {
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",
     "test_model_weights_reload_no_missing_tied_weights",
-    "test_pt_tf_model_equivalence",
     "test_mismatched_shapes_have_properly_initialized_weights",
     "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
     "test_model_is_small",
@@ -85,9 +84,6 @@ warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
 def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "is_pt_tf_cross_test: mark test to run only when PT and TF interactions are tested"
-    )
     config.addinivalue_line(
         "markers", "is_pt_flax_cross_test: mark test to run only when PT and FLAX interactions are tested"
     )
