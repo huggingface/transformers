@@ -634,3 +634,8 @@ class AutoImageProcessor:
             ALL_CUSTOM_CLASSES[slow_image_processor_class.__name__] = slow_image_processor_class
         if fast_image_processor_class is not None and fast_image_processor_class.__name__ not in ALL_CUSTOM_CLASSES:
             ALL_CUSTOM_CLASSES[fast_image_processor_class.__name__] = fast_image_processor_class
+
+        if slow_image_processor_class is not None:
+            slow_image_processor_class._auto_class = "AutoImageProcessor"
+        if fast_image_processor_class is not None:
+            fast_image_processor_class._auto_class = "AutoImageProcessor"
