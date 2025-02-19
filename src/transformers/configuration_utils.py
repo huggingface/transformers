@@ -1020,7 +1020,6 @@ class PretrainedConfig(PushToHubMixin):
         """
         cls._auto_class = "AutoConfig"
 
-
     @staticmethod
     def _get_global_generation_defaults() -> Dict[str, Any]:
         return {

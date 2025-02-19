@@ -34,6 +34,7 @@ from ...utils import (
     requires_backends,
 )
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+from .modeling_auto import ALL_CUSTOM_CLASSES
 
 
 if is_torch_available():
@@ -41,9 +42,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-ALL_CUSTOM_CLASSES = {}
-
 
 CLASS_DOCSTRING = """
     This is a generic model class that will be instantiated as one of the model classes of the library when created

@@ -29,7 +29,7 @@ from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
 from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, get_file_from_repo, logging
-from .auto_factory import _LazyAutoMapping, ALL_CUSTOM_CLASSES
+from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -38,6 +38,7 @@ from .configuration_auto import (
 )
 from .feature_extraction_auto import AutoFeatureExtractor
 from .image_processing_auto import AutoImageProcessor
+from .modeling_auto import ALL_CUSTOM_CLASSES
 from .tokenization_auto import AutoTokenizer
 
 

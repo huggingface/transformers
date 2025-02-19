@@ -24,7 +24,7 @@ from typing import List, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
-from .auto_factory import ALL_CUSTOM_CLASSES
+from .modeling_auto import ALL_CUSTOM_CLASSES
 
 
 logger = logging.get_logger(__name__)

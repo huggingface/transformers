@@ -26,13 +26,14 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
-from .auto_factory import _LazyAutoMapping, ALL_CUSTOM_CLASSES
+from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .modeling_auto import ALL_CUSTOM_CLASSES
 
 
 logger = logging.get_logger(__name__)

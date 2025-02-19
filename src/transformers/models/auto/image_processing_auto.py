@@ -36,13 +36,14 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from .auto_factory import _LazyAutoMapping, ALL_CUSTOM_CLASSES
+from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .modeling_auto import ALL_CUSTOM_CLASSES
 
 
 logger = logging.get_logger(__name__)
