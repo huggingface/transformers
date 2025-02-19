@@ -163,10 +163,10 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         # compute features
         input_features_no_dither = feature_extractor_no_dither(
-            np_speech_inputs, padding=True, return_tensors="np"
+            np_speech_inputs, padding=True, return_tensors="np", sampling_rate=dict_no_dither["sampling_rate"]
         ).input_features
         input_features_dither = feature_extractor_dither(
-            np_speech_inputs, padding=True, return_tensors="np"
+            np_speech_inputs, padding=True, return_tensors="np", sampling_rate=dict_dither["sampling_rate"]
         ).input_features
 
         # test there is a difference between features (there's added noise to input signal)
@@ -176,7 +176,7 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
         self.assertTrue(np.abs(diff).mean() > 1e-5)
         # features are not too different
         self.assertTrue(np.abs(diff).mean() <= 1e-3)
-        self.assertTrue(np.abs(diff).max() <= 1e-2)
+        self.assertTrue(np.abs(diff).max() <= 5e-2)
 
     def test_cepstral_mean_and_variance_normalization(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())

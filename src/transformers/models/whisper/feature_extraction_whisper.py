@@ -255,7 +255,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 Whether or not to return the number of frames of the input raw_speech.
                 These num_frames can be used by the model to compute word level timestamps.
         """
-
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
                 raise ValueError(
@@ -265,7 +264,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
+                f"It is strongly recommended to pass the `sampling_rate` argument to `{self.__class__.__name__}()`. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
