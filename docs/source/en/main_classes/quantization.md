@@ -81,6 +81,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] BitNetConfig
 
+## SpQRConfig
+
+[[autodoc]] SpQRConfig
+
 ## FineGrainedFP8Config
 
 [[autodoc]] FineGrainedFP8Config

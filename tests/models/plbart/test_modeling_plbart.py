@@ -224,7 +224,6 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (
         (PLBartModel, PLBartForConditionalGeneration, PLBartForSequenceClassification) if is_torch_available() else ()
     )
-    all_generative_model_classes = (PLBartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": PLBartModel,
@@ -658,7 +657,6 @@ class PLBartStandaloneDecoderModelTester:
 @require_torch
 class PLBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (PLBartDecoder, PLBartForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (PLBartForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

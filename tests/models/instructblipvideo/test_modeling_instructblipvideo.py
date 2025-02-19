@@ -496,7 +496,6 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
     ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 ):
     all_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (InstructBlipVideoForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -545,6 +544,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     @unittest.skip(reason="There's no base InstructBlipVideoModel")
     def test_save_load_fast_init_to_base(self):
+        pass
+
+    @unittest.skip(
+        "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"
+    )
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
     def test_forward_signature(self):
