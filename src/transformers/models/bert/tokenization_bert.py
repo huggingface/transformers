@@ -202,11 +202,13 @@ class BertTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
+        cls_token_id = int(str(self.cls_token_id))
+        sep_token_id = int(str(self.sep_token_id))
+        token_ids_0 = [int(str(x)) for x in token_ids_0]
         if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
+            return [cls_token_id] + token_ids_0 + [sep_token_id]
+        token_ids_1 = [int(str(x)) for x in token_ids_1]
+        return [cls_token_id] + token_ids_0 + [sep_token_id] + token_ids_1 + [sep_token_id]
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -456,20 +458,7 @@ class WordpieceTokenizer:
         self.max_input_chars_per_word = max_input_chars_per_word
 
     def tokenize(self, text):
-        """
-        Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
-        tokenization using the given vocabulary.
-
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
-
-        Args:
-            text: A single token or whitespace separated tokens. This should have
-                already been passed through *BasicTokenizer*.
-
-        Returns:
-            A list of wordpiece tokens.
-        """
-
+        """Tokenizes a piece of text into its word pieces."""
         output_tokens = []
         for token in whitespace_tokenize(text):
             chars = list(token)
@@ -504,4 +493,86 @@ class WordpieceTokenizer:
         return output_tokens
 
 
-__all__ = ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"]
+class BidirectionalWordpieceTokenizer(WordpieceTokenizer):
+    """Runs WordPiece tokenization with bidirectional support."""
+    def __init__(self, vocab, unk_token="[UNK]", max_input_chars_per_word=100):
+        super().__init__(vocab=vocab, unk_token=unk_token, max_input_chars_per_word=max_input_chars_per_word)
+        self.backward_vocab = {k[::-1]: v for k, v in vocab.items()}
+
+    def tokenize(self, text):
+        """Tokenizes a piece of text into its word pieces using bidirectional tokenization.
+
+        This uses a greedy longest-match-first algorithm to perform tokenization using both forward
+        and backward vocabularies, choosing the better tokenization. The algorithm tries both forward
+        and backward tokenization and selects the one that produces fewer tokens.
+
+        Args:
+            text: A single token or whitespace separated tokens. This should have
+                already been passed through BasicTokenizer.
+
+        Returns:
+            A list of wordpiece tokens.
+        """
+        output_tokens = []
+
+        for token in whitespace_tokenize(text):
+            chars = list(token)
+            if len(chars) > self.max_input_chars_per_word:
+                output_tokens.append(self.unk_token)
+                continue
+
+            # Forward tokenization
+            is_bad_forward = False
+            start = 0
+            forward_sub_tokens = []
+            while start < len(chars):
+                end = len(chars)
+                cur_substr = None
+                while start < end:
+                    substr = "".join(chars[start:end])
+                    if start > 0:
+                        substr = "##" + substr
+                    if substr in self.vocab:
+                        cur_substr = substr
+                        break
+                    end -= 1
+                if cur_substr is None:
+                    is_bad_forward = True
+                    break
+                forward_sub_tokens.append((cur_substr, int(self.vocab[cur_substr])))
+                start = end
+
+            # Backward tokenization
+            is_bad_backward = False
+            start = len(chars)
+            backward_sub_tokens = []
+            while start > 0:
+                end = 0
+                cur_substr = None
+                while start > end:
+                    substr = "".join(chars[end:start][::-1])
+                    if start < len(chars):
+                        substr = substr + "##"
+                    if substr in self.backward_vocab:
+                        cur_substr = substr
+                        break
+                    end += 1
+                if cur_substr is None:
+                    is_bad_backward = True
+                    break
+                backward_sub_tokens.append((cur_substr[::-1], int(self.backward_vocab[cur_substr])))
+                start = end
+
+            # Choose better tokenization
+            if is_bad_forward and is_bad_backward:
+                output_tokens.append(self.unk_token)
+            else:
+                if is_bad_backward or (not is_bad_forward and len(forward_sub_tokens) <= len(backward_sub_tokens)):
+                    output_tokens.extend([t for t, _ in forward_sub_tokens])
+                else:
+                    output_tokens.extend([t for t, _ in reversed(backward_sub_tokens)])
+
+        return output_tokens
+
+
+__all__ = ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer", "BidirectionalWordpieceTokenizer"]
