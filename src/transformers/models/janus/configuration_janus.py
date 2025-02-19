@@ -432,15 +432,15 @@ class JanusConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is None. Initializaing with default JanusTextConfig values")
+            logger.info("`text_config` is None. Initializing with default JanusTextConfig values")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`encodr_vision_config` is None. Initializaing with default JanusVisionConfig values")
+            logger.info("`encodr_vision_config` is None. Initializing with default JanusVisionConfig values")
 
         if vq_config is None:
             vq_config = {}
-            logger.info("`text_config` is None. Initializaing with default JanusDecoderVisionConfig values")
+            logger.info("`text_config` is None. Initializing with default JanusVQVAEConfig values")
 
         self.text_config = JanusTextConfig(**text_config)
         self.vision_config = JanusVisionConfig(**vision_config)

@@ -102,6 +102,9 @@ def convert_key(old_key, vision_mappings, other_mappings):
 
 
 def convert_state_dict(old_state_dict, vision_mappings, other_mappings):
+    """TODO
+    Has to delete the parameter `vqmodel.quantize.codebook_used`.
+    """
     return {convert_key(k, vision_mappings, other_mappings): v for k, v in old_state_dict.items()}
 
 old_weights = torch.hub.load_state_dict_from_url("https://huggingface.co/deepseek-ai/Janus-Pro-1B/resolve/main/pytorch_model.bin", map_location="cpu")
