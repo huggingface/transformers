@@ -114,8 +114,6 @@ class GitProcessor(ProcessorMixin):
         if images is not None:
             image_features = self.image_processor(images, **output_kwargs["images_kwargs"])
             data.update(image_features)
-            data["input_ids"] = data["input_ids"][:, :-1]
-            data["attention_mask"] = data["attention_mask"][:, :-1]
 
         return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].get("return_tensors"))
 
