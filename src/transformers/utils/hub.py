@@ -1090,36 +1090,22 @@ def get_checkpoint_shard_files(
         shard_filenames = [os.path.join(pretrained_model_name_or_path, subfolder, f) for f in shard_filenames]
         return shard_filenames, sharded_metadata
 
-    # At this stage pretrained_model_name_or_path is a model identifier on the Hub
-    try:
-        # Load from URL
-        cached_filenames = cached_files(
-            pretrained_model_name_or_path,
-            shard_filenames,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            token=token,
-            user_agent=user_agent,
-            revision=revision,
-            subfolder=subfolder,
-            _commit_hash=_commit_hash,
-        )
-
-    # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
-    # we don't have to catch them here.
-    except EntryNotFoundError:
-        raise EnvironmentError(
-            f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filenames} which is "
-            "required according to the checkpoint index."
-        )
-    except HTTPError:
-        raise EnvironmentError(
-            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filenames}. You should try"
-            " again after checking your internet connection."
-        )
+    # At this stage pretrained_model_name_or_path is a model identifier on the Hub. Try to get everything from cache,
+    # or download the files
+    cached_filenames = cached_files(
+        pretrained_model_name_or_path,
+        shard_filenames,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        resume_download=resume_download,
+        local_files_only=local_files_only,
+        token=token,
+        user_agent=user_agent,
+        revision=revision,
+        subfolder=subfolder,
+        _commit_hash=_commit_hash,
+    )
 
     return cached_filenames, sharded_metadata
 
