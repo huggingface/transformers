@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union, List, Dict
 
 import numpy as np
+from tqdm import tqdm
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -30,7 +31,10 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...generation import GenerationMixin
+from ...cache_utils import StaticCache
+from ...generation import (
+    ClassifierFreeGuidanceLogitsProcessor, 
+    GenerationMixin)
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -45,10 +49,6 @@ from ...utils import (
 )
 
 from ..chameleon.modeling_chameleon import (
-    ChameleonForConditionalGeneration,
-    ChameleonImageVocabularyMapping,
-    ChameleonModel,
-    ChameleonPreTrainedModel,
     ChameleonVQVAE,
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderResnetBlock,
@@ -56,11 +56,11 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoder,
     ChameleonVQVAEEncoderConvDownsample
 )
-from .configuration_janus import JanusVisionConfig,JanusConfig,JanusTextConfig, JanusVQVAEConfig
+from .configuration_janus import JanusVisionConfig,JanusConfig, JanusVQVAEConfig
 from ..vit.modeling_vit import ViTPatchEmbeddings
 from ..dinov2_with_registers.modeling_dinov2_with_registers  import Dinov2WithRegistersLayerScale, Dinov2WithRegistersDropPath
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionTransformer, SiglipVisionModel, SiglipMultiheadAttentionPoolingHead
-from ..llama.modeling_llama import LlamaModel, LlamaForCausalLM
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionTransformer
+from ..auto import AutoModel, AutoModelForCausalLM
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 
@@ -96,7 +96,17 @@ class JanusVisionPatchEmbeddings(ViTPatchEmbeddings):
 # ToDO: Is interpolate pos embeddings required for this model as of now passing?
 @dataclass
 class JanusVQVAEOutput:
-    pass
+    """
+    Base class for Anole VQ-VAE mode model outputs.
+    Args:
+        decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            Reconstructed pixel values after encoding and decoding the input.
+        emb_loss (`torch.FloatTensor`):
+            Embedding loss.
+    """
+
+    decoded_pixel_values: Optional[torch.FloatTensor] = None
+    emb_loss: torch.FloatTensor = None
 
 class JanusVisionEmbeddings(nn.Module):
     def __init__(self, config:JanusVisionConfig):
@@ -140,7 +150,6 @@ class JanusVisionEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-# Todo: introduce compatiability for cache
 class JanusVisionAttention(nn.Module):
     """Attention Class for Janus Vision Encoder """
     def __init__(self, config: JanusVisionConfig):
@@ -517,10 +526,6 @@ class JanusVisionEncoder(SiglipEncoder):
         self.layers = nn.ModuleList([JanusVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
 
-class JanusPreTrainedModel():
-     """An abstract class to load pretrained weigths"""
-     pass
-
 class JanusVisionTransformer(SiglipVisionTransformer,nn.Module):
     def __init__(self, config: JanusVisionConfig):
         nn.Module.__init__()
@@ -552,16 +557,15 @@ class JanusVisionAlignerMLP(nn.Module):
 class JanusVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
     def __init__(self, config:JanusVQVAEConfig):
         super().__init__(config)
-        self.quant_state_dims = [config.resolution // 2 ** (len(config.channel_multiplier) - 1)] * 2
+        self.quant_state_dims = [config.num_patches] * 2
 
     def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
         batch_size = image_tokens.shape[0]
         emb_dim: int = self.embedding.weight.shape[-1]
+
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
-        # l2 normalization on the last dimension
         hidden_state_quant = F.normalize(hidden_state_quant, p=2, dim=-1)
-
 
         # reshape back to match original input shape
         hidden_state_quant = hidden_state_quant.view((batch_size, *self.quant_state_dims, emb_dim))
@@ -661,14 +665,11 @@ class JanusVQVAEDecoder(nn.Module):
         self.num_resolutions = len(config.channel_multiplier)
         self.num_res_blocks = config.num_res_blocks
         base_channels = config.base_channels
-        resolution = config.resolution
         latent_channels = config.latent_channels
         out_channels = config.out_channels
 
         # compute in_ch_mult, block_in and curr_res at lowest res
         block_in = base_channels * config.channel_multiplier[self.num_resolutions - 1]
-        curr_res = resolution // 2 ** (self.num_resolutions - 1)
-        self.z_shape = (1, latent_channels, curr_res, curr_res)
 
         # z to block_in
         self.conv_in = torch.nn.Conv2d(latent_channels, block_in, kernel_size=3, stride=1, padding=1)
@@ -738,12 +739,34 @@ class JanusVQVAEDecoder(nn.Module):
         return hidden_state
 
 
-class JanusPreTrainedModel(ChameleonPreTrainedModel):
-    pass
+class JanusPreTrainedModel(PreTrainedModel):
+    config_class = JanusConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    # _no_split_modules = None # Should we pass Llama Decoder Layer?
+    _skip_keys_device_placement = ["past_key_values", "causal_mask"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_cache_class = True
+    _supports_static_cache = True
+    _supports_param_buffer_assignment = False
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, JanusVQVAE):
+            module.apply(module._init_weights)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class JanusVQVAE(ChameleonVQVAE):
-    main_input_name = "pixel_values"
 
     def __init__(self, config: JanusVQVAEConfig):
         super().__init__(config)
@@ -797,14 +820,6 @@ class JanusVQVAE(ChameleonVQVAE):
         return JanusVQVAEOutput(decoded_pixel_values, emb_loss)
 
 
-class JanusImageVocabularyMapping(ChameleonImageVocabularyMapping):
-    @cached_property
-    def bpe2img_mapping_tensor(self):
-        mapping = torch.zeros(max(self.bpe2img.keys()) + 1, dtype=torch.int)
-        for k, v in self.bpe2img.items():
-            mapping[k] = v
-        return mapping
-
 class JanusVQVAEAligner(nn.Module):
     def __init__(self, config:JanusVQVAEConfig):
         super().__init__()
@@ -835,15 +850,6 @@ class JanusVQVAEHead(nn.Module):
         hidden_states = self.vision_head(hidden_states)
         return hidden_states
 
-class JanusTextModel(LlamaModel):
-    pass
-class JanusTextForCausalLM(LlamaForCausalLM, JanusPreTrainedModel, GenerationMixin):
-    config_class = JanusTextConfig
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = JanusTextModel(config)
-
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["language_model.lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
@@ -858,19 +864,22 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         self.gen_embed = nn.Embedding(config.vq_config.num_embeddings, config.vq_config.embed_dim)
         self.gen_head = JanusVQVAEHead(config.vq_config)
 
-        self.language_model = JanusTextForCausalLM(config.text_config)
-
+        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
 
         # Initialize weights and apply final processing
         # self.post_init()
 
-    def get_input_embeddings(self,input_ids):
+    def get_input_embeddings(self, input_ids):
         return self.language_model.get_input_embeddings()(input_ids)
 
-    def get_image_embeddings(self,pixel_values):
+    def get_image_embeddings(self, pixel_values):
         image_embeds = self.vision_model(pixel_values)
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
+    def prepare_emeddings_for_image_generation(self,inputs):
+        hidden_state = self.gen_embed(inputs)
+        hidden_state = self.gen_aligner(hidden_state)
+        return hidden_state
 
     def forward(
         self,
@@ -878,7 +887,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values = None,
+        past_key_values=None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -887,7 +896,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        ):
+    ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -903,6 +912,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             raise ValueError(
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
+        # Generate input embeds which will be used while decoding
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings(input_ids)
 
         if pixel_values is not None:
             image_embeds = self.get_image_embeddings(pixel_values)
@@ -912,9 +924,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             image_embeds = image_embeds.reshape(-1, 2048)
             image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, 2048)
 
-            text_embeds = self.get_input_embeddings(input_ids)
-            image_embeds = image_embeds.to(text_embeds.device, text_embeds.dtype)
-            inputs_embeds = text_embeds.masked_scatter(image_attention_mask, image_embeds)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_embeds)
 
         outputs = self.language_model(
             inputs_embeds=inputs_embeds,
@@ -930,7 +941,143 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             labels=labels,
         )
 
-        return outputs
+        return outputs if return_dict else outputs.to_tuple()
+
+    # ToDo: Make it compatible with super class (add contine gen using embeds)
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        pixel_values=None,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        if past_key_values is not None:
+            if inputs_embeds is not None:  # Exception 1
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+
+        if cache_position[0] != 0:
+            pixel_values = None
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+        else:
+            model_inputs = {"input_ids": input_ids, "inputs_embeds": None}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = inputs_embeds.shape
+                device = inputs_embeds.device
+            else:
+                batch_size, sequence_length = input_ids.shape
+                device = input_ids.device
+
+            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_cache_shape(),
+                dtype=self.lm_head.weight.dtype,
+                device=device,
+                cache_position=cache_position,
+                batch_size=batch_size,
+                config=self.config,
+                past_key_values=past_key_values,
+            )
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "cache_position": cache_position,
+            }
+        )
+        return model_inputs
+
+    @torch.no_grad
+    def generate(self, input_ids: torch.Tensor, **kwargs):
+        generation_config = kwargs.get("generation_config")
+        # Perform usual auto-regressive text generation.
+        if kwargs.get("generation_mode", None) == "text":
+            kwargs.pop("generation_mode", None)
+            return super().generate(input_ids=input_ids, **kwargs)
+
+        # If image is passed then perform custom pre and post processing on generated tokens.
+        batch_size, seq_len = input_ids.shape
+        dtype = input_ids.dtype
+
+        input_tokens = torch.zeros((batch_size * 2, seq_len), dtype=dtype)
+        input_tokens = input_ids.repeat(2, 1).to(dtype)  # Now (batch_size * 2, seq_len)
+
+        # Set the second half of tokens to pad_token_id. These would be used
+        # for generating unconditional logits
+        input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id
+
+        # Generate input_embeddings from the given prompt.
+        inputs_embeds = self.get_input_embeddings(input_tokens)
+
+        # Placeholder to store generated tokens
+        generated_tokens = torch.zeros((batch_size, generation_config.num_image_tokens), dtype=dtype)
+        outputs = None
+
+        logit_processor = ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale)
+
+        # Loop through the number of image tokens that need to be generated
+        for i in tqdm(range(generation_config.num_image_tokens)):
+            # Pass the input embeddings through the language model
+            outputs = self.language_model.model(
+                inputs_embeds=inputs_embeds,
+                use_cache=True,
+                past_key_values=outputs.past_key_values if i != 0 else None,
+            )
+
+            # Extract the last hidden state (corresponding to the most recent token)
+            hidden_state = outputs.last_hidden_state[:, -1, :]
+
+            # Generate scores using the generation head.
+            scores = self.gen_head(hidden_state)
+
+            # Apply logit processor for controlled generation.
+            logits = logit_processor(input_ids, scores)
+
+            probs = torch.softmax(logits / generation_config.temperature, dim=-1)
+
+            # Sample the next token from the probability distribution.
+            next_token = torch.multinomial(probs, num_samples=1)
+            generated_tokens[:, i] = next_token.squeeze(dim=-1)
+
+            # Prepare embeddings for image generation.
+            next_token = next_token.to(dtype)
+            next_token = torch.cat([next_token.unsqueeze(dim=1), next_token.unsqueeze(dim=1)], dim=1).view(-1)
+
+            img_embeds = self.prepare_emeddings_for_image_generation(next_token)
+
+            inputs_embeds = img_embeds.unsqueeze(dim=1)
+
+        # Decode generated tokens using Janus VQ model.
+        decoded_image = self.vqmodel.decode(generated_tokens.to(dtype=torch.int))
+
+        # Convert tensor to numpy array and then normalize, reshape the decoded image.
+        decoded_image = decoded_image.to(torch.float32).detach().numpy().transpose(0, 2, 3, 1)
+        decoded_image = np.clip((decoded_image + 1) / 2 * 255, 0, 255)
+        decoded_image = decoded_image.astype(np.uint8)
+
+        return decoded_image
+
 
 
 # Modular Image Processor of Janus.
@@ -947,7 +1094,7 @@ def expand2square(pil_img, background_color):
         result = Image.new(pil_img.mode, (height, height), background_color)
         result.paste(pil_img, ((height - width) // 2, 0))
         return result
-    
+
 class JanusImageProcessor(BlipImageProcessor):
 
     def __init__(self,

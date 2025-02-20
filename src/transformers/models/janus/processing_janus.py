@@ -100,6 +100,7 @@ class JanusProcessor(ProcessorMixin):
         self.image_start_token = "<begin_of_image>" # Can be Hardcoded as it won't change.
         self.image_end_token = "<end_of_image>"
         self.use_default_system_prompt = use_default_system_prompt
+        self.generation_mode = kwargs.get('generation_mode',None)
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -109,15 +110,18 @@ class JanusProcessor(ProcessorMixin):
         images: ImageInput = None,
         **kwargs: Unpack[JanusProcessorKwargs]
     ) -> BatchFeature:
-        """Construct a Janus processor with JanusImage procesor and Llama text tokenizer"""
+        """Construct a Janus processor with Janus Image procesor and Llama text tokenizer"""
 
         output_kwargs = self._merge_kwargs(JanusProcessorKwargs,tokenizer_init_kwargs=self.tokenizer.init_kwargs,**kwargs)
 
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
 
+        if not self.generation_mode:
+            logger.info("Generation mode argument not provided. Defaulting to 'text' mode.")
+            self.generation_mode = "text"
 
-        data = {}
+
         if text is not None:
             if isinstance(text, str):
                 text = [text]
@@ -129,15 +133,16 @@ class JanusProcessor(ProcessorMixin):
         one_img_tokens = self.image_start_token + (IMAGE_TOKEN * self.num_image_tokens) + self.image_end_token
         for prompt in text:
             prompt = prompt.replace(IMAGE_TOKEN, one_img_tokens)
-            if self.use_default_system_prompt:
+            if self.use_default_system_prompt and self.generation_mode == "text":
                 prompt = DEFAULT_SYSTEM_PROMPT + prompt
+            if self.generation_mode == "image":
+                prompt+=self.image_start_token
             prompt_strings.append(prompt)
-
 
         data = self.tokenizer(prompt_strings,**output_kwargs['text_kwargs'])
 
         # Process images if pixel values are provided.
-        if images is not None:
+        if images is not None and self.generation_mode != "image":
             data["pixel_values"] = self.image_processor(images=images, **output_kwargs["common_kwargs"])["pixel_values"]
 
         return BatchFeature(data=data)
