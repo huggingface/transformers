@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from ...test_configuration_common import ConfigTester
