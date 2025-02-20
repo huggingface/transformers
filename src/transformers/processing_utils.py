@@ -1073,12 +1073,30 @@ class ProcessorMixin(PushToHubMixin):
         return cls.from_args_and_dict(args, processor_dict, **kwargs)
 
     @classmethod
-    def register_for_auto_class(cls, **kwargs):
+    def register_for_auto_class(cls, auto_class="AutoProcessor"):
         """
-        Register this class with a given auto class. This should only be used for custom configurations as the ones in
-        the library are already mapped with `AutoProcessor`.
+        Register this class with a given auto class. This should only be used for custom feature extractors as the ones
+        in the library are already mapped with `AutoProcessor`.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"AutoProcessor"`):
+                The auto class to register this new feature extractor with.
         """
-        cls._auto_class = "AutoProcessor"
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -1094,11 +1112,6 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
-                if not attribute_name == "tokenizer":
-                    raise ValueError(
-                        f"Only the `tokenizer_class` attribute can have a tuple of classes. "
-                        f" Got {attribute_name} with {class_name}."
-                    )
                 classes = tuple(cls.get_possibly_dynamic_module(n) if n is not None else None for n in class_name)
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
