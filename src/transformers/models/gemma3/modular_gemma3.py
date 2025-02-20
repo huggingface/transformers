@@ -808,6 +808,7 @@ def compute_rope_parameters(
 
 
 class Gemma3RotaryEmbedding(nn.Module):
+
     def __init__(self, config: Gemma3TextConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
@@ -837,9 +838,6 @@ class Gemma3RotaryEmbedding(nn.Module):
             device=device,
         )
 
-        self.post_init()
-
-
     def _register_freqs_cis(
         self,
         name: str,
@@ -855,7 +853,7 @@ class Gemma3RotaryEmbedding(nn.Module):
             device=device
         )
         self.register_buffer(name, frequencies, persistent=False)
-        self[f"original_{name}"] = self[name]
+        setattr(self, f"original_{name}", getattr(self, name))
 
     def _dynamic_frequency_update(self, position_ids, device):
         """
@@ -886,11 +884,13 @@ class Gemma3RotaryEmbedding(nn.Module):
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self[f"original_{ATTENTION_TYPE_GLOBAL}"] = self[f"original_{ATTENTION_TYPE_GLOBAL}"].to(device)
-            self.register_buffer(ATTENTION_TYPE_GLOBAL, self[f"original_{ATTENTION_TYPE_GLOBAL}"], persistent=False)
+            original_global_attr = f"original_{ATTENTION_TYPE_GLOBAL}"
+            setattr(self, original_global_attr, getattr(self, original_global_attr).to(device))
+            self.register_buffer(ATTENTION_TYPE_GLOBAL, getattr(self, original_global_attr), persistent=False)
 
-            self[f"original_{ATTENTION_TYPE_LOCAL}"] = self[f"original_{ATTENTION_TYPE_LOCAL}"].to(device)
-            self.register_buffer(ATTENTION_TYPE_LOCAL, self[f"original_{ATTENTION_TYPE_LOCAL}"], persistent=False)
+            original_local_attr = f"original_{ATTENTION_TYPE_GLOBAL}"
+            setattr(self, original_local_attr, getattr(self, original_local_attr).to(device))
+            self.register_buffer(ATTENTION_TYPE_LOCAL, getattr(self, original_local_attr), persistent=False)
 
             self.max_seq_len_cached = self.original_max_seq_len
 
@@ -900,8 +900,11 @@ class Gemma3RotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        global_freq_expanded = self[ATTENTION_TYPE_GLOBAL][None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        local_freq_expanded = self[ATTENTION_TYPE_LOCAL][None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        global_freq = getattr(self, ATTENTION_TYPE_GLOBAL).index_select(0, position_ids)
+        global_freq_expanded = global_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+
+        local_freq = getattr(self, ATTENTION_TYPE_LOCAL).index_select(0, position_ids)
+        local_freq_expanded = local_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
 
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
