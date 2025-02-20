@@ -29,7 +29,7 @@ from transformers import (
     TrainerCallback,
     TrainerState,
     TrainingArguments,
-    is_torch_available, TrainerControl,
+    is_torch_available,
 )
 from transformers.testing_utils import require_torch
 from transformers.trainer_callback import ExportableState
@@ -430,12 +430,12 @@ class TrainerCallbackTest(unittest.TestCase):
         times_saved = 0
 
         class OnEndCallback(TrainerCallback):
-            def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+            def on_step_end(self, args: TrainingArguments, state: TrainerState, control, **kwargs):
                 nonlocal times_saved
                 if control.should_save:
                     times_saved += 1
 
-            def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+            def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control, **kwargs):
                 nonlocal times_saved
                 if control.should_save:
                     times_saved += 1
