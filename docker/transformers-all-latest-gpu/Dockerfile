@@ -68,6 +68,9 @@ RUN python3 -m pip install --no-cache-dir g2p-en
 # For Some bitsandbytes tests
 RUN python3 -m pip install --no-cache-dir einops
 
+# For SmolVLM tests
+RUN python3 -m pip install --no-cache-dir num2words
+
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
