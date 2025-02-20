@@ -474,7 +474,11 @@ def cached_files(
                 "You are trying to access a gated repo.\nMake sure to have access to it at "
                 f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
             ) from e
-        elif isinstance(e, LocalEntryNotFoundError) and _raise_exceptions_for_connection_errors:
+        elif (
+            isinstance(e, LocalEntryNotFoundError)
+            and _raise_exceptions_for_connection_errors
+            and _raise_exceptions_for_missing_entries
+        ):
             raise EnvironmentError(
                 f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, couldn't find them in the"
                 f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing files named"
@@ -492,9 +496,10 @@ def cached_files(
     # If there are any missing file and the flag is active, raise
     if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
         missing_entries = [original for original, resolved in zip(filenames, resolved_files) if resolved is None]
+        revision_ = "main" if revision is None else revision
         raise EnvironmentError(
-            f"{path_or_repo_id} exits on does not appear to have file(s) named {*missing_entries,}. Checkout "
-            f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
+            f"{path_or_repo_id} does not appear to have file(s) named {*missing_entries,}. Checkout "
+            f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
         )
 
     # Remove potential missing entries (we can silently remove them at this point based on the flags)
