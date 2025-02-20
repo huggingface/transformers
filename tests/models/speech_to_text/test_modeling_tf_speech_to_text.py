@@ -434,10 +434,6 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=True):
-        # Allow missing keys since TF doesn't cache the sinusoidal embeddings in an attribute
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
-
 
 @require_tf
 @require_sentencepiece
