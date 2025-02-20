@@ -3541,7 +3541,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_type = torch._C._get_accelerator().type
             device_module = torch.get_device_module(device_type)
             # Get device with index assuming equal number of devices per host
-            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            index = None if device_type == "cpu" else torch.distributed.get_rank() % device_module.device_count()
+            tp_device = torch.device(device_type, index)
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
 
