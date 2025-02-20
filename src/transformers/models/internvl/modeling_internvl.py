@@ -22,6 +22,7 @@
 
 import collections.abc
 import math
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -150,7 +151,7 @@ class InternVLVisionSelfAttention(nn.Module):
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -167,6 +168,11 @@ class InternVLVisionSelfAttention(nn.Module):
         self.has_relative_position_bias = bool(window_size)
         if self.has_relative_position_bias:
             self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
 
         if window_size:
             self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
@@ -348,11 +354,7 @@ class InternVLVisionPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        position_embedding: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -361,17 +363,6 @@ class InternVLVisionPatchEmbeddings(nn.Module):
 
         embeddings = self.projection(pixel_values)
         patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
-
-        if position_embedding is not None:
-            # interpolate the position embedding to the corresponding size
-            position_embedding = position_embedding.view(1, self.patch_shape[0], self.patch_shape[1], -1).permute(
-                0, 3, 1, 2
-            )
-            position_embedding = nn.functional.interpolate(
-                position_embedding, size=(patch_height, patch_width), mode="bicubic"
-            )
-            embeddings = embeddings + position_embedding
-
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
         return embeddings, (patch_height, patch_width)
@@ -451,12 +442,16 @@ class InternVLVisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: Optional[bool] = None,
     ) -> torch.Tensor:
+        if self.position_embeddings is not None and interpolate_pos_encoding is not None:
+            warnings.warn(
+                "`interpolate_pos_encoding` argument has no effect for InternVLVisionEmbeddings, embeddings are always "
+                "interpolated to the input image size. The argument will be removed in transformers v4.51.0."
+            )
+
         _, _, height, width = pixel_values.shape
-        embeddings, (patch_height, patch_width) = self.patch_embeddings(
-            pixel_values, self.position_embeddings[:, 1:, :] if self.position_embeddings is not None else None
-        )
+        embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
         if bool_masked_pos is not None:
@@ -466,13 +461,10 @@ class InternVLVisionEmbeddings(nn.Module):
             embeddings = embeddings * (1 - w) + mask_tokens * w
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        if self.position_embeddings is not None:
-            if interpolate_pos_encoding:
-                cls_tokens = cls_tokens + self.interpolate_pos_encoding(embeddings, height, width)
-            else:
-                cls_tokens = cls_tokens + self.position_embeddings[:, :1, :]
-
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        if self.position_embeddings is not None:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
         embeddings = self.dropout(embeddings)
 
@@ -1024,9 +1016,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output, _ = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(
@@ -1084,6 +1074,8 @@ class InternVLPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
 
     def _init_weights(self, module):
         # important: this ported version of InternVL isn't meant for training from scratch - only
@@ -1323,89 +1315,6 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         vision_features = self.multi_modal_projector(vision_features)
 
         return vision_features
-
-    def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
-        num_images, num_image_patches, embed_dim = image_features.shape
-        batch_size, sequence_length = input_ids.shape
-        left_padding = not torch.sum(input_ids[:, -1] == torch.tensor(self.pad_token_id))
-        # 1. Create a mask to know where special image tokens are
-        special_image_token_mask = input_ids == self.config.image_token_index
-        num_special_image_tokens = torch.sum(special_image_token_mask, dim=-1)
-        # Compute the maximum embed dimension
-        max_embed_dim = (num_special_image_tokens.max() * (num_image_patches - 1)) + sequence_length
-        batch_indices, non_image_indices = torch.where(input_ids != self.config.image_token_index)
-
-        # 2. Compute the positions where text should be written
-        # Calculate new positions for text tokens in merged image-text sequence.
-        # `special_image_token_mask` identifies image tokens. Each image token will be replaced by `nb_text_tokens_per_images - 1` text tokens.
-        # `torch.cumsum` computes how each image token shifts subsequent text token positions.
-        # - 1 to adjust for zero-based indexing, as `cumsum` inherently increases indices by one.
-        new_token_positions = torch.cumsum((special_image_token_mask * (num_image_patches - 1) + 1), -1) - 1
-        nb_image_pad = max_embed_dim - 1 - new_token_positions[:, -1]
-        if left_padding:
-            new_token_positions += nb_image_pad[:, None]  # offset for left padding
-        text_to_overwrite = new_token_positions[batch_indices, non_image_indices]
-
-        # 3. Create the full embedding, already padded to the maximum position
-        final_embedding = torch.zeros(
-            batch_size, max_embed_dim, embed_dim, dtype=inputs_embeds.dtype, device=inputs_embeds.device
-        )
-        final_attention_mask = torch.zeros(
-            batch_size, max_embed_dim, dtype=attention_mask.dtype, device=inputs_embeds.device
-        )
-        if labels is not None:
-            final_labels = torch.full(
-                (batch_size, max_embed_dim), self.config.ignore_index, dtype=input_ids.dtype, device=input_ids.device
-            )
-        # In case the Vision model or the Language model has been offloaded to CPU, we need to manually
-        # set the corresponding tensors into their correct target device.
-        target_device = inputs_embeds.device
-        batch_indices, non_image_indices, text_to_overwrite = (
-            batch_indices.to(target_device),
-            non_image_indices.to(target_device),
-            text_to_overwrite.to(target_device),
-        )
-        attention_mask = attention_mask.to(target_device)
-
-        # 4. Fill the embeddings based on the mask. If we have ["hey" "<image>", "how", "are"]
-        # we need to index copy on [0, 577, 578, 579] for the text and [1:576] for the image features
-        final_embedding[batch_indices, text_to_overwrite] = inputs_embeds[batch_indices, non_image_indices]
-        final_attention_mask[batch_indices, text_to_overwrite] = attention_mask[batch_indices, non_image_indices]
-        if labels is not None:
-            final_labels[batch_indices, text_to_overwrite] = labels[batch_indices, non_image_indices]
-
-        # 5. Fill the embeddings corresponding to the images. Anything that is not `text_positions` needs filling (#29835)
-        image_to_overwrite = torch.full(
-            (batch_size, max_embed_dim), True, dtype=torch.bool, device=inputs_embeds.device
-        )
-        image_to_overwrite[batch_indices, text_to_overwrite] = False
-        if left_padding:
-            image_to_overwrite &= image_to_overwrite.cumsum(-1) - 1 >= nb_image_pad[:, None].to(target_device)
-        else:
-            mask = torch.ones_like(image_to_overwrite, dtype=torch.bool).cumsum(-1) - 1
-            padding_mask = mask <= new_token_positions[:, -1:].to(target_device)
-            image_to_overwrite &= padding_mask
-
-        if image_to_overwrite.sum() != image_features.shape[:-1].numel():
-            raise ValueError(
-                f"The input provided to the model are wrong. The number of image tokens is {torch.sum(special_image_token_mask)} while"
-                f" the number of image given to the model is {num_images}. This prevents correct indexing and breaks batch generation."
-            )
-
-        final_embedding[image_to_overwrite] = image_features.contiguous().reshape(-1, embed_dim).to(target_device)
-        final_attention_mask |= image_to_overwrite
-        position_ids = (final_attention_mask.cumsum(-1) - 1).masked_fill_((final_attention_mask == 0), 1)
-
-        # 6. Mask out the embedding at padding positions, as we later use the past_key_value value to determine the non-attended tokens.
-        batch_indices, pad_indices = torch.where(input_ids == self.pad_token_id)
-        indices_to_mask = new_token_positions[batch_indices, pad_indices]
-
-        final_embedding[batch_indices, indices_to_mask] = 0
-
-        if labels is None:
-            final_labels = None
-
-        return final_embedding, final_attention_mask, final_labels, position_ids
 
     @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=InternVLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)

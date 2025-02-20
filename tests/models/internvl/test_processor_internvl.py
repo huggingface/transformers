@@ -15,6 +15,7 @@
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
 from transformers import AutoProcessor, AutoTokenizer, InternVLProcessor
 from transformers.testing_utils import require_vision
@@ -36,7 +37,8 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_processor = GotOcr2ImageProcessor(
             do_resize=True,
-            size={"height": 448, "width": 448},
+            size={"height": 20, "width": 20},
+            max_patches=2,
             do_rescale=True,
             rescale_factor=1 / 255,
             do_normalize=True,
@@ -50,6 +52,9 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = InternVLProcessor(image_processor, tokenizer, **processor_kwargs)
         processor.save_pretrained(self.tmpdirname)
 
+    def prepare_processor_dict(self):
+        return {"image_seq_length": 10}
+
     def get_tokenizer(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
 
@@ -58,3 +63,17 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
+
+    # Override as InternVLProcessor needs image tokens in prompts
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        if batch_size is None:
+            return "lower newer <image>"
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return ["lower newer <image>"]
+        return ["lower newer <image>", "<image> upper older longer string"] + ["<image> lower newer"] * (
+            batch_size - 2
+        )

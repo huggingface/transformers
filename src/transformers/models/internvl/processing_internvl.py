@@ -39,8 +39,6 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
         },
         "images_kwargs": {
             "crop_to_patches": True,
-            "min_patches": 1,
-            "max_patches": 12,
         },
     }
 
@@ -56,7 +54,8 @@ class InternVLProcessor(ProcessorMixin):
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
         image_seq_length (`int`, *optional*, defaults to 256):
-            The number of image token to use per image patch.
+            The number of image token to use per image patch. it should be set so that:
+            image_seq_length = (config.image_size // config.patch_size) ** 2 * (config.scale_factor**2)
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """
@@ -71,7 +70,7 @@ class InternVLProcessor(ProcessorMixin):
     ):
         self.image_seq_length = image_seq_length
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
     def __call__(
         self,

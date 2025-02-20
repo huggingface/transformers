@@ -85,6 +85,7 @@ class ProcessorTesterMixin:
 
         component_class = processor_class_from_name(component_class_name)
         component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+        print("component", component)
         if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
@@ -226,6 +227,7 @@ class ProcessorTesterMixin:
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
+        print("processor", processor)
         inputs = processor(
             text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
         )
