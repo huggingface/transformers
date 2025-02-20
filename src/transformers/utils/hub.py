@@ -38,7 +38,6 @@ from huggingface_hub import (
     create_branch,
     create_commit,
     create_repo,
-    hf_hub_download,
     hf_hub_url,
     snapshot_download,
     try_to_load_from_cache,
@@ -48,7 +47,6 @@ from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
     HfHubHTTPError,
-    HFValidationError,
     LocalEntryNotFoundError,
     OfflineModeIsEnabled,
     RepositoryNotFoundError,
@@ -481,7 +479,6 @@ def cached_files(
     return resolved_files
 
 
-
 # TODO cyril: Deprecated and should be removed in 4.51
 def get_file_from_repo(
     *args,
@@ -542,7 +539,9 @@ def get_file_from_repo(
     tokenizer_config = get_file_from_repo("FacebookAI/xlm-roberta-base", "tokenizer_config.json")
     ```
     """
-    logger.warning("`get_file_from_repo` is deprecated and will be removed in version 4.51. Use `cached_file` instead.")
+    logger.warning(
+        "`get_file_from_repo` is deprecated and will be removed in version 4.51. Use `cached_file` instead."
+    )
     return cached_file(
         *args,
         _raise_exceptions_for_gated_repo=False,
@@ -550,6 +549,7 @@ def get_file_from_repo(
         _raise_exceptions_for_connection_errors=False,
         **kwargs,
     )
+
 
 def download_url(url, proxies=None):
     """

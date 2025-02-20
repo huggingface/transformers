@@ -4885,7 +4885,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             modified_keys = all_checkpoint_keys
             # We need to remove the prefix here, as it is what will happen when actually loading the state dicts
             if loading_base_model_from_task_state_dict:
-                modified_keys = [s[len(start_prefix_to_remove) :] for s in modified_keys if s.startswith(start_prefix_to_remove)]
+                modified_keys = [
+                    s[len(start_prefix_to_remove) :] for s in modified_keys if s.startswith(start_prefix_to_remove)
+                ]
             expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, modified_keys)
 
         error_msgs = []
@@ -5292,11 +5294,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if param.device == torch.device("meta"):
                 # upcast in fp32 if any
                 target_dtype = dtype
-                if (
-                    keep_in_fp32_modules is not None
-                    and any(
-                        module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
-                    )
+                if keep_in_fp32_modules is not None and any(
+                    module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
                 ):
                     target_dtype = torch.float32
 
