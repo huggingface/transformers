@@ -1056,6 +1056,46 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             fine_scale,
         )
 
-        output = format_output(matching_keypoints, coarse_matching_scores, batch_ids, (height, width))
+        matching_keypoints[:, :, 0] = matching_keypoints[:, :, 0] / width
+        matching_keypoints[:, :, 1] = matching_keypoints[:, :, 1] / height
+
+        unique_values, counts = torch.unique_consecutive(batch_ids, return_counts=True)
+
+        if len(unique_values) > 0:
+            matching_keypoints0 = matching_keypoints[0]
+            matching_keypoints1 = matching_keypoints[1]
+            split_keypoints0 = torch.split(matching_keypoints0, counts.tolist())
+            split_keypoints1 = torch.split(matching_keypoints1, counts.tolist())
+            split_scores = torch.split(coarse_matching_scores, counts.tolist())
+
+            split_mask = [torch.ones(size, device=matching_keypoints.device) for size in counts.tolist()]
+            split_indices = [torch.arange(size, device=matching_keypoints.device) for size in counts.tolist()]
+
+            keypoints0 = pad_sequence(split_keypoints0, batch_first=True)
+            keypoints1 = pad_sequence(split_keypoints1, batch_first=True)
+            matching_scores = pad_sequence(split_scores, batch_first=True)
+            mask = pad_sequence(split_mask, batch_first=True)
+            matches = pad_sequence(split_indices, batch_first=True)
+
+            keypoints = torch.stack([keypoints0, keypoints1], dim=1)
+            matching_scores = torch.stack([matching_scores, matching_scores], dim=1)
+            mask = torch.stack([mask, mask], dim=1)
+            matches = torch.stack([matches, matches], dim=1)
+
+        else:
+            keypoints = matching_keypoints.unsqueeze(0)
+            matching_scores = torch.stack([coarse_matching_scores, coarse_matching_scores], dim=0).unsqueeze(0)
+            mask = torch.ones_like(keypoints)
+            matches = torch.stack([matched_indices, matched_indices], dim=0).unsqueeze(0)
+
+        output = KeypointMatchingOutput(
+            loss=None,
+            matches=matches,
+            matching_scores=matching_scores,
+            keypoints=keypoints,
+            mask=mask,
+            hidden_states=None,
+            attentions=None,
+        )
 
         return output
