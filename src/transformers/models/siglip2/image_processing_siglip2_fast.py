@@ -32,21 +32,11 @@ from ...image_utils import (
 from ...utils import (
     filter_out_non_signature_kwargs,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
 
 
 if is_torch_available():
     import torch
-
-if is_torchvision_available():
-    pass
-
-if is_torchvision_v2_available():
-    pass
-elif is_torchvision_available():
-    pass
 
 
 @lru_cache(maxsize=256)
