@@ -22,7 +22,14 @@ from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, Proces
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, VideoMetadata, concatenate_list, make_batched_videos, make_flat_list_of_images
+from ...image_utils import (
+    ImageInput,
+    VideoInput,
+    VideoMetadata,
+    concatenate_list,
+    make_batched_videos,
+    make_flat_list_of_images,
+)
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -77,7 +84,7 @@ class InternVLProcessor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         audio=None,
-        videos=None,
+        videos: Optional[VideoInput] = None,
         **kwargs: Unpack[InternVLProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -186,6 +193,12 @@ class InternVLProcessor(ProcessorMixin):
                         new_prompt = new_prompt.replace("<video>", video_prompt, 1)
                         video_index += 1
                 processed_text.append(new_prompt)
+
+            if images is not None and image_index != len(images):
+                raise ValueError("Number of image placeholders in the prompt does not match the number of images.")
+            if videos is not None and video_index != len(videos):
+                raise ValueError("Number of video placeholders in the prompt does not match the number of videos.")
+
             # Concatenate the interleaved image and video patches (function agnostic to the patches type (list, numpy array, torch tensor))
             image_videos_inputs = {"pixel_values": concatenate_list(image_video_patches)}
             text = processed_text
