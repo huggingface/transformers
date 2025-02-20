@@ -63,8 +63,8 @@ class ModelPatterns:
             The tokenizer class associated with this model. Will default to `"{model_camel_cased}Config"`.
         tokenizer_class (`str`, *optional*):
             The tokenizer class associated with this model (leave to `None` for models that don't use a tokenizer).
-        image_processor_class (`str`, *optional*):
-            The image processor class associated with this model (leave to `None` for models that don't use an image
+        image_processor_class (`Union[str, tuple[str]]`, *optional*):
+            The image processor class or classes associated with this model (leave to `None` for models that don't use an image
             processor).
         feature_extractor_class (`str`, *optional*):
             The feature extractor class associated with this model (leave to `None` for models that don't use a feature
@@ -82,6 +82,7 @@ class ModelPatterns:
     config_class: Optional[str] = None
     tokenizer_class: Optional[str] = None
     image_processor_class: Optional[str] = None
+    image_processor_fast_class: Optional[str] = None
     feature_extractor_class: Optional[str] = None
     processor_class: Optional[str] = None
 
@@ -107,6 +108,7 @@ ATTRIBUTE_TO_PLACEHOLDER = {
     "config_class": "[CONFIG_CLASS]",
     "tokenizer_class": "[TOKENIZER_CLASS]",
     "image_processor_class": "[IMAGE_PROCESSOR_CLASS]",
+    "image_processor_fast_class": "[IMAGE_PROCESSOR_FAST_CLASS]",
     "feature_extractor_class": "[FEATURE_EXTRACTOR_CLASS]",
     "processor_class": "[PROCESSOR_CLASS]",
     "checkpoint": "[CHECKPOINT]",
@@ -339,7 +341,13 @@ def replace_model_patterns(
     # contains the camel-cased named, but will be treated before.
     attributes_to_check = ["config_class"]
     # Add relevant preprocessing classes
-    for attr in ["tokenizer_class", "image_processor_class", "feature_extractor_class", "processor_class"]:
+    for attr in [
+        "tokenizer_class",
+        "image_processor_class",
+        "image_processor_fast_class",
+        "feature_extractor_class",
+        "processor_class",
+    ]:
         if getattr(old_model_patterns, attr) is not None and getattr(new_model_patterns, attr) is not None:
             attributes_to_check.append(attr)
 
@@ -763,10 +771,10 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         tokenizer_class = None
     image_processor_classes = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
     if isinstance(image_processor_classes, tuple):
-        image_processor_class = image_processor_classes[0]  # we take the slow image processor class.
+        image_processor_class, image_processor_fast_class = image_processor_classes
     else:
         image_processor_class = image_processor_classes
-
+        image_processor_fast_class = None
     feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
     processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
 
@@ -800,6 +808,7 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
         config_class=config_class,
         tokenizer_class=tokenizer_class,
         image_processor_class=image_processor_class,
+        image_processor_fast_class=image_processor_fast_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
@@ -950,6 +959,7 @@ def add_model_to_main_init(
                 block.append(lines[idx])
                 idx += 1
             block = "\n".join(block)
+            print("block", block)
             new_lines.append(block)
 
             add_block = True
@@ -957,6 +967,7 @@ def add_model_to_main_init(
                 processing_classes = [
                     old_model_patterns.tokenizer_class,
                     old_model_patterns.image_processor_class,
+                    old_model_patterns.image_processor_fast_class,
                     old_model_patterns.feature_extractor_class,
                     old_model_patterns.processor_class,
                 ]
@@ -1034,7 +1045,7 @@ AUTO_CLASSES_PATTERNS = {
         '        ("{model_type}", "{pretrained_archive_map}"),',
     ],
     "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
-    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_class}"),'],
+    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_classes}"),'],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
     "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
     "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
@@ -1053,6 +1064,7 @@ def add_model_to_auto_classes(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         model_classes (`Dict[str, List[str]]`): A dictionary framework to list of model classes implemented.
     """
+    print("AUTO_CLASSES_PATTERNS", AUTO_CLASSES_PATTERNS)
     for filename in AUTO_CLASSES_PATTERNS:
         # Extend patterns with all model classes if necessary
         new_patterns = []
@@ -1068,14 +1080,27 @@ def add_model_to_auto_classes(
                     )
             elif "{config_class}" in pattern:
                 new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
-            elif "{image_processor_class}" in pattern:
+            elif "{image_processor_classes}" in pattern:
                 if (
                     old_model_patterns.image_processor_class is not None
                     and new_model_patterns.image_processor_class is not None
                 ):
-                    new_patterns.append(
-                        pattern.replace("{image_processor_class}", old_model_patterns.image_processor_class)
-                    )
+                    if (
+                        old_model_patterns.image_processor_fast_class is not None
+                        and new_model_patterns.image_processor_fast_class is not None
+                    ):
+                        new_patterns.append(
+                            pattern.replace(
+                                '"{image_processor_classes}"',
+                                f'("{old_model_patterns.image_processor_class}", "{old_model_patterns.image_processor_fast_class}")',
+                            )
+                        )
+                    else:
+                        new_patterns.append(
+                            pattern.replace(
+                                '"{image_processor_classes}"', f'("{old_model_patterns.image_processor_class}",)'
+                            )
+                        )
             elif "{feature_extractor_class}" in pattern:
                 if (
                     old_model_patterns.feature_extractor_class is not None
@@ -1101,7 +1126,7 @@ def add_model_to_auto_classes(
             new_model_line = new_model_line.replace(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
-
+            print("full_name", full_name, "old_model_line", old_model_line, "new_model_line", new_model_line)
             add_content_to_file(full_name, new_model_line, add_after=old_model_line)
 
     # Tokenizers require special handling
@@ -1197,6 +1222,10 @@ def duplicate_doc_file(
             elif "ImageProcessor" in block_class:
                 # We only add the image processor if necessary
                 if old_model_patterns.image_processor_class != new_model_patterns.image_processor_class:
+                    new_blocks.append(new_block)
+            elif "ImageProcessorFast" in block_class:
+                # We only add the image processor if necessary
+                if old_model_patterns.image_processor_fast_class != new_model_patterns.image_processor_fast_class:
                     new_blocks.append(new_block)
             elif "FeatureExtractor" in block_class:
                 # We only add the feature extractor if necessary
@@ -1309,7 +1338,13 @@ def create_new_model_like(
         )
 
     keep_old_processing = True
-    for processing_attr in ["image_processor_class", "feature_extractor_class", "processor_class", "tokenizer_class"]:
+    for processing_attr in [
+        "image_processor_class",
+        "image_processor_fast_class",
+        "feature_extractor_class",
+        "processor_class",
+        "tokenizer_class",
+    ]:
         if getattr(old_model_patterns, processing_attr) != getattr(new_model_patterns, processing_attr):
             keep_old_processing = False
 
@@ -1594,6 +1629,7 @@ def get_user_input():
     old_model_info = retrieve_info_for_model(old_model_type)
     old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
     old_image_processor_class = old_model_info["model_patterns"].image_processor_class
+    old_image_processor_fast_class = old_model_info["model_patterns"].image_processor_fast_class
     old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
     old_processor_class = old_model_info["model_patterns"].processor_class
     old_frameworks = old_model_info["frameworks"]
@@ -1634,7 +1670,13 @@ def get_user_input():
 
     old_processing_classes = [
         c if not isinstance(c, tuple) else c[0]
-        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
+        for c in [
+            old_image_processor_class,
+            old_image_processor_fast_class,
+            old_feature_extractor_class,
+            old_tokenizer_class,
+            old_processor_class,
+        ]
         if c is not None
     ]
     old_processing_classes = ", ".join(old_processing_classes)
@@ -1645,6 +1687,7 @@ def get_user_input():
     )
     if keep_processing:
         image_processor_class = old_image_processor_class
+        image_processor_fast_class = old_image_processor_fast_class
         feature_extractor_class = old_feature_extractor_class
         processor_class = old_processor_class
         tokenizer_class = old_tokenizer_class
@@ -1663,6 +1706,13 @@ def get_user_input():
             )
         else:
             image_processor_class = None
+        if old_image_processor_fast_class is not None:
+            image_processor_fast_class = get_user_field(
+                "What will be the name of the fast image processor class for this model? ",
+                default_value=f"{model_camel_cased}ImageProcessorFast",
+            )
+        else:
+            image_processor_fast_class = None
         if old_feature_extractor_class is not None:
             feature_extractor_class = get_user_field(
                 "What will be the name of the feature extractor class for this model? ",
@@ -1688,6 +1738,7 @@ def get_user_input():
         config_class=config_class,
         tokenizer_class=tokenizer_class,
         image_processor_class=image_processor_class,
+        image_processor_fast_class=image_processor_fast_class,
         feature_extractor_class=feature_extractor_class,
         processor_class=processor_class,
     )
