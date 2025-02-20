@@ -1280,6 +1280,7 @@ class SamHQMaskDecoder(nn.Module):
 
         iou_pred = self.iou_prediction_head(iou_token_out)
 
+
         if multimask_output:
             mask_slice = slice(1, self.num_mask_tokens - 1)
             iou_pred = iou_pred[:, :, mask_slice]
