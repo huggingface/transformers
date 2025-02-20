@@ -24,19 +24,20 @@ from ..llama.configuration_llama import LlamaConfig
 logger = logging.get_logger(__name__)
 
 
-{
-    "vision_config": {
-        ""
-    }
-}
-
-
 class DeepseekVLVisionConfig(PretrainedConfig):
     model_type = "deepseek_vl_vision_model"
     base_config_key = "vision_config"
     sub_configs = {"low_res_config": SiglipVisionConfig, "high_res_config": SamVisionConfig}
 
-    def __init__(self, concat_type="tuple", use_high_res=False, low_res_config=None, high_res_config=None, **kwargs):
+    def __init__(
+            self,
+            use_high_res=False,
+            low_res_config=None,
+            high_res_config=None,
+            proj_dims=4096,
+            proj_depth=2,
+            **kwargs
+        ):
         super().__init__(**kwargs)
 
         if low_res_config is None:
@@ -47,10 +48,11 @@ class DeepseekVLVisionConfig(PretrainedConfig):
             high_res_config = {}
             logger.info("`high_res_config` is `None`. Initializing the `SamVisionConfig` with default values.")
 
-        self.concat_type = concat_type
         self.use_high_res = use_high_res
         self.low_res_config = SiglipVisionConfig(**low_res_config)
         self.high_res_config = SamVisionConfig(**high_res_config)
+        self.proj_dims = proj_dims
+        self.proj_depth = proj_depth
 
 
 class DeepseekVLConfig(PretrainedConfig):

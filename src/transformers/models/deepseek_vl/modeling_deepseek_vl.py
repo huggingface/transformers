@@ -104,68 +104,40 @@ class DeepseekVLSiglipVisionEncoder(nn.Module):
         output = output[0] # last_hidden_state
         return output
 
-class DeepseekVLVisionProjection(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-    def forward(self, a, b):
-        show_tensor(a, name="projection") # a is low
 
-class DeepseekVLVisionProjection_(nn.Module):
+class DeepseekVLVisionProjection(nn.Module):
     def __init__(self, config: DeepseekVLVisionConfig):
         super().__init__()
         self.config = config
+        self.use_high_res = config.use_high_res
 
-        if self.config.projector_type == "low_high_hybrid_split_mlp_gelu":
-            mlp_depth = self.config.depth
-            self.low_up_proj = nn.Linear(self.config.input_dim, self.config.n_embed // 2)
-            self.high_up_proj = nn.Linear(self.config.input_dim, self.config.n_embed // 2)
-
-            projector_modules = []
-            for _ in range(1, mlp_depth):
-                projector_modules.append(nn.GELU())
-                projector_modules.append(nn.Linear(self.config.n_embed, self.config.n_embed))
-            projector_modules = nn.Sequential(**projector_modules)
-
+        if self.use_high_res:
+            in_channels = config.low_res_config.hidden_size
+            self.low_res_proj = nn.Linear(in_channels, config.proj_dims // 2)
+            in_channels = config.high_res_config.output_channels * 4
+            self.high_res_proj = nn.Linear(in_channels, config.proj_dims // 2)
         else:
-            raise ValueError(f"Unknown projector type: {self.config.projector_type}")
+            self.low_res_proj = nn.Linear(config.low_res_config.hidden_size, config.proj_dims)
 
-        self.layers = projector_modules
+        self.act = nn.GELU()
+        self.proj = nn.Linear(config.proj_dims, config.proj_dims)
 
-    def forward(self, vision_encodings: Tuple[torch.Tensor, Optional[torch.Tensor]]):
-        if isinstance(vision_encodings, Tuple):
-            low_res_encodings, high_res_encodings = vision_encodings
-            high_res_encodings = self.high_up_proj(high_res_encodings)
-            low_res_encodings = self.low_up_proj(low_res_encodings)
-            x = torch.concat([high_res_encodings, low_res_encodings], dim=-1)
-        else:
-            x = vision_encodings
-        
-        return self.layers(x)
+    def forward(self, low_res_encodings: torch.Tensor, high_res_encodings: Optional[torch.Tensor]) -> torch.Tensor:
+        encodings = self.low_res_proj(low_res_encodings)
+        if self.use_high_res:
+            high_res_encodings = self.high_res_proj(high_res_encodings)
+            encodings = torch.concat([high_res_encodings, encodings], dim=-1)
 
+        encodings = self.act(encodings)
+        encodings = self.proj(encodings)
 
-        # show_tensor(high_res_encodings, name="high_res_encodings")
-        # show_tensor(low_res_encodings, name="low_res_encodings")
-
-        """
-        low_res_encodings.shape: [1, 576, 1024] (batch_size, seq_len, config.low_res_config.output_channels)
-        high_res_encodings.shape: [1, 576, 1024] (batch_size, seq_len, config.high_res_config.output_channels)
-
-        low_res_encodings
-        - Siglip
-        - always provided
-        - used in 1.3b model and 7b model
-        high_res_encodings
-        - Sam
-        - None if config.use_high_res is False
-        - used in 7b model
-        """
+        return encodings
 
 
-# vision backbone
 class DeepseekVLVisionEncoder(nn.Module):
     def __init__(self, config: DeepseekVLVisionConfig):
         super().__init__()
-        self.concat_type = config.concat_type
+        self.config = config
         self.use_high_res = config.use_high_res
 
         # Siglip is used for low resolution encoding
@@ -180,14 +152,17 @@ class DeepseekVLVisionEncoder(nn.Module):
         batch_size, n_images, n_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * n_images, n_channels, height, width)
 
-        low_res_output = self.low_res_encoder(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        high_res_output = self.high_res_encoder(pixel_values) if self.use_high_res else None
-        output = self.projection(low_res_output, high_res_output)
+        low_res_encodings = self.low_res_encoder(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        high_res_encodings = self.high_res_encoder(pixel_values) if self.use_high_res else None
+
+        encodings = self.projection(low_res_encodings, high_res_encodings)
+
+        show_tensor(encodings, name="visual_encodings")
 
         # TODO: revert to original shape
         ...
 
-        return output
+        return encodings
 
 
 class DeepseekVLPreTrainedModel(PreTrainedModel):

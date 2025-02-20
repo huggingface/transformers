@@ -29,8 +29,6 @@ from transformers import (
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    # OLD: NEW
-
     # Sam (High Resolution)
     r"vision_model.vision_tower_high.vision_tower.pos_embed": r"model.vision_model.high_res_encoder.model.pos_embed",
     r"vision_model.vision_tower_high.vision_tower.patch_embed.proj.(weight|bias)": r"model.vision_model.high_res_encoder.model.patch_embed.projection.\1",
@@ -63,6 +61,14 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.proj.(weight|bias)": r"model.vision_model.low_res_encoder.model.vision_model.head.attention.out_proj.\1",
     r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.norm.(weight|bias)": r"model.vision_model.low_res_encoder.model.vision_model.head.layernorm.\1",
     r"vision_model(?:.vision_tower_low)?.vision_tower.attn_pool.mlp.fc(\d+).(weight|bias)": r"model.vision_model.low_res_encoder.model.vision_model.head.mlp.fc\1.\2",
+
+    # Vision Projection (1.3B)
+    r"aligner.layers.0.(weight|bias)": r"model.vision_model.projection.low_res_proj.\1",
+    r"aligner.layers.2.(weight|bias)": r"model.vision_model.projection.proj.\1",
+    # Vision Projection (7B)
+    r"aligner.(high|low)_up_proj.(weight|bias)": r"model.vision_model.projection.\1_res_proj.\2",
+    r"aligner.layers.1.(weight|bias)": r"model.vision_model.projection.proj.\1",
+
 }
 # fmt: on
 
