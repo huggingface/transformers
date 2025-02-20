@@ -924,11 +924,8 @@ def _load_state_dict_into_meta_model(
         # In this case, let's parallelize the modules!
         if device_mesh is not None:
             # Immediate parent
-            split_parent_module_name = param_name.split(".")[:-1]
-            parent_module_name = ".".join(split_parent_module_name)
-            parent_module = model
-            for name in split_parent_module_name:
-                parent_module = getattr(parent_module, name)
+            parent_module_name = param_name.rsplit('.', 1)[0]
+            parent_module = model.get_submodule(parent_module_name)
 
             # Check if we are part of the tp_plan
             current_module_plan = None
