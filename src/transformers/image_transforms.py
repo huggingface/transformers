@@ -15,7 +15,7 @@
 
 import warnings
 from math import ceil
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Collection, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -389,8 +389,8 @@ def resize(
 
 def normalize(
     image: np.ndarray,
-    mean: Union[float, Sequence[float]],
-    std: Union[float, Sequence[float]],
+    mean: Union[float, Collection[float]],
+    std: Union[float, Collection[float]],
     data_format: Optional[ChannelDimension] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> np.ndarray:
@@ -402,9 +402,9 @@ def normalize(
     Args:
         image (`np.ndarray`):
             The image to normalize.
-        mean (`float` or `Sequence[float]`):
+        mean (`float` or `Collection[float]`):
             The mean to use for normalization.
-        std (`float` or `Sequence[float]`):
+        std (`float` or `Collection[float]`):
             The standard deviation to use for normalization.
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If unset, will use the inferred format from the input.
@@ -425,14 +425,14 @@ def normalize(
     if not np.issubdtype(image.dtype, np.floating):
         image = image.astype(np.float32)
 
-    if isinstance(mean, Sequence):
+    if isinstance(mean, Collection):
         if len(mean) != num_channels:
             raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
     else:
         mean = [mean] * num_channels
     mean = np.array(mean, dtype=image.dtype)
 
-    if isinstance(std, Sequence):
+    if isinstance(std, Collection):
         if len(std) != num_channels:
             raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
     else:
