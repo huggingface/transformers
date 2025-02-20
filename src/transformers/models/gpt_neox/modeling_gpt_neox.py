@@ -740,7 +740,9 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -758,6 +760,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["embed_out.weight"]
     _tp_plan = {"embed_out": "colwise_rep"}
+    _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)

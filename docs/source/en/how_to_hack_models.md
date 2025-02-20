@@ -24,7 +24,37 @@ You'll learn how to:
 - Modify a model's architecture by changing its attention mechanism.
 - Apply techniques like Low-Rank Adaptation (LoRA) to specific model components.
 
-We encourage you to contribute your own hacks and share them here with the community1
+We encourage you to contribute your own hacks and share them here with the community!
+
+## Efficient Development Workflow
+
+When modifying model code, you'll often need to test your changes without restarting your Python session. The `clear_import_cache()` utility helps with this workflow, especially during model development and contribution when you need to frequently test and compare model outputs:
+
+```python
+from transformers import AutoModel
+model = AutoModel.from_pretrained("bert-base-uncased")
+
+# Make modifications to the transformers code...
+
+# Clear the cache to reload the modified code
+from transformers.utils.import_utils import clear_import_cache
+clear_import_cache()
+
+# Reimport to get the changes
+from transformers import AutoModel
+model = AutoModel.from_pretrained("bert-base-uncased")  # Will use updated code
+```
+
+This is particularly useful when:
+- Iteratively modifying model architectures
+- Debugging model implementations 
+- Testing changes during model development
+- Comparing outputs between original and modified versions
+- Working on model contributions
+
+The `clear_import_cache()` function removes all cached Transformers modules and allows Python to reload the modified code. This enables rapid development cycles without constantly restarting your environment.
+
+This workflow is especially valuable when implementing new models, where you need to frequently compare outputs between the original implementation and your Transformers version (as described in the [Add New Model](https://huggingface.co/docs/transformers/add_new_model) guide).
 
 ## Example: Modifying the Attention Mechanism in the Segment Anything Model (SAM)
 
