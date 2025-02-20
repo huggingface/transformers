@@ -32,27 +32,38 @@ Install 🤗 Transformers for whichever deep learning library you're working wit
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, take a look at this [guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). A virtual environment makes it easier to manage different projects, and avoid compatibility issues between dependencies.
 
-Start by creating a virtual environment in your project directory:
+Create a virtual environment with [uv](https://docs.astral.sh/uv/) (refer to [Installation](https://docs.astral.sh/uv/getting-started/installation/) for installation instructions), a fast Rust-based Python package and project manager.
 
 ```bash
-python -m venv .env
+uv venv my-env
+source my-env/bin/activate
 ```
 
-Activate the virtual environment. On Linux and MacOs:
+Now you're ready to install 🤗 Transformers with pip or uv.
+
+<hfoptions id="install">
+<hfoption id="uv">
 
 ```bash
-source .env/bin/activate
-```
-Activate Virtual environment on Windows
-
-```bash
-.env/Scripts/activate
+uv pip install transformers
 ```
 
-Now you're ready to install 🤗 Transformers with the following command:
+</hfoption>
+<hfoption id="pip">
 
 ```bash
 pip install transformers
+```
+
+</hfoption>
+</hfoptions>
+
+For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally) and TensorFlow(https://www.tensorflow.org/install/pip).
+
+Run the command below to check if your system detects an NVIDIA GPU.
+
+```bash
+nvidia-smi
 ```
 
 For CPU-support only, you can conveniently install 🤗 Transformers and a deep learning library in one line. For example, install 🤗 Transformers and PyTorch with:
@@ -254,3 +265,36 @@ Once your file is downloaded and locally cached, specify it's local path to load
 See the [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) section for more details on downloading files stored on the Hub.
 
 </Tip>
+
+## Troubleshooting
+
+See below for some of the more common installation issues and how to resolve them.
+
+### Unsupported Python version
+
+Ensure you are using Python 3.9 or later. Run the command below to check your Python version.
+
+```
+python --version
+```
+
+### Missing dependencies
+
+Install all required dependencies by running the following command. Ensure you’re in the project directory before executing the command.
+
+```
+pip install -r requirements.txt
+```
+
+### Windows-specific
+
+If you encounter issues on Windows, you may need to activate Developer Mode. Navigate to Windows Settings > For Developers > Developer Mode.
+
+Alternatively, create and activate a virtual environment as shown below.
+
+```
+python -m venv env
+.\env\Scripts\activate
+```
+
+

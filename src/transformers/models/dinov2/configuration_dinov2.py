@@ -60,7 +60,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
             The epsilon used by the layer normalization layers.
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
+        patch_size (`int`, *optional*, defaults to 14):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -88,6 +88,8 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
+        use_mask_token (`bool`, *optional*, defaults to `True`):
+            Whether to use mask_token in embeddings.
 
     Example:
 
@@ -118,7 +120,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-6,
         image_size=224,
-        patch_size=16,
+        patch_size=14,
         num_channels=3,
         qkv_bias=True,
         layerscale_value=1.0,
@@ -128,6 +130,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         out_indices=None,
         apply_layernorm=True,
         reshape_hidden_states=True,
+        use_mask_token=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -154,6 +157,7 @@ class Dinov2Config(BackboneConfigMixin, PretrainedConfig):
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
+        self.use_mask_token = use_mask_token
 
 
 class Dinov2OnnxConfig(OnnxConfig):
@@ -170,3 +174,6 @@ class Dinov2OnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
+
+
+__all__ = ["Dinov2Config", "Dinov2OnnxConfig"]

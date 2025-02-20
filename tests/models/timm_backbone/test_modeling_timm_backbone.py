@@ -115,6 +115,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    # `TimmBackbone` has no `_init_weights`. Timm's way of weight init. seems to give larger magnitude in the intermediate values during `forward`.
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     def test_timm_transformer_backbone_equivalence(self):
         timm_checkpoint = "resnet18"
         transformers_checkpoint = "microsoft/resnet-18"

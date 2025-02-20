@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import inspect
+from functools import lru_cache, wraps
 from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
@@ -21,7 +22,7 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, logging
+from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -34,12 +35,16 @@ is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse(
 is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
 is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
 is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
+
+# For backwards compatibility (e.g. some remote codes on Hub using those variables).
 is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
 is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
 is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
 
+# Cache this result has it's a C FFI call which can be pretty time-consuming
+_torch_distributed_available = torch.distributed.is_available()
 
-if is_torch_greater_or_equal("2.5"):
+if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import Replicate
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
@@ -339,6 +344,8 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
         return torch.isin(elements, test_elements)
 
 
+# TODO need to add the __repr__ that shows that it is a colwise parallel
+# See https://github.com/pytorch/pytorch/issues/145726
 def translate_to_torch_parallel_style(style: str):
     """
     In model configurations, we use a neutral type (string) to specify parallel
@@ -354,5 +361,33 @@ def translate_to_torch_parallel_style(style: str):
         return RowwiseParallel()
     elif style == "colwise_rep":
         return ColwiseParallel(output_layouts=Replicate())
+    elif style == "rowwise_rep":
+        return RowwiseParallel(input_layouts=Replicate())
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
+
+
+def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
+    """
+    LRU cache decorator from standard functools library, but with a workaround to disable
+    caching when torchdynamo is compiling. Expected to work with class methods.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not is_torchdynamo_compiling():
+                # Cache the function only if the model is not being compiled
+                # check if the function is already cached, otherwise create it
+                if not hasattr(self, f"_cached_{func.__name__}"):
+                    self.__setattr__(
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                    )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+            else:
+                # Otherwise, just call the original function
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
