@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Optimum Quanto
 
-[Quanto](https://github.com/huggingface/optimum-quanto) is a PyTorch quantization backend for [Optimum](https://huggingface.co/docs/optimum/index). It features linear quantization for weights (float8, int8, int4, int2) with accuracy very similar to full-precision models. Quanto is compatible with with any model modality and device, making it simple to use regardless of hardware.
+[Quanto](https://github.com/huggingface/optimum-quanto) is a PyTorch quantization backend for [Optimum](https://huggingface.co/docs/optimum/index). It features linear quantization for weights (float8, int8, int4, int2) with accuracy very similar to full-precision models. Quanto is compatible with any model modality and device, making it simple to use regardless of hardware.
 
 Quanto is also compatible with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for faster generation.
 

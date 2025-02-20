@@ -33,7 +33,7 @@ pip install flute-kernel
 <hfoption id="CUDA 11.8">
 
 ```bash
-pip install flute-kernel -i https://flute-ai.github.io/whl/cu118
+pip install flute-kernel -i https://flute-ai.github.io/whl/cu12.4
 ```
 
 </hfoption>
