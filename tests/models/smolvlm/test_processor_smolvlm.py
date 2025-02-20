@@ -265,6 +265,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_ids"], expected_input_ids)
         # fmt: on
 
+    @unittest.skip(
+            reason="from @molbap @zucchini-nlp, passing non-nested images is error-prone and not recommended"
+    )
     def test_non_nested_images_with_batched_text(self):
         processor = self.get_processor()
         processor.image_processor.do_image_splitting = False
