@@ -593,7 +593,6 @@ class _BaseAutoModelClass:
         cls._model_mapping.register(config_class, model_class, exist_ok=exist_ok)
         if model_class.__name__ not in ALL_CUSTOM_CLASSES:
             ALL_CUSTOM_CLASSES[model_class.__name__] = model_class
-        model_class._auto_class = "AutoModel"
 
 
 class _BaseAutoBackboneClass(_BaseAutoModelClass):
