@@ -1517,7 +1517,7 @@ def _get_tp_key_registry(model: "PreTrainedModel") -> Dict[str, Dict]:
         full_tp_plan.update(getattr(model, "_tp_plan", {}))
 
     # Translate the plan
-    full_tp_plan = {key: translate_to_torch_parallel_style(plan) for key, plan in full_tp_plan}
+    full_tp_plan = {key: translate_to_torch_parallel_style(plan) for key, plan in full_tp_plan.items()}
 
     # Extract full prefix before the layer numbers
     layer_prefix = None
