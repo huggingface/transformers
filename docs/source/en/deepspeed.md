@@ -586,6 +586,20 @@ You can choose the communication data type by setting the `communication_data_ty
 }
 ```
 
+### Universal Checkpointing
+
+[Universal Checkpointing](https://www.deepspeed.ai/tutorials/universal-checkpointing) is an efficient and flexible feature for saving and loading model checkpoints. It enables seamless model training continuation and fine-tuning across different model architectures, parallelism techniques, and training configurations.
+
+Resume training with a universal checkpoint by setting [load_universal](https://www.deepspeed.ai/docs/config-json/#checkpoint-options) to `true` in the config file.
+
+```yaml
+{
+    "checkpoint": {
+        "load_universal": true
+    }
+}
+```
+
 ## Deployment
 
 DeepSpeed can be deployed by different launchers such as [torchrun](https://pytorch.org/docs/stable/elastic/run.html), the `deepspeed` launcher, or [Accelerate](https://huggingface.co/docs/accelerate/basic_tutorials/launch#using-accelerate-launch). To deploy, add `--deepspeed ds_config.json` to the [`Trainer`] command line. It’s recommended to use DeepSpeed’s [`add_config_arguments`](https://deepspeed.readthedocs.io/en/latest/initialize.html#argument-parsing) utility to add any necessary command line arguments to your code.

@@ -23,7 +23,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -44,9 +44,6 @@ if is_torch_available():
         FalconMambaModel,
     )
     from transformers.cache_utils import MambaCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
@@ -247,9 +244,6 @@ class FalconMambaModelTester:
         return config, inputs_dict
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @require_torch
 # Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -300,7 +294,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
         self.config_tester.run_common_tests()
 
     @require_torch_multi_gpu
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx90a','gfx942','gfx1200'])
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -362,11 +356,12 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
                         self.assertTrue(param.data.min().item() >= inv_dt[0])
                 elif "A_log" in name:
                     A = torch.arange(1, config.state_size + 1, dtype=torch.float32)[None, :]
-                    self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                    A = A.expand(config.intermediate_size, -1).contiguous()
+                    torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                 elif "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
 
     @slow
     # Ignore copy
@@ -434,7 +429,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class FalconMambaIntegrationTests(unittest.TestCase):
     def setUp(self):

@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_tf,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     require_torch_or_tf,
     torch_device,
     skipIfRocm,
@@ -44,7 +43,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_small_model_pt(self):
         text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="pt")
         # Using `do_sample=False` to force deterministic output
@@ -294,6 +293,50 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 ],
             )
 
+    @require_torch
+    def test_small_chat_model_with_iterator_pt(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        text_generator = pipeline(
+            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+        ]
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+            }
+        ]
+
+        def data():
+            yield from [chat1, chat2]
+
+        outputs = text_generator(data(), do_sample=False, max_new_tokens=10)
+        assert isinstance(outputs, PipelineIterator)
+        outputs = list(outputs)
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
+            ],
+        )
+
     @require_tf
     def test_small_model_tf(self):
         text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="tf")
@@ -398,7 +441,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
         return text_generator, ["This is a test", "Another test"]
 
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
@@ -512,8 +555,8 @@ class TextGenerationPipelineTests(unittest.TestCase):
 
     @require_torch
     @require_accelerate
-    @require_torch_gpu
-    @skipIfRocm(arch='gfx1201')
+    @require_torch_accelerator
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_small_model_pt_bloom_accelerate(self):
         import torch
 
@@ -613,3 +656,17 @@ class TextGenerationPipelineTests(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             _ = text_generator(prompt, max_length=10)
         self.assertNotIn(logger_msg, cl.out)
+
+    @require_torch
+    def test_pipeline_assisted_generation(self):
+        """Tests that we can run assisted generation in the pipeline"""
+        model = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        pipe = pipeline("text-generation", model=model, assistant_model=model)
+
+        # We can run the pipeline
+        prompt = "Hello world"
+        _ = pipe(prompt)
+
+        # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
+        with self.assertRaises(ValueError):
+            _ = pipe(prompt, generate_kwargs={"num_beams": 2})

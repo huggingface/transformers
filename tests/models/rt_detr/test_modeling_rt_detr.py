@@ -28,7 +28,13 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_torch, require_torch_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -631,7 +637,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertTrue(not failed_cases, message)
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_with_different_dtypes(self, torch_dtype_str):
         torch_dtype = {
@@ -653,7 +659,7 @@ class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
         torch_dtype = {
@@ -739,11 +745,11 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=1e-4, atol=1e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=1e-4, atol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
@@ -763,6 +769,6 @@ class RTDetrModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-4))
+        torch.testing.assert_close(results["scores"][:4], expected_scores, rtol=1e-4, atol=1e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][:4], expected_slice_boxes, atol=1e-4))
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=1e-4, atol=1e-4)

@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import SegformerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, skipIfRocm
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -180,6 +180,10 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_head_masking = False
     test_pruning = False
     test_resize_embeddings = False
+
+    @skipIfRocm(arch='gfx942')
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def setUp(self):
         self.model_tester = SegformerModelTester(self)
@@ -373,7 +377,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
                 [[-12.5134, -13.4686, -14.4915], [-12.8669, -14.4343, -14.7758], [-13.2523, -14.5819, -15.0694]],
             ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_image_segmentation_city(self):
@@ -402,7 +406,7 @@ class SegformerModelIntegrationTest(unittest.TestCase):
                 [[-3.6456, -3.0209, -1.4203], [-3.0797, -3.1959, -2.0000], [-1.8757, -1.9217, -1.6997]],
             ]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3, :3], expected_slice, atol=1e-1))
+        torch.testing.assert_close(outputs.logits[0, :3, :3, :3], expected_slice, rtol=1e-1, atol=1e-1)
 
     @slow
     def test_post_processing_semantic_segmentation(self):

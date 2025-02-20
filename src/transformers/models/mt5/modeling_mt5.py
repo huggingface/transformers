@@ -1192,7 +1192,7 @@ class MT5Stack(MT5PreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -2543,3 +2543,15 @@ class MT5ForQuestionAnswering(MT5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "MT5EncoderModel",
+    "MT5ForConditionalGeneration",
+    "MT5ForQuestionAnswering",
+    "MT5ForSequenceClassification",
+    "MT5ForTokenClassification",
+    "MT5Model",
+    "MT5PreTrainedModel",
+    "MT5Stack",
+]

@@ -56,7 +56,7 @@ In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. N
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
 >>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
 
 >>> prompt = "Give me a short introduction to large language model."

@@ -18,6 +18,7 @@ import inspect
 import json
 import random
 import tempfile
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -173,8 +174,9 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(**processor_components)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
@@ -194,8 +196,9 @@ class ProcessorTesterMixin:
             "image_processor", do_rescale=True, rescale_factor=-1
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(**processor_components)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -209,8 +212,9 @@ class ProcessorTesterMixin:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
+        processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(**processor_components)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
@@ -227,8 +231,9 @@ class ProcessorTesterMixin:
             "image_processor", do_rescale=True, rescale_factor=1
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(**processor_components)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -241,7 +246,8 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -263,7 +269,8 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=2)
@@ -288,7 +295,8 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = [self.prepare_text_inputs()]
@@ -306,7 +314,8 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs()
@@ -329,7 +338,8 @@ class ProcessorTesterMixin:
         if "image_processor" not in self.processor_class.attributes:
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
         image_input = self.prepare_image_inputs()
@@ -519,3 +529,27 @@ class ProcessorTesterMixin:
             processor.prepare_and_validate_optional_call_args(
                 *(f"optional_{i}" for i in range(num_optional_call_args + 1))
             )
+
+    def test_chat_template_save_loading(self):
+        processor = self.get_processor()
+        existing_tokenizer_template = getattr(processor.tokenizer, "chat_template", None)
+        processor.chat_template = "test template"
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor.save_pretrained(tmpdirname)
+            self.assertTrue(Path(tmpdirname, "chat_template.json").is_file())
+            self.assertFalse(Path(tmpdirname, "chat_template.jinja").is_file())
+            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
+            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+            # When we don't use single-file chat template saving, processor and tokenizer chat templates
+            # should remain separate
+            self.assertEqual(getattr(reloaded_processor.tokenizer, "chat_template", None), existing_tokenizer_template)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor.save_pretrained(tmpdirname, save_raw_chat_template=True)
+            self.assertTrue(Path(tmpdirname, "chat_template.jinja").is_file())
+            self.assertFalse(Path(tmpdirname, "chat_template.json").is_file())
+            reloaded_processor = self.processor_class.from_pretrained(tmpdirname)
+            self.assertEqual(processor.chat_template, reloaded_processor.chat_template)
+            # When we save as single files, tokenizers and processors share a chat template, which means
+            # the reloaded tokenizer should get the chat template as well
+            self.assertEqual(reloaded_processor.chat_template, reloaded_processor.tokenizer.chat_template)

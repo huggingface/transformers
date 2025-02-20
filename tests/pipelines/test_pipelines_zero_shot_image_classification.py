@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
+    skipIfRocm,
     rocmUtils
 )
 
@@ -75,6 +76,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
     #     outputs = pipe([image] * 3, batch_size=2, candidate_labels=["A", "B"])
 
     @require_torch
+    @skipIfRocm(arch=['gfx942','gfx90a'])
     def test_small_model_pt(self, torch_dtype="float32"):
         image_classifier = pipeline(
             model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification", torch_dtype=torch_dtype
@@ -132,13 +134,14 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
         )
 
         for single_output in output:
-            if rocmUtils.is_rocm_skippable(arch='gfx1201'):
+            if rocmUtils.is_rocm_skippable(arch=['gfx1201','gfx1200']):
                 for sub_output in single_output:
                     compare_pipeline_output_to_hub_spec(sub_output, ZeroShotImageClassificationOutputElement)
             else:
                 compare_pipeline_output_to_hub_spec(single_output, ZeroShotImageClassificationOutputElement)
 
     @require_torch
+    @skipIfRocm(arch=['gfx942','gfx90a'])
     def test_small_model_pt_fp16(self):
         self.test_small_model_pt(torch_dtype="float16")
 

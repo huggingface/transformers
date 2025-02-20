@@ -324,7 +324,6 @@ class MusicgenFlashAttention2(MusicgenAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -2751,3 +2750,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             guidance_scale=1.0,
         )
+
+
+__all__ = ["MusicgenForConditionalGeneration", "MusicgenForCausalLM", "MusicgenModel", "MusicgenPreTrainedModel"]

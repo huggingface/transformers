@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import LiltConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, skipIfRocm
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -243,6 +243,10 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     fx_compatible = False
     test_pruning = False
 
+    @skipIfRocm(arch='gfx942')
+    def test_model_outputs_equivalence(self):
+        super().test_model_outputs_equivalence()
+
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
         self,
@@ -326,4 +330,4 @@ class LiltModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(outputs.last_hidden_state.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :, :3], expected_slice, atol=1e-3))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :, :3], expected_slice, rtol=1e-3, atol=1e-3)

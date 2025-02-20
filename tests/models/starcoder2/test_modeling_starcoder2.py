@@ -23,9 +23,11 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -321,6 +323,10 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     ):
         return True
 
+    @skipIfRocm(arch=['gfx1200','gfx1201'])
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        super().test_generate_from_inputs_embeds_with_static_cache()
+
     def setUp(self):
         self.model_tester = Starcoder2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Starcoder2Config, hidden_size=37)
@@ -412,7 +418,7 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Starcoder2IntegrationTest(unittest.TestCase):
     def test_starcoder2_batched_generation_sdpa(self):
         EXPECTED_TEXT = [

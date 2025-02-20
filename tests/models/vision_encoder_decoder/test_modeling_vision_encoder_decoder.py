@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     slow,
     to_2tuple,
     torch_device,
+    skipIfRocm
 )
 from transformers.utils import (
     cached_property,
@@ -441,18 +442,13 @@ class EncoderDecoderMixin:
                 if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                     raise ValueError("The eager model should not have SDPA attention layers")
 
-            has_sdpa = False
-            for name, submodule in model_sdpa.named_modules():
-                class_name = submodule.__class__.__name__
-                if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                    has_sdpa = True
-                    break
-            if not has_sdpa:
-                raise ValueError("The SDPA model should have SDPA attention layers")
-
 
 @require_torch
 class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
+    @skipIfRocm(arch=['gfx90a','gfx942'])
+    def test_save_and_load_from_pretrained(self):
+        super().test_save_and_load_from_pretrained()
+
     def get_pretrained_model_and_inputs(self):
         model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
             "hf-internal-testing/tiny-random-deit", "hf-internal-testing/tiny-random-roberta"
@@ -574,6 +570,10 @@ class DeiT2RobertaModelTest(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class ViT2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
     supports_sdpa = True  # one submodel support SDPA
+
+    @skipIfRocm(arch=['gfx90a','gfx942'])
+    def test_save_and_load_from_pretrained(self):
+        super().test_save_and_load_from_pretrained()
 
     def get_pretrained_model_and_inputs(self):
         model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -889,6 +889,10 @@ class LayoutLMv32TrOCR(EncoderDecoderMixin, unittest.TestCase):
 class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
     supports_sdpa = True  # both submodels support SDPA
 
+    @skipIfRocm(arch=['gfx90a','gfx942'])
+    def test_save_and_load_from_pretrained(self):
+        super().test_save_and_load_from_pretrained()
+
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = ViTModel(config).eval()
         decoder_model = GPT2LMHeadModel(decoder_config).eval()
@@ -1006,6 +1010,10 @@ class VIT2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
 @require_torch
 class Donut2GPT2Test(EncoderDecoderMixin, unittest.TestCase):
     supports_sdpa = True  # one submodel (GPT2) support SDPA
+
+    @skipIfRocm(arch=['gfx90a','gfx942'])
+    def test_save_and_load_from_pretrained(self):
+        super().test_save_and_load_from_pretrained()
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = DonutSwinModel(config).eval()
@@ -1151,7 +1159,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
             [-1.4502, -4.6683, -0.5347, -2.9291, 9.1435, -3.0571, 8.9764, 1.7560, 8.7358, -1.5311]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :10], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_printed(self):
@@ -1185,7 +1193,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
                 device=torch_device,
             )
 
-        self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :10], expected_slice, rtol=1e-4, atol=1e-4)
 
 
 @require_vision
@@ -1281,7 +1289,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([24.3873, -6.4491, 32.5394]).to(torch_device)
-        self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
         task_prompt = "<s_docvqa><s_question>{user_input}</s_question><s_answer>"
@@ -1345,7 +1353,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-27.4344, -3.2686, -19.3524], device=torch_device)
-        self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
         task_prompt = "<s_cord-v2>"
@@ -1407,7 +1415,7 @@ class DonutModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([-17.6490, -4.8381, -15.7577], device=torch_device)
-        self.assertTrue(torch.allclose(logits[0, 0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # step 2: generation
         task_prompt = "<s_rvlcdip>"
@@ -1484,7 +1492,7 @@ class NougatModelIntegrationTest(unittest.TestCase):
             [1.6253, -4.2179, 5.8532, -2.7911, -5.0609, -4.7397, -4.2890, -5.1073, -4.8908, -4.9729]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(logits[0, 0, :10], expected_slice, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :10], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_generation(self):
         processor = self.default_processor

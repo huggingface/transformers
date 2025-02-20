@@ -22,10 +22,12 @@ from transformers import MixtralConfig, is_torch_available
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
-    skipIfRocm
+    skipIfRocm,
+    rocmUtils
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -315,7 +317,21 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = True
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        if rocmUtils.is_rocm_skippable(arch=['gfx90a','gfx942','gfx1201','gfx1200']):
+            torch._dynamo.config.capture_dynamic_output_shape_ops = True
+        super().test_generate_from_inputs_embeds_with_static_cache()
+
+    def test_generate_with_static_cache(self):
+        if rocmUtils.is_rocm_skippable(arch=['gfx90a','gfx942','gfx1201','gfx1200']):
+            torch._dynamo.config.capture_dynamic_output_shape_ops = True
+        super().test_generate_with_static_cache()
+
+    @skipIfRocm(min_torch_version='2.5')
+    def test_flex_attention_with_grads(self):
+        super().test_flex_attention_with_grads()
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -473,7 +489,7 @@ class MixtralIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_logits(self):
         model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
@@ -509,7 +525,7 @@ class MixtralIntegrationTest(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_logits_batched(self):
         model_id = "hf-internal-testing/Mixtral-tiny"
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)

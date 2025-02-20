@@ -49,12 +49,16 @@ class VideoLlavaConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the CLIP backbone.
             Can be either "full" to select all features or "default" to select features without `CLS`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         image_seq_length (`int`, *optional*, defaults to 256):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 2056):
             Sequence length of one video embedding.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
 
     Example:
 
@@ -92,6 +96,7 @@ class VideoLlavaConfig(PretrainedConfig):
         vision_feature_layer=-2,
         image_seq_length=256,
         video_seq_length=2056,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -102,6 +107,7 @@ class VideoLlavaConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
         self.image_seq_length = image_seq_length
         self.video_seq_length = video_seq_length
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         self.vision_config = vision_config
 
@@ -132,3 +138,6 @@ class VideoLlavaConfig(PretrainedConfig):
 
         self.text_config = text_config
         super().__init__(**kwargs)
+
+
+__all__ = ["VideoLlavaConfig"]

@@ -20,12 +20,13 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_availab
 _import_structure = {
     "configuration_utils": [
         "BaseWatermarkingConfig",
+        "CompileConfig",
         "GenerationConfig",
         "GenerationMode",
         "SynthIDTextWatermarkingConfig",
         "WatermarkingConfig",
     ],
-    "streamers": ["TextIteratorStreamer", "TextStreamer"],
+    "streamers": ["AsyncTextIteratorStreamer", "TextIteratorStreamer", "TextStreamer"],
 }
 
 try:
@@ -67,7 +68,6 @@ else:
         "LogitNormalization",
         "LogitsProcessor",
         "LogitsProcessorList",
-        "LogitsWarper",
         "MinLengthLogitsProcessor",
         "MinNewTokensLengthLogitsProcessor",
         "MinPLogitsWarper",
@@ -88,7 +88,6 @@ else:
         "WatermarkLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
-        "MaxNewTokensCriteria",
         "MaxLengthCriteria",
         "MaxTimeCriteria",
         "ConfidenceCriteria",
@@ -192,12 +191,13 @@ else:
 if TYPE_CHECKING:
     from .configuration_utils import (
         BaseWatermarkingConfig,
+        CompileConfig,
         GenerationConfig,
         GenerationMode,
         SynthIDTextWatermarkingConfig,
         WatermarkingConfig,
     )
-    from .streamers import TextIteratorStreamer, TextStreamer
+    from .streamers import AsyncTextIteratorStreamer, TextIteratorStreamer, TextStreamer
 
     try:
         if not is_torch_available():
@@ -228,7 +228,6 @@ if TYPE_CHECKING:
             LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
-            LogitsWarper,
             MinLengthLogitsProcessor,
             MinNewTokensLengthLogitsProcessor,
             MinPLogitsWarper,
@@ -252,7 +251,6 @@ if TYPE_CHECKING:
             ConfidenceCriteria,
             EosTokenCriteria,
             MaxLengthCriteria,
-            MaxNewTokensCriteria,
             MaxTimeCriteria,
             StoppingCriteria,
             StoppingCriteriaList,

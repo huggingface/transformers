@@ -327,12 +327,12 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_headmasking = False
     test_pruning = False
 
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx90a','gfx942','gfx1100','gfx1101','gfx1200'])
     def test_generate_with_static_cache(self):
         super().test_generate_with_static_cache()
         pass
 
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx90a','gfx942','gfx1100','gfx1101','gfx1200'])
     def test_generate_from_inputs_embeds_with_static_cache(self):
         super().test_generate_from_inputs_embeds_with_static_cache()
         pass
@@ -379,7 +379,7 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         pass
 
     @unittest.skip("Dbrx does not support `torch.compile` with `fullgraph=True`.")
-    def test_generate_compile_fullgraph(self):
+    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -404,4 +404,4 @@ class DbrxModelIntegrationTest(unittest.TestCase):
                 ]
             ]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

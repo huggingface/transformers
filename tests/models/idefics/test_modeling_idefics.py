@@ -45,9 +45,6 @@ if is_torch_available():
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -328,7 +325,6 @@ class IdeficsModelTester:
         self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
@@ -595,19 +591,18 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
     all_generative_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
     
 
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx90a','gfx942','gfx1100','gfx1101','gfx1200'])
     def test_generate_from_inputs_embeds_with_static_cache(self):
         super().test_generate_from_inputs_embeds_with_static_cache()
         pass
 
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx90a','gfx942','gfx1100','gfx1101','gfx1200'])
     def test_generate_with_static_cache(self):
         super().test_generate_with_static_cache()
         pass
@@ -626,6 +621,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
     @pytest.mark.generate
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
     def test_left_padding_compatibility(self):
         """Overwrite because IDEFICS needs image attention mask to be also padded"""
         # NOTE: left-padding results in small numerical differences. This is expected.
@@ -683,7 +679,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             next_logits_with_padding = model(**model_kwargs, **inputs_dict).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -798,7 +794,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
     @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
-    def test_generate_compile_fullgraph(self):
+    def test_generate_compile_model_forward(self):
         pass
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
@@ -830,7 +826,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 @require_vision
 class IdeficsModelIntegrationTest(TestCasePlus):

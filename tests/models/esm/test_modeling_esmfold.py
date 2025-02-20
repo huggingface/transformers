@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import EsmConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import TestCasePlus, is_flaky, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -184,6 +184,12 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(
+        description="The computed `s = s / norm_denom` in `EsmFoldAngleResnet` is numerically instable if `norm_denom` is very small."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
     @unittest.skip(reason="Does not support attention outputs")
     def test_attention_outputs(self):
         pass
@@ -276,4 +282,4 @@ class EsmModelIntegrationTest(TestCasePlus):
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         position_outputs = model(input_ids)["positions"]
         expected_slice = torch.tensor([2.5828, 0.7993, -10.9334], dtype=torch.float32)
-        self.assertTrue(torch.allclose(position_outputs[0, 0, 0, 0], expected_slice, atol=1e-4))
+        torch.testing.assert_close(position_outputs[0, 0, 0, 0], expected_slice, rtol=1e-4, atol=1e-4)

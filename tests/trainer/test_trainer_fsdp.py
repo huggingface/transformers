@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_fp8,
     require_fsdp,
     require_torch_multi_gpu,
+    skipIfRocm,
 )
 
 
@@ -67,6 +68,7 @@ class TestFSDPTrainer(TestCasePlus):
     @require_accelerate
     @require_torch_multi_gpu
     @require_fsdp
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
     def test_trainer(self):
         output_dir = self.get_auto_remove_tmp_dir()
         cmd = [

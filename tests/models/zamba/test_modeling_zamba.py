@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
@@ -46,7 +45,7 @@ if is_torch_available():
         ZambaModel,
     )
     from transformers.models.zamba.modeling_zamba import (
-        HybridMambaAttentionDynamicCache,
+        ZambaHybridDynamicCache,
     )
 
 
@@ -215,9 +214,7 @@ class ZambaModelTester:
 
         # first forward pass
         # Attention: Zamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
+        past_key_values = ZambaHybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
@@ -344,10 +341,14 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 if param.requires_grad:
                     if "A_log" in name:
                         A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
-                        self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                        intermediate_dim = config.mamba_expand * config.hidden_size
+                        A = A.expand(intermediate_dim, -1).reshape(
+                            config.n_mamba_heads, intermediate_dim // config.n_mamba_heads, -1
+                        )
+                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                     elif "D" in name:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
                     elif "x_proj" in name or "dt_proj_weight" in name:
                         self.assertIn(
                             ((param.data.mean() * 1e2).round() / 1e2).item(),
@@ -501,7 +502,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=3e-3))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=3e-3, atol=3e-3)
 
     @require_flash_attn
     @require_torch_gpu
@@ -552,11 +553,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         right padding + use cache with FA2
         """
         self.skipTest(reason="Zamba flash attention does not support right padding")
-
-    @unittest.skip(reason="Zamba has its own special cache type")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
 
 @require_torch

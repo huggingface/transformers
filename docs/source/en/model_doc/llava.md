@@ -131,7 +131,7 @@ prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=T
 prompts = [prompt_1, prompt_2]
 
 # We can simply feed images in the order they have to be used in the text prompt
-inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device, torch.float16)
+inputs = processor(images=[image_stop, image_cats], text=prompts, padding=True, return_tensors="pt").to(model.device, torch.float16)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
@@ -162,6 +162,16 @@ For multiple turns conversation:
 "USER: <image>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
 ```
 
+## Note regarding reproducing original implementation
+
+In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LLavaImageProcessor`:
+
+```python
+from transformers import LLavaImageProcessor
+
+image_processor = LLavaImageProcessor.from_pretrained("https://huggingface.co/llava-hf/llava-1.5-7b-hf", do_pad=True)
+```
+
 ### Using Flash Attention 2
 
 Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
@@ -179,6 +189,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
+
+## LlavaImageProcessor
+
+[[autodoc]] LlavaImageProcessor
+    - preprocess
 
 ## LlavaProcessor
 

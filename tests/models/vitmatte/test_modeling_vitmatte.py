@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm,
 )
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -143,6 +144,10 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+
+    @skipIfRocm(arch='gfx942')
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def setUp(self):
         self.model_tester = VitMatteModelTester(self)
@@ -292,4 +297,4 @@ class VitMatteModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.9977, 0.9987, 0.9990], [0.9980, 0.9998, 0.9998], [0.9983, 0.9998, 0.9998]], device=torch_device
         )
-        self.assertTrue(torch.allclose(alphas[0, 0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(alphas[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

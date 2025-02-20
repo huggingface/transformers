@@ -1,10 +1,10 @@
 name: Self-hosted runner (AMD mi250 CI caller)
 
 on:
-  workflow_run:
-    workflows: ["Self-hosted runner (push-caller)"]
-    branches: ["main"]
-    types: [completed]
+  #workflow_run:
+  #  workflows: ["Self-hosted runner (push-caller)"]
+  #  branches: ["main"]
+  #  types: [completed]
   push:
     branches:
       - run_amd_push_ci_caller*
@@ -13,7 +13,7 @@ on:
       - "tests/**"
       - ".github/**"
       - "templates/**"
-      - "utils/**"    
+      - "utils/**"
   pull_request:
      types: [opened, reopened, synchronize]
      branches: ["main"]
@@ -21,7 +21,7 @@ on:
 jobs:
   run_amd_ci:
     name: AMD mi250
-    if: (cancelled() != true) && (github.event_name != 'schedule') && (github.event_name == 'pull_request')
+    if: (cancelled() != true) && ((github.event_name == 'workflow_run') || ((github.event_name == 'push') && startsWith(github.ref_name, 'run_amd_push_ci_caller')))
     uses: ./.github/workflows/self-push-amd.yml
     with:
       gpu_flavor: mi250

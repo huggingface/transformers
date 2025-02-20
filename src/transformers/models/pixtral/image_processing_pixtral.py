@@ -14,6 +14,7 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
+import math
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -36,7 +37,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_device, is_torch_dtype, is_torch_tensor, is_vision_available, logging
+from ...utils import TensorType, is_torch_device, is_torch_dtype, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -62,10 +63,24 @@ class BatchMixFeature(BatchFeature):
         Returns:
             [`BatchFeature`]: The same instance after modification.
         """
+
+        def _recursive_to(obj, device, *args, **kwargs):
+            # Lists can be nested, so keep digging until we hit tensors
+            if isinstance(obj, list):
+                return [_recursive_to(o, device, *args, **kwargs) for o in obj]
+            # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
+            elif isinstance(obj, torch.Tensor) and torch.is_floating_point(obj):
+                # cast and send to device
+                return obj.to(*args, **kwargs)
+            elif isinstance(obj, torch.Tensor) and device is not None:
+                # only send to device, don't cast
+                return obj.to(device=device)
+            else:
+                return obj
+
         requires_backends(self, ["torch"])
         import torch  # noqa
 
-        new_data = {}
         device = kwargs.get("device")
         # Check if the args are a device or a dtype
         if device is None and len(args) > 0:
@@ -79,21 +94,8 @@ class BatchMixFeature(BatchFeature):
             else:
                 # it's something else
                 raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
-            # check if v is a floating point
-            if isinstance(v, list):
-                new_data[k] = [
-                    element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
-                ]
-            elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
-                # cast and send to device
-                new_data[k] = v.to(*args, **kwargs)
-            elif isinstance(v, torch.Tensor) and device is not None:
-                new_data[k] = v.to(device=device)
-            else:
-                new_data[k] = v
-        self.data = new_data
+
+        self.data = {k: _recursive_to(v, device, *args, **kwargs) for k, v in self.data.items()}
         return self
 
 
@@ -179,7 +181,7 @@ def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) 
 
 
 def get_resize_output_image_size(
-    input_image: np.ndarray,
+    input_image: ImageInput,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     patch_size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -189,7 +191,7 @@ def get_resize_output_image_size(
     size.
 
     Args:
-        input_image (`np.ndarray`):
+        input_image (`ImageInput`):
             The image to resize.
         size (`int` or `Tuple[int, int]`):
             Max image size an input image can be. Must be a dictionary with the key "longest_edge".
@@ -210,8 +212,8 @@ def get_resize_output_image_size(
 
     if ratio > 1:
         # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
-        height = int(np.ceil(height / ratio))
-        width = int(np.ceil(width / ratio))
+        height = int(math.ceil(height / ratio))
+        width = int(math.ceil(width / ratio))
 
     num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
     return num_height_tokens * patch_height, num_width_tokens * patch_width
@@ -472,7 +474,7 @@ class PixtralImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
-        if is_scaled_image(images_list[0][0]) and do_rescale:
+        if do_rescale and is_scaled_image(images_list[0][0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -518,3 +520,6 @@ class PixtralImageProcessor(BaseImageProcessor):
         # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
         images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
         return BatchMixFeature(data={"pixel_values": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)
+
+
+__all__ = ["PixtralImageProcessor"]

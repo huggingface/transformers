@@ -151,13 +151,7 @@ jobs:
     runs-on: rocm
     container:
       image: huggingface/transformers-pytorch-amd-gpu-push-ci  # <--- We test only for PyTorch for now
-      options: --device /dev/kfd --device /dev/dri --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    env:
-      # For the meaning of these environment variables, see the job `Setup`
-      CI_BRANCH_PUSH: ${{ github.event.ref }}
-      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
-      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
-      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
+      options: --device /dev/kfd --device /dev/dri --env HIP_VISIBLE_DEVICES --env ROCR_VISIBLE_DEVICES --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
 
       - name: Remove transformers repository (installed during docker image build)

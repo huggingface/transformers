@@ -16,7 +16,9 @@
 
 import unittest
 
+import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -36,6 +38,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
+    skipIfRocm
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -124,6 +127,14 @@ class MllamaForCausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     all_generative_model_classes = (MllamaForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        super().test_generate_from_inputs_embeds_with_static_cache()
+
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
 
     def setUp(self):
         self.model_tester = MllamaText2TextModelTester(self)
@@ -318,7 +329,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
@@ -363,6 +374,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     @unittest.skip(reason="AssertionError: Items in the second set but not the first: might be a setting issue")
     def test_model_parallelism(self):
+        pass
+
+    @parameterized.expand([("offloaded",)])
+    @pytest.mark.generate
+    @unittest.skip(reason="Offloaded cache seems to not work with mllama's kv cache type")
+    def test_offloaded_cache_implementation(self, cache_implementation):
         pass
 
     def test_generate_text_only_with_cache(self):

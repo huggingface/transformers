@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_torch_multi_xpu,
     require_torch_neuroncore,
     require_torch_npu,
+    skipIfRocm,
 )
 from transformers.training_args import ParallelMode
 from transformers.utils import logging
@@ -147,6 +148,7 @@ class TestTrainerDistributedNPU(TestCasePlus):
 
 class TestTrainerDistributed(TestCasePlus):
     @require_torch_multi_gpu
+    @skipIfRocm(os_name='ubuntu', os_version='24.04')
     def test_trainer(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}

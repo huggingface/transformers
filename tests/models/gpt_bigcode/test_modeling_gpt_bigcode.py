@@ -37,9 +37,6 @@ if is_torch_available():
         GPTBigCodeModel,
     )
     from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
-else:
-    is_torch_greater_or_equal_than_1_12 = False
 
 
 class GPTBigCodeModelTester:
@@ -504,10 +501,6 @@ class GPTBigCodeMHAModelTest(GPTBigCodeModelTest):
     multi_query = False
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_1_12,
-    reason="`GPTBigCode` checkpoints use `PytorchGELUTanh` which requires `torch>=1.12.0`.",
-)
 @slow
 @require_torch
 class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):
@@ -596,4 +589,4 @@ class GPTBigCodeMQATest(unittest.TestCase):
         attention_mqa_result = attention_mqa(hidden_states)[0]
 
         # CHECK THAT ALL OUTPUTS ARE THE SAME
-        self.assertTrue(torch.allclose(attention_mha_result, attention_mqa_result, atol=1e-5))
+        torch.testing.assert_close(attention_mha_result, attention_mqa_result, rtol=1e-5, atol=1e-5)

@@ -25,6 +25,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -353,6 +354,14 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
 
+    @skipIfRocm(arch=['gfx90a','gfx942','gfx1100','gfx1101','gfx1201','gfx1200'])
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
+
+    @skipIfRocm(arch='gfx90a')
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        super().test_generate_from_inputs_embeds_with_static_cache
+
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(
         self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
@@ -491,7 +500,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
         self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-3, rtol=1e-3))
         # Last token generated using long factor
-        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
+        torch.testing.assert_close(last_token_logits, regenerated_last_token_logits, rtol=1e-2, atol=1e-2)
 
 
 @slow
@@ -518,7 +527,7 @@ class PhimoeIntegrationTest(unittest.TestCase):
          -4.9375,  0.7148, -0.0972,  1.7656, -0.0801,  0.2217,  0.1875, -0.4629,
           1.5781,  0.3535,  0.0874,  0.6836, -0.0518, -1.2969]]).to(torch_device)  # fmt: skip
 
-        self.assertTrue(torch.allclose(EXPECTED_OUTPUT, output[0, :2, :30], atol=1e-4, rtol=1e-4))
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
 
     def test_phimoe_instruct_generation(self):
         model = PhimoeForCausalLM.from_pretrained("microsoft/Phi-3.5-MoE-instruct")

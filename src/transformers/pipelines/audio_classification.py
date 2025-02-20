@@ -92,7 +92,7 @@ class AudioClassificationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         # Default, might be overriden by the model.config.
-        kwargs["top_k"] = 5
+        kwargs["top_k"] = kwargs.get("top_k", 5)
         super().__init__(*args, **kwargs)
 
         if self.framework != "pt":
@@ -172,6 +172,7 @@ class AudioClassificationPipeline(Pipeline):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
         if isinstance(inputs, dict):
+            inputs = inputs.copy()  # So we don't mutate the original dictionary outside the pipeline
             # Accepting `"array"` which is the key defined in `datasets` for
             # better integration
             if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
@@ -211,6 +212,8 @@ class AudioClassificationPipeline(Pipeline):
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
+        if self.torch_dtype is not None:
+            processed = processed.to(dtype=self.torch_dtype)
         return processed
 
     def _forward(self, model_inputs):
