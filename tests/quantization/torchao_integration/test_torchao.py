@@ -14,9 +14,10 @@
 # limitations under the License.
 
 import gc
+import importlib.metadata
 import tempfile
 import unittest
-import importlib.metadata
+
 from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
