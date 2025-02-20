@@ -70,8 +70,8 @@ def apply_rotary_pos_emb_flashatt(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     cos = cos.chunk(2, dim=-1)[0].contiguous()
     sin = sin.chunk(2, dim=-1)[0].contiguous()
-    q_embed = apply_rotary_emb(q.float(), cos, sin).type_as(q)
-    k_embed = apply_rotary_emb(k.float(), cos, sin).type_as(k)
+    q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
+    k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
     return q_embed, k_embed
 
 
@@ -170,8 +170,8 @@ class Qwen2_5_VLVisionFlashAttention2(nn.Module):
                 "removed and `position_embeddings` will be mandatory."
             )
             emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos().float()
-            sin = emb.sin().float()
+            cos = emb.cos()
+            sin = emb.sin()
         else:
             cos, sin = position_embeddings
         q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
