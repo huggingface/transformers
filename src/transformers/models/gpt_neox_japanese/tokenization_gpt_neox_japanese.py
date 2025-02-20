@@ -236,12 +236,11 @@ class SubWordJapaneseTokenizer:
         # different regex that should generally have the same behaviour in most non-pathological cases.
         if sys.version_info >= (3, 11):
             self.content_repatter6 = re.compile(
-                r"((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*億)*+"
-                r"((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*万)*+"
-                r"((0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*千)*+"
-                r"(0|[1-9]\d*|[1-9]\d{0,2}(,\d{3})+)*"
-                r"(千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
-                r"(\(税込\)|\(税抜\)|\+tax)*"
+                r"(?:\d,\d{3}|[\d億])*+"
+                r"(?:\d,\d{3}|[\d万])*+"
+                r"(?:\d,\d{3}|[\d千])*+"
+                r"(?:千円|万円|千万円|円|千ドル|万ドル|千万ドル|ドル|千ユーロ|万ユーロ|千万ユーロ|ユーロ)+"
+                r"(?:\(税込\)|\(税抜\)|\+tax)*"
             )
         else:
             self.content_repatter6 = re.compile(
