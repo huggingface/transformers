@@ -217,6 +217,14 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         else {}
     )
 
+    @skipIfRocm
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
+    @skipIfRocm
+    def test_training(self):
+        super().test_training()
+
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
