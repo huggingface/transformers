@@ -149,15 +149,6 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, los
 
     return fast_config
 
-
-def get_small_model_config():
-    pass
-
-
-def get_base_model_config():
-    pass
-
-
 def convert_fast_checkpoint(
     checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path, save_backbone_separately
 ):
