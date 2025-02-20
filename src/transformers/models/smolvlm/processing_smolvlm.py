@@ -116,7 +116,6 @@ class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-
 class SmolVLMProcessor(ProcessorMixin):
     r"""
     Constructs a SmolVLM processor which wraps a LLama tokenizer and SmolVLM image processor into a single processor.
@@ -158,7 +157,7 @@ class SmolVLMProcessor(ProcessorMixin):
         self.default_max_frames = image_processor.video_sampling["max_frames"]
         self.default_fps = image_processor.video_sampling["fps"]
         # Matches one or more occurrences of <row_x_col_y> tags (where x and y are digits, optionally surrounded by newline characters
-        #self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
+        # self._regex_to_remove_extra_special_tokens = re.compile(r"(<row_\d+_col_\d+>\n?)+")
 
         if not num2words:
             raise ImportError(

@@ -75,7 +75,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device)
+).to(model.device, dtype=torch.bfloat16)
 
 output_ids = model.generate(**inputs, max_new_tokens=128)
 generated_texts = processor.batch_decode(output_ids, skip_special_tokens=True)
@@ -157,7 +157,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device)
+).to(model.device, dtype=torch.bfloat16)
 
 generated_ids = model.generate(**inputs, do_sample=False, max_new_tokens=100)
 generated_texts = processor.batch_decode(generated_ids, skip_special_tokens=True)
