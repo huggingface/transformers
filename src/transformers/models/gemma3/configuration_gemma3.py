@@ -29,9 +29,9 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-ATTENTION_TYPE_GLOBAL = "global_sliding"
+ATTENTION_TYPE_GLOBAL = "global"
 ATTENTION_TYPE_LOCAL = "local_sliding"
-AttentionType = Literal["global_sliding", "local_sliding"]
+AttentionType = Literal["global", "local_sliding"]
 AttentionPattern = Sequence[AttentionType]
 DEFAULT_ATTENION_PATTERN = cast(
     AttentionPattern,
@@ -107,7 +107,8 @@ class Gemma3TextConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
+        query_pre_attn_scalar (`float`, *optional*, defaults to None):
+            The scaling factor used on the attention scores, not that
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
             attention. This is the size of the sliding window.
         final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh soft-capping
@@ -153,7 +154,7 @@ class Gemma3TextConfig(PretrainedConfig):
         head_dim: int = 256,
         sliding_window: int = 4096,  # sliding_window_size in FLAX
         final_logit_softcapping: float = 30.0,
-        query_pre_attn_scalar: int = 256,
+        query_pre_attn_scalar: Optional[float] = None,
         attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
         rope_theta: float = 10_000.0,  # Consolidated in rope_wave_length Mapping in PyTorch
         rope_global_base_freq: float = 1_000_000.0,
@@ -174,7 +175,6 @@ class Gemma3TextConfig(PretrainedConfig):
         # Config parameters still to be adjudicated
         use_pre_ffw_norm: bool = False,  # use_post_attn_norm in FLAX
         use_post_ffw_norm: bool = False,
-        query_pre_attn_norm: Optional[enum.Enum] = None,
         compression_type: Optional[enum.Enum] = None,  # uant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):

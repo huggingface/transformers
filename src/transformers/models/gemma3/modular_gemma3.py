@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 import enum
 import itertools
@@ -96,9 +96,9 @@ BatchedPanAndScannedImage = Sequence[Sequence[PanAndScannedImage]]
 MutablePanAndScannedImage = tuple[PIL.Image.Image, list[PIL.Image.Image]]
 MutableBatchedPanAndScannedImage = list[list[MutablePanAndScannedImage]]
 
-ATTENTION_TYPE_GLOBAL = "global_sliding"
+ATTENTION_TYPE_GLOBAL = "global"
 ATTENTION_TYPE_LOCAL = "local_sliding"
-AttentionType = Literal["global_sliding", "local_sliding"]
+AttentionType = Literal["global", "local_sliding"]
 AttentionPattern = Sequence[AttentionType]
 DEFAULT_ATTENION_PATTERN = cast(AttentionPattern, (
     ATTENTION_TYPE_LOCAL,
@@ -173,7 +173,8 @@ class Gemma3TextConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
+        query_pre_attn_scalar (`float`, *optional*, defaults to None):
+            The scaling factor used on the attention scores, not that
         sliding_window (`int`, *optional*, defaults to 4096): in Gemma3, every other layer uses sliding window
             attention. This is the size of the sliding window.
         final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh soft-capping
@@ -218,7 +219,7 @@ class Gemma3TextConfig(PretrainedConfig):
         head_dim: int = 256,
         sliding_window: int = 4096,                    # sliding_window_size in FLAX
         final_logit_softcapping: float = 30.0,
-        query_pre_attn_scalar: int = 256,
+        query_pre_attn_scalar: Optional[float] = None,
         attention_pattern: AttentionPattern = DEFAULT_ATTENION_PATTERN,
         rope_theta: float = 10_000.0,                    # Consolidated in rope_wave_length Mapping in PyTorch
         rope_global_base_freq: float = 1_000_000.0,
@@ -240,7 +241,6 @@ class Gemma3TextConfig(PretrainedConfig):
         # Config parameters still to be adjudicated
         use_pre_ffw_norm: bool = False,         # use_post_attn_norm in FLAX
         use_post_ffw_norm: bool = False,
-        query_pre_attn_norm: Optional[enum.Enum] = None,
         compression_type: Optional[enum.Enum] = None,       # uant in Torch, v3_compression_type in FLAX
         **kwargs,
     ):
@@ -625,8 +625,9 @@ class Gemma3Attention(nn.Module):
         self.is_causal = True
         self.layer_idx = layer_idx
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.sliding_window if self.attention_type == ATTENTION_TYPE_LOCAL else None
+        self.scaling = config.query_pre_attn_scalar
+        self.is_sliding = self.attention_type == ATTENTION_TYPE_LOCAL
+        self.sliding_window = config.sliding_window if self.is_sliding else None
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -646,7 +647,7 @@ class Gemma3Attention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]],
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
@@ -662,7 +663,7 @@ class Gemma3Attention(nn.Module):
         query_states = self.q_norm(query_states)
         key_states = self.k_norm(key_states)
 
-        cos, sin = position_embeddings
+        cos, sin = position_embeddings[self.attention_type]
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -717,19 +718,19 @@ class Gemma3DecoderLayer(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.is_sliding = not bool(layer_idx % 2)
         self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma3MLP(config)
         self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.is_sliding = self.self_attn.is_sliding
         self.sliding_window = config.sliding_window
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]],
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
@@ -795,6 +796,17 @@ class Gemma3DecoderLayer(nn.Module):
         return outputs
 
 
+def compute_rope_parameters(
+    dim: int, end: int, theta: float = 10_000.0, device: Optional[torch.device] = None
+) -> torch.Tensor:
+    """Precomputes the frequency cis."""
+    freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[:(dim // 2)].float().to(device) / dim))
+    t = torch.arange(end, device=freqs.device)
+    freqs = torch.outer(t, freqs).float()
+    freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
+    return freqs_cis
+
+
 class Gemma3RotaryEmbedding(nn.Module):
     def __init__(self, config: Gemma3TextConfig, device=None):
         super().__init__()
@@ -803,15 +815,47 @@ class Gemma3RotaryEmbedding(nn.Module):
             self.rope_type = rope_scaling.get("rope_type", rope_scaling.get("type"))
         else:
             self.rope_type = "default"
+
+        self.config = config
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        # Pre-compute the rotary embedding table
+        self._register_freqs_cis(
+            name=ATTENTION_TYPE_GLOBAL,
+            head_dim=config.head_dim,
+            max_seq_len=config.max_position_embeddings,
+            theta=config.rope_global_base_freq,
+            device=device,
+        )
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+        self._register_freqs_cis(
+            name=ATTENTION_TYPE_LOCAL,
+            head_dim=self.config.head_dim,
+            max_seq_len=self.config.max_position_embeddings,
+            theta=self.config.rope_local_base_freq,
+            device=device,
+        )
+
+        self.post_init()
+
+
+    def _register_freqs_cis(
+        self,
+        name: str,
+        head_dim: int,
+        max_seq_len: int,
+        theta: int = 10_000,
+        device: Optional[torch.device] = None,
+    ):
+        frequencies = compute_rope_parameters(
+            theta=theta,
+            dim=head_dim,
+            end=max_seq_len,
+            device=device
+        )
+        self.register_buffer(name, frequencies, persistent=False)
+        self[f"original_{name}"] = self[name]
 
     def _dynamic_frequency_update(self, position_ids, device):
         """
@@ -821,39 +865,64 @@ class Gemma3RotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self._register_freqs_cis(
+                name=ATTENTION_TYPE_GLOBAL,
+                head_dim=self.config.head_dim,
+                max_seq_len=seq_len,
+                theta=self.config.rope_global_base_freq,
+                device=device,
+            )
+
+            self._register_freqs_cis(
+                name=ATTENTION_TYPE_LOCAL,
+                head_dim=self.config.head_dim,
+                max_seq_len=seq_len,
+                theta=self.config.rope_local_base_freq,
+                device=device,
+            )
+
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            self.original_inv_freq = self.original_inv_freq.to(device)
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self[f"original_{ATTENTION_TYPE_GLOBAL}"] = self[f"original_{ATTENTION_TYPE_GLOBAL}"].to(device)
+            self.register_buffer(ATTENTION_TYPE_GLOBAL, self[f"original_{ATTENTION_TYPE_GLOBAL}"], persistent=False)
+
+            self[f"original_{ATTENTION_TYPE_LOCAL}"] = self[f"original_{ATTENTION_TYPE_LOCAL}"].to(device)
+            self.register_buffer(ATTENTION_TYPE_LOCAL, self[f"original_{ATTENTION_TYPE_LOCAL}"], persistent=False)
+
             self.max_seq_len_cached = self.original_max_seq_len
 
     @torch.no_grad()
-    def forward(self, x, position_ids):
+    def forward(self, x, position_ids) -> Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]]:
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        global_freq_expanded = self[ATTENTION_TYPE_GLOBAL][None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        local_freq_expanded = self[ATTENTION_TYPE_LOCAL][None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
+
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
+            global_freqs = (global_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            global_emb = torch.cat((global_freqs, global_freqs), dim=-1)
+            global_cos = global_emb.cos()
+            global_sin = global_emb.sin()
 
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+            local_freqs = (local_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            local_emb = torch.cat((local_freqs, local_freqs), dim=-1)
+            local_cos = local_emb.cos().to(dtype=x.dtype)
+            local_sin = local_emb.sin().to(dtype=x.dtype)
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return {
+            ATTENTION_TYPE_GLOBAL: (global_cos, global_sin),
+            ATTENTION_TYPE_LOCAL: (local_cos, local_sin),
+        }
 
 
 class Gemma3PreTrainedModel(GemmaPreTrainedModel):
