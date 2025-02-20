@@ -1409,10 +1409,11 @@ class SiglipModel(SiglipPreTrainedModel):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logits_per_text = (
-            torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device)) * self.logit_scale.exp()
-            + self.logit_bias
-        )
+        logits_per_text = torch.matmul(text_embeds, image_embeds.t().to(text_embeds.device))
+
+        logit_scale, logit_bias = self.logit_scale.to(text_embeds.device), self.logit_bias.to(text_embeds.device)
+        logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
+
         logits_per_image = logits_per_text.t()
 
         loss = None
