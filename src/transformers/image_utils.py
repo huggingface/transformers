@@ -791,7 +791,6 @@ def load_video(
     video: Union[str, "VideoInput"],
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    initial_shift: Union[bool, float, int] = 0,
     backend: str = "opencv",
     sample_indices_fn: Optional[Callable] = None,
     **kwargs,
@@ -807,8 +806,6 @@ def load_video(
         fps (`int`, *optional*):
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
-        initial_shift (`bool`, `float` or `int`, defaults to `0`):
-            The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
         backend (`str`, *optional*, defaults to `"opencv"`):
             The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
         sample_indices_fn (`Callable`, *optional*):

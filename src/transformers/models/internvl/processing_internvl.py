@@ -22,7 +22,7 @@ from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, Proces
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, concatenate_list, make_batched_videos, make_flat_list_of_images
+from ...image_utils import ImageInput, VideoMetadata, concatenate_list, make_batched_videos, make_flat_list_of_images
 
 
 class InternVLImagesKwargs(ImagesKwargs, total=False):
@@ -194,6 +194,34 @@ class InternVLProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_videos_inputs})
+
+    def sample_indices_fn(
+        self, metadata: VideoMetadata, num_frames: int = None, initial_shift: Union[bool, float, int] = True
+    ):
+        """
+        The function to generate indices of frames to sample from a video.
+
+        Args:
+            metadata (`VideoMetadata`):
+                `VideoMetadata` object containing metadat about the video, such as "total_num_frames" or "fps".
+            num_frames (`int`, *optional*):
+                Number of frames to sample uniformly. If None, all frames are sampled.
+            initial_shift (`bool`, `float` or `int`, defaults to `0`):
+                The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
+
+        Returns:
+            `np.ndarray`: Array of frame indices to sample.
+        """
+        if initial_shift is True:
+            initial_shift = metadata.total_num_frames / num_frames / 2
+        if num_frames is not None:
+            indices = np.arange(
+                initial_shift, metadata.total_num_frames, metadata.total_num_frames / num_frames
+            ).astype(int)
+        else:
+            indices = np.arange(initial_shift, metadata.total_num_frames).astype(int)
+
+        return indices
 
     def batch_decode(self, *args, **kwargs):
         """

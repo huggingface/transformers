@@ -15,6 +15,7 @@
 """Testing suite for the PyTorch GotOcr2 model."""
 
 import unittest
+from functools import partial
 from io import BytesIO
 
 import requests
@@ -488,14 +489,14 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 ],
             }
         ]
+
         inputs = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            num_frames=8,
-            initial_shift=True,
+            sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
         ).to(torch_device)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -565,8 +566,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
-            num_frames=8,
-            initial_shift=True,
+            sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
         ).to(torch_device)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -824,8 +824,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            num_frames=8,
-            initial_shift=True,
+            sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
         ).to(torch_device)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)
@@ -895,8 +894,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
-            num_frames=8,
-            initial_shift=True,
+            sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
         ).to(torch_device)
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=25)

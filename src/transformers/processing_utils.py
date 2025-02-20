@@ -396,8 +396,6 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
         Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
     num_frames (`int`, *optional*):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
-    initial_shift (`bool`, `float` or `int`, defaults to `0`):
-        The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from the middle of the video.
     video_load_backend (`str`, *optional*, defaults to `"pyav"`):
         The backend to use when loading the video which will be used only when there are videos in the conversation.
         Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
@@ -420,7 +418,6 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
     tokenize: Optional[bool] = False
     return_dict: Optional[bool] = False
     num_frames: Optional[int] = None
-    initial_shift: Optional[Union[bool, float, int]] = 0
     video_load_backend: Optional[str] = "pyav"
     video_fps: Optional[int] = None
     sample_indices_fn: Optional[Callable] = None
