@@ -862,7 +862,7 @@ def _load_state_dict_into_meta_model(
         # In this case, let's parallelize the modules as soon as we can!
         if tp_key_registry is not None:
             plan = None
-            patterns = re.escape("|".join(tp_key_registry.keys()))
+            patterns = "|".join(map(re.escape, tp_key_registry.keys()))
             match_object = re.match(rf"({patterns})\.", param_name)
             if match_object is not None:
                 module_prefix = match_object.group(1)
