@@ -20,7 +20,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import enum
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal, Optional, Union, cast
 
 from ...configuration_utils import PretrainedConfig
@@ -28,6 +28,31 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+class Gemma3RotaryEmbeddingConfig(PretrainedConfig):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        rope_theta: float,
+        head_dim: Optional[int] = None,
+        partial_rotary_factor: Optional[float] = None,
+        rope_scaling: Mapping[str, Union[int, float]] = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.rope_theta = rope_theta
+
+        if head_dim is not None:
+            self.head_dim = head_dim
+        if partial_rotary_factor is not None:
+            self.partial_rotary_factor = partial_rotary_factor
+        if rope_scaling is not None:
+            self.rope_scaling = rope_scaling
+
 
 ATTENTION_TYPE_GLOBAL = "global"
 ATTENTION_TYPE_LOCAL = "local_sliding"

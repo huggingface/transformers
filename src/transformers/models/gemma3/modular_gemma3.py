@@ -112,6 +112,31 @@ DEFAULT_ATTENION_PATTERN = cast(AttentionPattern, (
 TextInputTypes = Union[TextInput, Sequence[TextInput]]
 
 
+class Gemma3RotaryEmbeddingConfig(PretrainedConfig):
+
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        rope_theta: float,
+        head_dim: Optional[int] = None,
+        partial_rotary_factor: Optional[float] = None,
+        rope_scaling: Mapping[str, Union[int, float]] = None,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.rope_theta = rope_theta
+
+        if head_dim is not None:
+            self.head_dim = head_dim
+        if partial_rotary_factor is not None:
+            self.partial_rotary_factor = partial_rotary_factor
+        if rope_scaling is not None:
+            self.rope_scaling = rope_scaling
+
+
 class Gemma3TextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Gemma3Model`]. It is used to instantiate a Gemma3
@@ -615,6 +640,7 @@ def eager_attention_forward(
 
 
 class Gemma3Attention(nn.Module):
+
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
 
         super().__init__()
@@ -809,7 +835,7 @@ def compute_rope_parameters(
 
 class Gemma3RotaryEmbedding(nn.Module):
 
-    def __init__(self, config: Gemma3TextConfig, device=None):
+    def __init__(self, config: Gemma3RotaryEmbeddingConfig, device: torch.device = None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if (rope_scaling := getattr(config, "rope_scaling", None)) is not None:
@@ -820,40 +846,11 @@ class Gemma3RotaryEmbedding(nn.Module):
         self.config = config
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        # Pre-compute the rotary embedding table
-        self._register_freqs_cis(
-            name=ATTENTION_TYPE_GLOBAL,
-            head_dim=config.head_dim,
-            max_seq_len=config.max_position_embeddings,
-            theta=config.rope_global_base_freq,
-            device=device,
-        )
-
-        self._register_freqs_cis(
-            name=ATTENTION_TYPE_LOCAL,
-            head_dim=self.config.head_dim,
-            max_seq_len=self.config.max_position_embeddings,
-            theta=self.config.rope_local_base_freq,
-            device=device,
-        )
-
-    def _register_freqs_cis(
-        self,
-        name: str,
-        head_dim: int,
-        max_seq_len: int,
-        theta: int = 10_000,
-        device: Optional[torch.device] = None,
-    ):
-        frequencies = compute_rope_parameters(
-            theta=theta,
-            dim=head_dim,
-            end=max_seq_len,
-            device=device
-        )
-        self.register_buffer(name, frequencies, persistent=False)
-        setattr(self, f"original_{name}", getattr(self, name))
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
 
     def _dynamic_frequency_update(self, position_ids, device):
         """
@@ -863,69 +860,39 @@ class Gemma3RotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            self._register_freqs_cis(
-                name=ATTENTION_TYPE_GLOBAL,
-                head_dim=self.config.head_dim,
-                max_seq_len=seq_len,
-                theta=self.config.rope_global_base_freq,
-                device=device,
-            )
-
-            self._register_freqs_cis(
-                name=ATTENTION_TYPE_LOCAL,
-                head_dim=self.config.head_dim,
-                max_seq_len=seq_len,
-                theta=self.config.rope_local_base_freq,
-                device=device,
-            )
-
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
-            original_global_attr = f"original_{ATTENTION_TYPE_GLOBAL}"
-            setattr(self, original_global_attr, getattr(self, original_global_attr).to(device))
-            self.register_buffer(ATTENTION_TYPE_GLOBAL, getattr(self, original_global_attr), persistent=False)
-
-            original_local_attr = f"original_{ATTENTION_TYPE_GLOBAL}"
-            setattr(self, original_local_attr, getattr(self, original_local_attr).to(device))
-            self.register_buffer(ATTENTION_TYPE_LOCAL, getattr(self, original_local_attr), persistent=False)
-
+            self.original_inv_freq = self.original_inv_freq.to(device)
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
     @torch.no_grad()
-    def forward(self, x, position_ids) -> Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]]:
+    def forward(self, x, position_ids):
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        global_freq = getattr(self, ATTENTION_TYPE_GLOBAL).index_select(0, position_ids)
-        global_freq_expanded = global_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-
-        local_freq = getattr(self, ATTENTION_TYPE_LOCAL).index_select(0, position_ids)
-        local_freq_expanded = local_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-
         with torch.autocast(device_type=device_type, enabled=False):
-            global_freqs = (global_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            global_emb = torch.cat((global_freqs, global_freqs), dim=-1)
-            global_cos = global_emb.cos()
-            global_sin = global_emb.sin()
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
 
-            local_freqs = (local_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            local_emb = torch.cat((local_freqs, local_freqs), dim=-1)
-            local_cos = local_emb.cos().to(dtype=x.dtype)
-            local_sin = local_emb.sin().to(dtype=x.dtype)
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
 
-        return {
-            ATTENTION_TYPE_GLOBAL: (global_cos, global_sin),
-            ATTENTION_TYPE_LOCAL: (local_cos, local_sin),
-        }
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class Gemma3PreTrainedModel(GemmaPreTrainedModel):
@@ -946,10 +913,22 @@ class Gemma3Model(Gemma3PreTrainedModel):
             [Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Gemma3RotaryEmbedding(config=config)
+        self.rotary_emb_global = Gemma3RotaryEmbedding(config=Gemma3RotaryEmbeddingConfig(
+            hidden_size=config.hidden_size,
+            num_attention_heads=config.num_attention_heads,
+            rope_theta=config.rope_global_base_freq,
+            head_dim=config.head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+        ))
+        self.rotary_emb_local = Gemma3RotaryEmbedding(config=Gemma3RotaryEmbeddingConfig(
+            hidden_size=config.hidden_size,
+            num_attention_heads=config.num_attention_heads,
+            rope_theta=config.rope_local_base_freq,
+            head_dim=config.head_dim,
+            max_position_embeddings=config.max_position_embeddings,
+        ))
         self.gradient_checkpointing = False
         self.post_init()
-
 
     def forward(
         self,
@@ -1021,7 +1000,10 @@ class Gemma3Model(Gemma3PreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings: Mapping[AttentionType, tuple[torch.Tensor, torch.Tensor]] = {
+            ATTENTION_TYPE_GLOBAL: self.rotary_emb_global(hidden_states, position_ids),
+            ATTENTION_TYPE_LOCAL: self.rotary_emb_local(hidden_states, position_ids),
+        }
 
         # normalized
         # Gemma3 downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
