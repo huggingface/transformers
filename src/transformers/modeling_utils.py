@@ -5226,48 +5226,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return True
         return False
 
-    def tensor_parallel(self, device_mesh):
-        """
-        Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
-        was already loaded in memory, note however that this means that each process will first initialize the whole model,
-        then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
-        Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
-        so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
-
-        Args:
-            device_mesh (`torch.distributed.DeviceMesh`):
-                The device mesh to use for tensor parallelism.
-        """
-        if not is_torch_greater_or_equal("2.5"):
-            raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
-
-        # Tensor parallelize a nn.Module based on the `_tp_plan` attribute of the module.
-        # No op if `_tp_plan` attribute does not exist under the module.
-        # This is a helper function to be used with `model.apply` to recursively
-        # parallelize a model.
-        def tplize(mod: torch.nn.Module) -> None:
-            tp_plan = getattr(mod, "_tp_plan", None)
-            if tp_plan is None:
-                return
-            logger.debug(f"Applying tensor parallel to {mod.__class__.__name__}: {tp_plan}")
-            # In model configs, we use a neutral type (string) to specify
-            # parallel styles, here we translate them into torch TP types.
-            # Using tree_map because `tp_plan` is a dict.
-            tp_plan = torch.utils._pytree.tree_map(
-                translate_to_torch_parallel_style,
-                tp_plan,
-            )
-            # Apply TP to current module.
-            torch.distributed.tensor.parallel.parallelize_module(
-                mod,
-                device_mesh=device_mesh,
-                parallelize_plan=tp_plan,
-            )
-
-        # `apply` is a native method of `nn.Module` that recursively applies a
-        # function to every submodule.
-        self.apply(tplize)
-
     @property
     def supports_pp_plan(self):
         if self._pp_plan is not None:
