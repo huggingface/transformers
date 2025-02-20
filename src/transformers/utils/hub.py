@@ -70,7 +70,6 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
-from .logging import tqdm
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

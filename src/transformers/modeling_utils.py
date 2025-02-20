@@ -862,25 +862,21 @@ def _load_state_dict_into_meta_model(
         # In this case, let's parallelize the modules as soon as we can!
         if tp_key_registry is not None:
             plan = None
-            prefix = None
-            for module_prefix in tp_key_registry.keys():
-                if f"{module_prefix}." in param_name:
-                    tp_key_registry[module_prefix]["children"].remove(param_name)
-                    # If all the children were already removed, it means that all parameters are now on the correct
-                    # device -> we should call `parallelize_module` right now!
-                    if len(tp_key_registry[module_prefix]["children"]) == 0:
-                        plan = tp_key_registry[module_prefix]["plan"]
-                        prefix = module_prefix
-                    break
+            patterns = re.escape("|".join(tp_key_registry.keys()))
+            match_object = re.match(rf"({patterns}).")
+            if match_object is not None:
+                module_prefix = match_object.group(1)
+                tp_key_registry[module_prefix]["children"].remove(param_name)
+                # If all the children were already removed, it means that all parameters are now on the correct
+                # device -> we should call `parallelize_module` right now!
+                if len(tp_key_registry[module_prefix]["children"]) == 0:
+                    plan = tp_key_registry[module_prefix]["plan"]
+                    del tp_key_registry[module_prefix]
 
             if plan is not None:
-                del tp_key_registry[prefix]
-                parent_module = model
-                for name in prefix.split("."):
-                    parent_module = getattr(parent_module, name)
-
+                module_to_parallelize = model.get_submodule(module_prefix)
                 torch.distributed.tensor.parallel.parallelize_module(
-                    parent_module,
+                    module_to_parallelize,
                     device_mesh=device_mesh,
                     parallelize_plan=plan,
                 )
@@ -1515,51 +1511,42 @@ def _get_tp_key_registry(model: "PreTrainedModel") -> Dict[str, Dict]:
     is_task_specific_model = hasattr(model, prefix) if len(prefix) > 0 else False
 
     full_tp_plan = model.config.base_model_tp_plan
+    # Add the prefix to the base model plan, as well as non-base model plan if relevant
     if is_task_specific_model:
-        # Add the prefix to the base model plan
         full_tp_plan = {f"{prefix}.{key}": plan for key, plan in full_tp_plan.items()}
-        # Add potential task-specific additional plan
         full_tp_plan.update(getattr(model, "_tp_plan", {}))
+
+    # Translate the plan
+    full_tp_plan = {key: translate_to_torch_parallel_style(plan) for key, plan in full_tp_plan}
 
     # Extract full prefix before the layer numbers
     layer_prefix = None
-    for key in full_tp_plan.keys():
-        if "*" in key:
-            # extract everything before the first "*" corresponding to layer number
-            layer_prefix = key.split("*", 1)[0]
-            # Remove ending dot
-            layer_prefix = layer_prefix[:-1] if layer_prefix.endswith(".") else layer_prefix
-            break
-    if layer_prefix is None:
-        raise ValueError("Could not parse format of the base_model_tp_plan in the config.")
+    layer_prefixes = {k.split("*", 1)[0] for k in full_tp_plan.keys() if "*" in k}
+    if len(layer_prefixes) != 1:
+        raise ValueError("The `base_model_tp_plan` in the config does not seem to have a proper per-layer pattern.")
+    # We remove the trailing "."
+    layer_prefix = layer_prefixes.pop()[:-1]
 
-    # Separate between layer plan, and other module plans
-    layer_tp_plan = {}
-    other_modules_to_parallelize = {}
-    for key, plan in full_tp_plan.items():
-        # In this case, keep the key starting after the "*" layer number indicator
-        if key.startswith(layer_prefix):
-            layer_key = key.split("*", 1)[1][1:]
-            layer_tp_plan[layer_key] = translate_to_torch_parallel_style(plan)
-        else:
-            other_modules_to_parallelize[key] = translate_to_torch_parallel_style(plan)
+    # Create the tp plan for an entire layer (it will be the same for each layer number in the ModuleList)
+    layer_tp_plan = {
+        key.split("*", 1)[1][1:]: plan for key, plan in full_tp_plan.items() if key.startswith(layer_prefix)
+    }
 
     # This contains all the modules to parallelize, as well as corresponding tp_plan for the full module
     modules_to_parallelize = {
         f"{layer_prefix}.{layer_idx}": layer_tp_plan for layer_idx in range(model.config.num_hidden_layers)
     }
-    modules_to_parallelize.update(other_modules_to_parallelize)
+    # Add modules which are not layers
+    modules_to_parallelize.update(
+        {key: plan for key, plan in full_tp_plan.items() if not key.startswith(layer_prefix)}
+    )
 
     tp_key_registry = {}
     for module_name, tp_plan in modules_to_parallelize.items():
         # Retrieve the actual module object corresponding to module_name
-        actual_module = model
-        for name in module_name.split("."):
-            actual_module = getattr(actual_module, name)
-
+        actual_module = model.get_submodule(module_name)
         # Find all parameters in the state dict of the module
-        children = set(actual_module.state_dict().keys())
-        children = {f"{module_name}.{child}" for child in children}
+        children = {f"{module_name}.{child}" for child in set(actual_module.state_dict().keys())}
         tp_key_registry[module_name] = {"children": children, "plan": tp_plan}
 
     return tp_key_registry
