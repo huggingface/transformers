@@ -474,15 +474,10 @@ def cached_files(
                 "You are trying to access a gated repo.\nMake sure to have access to it at "
                 f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
             ) from e
-        elif (
-            isinstance(e, LocalEntryNotFoundError)
-            and _raise_exceptions_for_connection_errors
-            and _raise_exceptions_for_missing_entries
-        ):
+        elif isinstance(e, LocalEntryNotFoundError) and _raise_exceptions_for_connection_errors:
             raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, couldn't find them in the"
-                f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing files named"
-                f" {*filenames,}.\nCheckout your internet connection or see how to run the library in offline mode at"
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
+                f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
                 " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             ) from e
         elif isinstance(e, HTTPError) and _raise_exceptions_for_connection_errors:
