@@ -759,12 +759,6 @@ def _load_state_dict_into_meta_model(
 
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
-    # we need this later to initialize tensor parallelism
-    if device_mesh is not None:
-        full_tp_plan = model.config.base_model_tp_plan
-        for submodule in model.modules():
-            full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
-
     for param_name, param in state_dict.items():
         if param_name not in expected_keys:
             continue
@@ -5260,10 +5254,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
         was already loaded in memory, note however that this means that each process will first initialize the whole model,
         then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
-<<<<<<< HEAD
-
-=======
->>>>>>> 4e8f332085 (new first tp loading version)
         Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
         so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
 
