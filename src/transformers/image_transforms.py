@@ -14,8 +14,9 @@
 # limitations under the License.
 
 import warnings
+from collections.abc import Collection
 from math import ceil
-from typing import Collection, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
