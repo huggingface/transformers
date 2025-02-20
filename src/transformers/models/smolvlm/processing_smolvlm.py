@@ -324,7 +324,7 @@ class SmolVLMProcessor(ProcessorMixin):
     ):
         """
         Used within `apply_chat_template` when a model has special way to process conversation history. For example,
-        video models might want to specify in the prompt the duratin of video or which frame indices ate which timestamps
+        video models might want to specify in the prompt the duration of video or which frame indices at which timestamps
         were sampled. This information cannot be accessed before the video is loaded.
         For most models it is a no-op, must be overriden by model processors which require special processing.
         Args:
@@ -332,15 +332,15 @@ class SmolVLMProcessor(ProcessorMixin):
                 The conversation to process. Always comes in batched format.
             batch_images (`List[List[ImageInput]]`):
                 Batch of images that were loaded from url/path defined in the conversation. The images
-                are ordered in the samm way as in the conversation. Comes in nested list format, one list of `PIL` images
+                are ordered in the same way as in the conversation. Comes in nested list format, one list of `PIL` images
                 per batch.
             batch_videos (`List[List[ImageInput]]`):
                 Batch of videos that were loaded from url/path defined in the conversation. The videos
-                are ordered in the samm way as in the conversation. Comes in nested list format, one list of 4D video arrays
+                are ordered in the same way as in the conversation. Comes in nested list format, one list of 4D video arrays
                 per batch.
             batch_video_metadata (`List[List[Dict[[str, any]]]]`):
                 Batch of metadata returned from loading videos. That includes video fps, duration and total number of framer in original video.
-                Metadata are ordered in the samm way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
+                Metadata are ordered in the same way as `batch_videos`. Comes in nested list format, one list of 4D video arrays
                 per batch.
         """
         # We don't want to modify in-place the messages passed by user
@@ -425,7 +425,14 @@ class SmolVLMProcessor(ProcessorMixin):
 
     # Add model-specific video sampling method when applying the template
     def apply_chat_template(
-        self, conversation, max_frames=None, target_fps=None, skip_secs=1, video_load_backend="pyav", **kwargs
+        self,
+        conversation,
+        max_frames=None,
+        target_fps=None,
+        skip_secs=1,
+        video_load_backend="pyav",
+        sample_indices_fn=None,
+        **kwargs,
     ):
         max_frames = self.default_max_frames if max_frames is None else max_frames
         target_fps = self.default_fps if target_fps is None else target_fps
@@ -435,9 +442,12 @@ class SmolVLMProcessor(ProcessorMixin):
                 metadata, max_frames=max_frames, target_fps=target_fps, skip_secs=skip_secs, **fn_kwargs
             )
 
-        sample_indices_fn = sample_indices_fn_func
+        # word of caution- we are blindly overriding a callable kwarg here.
+        # typed kwargs would be a way to avoid that @molbap
+        if not sample_indices_fn:
+            sample_indices_fn = sample_indices_fn_func
         return super().apply_chat_template(
-            conversation, sample_indices_fn=sample_indices_fn, video_load_backend=video_load_backend, **kwargs
+            conversation, video_load_backend=video_load_backend, sample_indices_fn=sample_indices_fn, **kwargs
         )
 
 
