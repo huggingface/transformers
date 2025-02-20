@@ -162,7 +162,7 @@ if __name__ == "__main__":
 
         import multiprocessing
 
-        with multiprocessing.Pool(4) as p:
+        with multiprocessing.Pool(args.num_workers) as p:
             outputs = p.map(compare_files, new_ordered_files)
         for output in outputs:
             non_matching_files += output
