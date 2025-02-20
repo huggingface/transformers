@@ -274,23 +274,14 @@ ALL_LAYERNORM_LAYERS.append(T5LayerNorm)
 class T5ClampedDropout(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.ort = config.ort
         self.dropout = nn.Dropout(config.dropout_rate)
         self.dropout_rate = config.dropout_rate
 
     def forward(self, hidden_states):
         # clamp inf values to enable fp16 training
-        if self.ort:
-            # Remove data-based control flow for static graph
-            if hidden_states.dtype == torch.float16:
-                clamp_value = torch.where(torch.isinf(hidden_states).any(), torch.finfo(hidden_states.dtype).max - 1000,
-                    torch.finfo(hidden_states.dtype).max)
-                clamp_value = (1.0-self.dropout_rate)*clamp_value
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-        else:
-            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -671,7 +662,6 @@ class T5Block(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
         super().__init__()
         self.is_decoder = config.is_decoder
-        self.ort = config.ort
         self.layer = nn.ModuleList()
         self.layer.append(
             T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx)
