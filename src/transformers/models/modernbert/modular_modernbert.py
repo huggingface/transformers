@@ -252,6 +252,7 @@ class ModernBertConfig(PretrainedConfig):
         del output["reference_compile"]
         return output
 
+
 def _unpad_modernbert_input(
     inputs: torch.Tensor,
     attention_mask: torch.Tensor,
