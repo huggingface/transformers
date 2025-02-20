@@ -4679,13 +4679,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
+        model_state_dict_keys = model_state_dict.keys()
         if low_cpu_mem_usage:
             for key in missing_keys:
-                if key in list(model_state_dict.keys()):
+                if key in model_state_dict_keys:
                     key = key
-                elif f"{prefix}.{key}" in list(model_state_dict.keys()):
+                elif f"{prefix}.{key}" in model_state_dict_keys:
                     key = f"{prefix}.{key}"
-                elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict.keys()):
+                elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in model_state_dict_keys:
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
 
