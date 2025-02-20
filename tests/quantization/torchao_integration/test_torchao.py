@@ -16,6 +16,8 @@
 import gc
 import tempfile
 import unittest
+import importlib.metadata
+from packaging import version
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 from transformers.testing_utils import (
@@ -32,19 +34,24 @@ if is_torch_available():
 if is_torchao_available():
     from torchao.dtypes import (
         AffineQuantizedTensor,
-        Int4CPULayout,
         TensorCoreTiledLayout,
     )
+
+    if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0"):
+        from torchao.dtypes import Int4CPULayout
+
+
+def is_torchao_available_on_cpu():
+    return is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
 
 
 def check_torchao_int4_wo_quantized(test_module, qlayer):
     weight = qlayer.weight
     test_module.assertEqual(weight.quant_min, 0)
     test_module.assertEqual(weight.quant_max, 15)
-    if is_torchao_available():
-        test_module.assertTrue(isinstance(weight, AffineQuantizedTensor))
-        layout = Int4CPULayout if weight.device.type == "cpu" else TensorCoreTiledLayout
-        test_module.assertTrue(isinstance(weight.tensor_impl._layout, layout))
+    test_module.assertTrue(isinstance(weight, AffineQuantizedTensor))
+    layout = Int4CPULayout if weight.device.type == "cpu" else TensorCoreTiledLayout
+    test_module.assertTrue(isinstance(weight.tensor_impl._layout, layout))
 
 
 def check_forward(test_module, model, batch_size=1, context_size=1024):
@@ -104,7 +111,7 @@ class TorchAoTest(unittest.TestCase):
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     device = "cpu"
     quant_scheme_kwargs = (
-        {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available() else {"group_size": 32}
+        {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available_on_cpu() else {"group_size": 32}
     )
 
     def tearDown(self):
@@ -112,6 +119,9 @@ class TorchAoTest(unittest.TestCase):
         torch.cuda.empty_cache()
         gc.collect()
 
+    @unittest.skipIf(
+        device == "cpu" and not is_torchao_available_on_cpu(), reason="CPU tests requires torchao >= 0.8.0"
+    )
     def test_int4wo_quant(self):
         """
         Simple LLM model testing int4 weight only quantization
@@ -134,6 +144,9 @@ class TorchAoTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    @unittest.skipIf(
+        device == "cpu" and not is_torchao_available_on_cpu(), reason="CPU tests requires torchao >= 0.8.0"
+    )
     def test_int4wo_quant_bfloat16_conversion(self):
         """
         Testing the dtype of model will be modified to be bfloat16 for int4 weight only quantization
@@ -156,6 +169,9 @@ class TorchAoTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
         self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    @unittest.skipIf(
+        device == "cpu" and not is_torchao_available_on_cpu(), reason="CPU tests requires torchao >= 0.8.0"
+    )
     def test_int8_dynamic_activation_int8_weight_quant(self):
         """
         Simple LLM model testing int8_dynamic_activation_int8_weight
@@ -269,7 +285,7 @@ class TorchAoSerializationTest(unittest.TestCase):
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     quant_scheme = "int4_weight_only"
     quant_scheme_kwargs = (
-        {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available() else {"group_size": 32}
+        {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available_on_cpu() else {"group_size": 32}
     )
     device = "cpu"
 
@@ -290,12 +306,18 @@ class TorchAoSerializationTest(unittest.TestCase):
         torch.cuda.empty_cache()
         gc.collect()
 
+    @unittest.skipIf(
+        device == "cpu" and not is_torchao_available_on_cpu(), reason="CPU tests requires torchao >= 0.8.0"
+    )
     def test_original_model_expected_output(self):
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device)
         output = self.quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
 
         self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.ORIGINAL_EXPECTED_OUTPUT)
 
+    @unittest.skipIf(
+        device == "cpu" and not is_torchao_available_on_cpu(), reason="CPU tests requires torchao >= 0.8.0"
+    )
     def check_serialization_expected_output(self, device, expected_output):
         """
         Test if we can serialize and load/infer the model again on the same device
@@ -310,6 +332,9 @@ class TorchAoSerializationTest(unittest.TestCase):
             output = loaded_quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), expected_output)
 
+    @unittest.skipIf(
+        device == "cpu" and not is_torchao_available_on_cpu(), reason="CPU tests requires torchao >= 0.8.0"
+    )
     def test_serialization_expected_output(self):
         self.check_serialization_expected_output(self.device, self.SERIALIZED_EXPECTED_OUTPUT)
 
@@ -321,6 +346,9 @@ class TorchAoSerializationW8A8CPUTest(TorchAoSerializationTest):
 
     @require_torch_gpu
     def test_serialization_expected_output_on_cuda(self):
+        """
+        Test if we can serialize on device (cpu) and load/infer the model on cuda
+        """
         self.check_serialization_expected_output("cuda", self.SERIALIZED_EXPECTED_OUTPUT)
 
 
@@ -331,6 +359,9 @@ class TorchAoSerializationW8CPUTest(TorchAoSerializationTest):
 
     @require_torch_gpu
     def test_serialization_expected_output_on_cuda(self):
+        """
+        Test if we can serialize on device (cpu) and load/infer the model on cuda
+        """
         self.check_serialization_expected_output("cuda", self.SERIALIZED_EXPECTED_OUTPUT)
 
 
