@@ -77,8 +77,6 @@ The pipeline allows to use the model in a few lines of code:
 >>> image_classifier = pipeline(
 ...     task="zero-shot-image-classification",
 ...     model="google/siglip2-base-patch16-224",
-...     # lowercased and without punctuation, this is how SigLIP2 was evaluated
-...     hypothesis_template="this is a photo of {}",
 ... )
 
 >>> # load image
@@ -111,7 +109,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 >>> candidate_labels = ["2 cats", "2 dogs"]
 # follows the pipeline prompt template to get same results
->>> texts = [f"this is a photo of {label}" for label in candidate_labels]
+>>> texts = [f"This is a photo of {label}." for label in candidate_labels]
 
 # IMPORTANT: we pass `padding=max_length` and `max_length=64` since the model was trained with this
 >>> inputs = processor(text=texts, images=image, padding="max_length", max_length=64, return_tensors="pt")
@@ -158,7 +156,7 @@ After resizing, the image is split into a sequence of patches, and a mask with p
 
 >>> candidate_labels = ["2 cats", "2 dogs"]
 # follows the pipeline prompt template to get same results
->>> texts = [f"this is a photo of {label}" for label in candidate_labels]
+>>> texts = [f"This is a photo of {label}." for label in candidate_labels]
 
 # default value for `max_num_patches` is 256, but you can increase resulted image resolution providing
 # higher values e.g. `max_num_patches=512`
