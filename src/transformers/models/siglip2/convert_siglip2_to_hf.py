@@ -27,7 +27,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image, ImageDraw
 
-from transformers import GemmaTokenizerFast, Siglip2Config, Siglip2ImageProcessor, Siglip2Model, Siglip2Processor
+from transformers import GemmaTokenizerFast, Siglip2Config, Siglip2ImageProcessorFast, Siglip2Model, Siglip2Processor
 from transformers.utils import logging
 
 
@@ -189,8 +189,8 @@ def get_siglip2_tokenizer() -> GemmaTokenizerFast:
     return tokenizer
 
 
-def get_siglip2_image_processor(patch_size: int, max_num_patches: int) -> Siglip2ImageProcessor:
-    image_processor = Siglip2ImageProcessor(
+def get_siglip2_image_processor(patch_size: int, max_num_patches: int) -> Siglip2ImageProcessorFast:
+    image_processor = Siglip2ImageProcessorFast(
         patch_size=patch_size,
         max_num_patches=max_num_patches,
         do_resize=True,

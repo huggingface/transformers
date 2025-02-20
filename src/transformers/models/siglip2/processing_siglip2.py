@@ -61,8 +61,8 @@ class Siglip2Processor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
 
-    image_processor_class = "Siglip2ImageProcessor"
-    tokenizer_class = "GemmaTokenizerFast"
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
