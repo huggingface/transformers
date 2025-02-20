@@ -1030,8 +1030,3 @@ class AutoTokenizer:
             ALL_CUSTOM_CLASSES[slow_tokenizer_class.__name__] = slow_tokenizer_class
         if fast_tokenizer_class is not None and fast_tokenizer_class.__name__ not in ALL_CUSTOM_CLASSES:
             ALL_CUSTOM_CLASSES[fast_tokenizer_class.__name__] = fast_tokenizer_class
-
-        if slow_tokenizer_class is not None:
-            slow_tokenizer_class._auto_class = "AutoTokenizer"
-        if fast_tokenizer_class is not None:
-            fast_tokenizer_class._auto_class = "AutoTokenizer"
