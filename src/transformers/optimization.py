@@ -20,7 +20,6 @@ from functools import partial
 from typing import Optional, Union
 
 import torch
-from torch.optim import AdamW as TorchAdamW
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR, ReduceLROnPlateau
 
@@ -602,15 +601,6 @@ def get_scheduler(
         num_training_steps=num_training_steps,
         **scheduler_specific_kwargs,
     )
-
-
-class AdamW(TorchAdamW):
-    """
-    AdamW is a variant of the Adam optimizer with corrected weight decay. In the past, Transformers had a
-    full implementation of this optimizer, but since AdamW is now available in Torch, this class is simply
-    a wrapper around `torch.optim.AdamW`, retained for backward compatibility. We recommend directly
-    importing `torch.optim.AdamW` in non-legacy code.
-    """
 
 
 class Adafactor(Optimizer):
