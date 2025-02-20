@@ -93,6 +93,7 @@ from . import (
     encoder_decoder,
     ernie,
     esm,
+    eurobert,
     falcon,
     falcon_mamba,
     fastspeech2_conformer,

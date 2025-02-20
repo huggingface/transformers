@@ -443,6 +443,7 @@ _import_structure = {
     "models.encoder_decoder": ["EncoderDecoderConfig"],
     "models.ernie": ["ErnieConfig"],
     "models.esm": ["EsmConfig", "EsmTokenizer"],
+    "models.eurobert": ["EuroBertConfig"],
     "models.falcon": ["FalconConfig"],
     "models.falcon_mamba": ["FalconMambaConfig"],
     "models.fastspeech2_conformer": [
@@ -2332,6 +2333,14 @@ else:
             "EsmForTokenClassification",
             "EsmModel",
             "EsmPreTrainedModel",
+        ]
+    )
+    _import_structure["models.eurobert"].extend(
+        [
+            "EuroBertForMaskedLM",
+            "EuroBertForSequenceClassification",
+            "EuroBertModel",
+            "EuroBertPreTrainedModel",
         ]
     )
     _import_structure["models.falcon"].extend(
@@ -5562,6 +5571,7 @@ if TYPE_CHECKING:
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ErnieConfig
     from .models.esm import EsmConfig, EsmTokenizer
+    from .models.eurobert import EuroBertConfig
     from .models.falcon import FalconConfig
     from .models.falcon_mamba import FalconMambaConfig
     from .models.fastspeech2_conformer import (
@@ -7319,6 +7329,12 @@ if TYPE_CHECKING:
             EsmForTokenClassification,
             EsmModel,
             EsmPreTrainedModel,
+        )
+        from .models.eurobert import (
+            EuroBertForMaskedLM,
+            EuroBertForSequenceClassification,
+            EuroBertModel,
+            EuroBertPreTrainedModel,
         )
         from .models.falcon import (
             FalconForCausalLM,
