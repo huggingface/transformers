@@ -440,10 +440,6 @@ class TrainerCallbackTest(unittest.TestCase):
                 if control.should_save:
                     times_saved += 1
 
-        trainer = self.get_trainer(
-            max_steps=2,
-            save_strategy="epoch",
-            callbacks=[OnEndCallback]
-        )
+        trainer = self.get_trainer(max_steps=2, save_strategy="epoch", callbacks=[OnEndCallback])
         trainer.train()
         assert times_saved == 1
