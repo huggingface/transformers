@@ -505,8 +505,7 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
 
     def _f02sine(self, f0_values):
         rad_values = (f0_values / self.sampling_rate) % 1
-        # torch.manual_seed(0)
-        # rand_ini = torch.rand(f0_values.shape[0], f0_values.shape[2], device=f0_values.device)
+        rand_ini = torch.rand(f0_values.shape[0], f0_values.shape[2], device=f0_values.device)
         rand_ini = torch.zeros(f0_values.shape[0], f0_values.shape[2], device=f0_values.device)
         rand_ini[:, 0] = 0
         rad_values[:, 0, :] += rand_ini
@@ -526,9 +525,8 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
         # generate uv signal
         uv = (f0 > self.voiced_threshold).float()
         noise_amp = uv * self.add_noise_std + (1 - uv) * self.sine_amplitude / 3
-        # torch.manual_seed(0)
-        # noise = noise_amp * torch.randn_like(sine_waves)
-        # sine_waves = sine_waves * uv + noise
+        noise = noise_amp * torch.randn_like(sine_waves)
+        sine_waves = sine_waves * uv + noise
         sine_waves = sine_waves * uv
 
         return sine_waves
