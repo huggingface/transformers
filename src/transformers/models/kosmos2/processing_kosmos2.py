@@ -85,7 +85,7 @@ class Kosmos2Processor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["num_patch_index_tokens"]
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = ("CLIPImageProcessor", "CLIPImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):

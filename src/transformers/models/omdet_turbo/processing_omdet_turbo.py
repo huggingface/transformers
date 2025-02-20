@@ -216,7 +216,7 @@ class OmDetTurboProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "DetrImageProcessor"
+    image_processor_class = ("DetrImageProcessor", "DetrImageProcessorFast")
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
