@@ -405,8 +405,8 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to the HuggingFace Hub...")
-        model.push_to_hub(f"s0225/{model_name}", private=True)
-        processor.push_to_hub(f"s0225/{model_name}", private=True)
+        model.push_to_hub(f"qubvel-hf/{model_name}", private=True)
+        processor.push_to_hub(f"qubvel-hf/{model_name}", private=True)
 
 
 if __name__ == "__main__":

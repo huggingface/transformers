@@ -501,7 +501,7 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "s0225/siglip2-base-patch16-naflex"
+        model_name = "google/siglip2-base-patch16-naflex"
         model = Siglip2VisionModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -660,7 +660,7 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "s0225/siglip2-base-patch16-naflex"
+        model_name = "google/siglip2-base-patch16-naflex"
         model = Siglip2TextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -802,7 +802,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "s0225/siglip2-base-patch16-naflex"
+        model_name = "google/siglip2-base-patch16-naflex"
         model = Siglip2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -936,7 +936,7 @@ def prepare_images():
 class Siglip2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "s0225/siglip2-base-patch16-naflex"
+        model_name = "google/siglip2-base-patch16-naflex"
         model = Siglip2Model.from_pretrained(model_name).to(torch_device)
         processor = Siglip2Processor.from_pretrained(model_name)
 

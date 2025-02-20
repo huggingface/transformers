@@ -83,10 +83,10 @@ class Siglip2VisionConfig(SiglipVisionConfig):
     ```python
     >>> from transformers import Siglip2VisionConfig, Siglip2VisionModel
 
-    >>> # Initializing a Siglip2VisionConfig with google/siglip2-base-patch16-224 style configuration
+    >>> # Initializing a Siglip2VisionConfig with google/siglip2-base-patch16-naflex style configuration
     >>> configuration = Siglip2VisionConfig()
 
-    >>> # Initializing a Siglip2VisionModel (with random weights) from the google/siglip2-base-patch16-224 style configuration
+    >>> # Initializing a Siglip2VisionModel (with random weights) from the google/siglip2-base-patch16-naflex style configuration
     >>> model = Siglip2VisionModel(configuration)
 
     >>> # Accessing the model configuration
