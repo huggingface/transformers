@@ -47,13 +47,12 @@ checkpoints at four sizes (ViT-B/86M, L/303M, So400m/400M, and g/1B).*
 
 - Usage of SigLIP2 is similar to [SigLIP](siglip) and [CLIP](clip). The main difference from CLIP is the training loss, which does not require a global view of all the pairwise similarities of images and texts within a batch. One needs to apply the sigmoid activation function to the logits, rather than the softmax.
 - Training is supported but does not use `torch.distributed` utilities which may limit the scalability of batch size. However, DDP and FDSP works on single-node multi-gpu setup.
-- When using the standalone [`GemmaTokenizer`] make sure to pass `padding="max_length"` and `max_length=64` as that's how the model was trained.
+- When using the standalone [`GemmaTokenizerFast`] make sure to pass `padding="max_length"` and `max_length=64` as that's how the model was trained.
 - Model was trained with *lowercased* text, make sure you make the same preprocessing for your text labels.
-- To get the same results as the pipeline, a prompt template of "This is a photo of {label}." should be used.
+- To get the same results as the pipeline, a prompt template of "this is a photo of {label}" should be used.
 - The NaFlex variant supports processing images at higher resolutions by adjusting the `max_num_patches` parameter in the `Processor`. The default value is `max_num_patches=256`. Increasing `max_num_patches` to 1024 (4x) will approximately double processed image height and width, while preserving the aspect ratio.
 
-#### <Metrics>
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip_table.jpeg"
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/siglip2_metrics_table.png"
 alt="drawing" width="600"/>
 
 This model was contributed by [qubvel](https://huggingface.co/qubvel-hf).
