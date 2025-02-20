@@ -277,8 +277,8 @@ class StyleTextToSpeech2DurationProjector(nn.Module):
 
         hidden_states = self.duration_proj(hidden_states)
         durations = torch.sigmoid(hidden_states).sum(axis=-1) / speed  
-        durations = torch.round(durations).clamp(min=1).long().squeeze()
-        
+        durations = torch.round(durations).clamp(min=1).long()
+   
         mask = torch.arange(durations.size(1), device=durations.device)[None, :] < torch.tensor(input_lengths, device=durations.device)[:, None]
         durations = durations * mask
         
