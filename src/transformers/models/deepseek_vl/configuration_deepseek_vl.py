@@ -24,24 +24,11 @@ from ..llama.configuration_llama import LlamaConfig
 logger = logging.get_logger(__name__)
 
 
-class DeepseekVLAlignerConfig(PretrainedConfig):
-    model_type = "deepseek_vl_align_model"
-    base_config_key = "aligner_config"
-
-    def __init__(
-        self,
-        depth=2,
-        input_dim=1024,
-        n_embed=4096,
-        projector_type="low_high_hybrid_split_mlp_gelu",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.input_dim = input_dim
-        self.n_embed = n_embed
-        self.projector_type = projector_type
+{
+    "vision_config": {
+        ""
+    }
+}
 
 
 class DeepseekVLVisionConfig(PretrainedConfig):
@@ -70,31 +57,25 @@ class DeepseekVLConfig(PretrainedConfig):
     model_type = "deepseek_vl"
     sub_configs = {
         "text_config": LlamaConfig,
-        "aligner_config": DeepseekVLAlignerConfig,
         "vision_config": DeepseekVLVisionConfig,
     }
 
-    def __init__(self, text_config=None, aligner_config=None, vision_config=None, **kwargs):
+    def __init__(self, text_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)
 
         if text_config is None:
             text_config = {}
             logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
 
-        if aligner_config is None:
-            aligner_config = {}
-            logger.info("`aligner_config` is `None`. Initializing the `DeepseekVLAlignerConfig` with default values.")
-
         if vision_config is None:
             vision_config = {}
             logger.info("`vision_config` is `None`. Initializing the `DeepseekVLVisionConfig` with default values.")
 
         self.text_config = LlamaConfig(**text_config)
-        self.aligner_config = DeepseekVLAlignerConfig(**aligner_config)
         self.vision_config = DeepseekVLVisionConfig(**vision_config)
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: LlamaConfig, aligner_config: DeepseekVLAlignerConfig, vision_config: DeepseekVLVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: LlamaConfig, vision_config: DeepseekVLVisionConfig, **kwargs):
         r"""
         Instantiate a [`SiglipConfig`] (or a derived class) from siglip text model configuration and siglip vision
         model configuration.
@@ -103,7 +84,7 @@ class DeepseekVLConfig(PretrainedConfig):
             [`DeepseekVLConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), aligner_config=aligner_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
 
-__all__ = ["DeepseekVLAlignerConfig", "DeepseekVLVisionConfig", "DeepseekVLConfig"]
+__all__ = ["DeepseekVLVisionConfig", "DeepseekVLConfig"]
