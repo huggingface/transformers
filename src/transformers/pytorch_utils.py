@@ -66,9 +66,7 @@ def softmax_backward_data(parent, grad_output, output, dim, self):
     return _softmax_backward_data(grad_output, output, parent.dim, self.dtype)
 
 
-def prune_linear_layer(
-    layer: nn.Linear, index: torch.LongTensor, dim: int = 0
-) -> nn.Linear:
+def prune_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int = 0) -> nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
 
@@ -91,9 +89,7 @@ def prune_linear_layer(
             b = layer.bias[index].clone().detach()
     new_size = list(layer.weight.size())
     new_size[dim] = len(index)
-    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(
-        layer.weight.device
-    )
+    new_layer = nn.Linear(new_size[1], new_size[0], bias=layer.bias is not None).to(layer.weight.device)
     new_layer.weight.requires_grad = False
     new_layer.weight.copy_(W.contiguous())
     new_layer.weight.requires_grad = True
@@ -259,15 +255,9 @@ def apply_chunking_to_forward(
         num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
 
         # chunk input tensor into tuples
-        input_tensors_chunks = tuple(
-            input_tensor.chunk(num_chunks, dim=chunk_dim)
-            for input_tensor in input_tensors
-        )
+        input_tensors_chunks = tuple(input_tensor.chunk(num_chunks, dim=chunk_dim) for input_tensor in input_tensors)
         # apply forward fn to every tuple
-        output_chunks = tuple(
-            forward_fn(*input_tensors_chunk)
-            for input_tensors_chunk in zip(*input_tensors_chunks)
-        )
+        output_chunks = tuple(forward_fn(*input_tensors_chunk) for input_tensors_chunk in zip(*input_tensors_chunks))
         # concatenate output at same dimension
         return torch.cat(output_chunks, dim=chunk_dim)
 
@@ -291,9 +281,7 @@ def find_pruneable_heads_and_indices(
         into account and the indices of rows/columns to keep in the layer weight.
     """
     mask = torch.ones(n_heads, head_size)
-    heads = (
-        set(heads) - already_pruned_heads
-    )  # Convert to set and remove already pruned heads
+    heads = set(heads) - already_pruned_heads  # Convert to set and remove already pruned heads
     for head in heads:
         # Compute how many pruned heads are before the head and move the index accordingly
         head = head - sum(1 if h < head else 0 for h in already_pruned_heads)
@@ -335,9 +323,7 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     return tensor.device, unique_id, storage_size(tensor)
 
 
-def isin_mps_friendly(
-    elements: torch.Tensor, test_elements: torch.Tensor | int
-) -> torch.Tensor:
+def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int) -> torch.Tensor:
     """
     Same as `torch.isin` without flags, but MPS-friendly. We can remove this function when we stop supporting
     torch <= 2.3. See https://github.com/pytorch/pytorch/issues/77764#issuecomment-2067838075
@@ -355,13 +341,7 @@ def isin_mps_friendly(
         test_elements = torch.tensor(test_elements)
         if test_elements.ndim == 0:
             test_elements = test_elements.unsqueeze(0)
-        return (
-            elements.tile(test_elements.shape[0], 1)
-            .eq(test_elements.unsqueeze(1))
-            .sum(dim=0)
-            .bool()
-            .squeeze()
-        )
+        return elements.tile(test_elements.shape[0], 1).eq(test_elements.unsqueeze(1)).sum(dim=0).bool().squeeze()
     else:
         # Note: don't use named arguments in `torch.isin`, see https://github.com/pytorch/pytorch/issues/126045
         return torch.isin(elements, test_elements)
@@ -407,9 +387,7 @@ def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
                         f"_cached_{func.__name__}",
                         lru_cache(*lru_args, **lru_kwargs)(func.__get__(self)),
                     )
-                return self.__getattribute__(f"_cached_{func.__name__}")(
-                    *args, **kwargs
-                )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
             else:
                 # Otherwise, just call the original function
                 return func(self, *args, **kwargs)
