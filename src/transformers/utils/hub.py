@@ -68,6 +68,7 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
+from .logging import EmptyTqdm
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -124,6 +125,19 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
+
+
+class AlwaysEmptyTqdm:
+    """Allow to remove default tqdm bar in `snapshot_download`."""
+
+    def __call__(self, *args, **kwargs):
+        return EmptyTqdm(*args, **kwargs)
+
+    def set_lock(self, *args, **kwargs):
+        self._lock = None
+
+    def get_lock(self):
+        pass
 
 
 def _get_cache_file_to_return(
@@ -415,7 +429,7 @@ def cached_files(
     user_agent = http_user_agent(user_agent)
     try:
         # Load from URL or cache if already cached
-        resolved_folder = snapshot_download(
+        _ = snapshot_download(
             path_or_repo_id,
             allow_patterns=filenames,
             repo_type=repo_type,
@@ -427,55 +441,67 @@ def cached_files(
             resume_download=resume_download,
             token=token,
             local_files_only=local_files_only,
+            tqdm_class=AlwaysEmptyTqdm() if len(filenames) == 1 else None,  # remove the 2nd bar with only 1 file
         )
-    except GatedRepoError as e:
-        resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
-        ]
-        if all(file is not None for file in resolved_files) or not _raise_exceptions_for_gated_repo:
-            return resolved_files
-        raise EnvironmentError(
-            "You are trying to access a gated repo.\nMake sure to have access to it at "
-            f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
-        ) from e
-    except RepositoryNotFoundError as e:
-        raise EnvironmentError(
-            f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
-            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
-            "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
-            "`token=<your_token>`"
-        ) from e
-    except RevisionNotFoundError as e:
-        raise EnvironmentError(
-            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
-            "for this model name. Check the model page at "
-            f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
-        ) from e
-    except LocalEntryNotFoundError as e:
-        resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
-        ]
-        if (
-            all(file is not None for file in resolved_files)
-            or not _raise_exceptions_for_missing_entries
-            or not _raise_exceptions_for_connection_errors
-        ):
-            return resolved_files
-        raise EnvironmentError(
-            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, couldn't find it in the"
-            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing files named"
-            f" {*filenames,}.\nCheckout your internet connection or see how to run the library in offline mode at"
-            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-        ) from e
-    except HTTPError as err:
-        resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
-        ]
-        if all(file is not None for file in resolved_files) or not _raise_exceptions_for_connection_errors:
-            return resolved_file
-        raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
 
-    resolved_files = [os.path.join(resolved_folder, filename) for filename in filenames]
+    except Exception as e:
+        # We cannot recover from them
+        if isinstance(e, RepositoryNotFoundError) and not isinstance(e, GatedRepoError):
+            raise EnvironmentError(
+                f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
+                "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
+                "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+                "`token=<your_token>`"
+            ) from e
+        elif isinstance(e, RevisionNotFoundError):
+            raise EnvironmentError(
+                f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+                "for this model name. Check the model page at "
+                f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
+            ) from e
+
+        # Now we try to recover if we can find all files correctly in the cache
+        resolved_files = [
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
+        ]
+        if all(file is not None for file in resolved_files):
+            return resolved_files
+
+        # Raise based on the flags. Note that we will raise for missing entries at the very end, even when
+        # not entering this Except block, as it may also happen when `snapshot_download` does not raise
+        if isinstance(e, GatedRepoError) and _raise_exceptions_for_gated_repo:
+            raise EnvironmentError(
+                "You are trying to access a gated repo.\nMake sure to have access to it at "
+                f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
+            ) from e
+        elif isinstance(e, LocalEntryNotFoundError) and _raise_exceptions_for_connection_errors:
+            raise EnvironmentError(
+                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, couldn't find them in the"
+                f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing files named"
+                f" {*filenames,}.\nCheckout your internet connection or see how to run the library in offline mode at"
+                " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+            ) from e
+        elif isinstance(e, HTTPError) and _raise_exceptions_for_connection_errors:
+            raise EnvironmentError(
+                f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}"
+            )
+
+    resolved_files = [
+        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
+    ]
+    # If there are any missing file and the flag is active, raise
+    if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
+        missing_entries = [original for original, resolved in zip(filenames, resolved_files) if resolved is None]
+        raise EnvironmentError(
+            f"{path_or_repo_id} exits on does not appear to have file(s) named {*missing_entries,}. Checkout "
+            f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
+        )
+
+    # Remove potential missing entries (we can silently remove them at this point based on the flags)
+    resolved_files = [file for file in resolved_files if file is not None]
+    # For BC, we return `None` if the list is empty
+    resolved_files = None if len(resolved_files) == 0 else resolved_files
+
     return resolved_files
 
 
@@ -1081,6 +1107,7 @@ def get_checkpoint_shard_files(
             subfolder=subfolder,
             _commit_hash=_commit_hash,
         )
+
     # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
     # we don't have to catch them here.
     except EntryNotFoundError:
