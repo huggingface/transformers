@@ -535,6 +535,10 @@ _import_structure = {
         "Kosmos2Config",
         "Kosmos2Processor",
     ],
+    "models.kosmos2_5": [
+        "Kosmos2_5Config",
+        "Kosmos2_5Processor",
+    ],
     "models.layoutlm": [
         "LayoutLMConfig",
         "LayoutLMTokenizer",
@@ -1258,6 +1262,7 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.kosmos2_5"].extend(["Kosmos2_5ImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -1321,6 +1326,7 @@ else:
     _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.depth_pro"].append("DepthProImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.kosmos2_5"].append("Kosmos2_5ImageProcessorFast")
     _import_structure["models.llava"].append("LlavaImageProcessorFast")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
@@ -2686,6 +2692,13 @@ else:
             "Kosmos2ForConditionalGeneration",
             "Kosmos2Model",
             "Kosmos2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.kosmos2_5"].extend(
+        [
+            "Kosmos2_5ForConditionalGeneration",
+            "Kosmos2_5Model",
+            "Kosmos2_5PreTrainedModel",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -5655,6 +5668,10 @@ if TYPE_CHECKING:
         Kosmos2Config,
         Kosmos2Processor,
     )
+    from .models.kosmos2_5 import (
+        Kosmos2_5Config,
+        Kosmos2_5Processor,
+    )
     from .models.layoutlm import (
         LayoutLMConfig,
         LayoutLMTokenizer,
@@ -6413,6 +6430,7 @@ if TYPE_CHECKING:
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
+        from .models.kosmos2_5 import Kosmos2_5ImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -6488,6 +6506,7 @@ if TYPE_CHECKING:
         from .models.deit import DeiTImageProcessorFast
         from .models.depth_pro import DepthProImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.kosmos2_5 import Kosmos2_5ImageProcessorFast
         from .models.llava import LlavaImageProcessorFast
         from .models.llava_next import LlavaNextImageProcessorFast
         from .models.llava_onevision import LlavaOnevisionImageProcessorFast
@@ -7599,6 +7618,11 @@ if TYPE_CHECKING:
             Kosmos2ForConditionalGeneration,
             Kosmos2Model,
             Kosmos2PreTrainedModel,
+        )
+        from .models.kosmos2_5 import (
+            Kosmos2_5ForConditionalGeneration,
+            Kosmos2_5Model,
+            Kosmos2_5PreTrainedModel,
         )
         from .models.layoutlm import (
             LayoutLMForMaskedLM,
