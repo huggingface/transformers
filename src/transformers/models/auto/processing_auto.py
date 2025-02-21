@@ -31,7 +31,6 @@ from ...tokenization_utils import TOKENIZER_CONFIG_FILE
 from ...utils import FEATURE_EXTRACTOR_NAME, PROCESSOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
-    ALL_CUSTOM_CLASSES,
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     model_type_to_module_name,
@@ -378,6 +377,3 @@ class AutoProcessor:
             processor_class ([`ProcessorMixin`]): The processor to register.
         """
         PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)
-        if processor_class.__name__ not in ALL_CUSTOM_CLASSES:
-            ALL_CUSTOM_CLASSES[processor_class.__name__] = processor_class
-        processor_class._auto_class = "AutoProcessor"

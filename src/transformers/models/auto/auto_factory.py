@@ -34,7 +34,6 @@ from ...utils import (
     requires_backends,
 )
 from .configuration_auto import (
-    ALL_CUSTOM_CLASSES,
     AutoConfig,
     model_type_to_module_name,
     replace_list_option_in_docstrings,
@@ -591,8 +590,6 @@ class _BaseAutoModelClass:
                 "one of those so they match!"
             )
         cls._model_mapping.register(config_class, model_class, exist_ok=exist_ok)
-        if model_class.__name__ not in ALL_CUSTOM_CLASSES:
-            ALL_CUSTOM_CLASSES[model_class.__name__] = model_class
 
 
 class _BaseAutoBackboneClass(_BaseAutoModelClass):
