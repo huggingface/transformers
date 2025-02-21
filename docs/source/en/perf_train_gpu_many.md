@@ -450,12 +450,13 @@ Implementations:
 - [parallelformers](https://github.com/tunib-ai/parallelformers) (only inference at the moment)
 - [SageMaker](https://arxiv.org/abs/2111.05972) - this is a proprietary solution that can only be used on AWS.
 - [OSLO](https://github.com/tunib-ai/oslo) has the tensor parallelism implementation based on the Transformers.
+- [`transformers` integration](main_classes/trainer) tensor parallelism is available through tp_size attribute for models having `base_tp_plan`. Further you can look at [example usage](perf_infer_gpu_multi)
 
 SageMaker combines TP with DP for a more efficient processing.
 
 🤗 Transformers status:
-- core: not yet implemented in the core
-- but if you want inference [parallelformers](https://github.com/tunib-ai/parallelformers) provides this support for most of our models. So until this is implemented in the core you can use theirs. And hopefully training mode will be supported too.
+- core: uses PyTorch 2 APIs to support tensor parallelism to models having base_tp_plan in their respective config classes.
+- Alternatively, you can as well try [parallelformers](https://github.com/tunib-ai/parallelformers) that provides this support for most of our models. Training mode with TP is as well supported natively in transformers.
 - Deepspeed-Inference also supports our BERT, GPT-2, and GPT-Neo models in their super-fast CUDA-kernel-based inference mode, see more [here](https://www.deepspeed.ai/tutorials/inference-tutorial/)
 
 🤗 Accelerate integrates with [TP from Megatron-LM](https://huggingface.co/docs/accelerate/v0.23.0/en/usage_guides/megatron_lm).
@@ -476,7 +477,7 @@ And GPU1 does the same by enlisting GPU3 to its aid.
 Since each dimension requires at least 2 GPUs, here you'd need at least 4 GPUs.
 
 Implementations:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -497,7 +498,7 @@ This diagram is from a blog post [3D parallelism: Scaling to trillion-parameter 
 Since each dimension requires at least 2 GPUs, here you'd need at least 8 GPUs.
 
 Implementations:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeed also includes an even more efficient DP, which they call ZeRO-DP.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -535,7 +536,7 @@ Important papers:
 - [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](
 https://arxiv.org/abs/2201.11990)
 
-🤗 Transformers status: not yet implemented, since we have no PP and TP.
+🤗 Transformers status: not yet implemented, since we have no PP.
 
 ## FlexFlow
 

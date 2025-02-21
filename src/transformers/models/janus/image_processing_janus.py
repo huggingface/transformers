@@ -59,9 +59,6 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-# Modular Image Processor of Janus.
-
-
 def expand2square(pil_img, background_color):
     width, height = pil_img.size
     if width == height:
@@ -150,6 +147,7 @@ class JanusImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
+        size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -179,13 +177,21 @@ class JanusImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        # Remove the size arg from kwargs as we will be dynamically calculating the output size.
-        _ = kwargs.pop("size", None)
         height, width, _ = image.shape
         max_size = max(height, width)
+
+        if isinstance(size, dict):
+            if "height" not in size or "width" not in size:
+                raise ValueError(
+                    f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+                )
+            image_size = size["height"]  # Assign height as image_size assuming height=width
+        else:
+            image_size = size
+
         output_size = [
-            max(int(height / max_size * self.image_size), self.min_size),
-            max(int(width / max_size * self.image_size), self.min_size),
+            max(int(height / max_size * image_size), self.min_size),
+            max(int(width / max_size * image_size), self.min_size),
         ]
 
         image = resize(

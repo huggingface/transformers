@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import textwrap
 
+#  TORCH_LOGS=+dtensor CUDA_LAUNCH_BLOCKING=1 TORCH_USE_CUDA_DSA=1 PYTHONPATH="src" python -m torch.distributed.run --nproc_per_node 2 ./tests/tp/test_tp.py
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaModel
@@ -80,17 +81,13 @@ class TestTensorParallel(TestCasePlus):
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, tp_plan="auto")
             torch.distributed.barrier()
 
-            # The expected full model memory footprint
-            expected_model_memory = 16
+            # The expected model memory footprint. We add 1 as not all the modules are split (e.g. the embeddings)
+            expected_model_memory_per_device = (16 / world_size) + 1
             overhead_factor = 1.2
 
-            # Assert we did not use more than the full model expected memory (with some overhead)
-            if not torch.cuda.max_memory_allocated(device) / 1024**3 < expected_model_memory * overhead_factor:
-                raise ValueError("Loading the model used more than the full model size")
-
-            # Assert we correctly handled the sharding between devices
-            if not torch.cuda.memory_allocated(device) / 1024**3 < (expected_model_memory / world_size) * overhead_factor:
-                raise ValueError("Each model shard is larger than what is expected.")
+            # Check that we do not use more than the expected sharded size during initialization
+            if torch.cuda.max_memory_allocated(device) / 1024**3 > expected_model_memory_per_device * overhead_factor:
+                raise ValueError("Loading the model used more than the expected fraction of model size per device")
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()
@@ -110,9 +107,8 @@ if __name__ == "__main__":
 
     # Test settings
     model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-    bs = 4
-    seqlen = 64
-
+    bs = 1
+    seqlen = 4096
     # Get distributed settings
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
@@ -124,23 +120,45 @@ if __name__ == "__main__":
 
     # Get model config
     config = LlamaConfig.from_pretrained(model_id)
-    # Shrink model size
-    config.num_hidden_layers //= 8
-    config.vocab_size //= 8
-
+    config.hidden_size = 2048
+    config.attention_bias = False
     # Instantiate model
     with device:
-        model = LlamaModel(config)
+        model = LlamaModel(config).to(dtype=torch.float16)
 
     model.eval()
-
     # Tensor Parallel
     if world_size > 1:
         model.tensor_parallel(device_mesh)
-
     # Run model
+
     inputs = torch.randint(config.vocab_size, (bs, seqlen), device=device)
-    with torch.no_grad():
-        out = model(inputs)
+
+    # Test cuda graphing explicitly
+    with torch.cuda.device(device):
+        print("Cuda graphing")
+        with torch.no_grad():
+            inputs = torch.randint(config.vocab_size, (bs, seqlen), device=device)
+            # CUDA Graph setup
+            s = torch.cuda.Stream(device=device)
+            s.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(s):
+                for i in range(3):
+                    out = model(inputs)
+            torch.cuda.current_stream().wait_stream(s)
+            g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(g):
+                out = model(inputs)
+
+            for _ in range(2):
+                g.replay()
+            s.synchronize()
 
     assert out.last_hidden_state.shape == torch.Size([bs, seqlen, config.hidden_size])
+
+    # Test compile
+    with torch.no_grad():
+        out = model(inputs)
+        model.forward = torch.compile(model.forward, mode="reduce-overhead")
+        out = model(inputs)
+        out = model(inputs)
