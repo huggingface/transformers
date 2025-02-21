@@ -164,14 +164,10 @@ class TrainerState:
                     num_steps = math.ceil(max_steps * num_steps)
                 setattr(self, f"{step_kind}_steps", num_steps)
 
-    def init_training_references(self, trainer, train_dataloader, max_steps, num_train_epochs, trial):
+    def init_training_references(self, trainer, max_steps, num_train_epochs, trial):
         """
         Stores the initial training references needed in `self`
         """
-        for attr in ("model", "optimizer", "lr_scheduler"):
-            setattr(self, attr, getattr(trainer, attr))
-
-        self.train_dataloader = train_dataloader
         if trainer.hp_name is not None and trainer._trial is not None:
             # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
             # parameter to Train when using DDP.
@@ -604,7 +600,7 @@ class DefaultFlowCallback(TrainerCallback):
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
-            if args.save_strategy not in [SaveStrategy.NO, SaveStrategy.BEST]:
+            if args.save_strategy == SaveStrategy.STEPS:
                 control.should_save = True
 
         return control
