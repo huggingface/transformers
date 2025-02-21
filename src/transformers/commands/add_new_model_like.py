@@ -64,9 +64,12 @@ class ModelPatterns:
             The tokenizer class associated with this model. Will default to `"{model_camel_cased}Config"`.
         tokenizer_class (`str`, *optional*):
             The tokenizer class associated with this model (leave to `None` for models that don't use a tokenizer).
-        image_processor_class (`Union[str, tuple[str]]`, *optional*):
-            The image processor class or classes associated with this model (leave to `None` for models that don't use an image
+        image_processor_class (`str`, *optional*):
+            The image processor class associated with this model (leave to `None` for models that don't use an image
             processor).
+        image_processor_fast_class (`str`, *optional*):
+            The fast image processor class associated with this model (leave to `None` for models that don't use a fast
+            image processor).
         feature_extractor_class (`str`, *optional*):
             The feature extractor class associated with this model (leave to `None` for models that don't use a feature
             extractor).
@@ -1456,7 +1459,7 @@ def create_new_model_like(
     if create_fast_image_processor:
         add_fast_image_processor(model_name=new_model_patterns.model_lower_cased)
 
-    # 6. Warn the user for duplicate patterns
+    # 7. Warn the user for duplicate patterns
     if old_model_patterns.model_type == old_model_patterns.checkpoint:
         print(
             "The model you picked has the same name for the model type and the checkpoint name "
