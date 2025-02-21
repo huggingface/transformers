@@ -38,10 +38,10 @@ from huggingface_hub import (
     create_branch,
     create_commit,
     create_repo,
+    hf_hub_download,
     hf_hub_url,
     snapshot_download,
     try_to_load_from_cache,
-    hf_hub_download
 )
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
@@ -490,7 +490,8 @@ def cached_files(
                 f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
                 " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             ) from e
-        elif isinstance(e, HTTPError):
+        # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. Either way, we treat it later
+        elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise EnvironmentError(

@@ -529,29 +529,22 @@ class AutoModelTest(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
 
-    def test_cached_model_has_minimum_calls(self):
+    def test_cached_model_has_minimum_calls_to_head(self):
         # Make sure we have cached the model.
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
-        self.assertEqual(counter["GET"], 1)
-        self.assertEqual(counter["HEAD"], 0)
-        self.assertEqual(counter.total_calls, 1)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 2)
+        self.assertEqual(counter.total_calls, 2)
 
         # With a sharded checkpoint
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
-        self.assertEqual(counter["GET"], 2)
-        self.assertEqual(counter["HEAD"], 0)
+        self.assertEqual(counter["GET"], 0)
+        self.assertEqual(counter["HEAD"], 2)
         self.assertEqual(counter.total_calls, 2)
-
-        from huggingface_hub import HfApi
-        with RequestCounter() as counter:
-            api = HfApi()
-            repo_info = api.repo_info(repo_id="hf-internal-testing/tiny-random-bert-sharded")
-        print(f'GET: {counter["GET"]}   HEAD: {counter["HEAD"]}   tot: {counter.total_calls}')
-
 
     def test_attr_not_existing(self):
         from transformers.models.auto.auto_factory import _LazyAutoMapping
