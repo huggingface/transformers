@@ -43,7 +43,6 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
-
         class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
         intro = rf"""    The {class_name} forward method, overrides the `__call__` special method.
 
@@ -63,14 +62,14 @@ def add_start_docstrings_to_model_forward(*docstr):
             doc_indentation = len(first_non_empty) - len(first_non_empty.lstrip())
         except StopIteration:
             doc_indentation = correct_indentation
-        
+
         docs = docstr
         # In this case, the correct indentation level (class method, 2 Python levels) was respected, and we should
         # correctly reindent everything. Otherwise, the doc uses a single indentation level
         if doc_indentation == 4 + correct_indentation:
             docs = [textwrap.indent(textwrap.dedent(doc), " " * correct_indentation) for doc in docstr]
             intro = textwrap.indent(textwrap.dedent(intro), " " * correct_indentation)
-            
+
         docstring = "".join(docs) + current_doc
         fn.__doc__ = intro + docstring
         return fn
