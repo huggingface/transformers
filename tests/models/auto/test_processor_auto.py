@@ -354,6 +354,26 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             if CustomConfig in PROCESSOR_MAPPING._extra_content:
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
 
+    def test_dynamic_processor_with_specific_dynamic_subcomponents(self):
+        class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
+            pass
+
+        class NewTokenizer(BertTokenizer):
+            pass
+
+        class NewProcessor(ProcessorMixin):
+            feature_extractor_class = "NewFeatureExtractor"
+            tokenizer_class = "NewTokenizer"
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+
+        from transformers import AutoImageProcessor, AutoModel, AutoProcessor
+
+        AutoImageProcessor.register(NewModel.config_class, NewImageProcessor)
+        AutoProcessor.register(NewModel.config_class, NewProcessor)
+        AutoModel.register(NewModel.config_class, NewModel)
+
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")
         self.assertEqual(processor.__class__.__name__, "BertTokenizerFast")

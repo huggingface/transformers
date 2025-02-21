@@ -1139,8 +1139,3 @@ class AutoConfig:
                 "match!"
             )
         CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
-        if config.__name__ not in ALL_CUSTOM_CLASSES:
-            ALL_CUSTOM_CLASSES[config.__name__] = config
-
-
-ALL_CUSTOM_CLASSES = {}

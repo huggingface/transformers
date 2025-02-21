@@ -28,7 +28,6 @@ from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
-    ALL_CUSTOM_CLASSES,
     CONFIG_MAPPING_NAMES,
     AutoConfig,
     model_type_to_module_name,
@@ -403,5 +402,3 @@ class AutoFeatureExtractor:
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
         FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
-        if feature_extractor_class.__name__ not in ALL_CUSTOM_CLASSES:
-            ALL_CUSTOM_CLASSES[feature_extractor_class.__name__] = feature_extractor_class
