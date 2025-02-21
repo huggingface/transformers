@@ -30,8 +30,12 @@ from transformers import (
     AutoTokenizer,
     JanusConfig,
     JanusForConditionalGeneration,
+    JanusImageProcessor,
     JanusProcessor,
     SiglipVisionConfig,
+    JanusTextConfig,
+    JanusVisionConfig,
+    JanusVQVAEConfig,
 )
 from safetensors.torch import load_file
 
@@ -133,35 +137,46 @@ def convert_state_dict_to_hf(state_dict):
 
     return converted_state_dict
 
-def ensure_model_downloaded(repo_id: str, revision: str = None) -> str:
+def ensure_model_downloaded(repo_id: str = None, revision: str = None, local_dir: str = None) -> str:
     """
     Ensures model files are downloaded locally, downloads them if not.
     Returns path to local files.
+    
+    Args:
+        repo_id: The Hugging Face model repo ID (required if local_dir not provided)
+        revision: Optional git revision to use
+        local_dir: Optional local directory path where model files should be stored/found
     """
-    print(f"Ensuring {repo_id} (revision: {revision}) is downloaded...")
-    local_files_only = False
+    if repo_id is None:
+        raise ValueError("repo_id must be provided")
+        
+    print(f"Ensuring {repo_id} (revision: {revision or 'latest'}) is downloaded...")
+    
+    if local_dir is not None:
+        print(f"Using provided local directory: {local_dir}")
+        os.makedirs(local_dir, exist_ok=True)
     
     try:
         # First try to find files locally
-        local_files_only = True
-        local_dir = snapshot_download(
+        download_dir = snapshot_download(
             repo_id,
             revision=revision,
-            local_files_only=local_files_only
+            local_files_only=True,
+            local_dir=local_dir
         )
-        print(f"Found model files locally at {local_dir}")
-        return local_dir
+        print(f"Found model files locally at {download_dir}")
+        return download_dir
     except Exception:
         # If files not found locally, download them
         print(f"Downloading model files for {repo_id}...")
-        local_files_only = False
-        local_dir = snapshot_download(
+        download_dir = snapshot_download(
             repo_id,
             revision=revision,
-            local_files_only=local_files_only
+            local_files_only=False,
+            local_dir=local_dir
         )
-        print(f"Downloaded model files to {local_dir}")
-        return local_dir
+        print(f"Downloaded model files to {download_dir}")
+        return download_dir
 
 def load_model_state_dict(input_path: str) -> dict:
     """
@@ -198,7 +213,6 @@ def load_model_state_dict(input_path: str) -> dict:
 def convert_model(
     repo_id,
     text_model_id,
-    vision_model_id,
     output_dir=None,
     output_hub_path=None,
     safe_serialization=True,
@@ -213,12 +227,39 @@ def convert_model(
     # Download or locate model files
     input_path = ensure_model_downloaded(repo_id, revision)
     
-    # First create and save the processor
-    print("Loading tokenizer and image processor...")
-    tokenizer = AutoTokenizer.from_pretrained(text_model_id)
-    image_processor = AutoImageProcessor.from_pretrained(vision_model_id)
+    # Load configuration files
+    with open(os.path.join(input_path, "config.json"), "r") as f:
+        config_data = json.load(f)
+    with open(os.path.join(input_path, "preprocessor_config.json"), "r") as f:
+        preprocessor_config = json.load(f)
+    with open(os.path.join(input_path, "processor_config.json"), "r") as f:
+        processor_config = json.load(f)
+    with open(os.path.join(input_path, "special_tokens_map.json"), "r") as f:
+        special_tokens_map = json.load(f)
+    with open(os.path.join(input_path, "tokenizer_config.json"), "r") as f:
+        tokenizer_config = json.load(f)
+
+    # Create tokenizer with special tokens
+    tokenizer = AutoTokenizer.from_pretrained(
+        text_model_id,
+        bos_token=special_tokens_map["bos_token"],
+        eos_token=special_tokens_map["eos_token"],
+        pad_token=special_tokens_map["pad_token"],
+        additional_special_tokens=special_tokens_map["additional_special_tokens"],
+        model_max_length=tokenizer_config["model_max_length"],
+    )
+
+    # Create image processor from config
+    image_processor = JanusImageProcessor(
+        do_resize=preprocessor_config.get("do_resize", True),
+        size={"height": preprocessor_config["image_size"], "width": preprocessor_config["image_size"]},
+        do_normalize=preprocessor_config.get("do_normalize", True),
+        image_mean=preprocessor_config.get("image_mean", [0.5, 0.5, 0.5]),
+        image_std=preprocessor_config.get("image_std", [0.5, 0.5, 0.5]),
+        min_size=preprocessor_config.get("min_size", 14),
+    )
     
-    print("Creating and saving processor...")
+    # Create processor with chat template
     processor = JanusProcessor(
         image_processor=image_processor,
         tokenizer=tokenizer,
@@ -232,43 +273,64 @@ def convert_model(
         print(f"Pushing processor to hub at {output_hub_path}...")
         processor.push_to_hub(output_hub_path)
 
-    # Create and save the config
-    print("Creating model configuration...")
-    text_config = AutoConfig.from_pretrained(text_model_id)
-    vision_config = SiglipVisionConfig(
-        hidden_size=1152,
-        image_size=384,
-        intermediate_size=4304,
-        num_attention_heads=16,
-        num_hidden_layers=26,
-        patch_size=14,
-        vision_use_head=False,
-    ).to_dict()
+    # Create model configurations
+    text_config = JanusTextConfig(
+        vocab_size=config_data["language_config"]["vocab_size"],
+        hidden_size=config_data["language_config"]["hidden_size"],
+        intermediate_size=config_data["language_config"]["intermediate_size"],
+        num_hidden_layers=config_data["language_config"]["num_hidden_layers"],
+        num_attention_heads=config_data["language_config"]["num_attention_heads"],
+        num_key_value_heads=config_data["language_config"].get("num_key_value_heads", None),
+        hidden_act=config_data["language_config"].get("hidden_act", "silu"),
+        max_position_embeddings=config_data["language_config"]["max_position_embeddings"],
+        torch_dtype=config_data["language_config"].get("torch_dtype", "bfloat16"),
+    )
 
-    # TODO: change this. The text and processor configs are probably right, but this is likely obtained from HUB
-    config = JanusConfig(text_config=text_config, 
-                         vision_config=vision_config,
-                         vq_config=None)
-    
+    vision_config = JanusVisionConfig(
+        hidden_size=config_data["vision_config"]["params"]["model_name"].endswith("large") and 1024 or 768,
+        image_size=config_data["vision_config"]["params"]["image_size"],
+        select_feature=config_data["vision_config"]["params"]["select_feature"],
+        select_layer=config_data["vision_config"]["params"]["select_layer"],
+        aligner_projection_size=config_data["aligner_config"]["params"]["n_embed"],
+        depth=config_data["aligner_config"]["params"]["depth"],
+    )
+
+    vq_config = JanusVQVAEConfig(
+        embed_dim=config_data["gen_vision_config"]["params"]["n_embed"],
+        num_embeddings=config_data["gen_vision_config"]["params"]["image_token_size"],
+        aligner_projection_size=config_data["gen_aligner_config"]["params"]["n_embed"],
+        depth=config_data["gen_aligner_config"]["params"]["depth"],
+        image_token_embed_size=config_data["gen_head_config"]["params"]["image_token_embed"],
+    )
+
+    # Create the main config
+    config = JanusConfig(
+        text_config=text_config,
+        vision_config=vision_config,
+        vq_config=vq_config,
+    )
+
+    # Save the config
     if output_dir:
-        print(f"Saving config to {output_dir}...")
         config.save_pretrained(output_dir)
     if output_hub_path:
-        print(f"Pushing config to hub at {output_hub_path}...")
         config.push_to_hub(output_hub_path)
 
-    # Load and convert the model
-    print(f"Loading weights from {input_path}")
-    state_dict = load_model_state_dict(input_path)
-    state_dict = convert_state_dict_to_hf(state_dict)
-    
-    print("Creating Janus model...")
+    # Initialize model with empty weights
+    print("Creating empty model...")
     with init_empty_weights():
         model = JanusForConditionalGeneration(config)
-    
+
+    # Load and convert state dict
     print("Loading state dict...")
+    state_dict = load_model_state_dict(input_path)
+    state_dict = convert_state_dict_to_hf(state_dict)
+
+    # Load converted state dict
+    print("Loading converted weights into model...")
     model.load_state_dict(state_dict, strict=True)
-    
+
+    # Save the model
     if output_dir:
         print(f"Saving model to {output_dir}...")
         model.save_pretrained(output_dir, safe_serialization=safe_serialization)
@@ -313,11 +375,6 @@ def main():
         required=True,
     )
     parser.add_argument(
-        "--vision_model_id", 
-        help="Hub ID of the vision model to get image processor from",
-        required=True,
-    )
-    parser.add_argument(
         "--safe_serialization",
         type=bool,
         default=True,
@@ -331,7 +388,6 @@ def main():
     convert_model(
         repo_id=args.repo_id,
         text_model_id=args.text_model_id,
-        vision_model_id=args.vision_model_id,
         output_dir=args.output_dir,
         output_hub_path=args.output_hub_path,
         safe_serialization=args.safe_serialization,
@@ -339,4 +395,5 @@ def main():
     )
 
 if __name__ == "__main__":
-    main()
+    # main()
+    ensure_model_downloaded("deepseek-ai/Janus-Pro-1B", local_dir="tmp/hub_code")
