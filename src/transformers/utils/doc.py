@@ -16,10 +16,10 @@ Doc utilities: Utilities related to documentation
 """
 
 import functools
+import inspect
 import re
 import textwrap
 import types
-import inspect
 
 
 def get_docstring_indentation_level(func):
