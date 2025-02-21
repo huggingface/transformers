@@ -857,7 +857,7 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
 
         Example:
 
-            ```python
+        ```python
         >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
 
         >>> model = Gemma2ForCausalLM.from_pretrained("google/gemma-2-9b")
