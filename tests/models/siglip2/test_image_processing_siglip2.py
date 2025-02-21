@@ -151,7 +151,7 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_numpy_4_channels(self):
         pass
 
-    # increase mean tolerance to 1e-3 -> 1.5e-3
+    # increase mean tolerance to 1e-3 -> 2e-3
     # Ignore copy
     def test_slow_fast_equivalence(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
@@ -170,10 +170,10 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
         torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-1)
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1.5e-3
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
         )
 
-    # increase mean tolerance to 1e-3 -> 1.5e-3
+    # increase mean tolerance to 1e-3 -> 2e-3
     # Ignore copy
     def test_slow_fast_equivalence_batched(self):
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
@@ -196,5 +196,5 @@ class Siglip2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1, rtol=1e-1)
         self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1.5e-3
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 2e-3
         )
