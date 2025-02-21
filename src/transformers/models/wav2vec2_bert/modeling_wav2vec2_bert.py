@@ -35,6 +35,9 @@ from ...utils import (
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
 
+if is_peft_available():
+    from peft.tuners.lora import LoraLayer
+
 # General docstring
 _CONFIG_FOR_DOC = "Wav2Vec2BertConfig"
 
@@ -973,6 +976,9 @@ WAV2VEC2_BERT_INPUTS_DOCSTRING = r"""
 """
 
 
+Wav2Vec2BertBaseModelOutput = Wav2Vec2BaseModelOutput
+
+
 @add_start_docstrings(
     "The bare Wav2Vec2Bert Model transformer outputting raw hidden-states without any specific head on top.",
     WAV2VEC2_BERT_START_DOCSTRING,
@@ -1047,7 +1053,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
     @add_start_docstrings_to_model_forward(WAV2VEC2_BERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_PRETRAINED_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
+        output_type=Wav2Vec2BertBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -1060,7 +1066,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+    ) -> Union[Tuple, Wav2Vec2BertBaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1092,7 +1098,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
 
-        return Wav2Vec2BaseModelOutput(
+        return Wav2Vec2BertBaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
@@ -1451,8 +1457,6 @@ class TDNNLayer(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if is_peft_available():
-            from peft.tuners.lora import LoraLayer
-
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(
                     "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "

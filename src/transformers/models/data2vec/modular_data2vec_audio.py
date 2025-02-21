@@ -244,6 +244,8 @@ DATA2VEC_AUDIO_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+Data2VecAudioBaseModelOutput = Wav2Vec2BaseModelOutput
+
 
 @add_start_docstrings(
     "The bare Data2VecAudio Model transformer outputting raw hidden-states without any specific head on top.",
@@ -280,7 +282,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
+        output_type=Data2VecAudioBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,

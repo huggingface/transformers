@@ -723,6 +723,8 @@ WAV2VEC2_CONFORMER_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+Wav2Vec2ConformerBaseModelOutput = Wav2Vec2BaseModelOutput
+
 
 @add_start_docstrings(
     "The bare Wav2Vec2Conformer Model transformer outputting raw hidden-states without any specific head on top.",
@@ -752,7 +754,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
     @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
+        output_type=Wav2Vec2ConformerBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,

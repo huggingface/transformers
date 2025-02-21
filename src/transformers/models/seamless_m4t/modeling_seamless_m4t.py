@@ -325,8 +325,6 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Module):
             weight_norm = nn.utils.parametrizations.weight_norm
 
         if is_deepspeed_zero3_enabled():
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
             if hasattr(self.conv, "parametrizations"):

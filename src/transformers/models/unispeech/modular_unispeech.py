@@ -279,6 +279,9 @@ UNISPEECH_INPUTS_DOCSTRING = r"""
 """
 
 
+UniSpeechBaseModelOutput = Wav2Vec2BaseModelOutput
+
+
 @add_start_docstrings(
     "The bare UniSpeech Model transformer outputting raw hidden-states without any specific head on top.",
     UNISPEECH_START_DOCSTRING,
@@ -310,7 +313,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
     @add_start_docstrings_to_model_forward(UNISPEECH_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
+        output_type=UniSpeechBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -323,7 +326,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+    ) -> Union[Tuple, UniSpeechBaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -355,7 +358,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
 
-        return Wav2Vec2BaseModelOutput(
+        return UniSpeechBaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
