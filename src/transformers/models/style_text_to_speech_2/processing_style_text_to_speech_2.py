@@ -29,30 +29,22 @@ from ..auto import AutoTokenizer
 
 logger = logging.get_logger(__name__)
 
-VOICE_PRESETS_FILES_NAMES = {"voice_presets_path": "voice_presets_paths.json"}
+VOICE_PRESETS_FILES_NAMES = {"voice_presets_path": "voice_presets.json"}
 DEFAULT_VOICE_PRESET_NAME = "af_heart"
-
-
-@dataclass
-class VoicePresetsConfig:
-    path_or_repo: str
-    voice_to_path: Dict[str, str]
 
 
 class StyleTextToSpeech2Processor(ProcessorMixin):
 
+    tokenizer_class = "StyleTextToSpeech2Tokenizer"
     attributes = ["tokenizer"]
 
     def __init__(
         self, 
         tokenizer, 
-        voice_presets_config: Union[Dict, VoicePresetsConfig],
+        voice_presets_config: Dict[str, Union[str, Dict[str, str]]],
     ):
         super().__init__(tokenizer)
-        if not isinstance(voice_presets_config, VoicePresetsConfig):
-            self.voice_presets_config = VoicePresetsConfig(**voice_presets_config)
-        else:
-            self.voice_presets_config = voice_presets_config
+        self.voice_presets_config = voice_presets_config
 
     @classmethod
     def from_pretrained(
@@ -73,11 +65,11 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
             subfolder=kwargs.pop("subfolder", ""),
         )
         with open(voice_presets_path) as voice_presets_json:
-            voice_presets = json.load(voice_presets_json)
+            voice_presets_config = json.load(voice_presets_json)
 
         tokenizer = AutoTokenizer.from_pretrained(pretrained_processor_name_or_path, **kwargs)
 
-        return cls(tokenizer=tokenizer, voice_presets=voice_presets)
+        return cls(tokenizer=tokenizer, voice_presets_config=voice_presets_config)
     
     def save_pretrained(
         self,
@@ -92,13 +84,16 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
         voice_presets_path = os.path.join(save_directory, voice_presets_path)
         os.makedirs(os.path.dirname(voice_presets_path), exist_ok=True)
 
-        for voice, path in self.voice_presets_config.voice_to_path.items():
+        for voice, path in self.voice_presets_config["voice_to_path"].items():
             voice_preset = self._load_voice_tensor(voice)
             save_path = os.path.join(save_directory, path)
-            torch.save(voice_preset, os.path.join(save_directory, path))
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torch.save(voice_preset, save_path)
         
         with open(os.path.join(save_directory, voice_presets_path), "w") as fp:
-            json.dump(asdict(self.voice_presets_config), fp)
+            voice_presets_config = self.voice_presets_config.copy()
+            voice_presets_config["path_or_repo"] = save_directory
+            json.dump(self.voice_presets_config, fp)
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
@@ -107,8 +102,8 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
         voice_name: Optional[Union[str, List[str]]] = None,
         **kwargs
     ) -> torch.Tensor:
-        path_or_repo = self.voice_presets_config.path_or_repo
-        voice_preset_path = self.voice_presets_config.voice_to_path[voice_name]
+        path_or_repo = self.voice_presets_config["path_or_repo"]
+        voice_preset_path = self.voice_presets_config["voice_to_path"][voice_name]
 
         path = get_file_from_repo(
             path_or_repo,
@@ -128,16 +123,15 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
     def __call__(
         self, 
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
-        voice_names: Optional[Union[str, List[str], torch.Tensor]] = None, 
+        voice_names: Optional[Union[str, List[str]]] = None,
         return_attention_mask = True,
         **kwargs
     ):
-        # TODO: handle merge kwargs
-        # TODO: split when longer than 510 tokens!!!!!
-
-        tokenizer_kwargs = kwargs 
-
-        inputs = self.tokenizer(text, return_attention_mask=return_attention_mask, **tokenizer_kwargs)
+        inputs = self.tokenizer(
+            text, 
+            return_attention_mask=return_attention_mask,
+            **kwargs
+        )
 
         if "attention_mask" in inputs:
             lenghts = inputs["attention_mask"].sum(dim=1).tolist()
@@ -145,20 +139,17 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
             logger.warning("return_attention_mask is set to False. It is assumed that all texts have the same length.")
             lenghts = [inputs["input_ids"].shape[1]] * inputs["input_ids"].shape[0]
 
-        if voice_preset is None:
-            voice_preset = DEFAULT_VOICE_PRESET_NAME
-
-        if isinstance(voice_preset, str):
-            voice_preset = [voice_preset]
-
         batch_size = inputs["input_ids"].shape[0]
-        if len(voice_preset) == 1:
-            voice_presets = [voice_presets] * batch_size
-        elif len(voice_presets) != batch_size:
-            raise ValueError(
-                f"The provided number of voice names ({len(voice_names)}) does not match the number of provided texts ({batch_size})."
-                " Use a single voice name or provide a voice name for each text."
-            )
+        if voice_names is None:
+            voice_names = [DEFAULT_VOICE_PRESET_NAME] * batch_size
+        elif isinstance(voice_names, str):
+            voice_names = [voice_names] * batch_size
+        elif isinstance(voice_names, list):
+            if len(voice_names) != batch_size:
+                raise ValueError(
+                    f"The provided number of voice names ({len(voice_names)}) does not match the number of provided texts ({batch_size})."
+                    " Use a single voice name or provide a voice name for each text."
+                ) 
         
         name_to_loaded_voice = {
             voice_name: self._load_voice_tensor(voice_name)
