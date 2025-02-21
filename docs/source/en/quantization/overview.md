@@ -63,6 +63,7 @@ Use the table below to help you decide which quantization method to use.
 | [VPTQ](./vptq.md)                             | 🔴                   | 🔴              |     🟢     | 🟡        | 🔴                                 | 🔴              | 🟢              | 1/8         | 🔴               | 🟢                          | 🟢                      | https://github.com/microsoft/VPTQ            |
 | [SpQR](./spqr.md)                          | 🔴                       |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3              |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
 | [FINEGRAINED_FP8](./finegrained_fp8.md)                 | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8             | 🔴               | 🟢                          | 🟢                      |        |
+| [Quark](./quark.md)                           | 🔴                       | 🟢 6 | 🟢 6      | 🟢 6      | 🟢 6                   | 🟢 6       | ?               | 2/4/6/8/9/16 | 🔴                | 🔴                               | 🟢                       | https://quark.docs.amd.com/latest/                      |
 <Tip>
   
 **1:** bitsandbytes is being refactored to support multiple backends beyond CUDA. Currently, ROCm (AMD GPU) and Intel CPU implementations are mature, with Intel XPU in progress and Apple Silicon support expected by Q4/Q1. For installation instructions and the latest backend updates, visit [this link](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend). Check out [these docs](https://huggingface.co/docs/bitsandbytes/main/en/non_cuda_backends) for more details and feedback links.
@@ -90,6 +91,12 @@ Use the table below to help you decide which quantization method to use.
 <Tip>
 
 **5:** torchao only supports int4 weight on Metal (Apple Silicon).
+
+</Tip>
+
+<Tip>
+
+**6:** Quark is hardware agnostic, and may not supported accelerated inference / kernels for every quantization scheme and every hardware and PyTorch distribution.
 
 </Tip>
 

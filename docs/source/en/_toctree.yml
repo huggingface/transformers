@@ -180,6 +180,8 @@
     title: VPTQ
   - local: quantization/quanto
     title: Quanto
+  - local: quantization/quark
+    title: Quark
   - local: quantization/eetq
     title: EETQ
   - local: quantization/higgs
