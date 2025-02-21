@@ -508,6 +508,10 @@ def cached_files(
     # If there are any missing file and the flag is active, raise
     if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
         missing_entries = [original for original, resolved in zip(full_filenames, resolved_files) if resolved is None]
+        # Last escape
+        if len(resolved_files) == 1 and missing_entries[0] == os.path.join(subfolder, "config.json"):
+            return None
+        # Now we raise for missing entries
         revision_ = "main" if revision is None else revision
         msg = f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {*missing_entries,}"
         raise EnvironmentError(
