@@ -37,6 +37,7 @@ from collections.abc import Mapping
 from dataclasses import MISSING, fields
 from functools import wraps
 from io import StringIO
+from packaging import version
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
@@ -961,6 +962,18 @@ def require_torchdynamo(test_case):
 def require_torchao(test_case):
     """Decorator marking a test that requires torchao"""
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
+
+
+def require_torchao_version_greater_or_equal(torchao_version):
+    def decorator(test_case):
+        correct_torchao_version = is_torchao_available() and version.parse(
+            version.parse(importlib.metadata.version("torchao")).base_version
+        ) >= version.parse(torchao_version)
+        return unittest.skipUnless(
+            correct_torchao_version, f"Test requires gguf with the version greater than {torchao_version}."
+        )(test_case)
+
+    return decorator
 
 
 def require_torch_tensorrt_fx(test_case):
