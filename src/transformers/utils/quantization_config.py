@@ -30,8 +30,8 @@ from packaging import version
 from ..utils import (
     is_auto_awq_available,
     is_gptqmodel_available,
-	is_quark_available,
     is_hqq_available,
+    is_quark_available,
     is_torch_available,
     is_torchao_available,
     logging,

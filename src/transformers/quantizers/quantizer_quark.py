@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import TYPE_CHECKING, Dict, Any
+from typing import TYPE_CHECKING, Any, Dict
 
 from .base import HfQuantizer
 
@@ -20,7 +20,8 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_quark_available, is_accelerate_available, logging
+from ..utils import is_accelerate_available, is_quark_available, logging
+
 
 if is_accelerate_available():
     from accelerate.utils import set_module_tensor_to_device

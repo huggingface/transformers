@@ -3172,9 +3172,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if getattr(self, "quantization_method", None) == QuantizationMethod.HQQ:
             raise ValueError("`.to` is not supported for HQQ-quantized models.")
-        
+
         if dtype_present_in_args and getattr(self, "quantization_method", None) == QuantizationMethod.QUARK:
-            raise ValueError(f"Casting a Quark quantized model to a new `dtype` is not supported.")
+            raise ValueError("Casting a Quark quantized model to a new `dtype` is not supported.")
 
         # Checks if the model has been loaded in 4-bit or 8-bit with BNB
         if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:

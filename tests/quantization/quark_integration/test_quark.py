@@ -15,8 +15,7 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig, QuarkConfig, GenerationConfig
-from transformers.utils.import_utils import is_quark_available
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, QuarkConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
@@ -25,6 +24,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
+from transformers.utils.import_utils import is_quark_available
 
 
 if is_torch_available():
@@ -34,7 +34,7 @@ if is_quark_available():
     from quark.torch.export.nn.modules.qparamslinear import QParamsLinear
 
 
-class QuarkConfigTest(unittest.TestCase):    
+class QuarkConfigTest(unittest.TestCase):
     def test_commmon_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
         QuarkConfig(**config.quantization_config)
