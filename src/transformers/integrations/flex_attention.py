@@ -1,5 +1,5 @@
 """
-Inspired by torchtune's flex attention implementation
+Partially inspired by torchtune's flex attention implementation
 
 Citation:
 @software{torchtune,
