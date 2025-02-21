@@ -17,8 +17,8 @@ Doc utilities: Utilities related to documentation
 
 import functools
 import re
-import types
 import textwrap
+import types
 
 
 def add_start_docstrings(*docstr):
