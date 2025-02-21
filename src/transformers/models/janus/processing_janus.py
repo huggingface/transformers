@@ -136,7 +136,7 @@ class JanusProcessor(ProcessorMixin):
             if self.use_default_system_prompt and self.generation_mode == "text":
                 prompt = DEFAULT_SYSTEM_PROMPT + prompt
             if self.generation_mode == "image":
-                prompt+=self.image_start_token
+                prompt += self.image_start_token
             prompt_strings.append(prompt)
 
 

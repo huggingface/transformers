@@ -155,9 +155,10 @@ def ensure_model_downloaded(repo_id: str = None, revision: str = None, local_dir
     if local_dir is not None:
         if os.path.exists(local_dir):
             print(f"Using provided local directory: {local_dir}")
-            return local_dir
         else:
-            raise ValueError(f"Provided local_dir {local_dir} does not exist")
+            # Create the local directory if it doesn't exist
+            os.makedirs(local_dir, exist_ok=True)
+            print(f"Created local directory: {local_dir}")
             
     if repo_id is None:
         raise ValueError("Either repo_id or local_dir must be provided")
@@ -233,6 +234,11 @@ def convert_model(
     
     if repo_id is None and local_dir is None:
         raise ValueError("Either repo_id or local_dir must be specified")
+
+    # Create output directory if specified
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"Created/verified output directory: {output_dir}")
 
     torch.set_default_dtype(torch.float16)
 
