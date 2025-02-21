@@ -1692,26 +1692,25 @@ class QuarkConfig(QuantizationConfigMixin):
         **kwargs,
     ):
         if is_torch_available() and is_quark_available():
-            import quark.torch
+            from quark.torch.export.config.config import JsonExporterConfig
+            from quark.torch.export.main_export.quant_config_parser import QuantConfigParser
+            from quark.torch.quantization.config.config import Config
 
-        self.custom_mode = kwargs["quant_method"]  # This might be e.g. `"fp8"` or `"awq"`.
+        # This might be e.g. `"fp8"` or `"awq"`.
+        self.custom_mode = kwargs["quant_method"]
         self.legacy = "export" not in kwargs
 
         if self.custom_mode in ["awq", "fp8"]:
             # Legacy (quark<1.0) or custom export.
-            self.quant_config = (
-                quark.torch.export.main_export.quant_config_parser.QuantConfigParser.from_custom_config(
-                    kwargs, is_bias_quantized=False
-                )
-            )
-            self.json_export_config = quark.torch.export.config.config.JsonExporterConfig()
+            self.quant_config = QuantConfigParser.from_custom_config(kwargs, is_bias_quantized=False)
+            self.json_export_config = JsonExporterConfig()
         else:
-            self.quant_config = quark.torch.quantization.config.config.Config.from_dict(kwargs)
+            self.quant_config = Config.from_dict(kwargs)
 
             if "export" in kwargs:
-                self.json_export_config = quark.torch.export.config.config.JsonExporterConfig(**kwargs["export"])
+                self.json_export_config = JsonExporterConfig(**kwargs["export"])
             else:
                 # Legacy (quark<1.0) or custom export.
-                self.json_export_config = quark.torch.export.config.config.JsonExporterConfig()
+                self.json_export_config = JsonExporterConfig()
 
         self.quant_method = QuantizationMethod.QUARK
