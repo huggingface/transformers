@@ -112,6 +112,7 @@ from .utils import (
     is_pytesseract_available,
     is_pytest_available,
     is_pytorch_quantization_available,
+    is_quark_available,
     is_rjieba_available,
     is_sacremoses_available,
     is_safetensors_available,
@@ -1254,6 +1255,11 @@ def require_fbgemm_gpu(test_case):
     """
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
 
+def require_quark(test_case):
+    """
+    Decorator for quark dependency
+    """
+    return unittest.skipUnless(is_quark_available(), "test requires quark")(test_case)
 
 def require_flute_hadamard(test_case):
     """

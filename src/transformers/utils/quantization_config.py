@@ -2,6 +2,7 @@
 # coding=utf-8
 
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2024, Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,6 +30,7 @@ from packaging import version
 from ..utils import (
     is_auto_awq_available,
     is_gptqmodel_available,
+	is_quark_available,
     is_hqq_available,
     is_torch_available,
     is_torchao_available,
@@ -59,6 +61,7 @@ class QuantizationMethod(str, Enum):
     BITNET = "bitnet"
     SPQR = "spqr"
     FP8 = "fp8"
+	QUARK = "quark"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1681,3 +1684,30 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             raise ValueError("weight_block_size must be a tuple of two integers")
         if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+
+
+class QuarkConfig(QuantizationConfigMixin):
+    def __init__(
+        self,
+        **kwargs,
+    ):
+        if is_torch_available() and is_quark_available():
+            import quark.torch
+
+        self.custom_mode = kwargs["quant_method"]  # This might be e.g. `"fp8"` or `"awq"`.
+        self.legacy = "export" not in kwargs
+
+        if self.custom_mode in ["awq", "fp8"]:
+            # Legacy (quark<1.0) or custom export.
+            self.quant_config = quark.torch.export.main_export.quant_config_parser.QuantConfigParser.from_custom_config(kwargs, is_bias_quantized=False)
+            self.json_export_config = quark.torch.export.config.config.JsonExporterConfig()
+        else:
+            self.quant_config = quark.torch.quantization.config.config.Config.from_dict(kwargs)
+
+            if "export" in kwargs:
+                self.json_export_config = quark.torch.export.config.config.JsonExporterConfig(**kwargs["export"])
+            else:
+                # Legacy (quark<1.0) or custom export.
+                self.json_export_config = quark.torch.export.config.config.JsonExporterConfig()
+
+        self.quant_method = QuantizationMethod.QUARK
