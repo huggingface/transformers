@@ -531,7 +531,7 @@ def load_state_dict(
                     f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
                     "you save your model with the `save_pretrained` method."
                 )
-            state_dict ={}
+            state_dict = {}
             for k in f.keys():
                 state_dict[k] = f.get_slice(k).get_shape()
             return state_dict
@@ -775,6 +775,7 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
 
+
 def _load_state_dict_into_meta_model(
     model,
     state_dict,
@@ -793,7 +794,7 @@ def _load_state_dict_into_meta_model(
     pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
     device_mesh=None,
     prefix=None,
-    shard_file=None
+    shard_file=None,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -835,10 +836,10 @@ def _load_state_dict_into_meta_model(
 
         module_name = param_name
         set_module_kwargs = {}
-        param =file_pointers.get_slice(param_name)
+        param = file_pointers.get_slice(param_name)
         # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
         # in int/uint/bool and not cast them.
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.get_dtype()== torch.float8_e4m3fn
+        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.get_dtype() == torch.float8_e4m3fn
         if dtype is not None and "F" in param.get_dtype() and not is_param_float8_e4m3fn:
             if (
                 keep_in_fp32_modules is not None
@@ -870,40 +871,46 @@ def _load_state_dict_into_meta_model(
                 param_casting_dtype = old_param.dtype
 
             if old_param.is_contiguous():
-                param_to_contiguous = True # TODO not taking into account anymore
+                _param_to_contiguous = True  # TODO not taking into account anymore
 
         # In this case, let's parallelize the modules!
         if device_mesh is not None:
-            layer = param_name.rsplit('.', 1)[0]
+            layer = param_name.rsplit(".", 1)[0]
             try:
                 module_to_tp: torch.nn.Module = model.get_submodule(layer)
             except Exception:
-                raise ValueError("The config tp plan is wrong because the layer is not a liner layer, nor an embedding")
+                raise ValueError(
+                    "The config tp plan is wrong because the layer is not a liner layer, nor an embedding"
+                )
 
             prefix = "model"
             if prefix is not None:
-                param_name_ = param_name.replace(f"{prefix}.","")
+                param_name_ = param_name.replace(f"{prefix}.", "")
 
             current_module_plan = None
             full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
-            if plan:= re.search(full_tp_plan_, param_name_):
-                match = re.sub("[0-9]+","*", plan[0])
+            if plan := re.search(full_tp_plan_, param_name_):
+                match = re.sub("[0-9]+", "*", plan[0])
                 current_module_plan = full_tp_plan[match]
             if current_module_plan is not None:
                 if current_module_plan is not None:
-                    rank = device_map[''].index
+                    rank = device_map[""].index
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
-                    layer = model.get_submodule(param_name.rsplit('.', 1)[0])
+                    layer = model.get_submodule(param_name.rsplit(".", 1)[0])
                     if "row" in current_module_plan or "down" in param_name:
                         _, col = param.shape
-                        param =  param[:, rank * (col//device_mesh.max()) : (rank +1)* (col//device_mesh.max()) ]
+                        param = param[:, rank * (col // device_mesh.max()) : (rank + 1) * (col // device_mesh.max())]
                     else:
                         row, _ = param.shape
-                        param =  param[rank * (row//device_mesh.max()) : (rank +1)* (row//device_mesh.max()), :]
+                        param = param[rank * (row // device_mesh.max()) : (rank + 1) * (row // device_mesh.max()), :]
                     with torch.no_grad():
-                        layer.weight._local_tensor = param.to(device_map[''], dtype=param_casting_dtype, non_blocking=False)
+                        layer.weight._local_tensor = param.to(
+                            device_map[""], dtype=param_casting_dtype, non_blocking=False
+                        )
                 else:
-                    set_module_tensor_to_device(model, param_name,  device_map[''], param[:].to(dtype=param_casting_dtype))
+                    set_module_tensor_to_device(
+                        model, param_name, device_map[""], param[:].to(dtype=param_casting_dtype)
+                    )
         else:
             set_module_kwargs["param"] = param[:]
             if device_map is None:
@@ -938,7 +945,9 @@ def _load_state_dict_into_meta_model(
                 # For backward compatibility with older versions of `accelerate` and for non-quantized params
                 set_module_tensor_to_device(model, param_name, param_device, param[:])
             else:
-                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+                hf_quantizer.create_quantized_param(
+                    model, param, param_name, param_device, state_dict, unexpected_keys
+                )
                 # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                 # and then cast it to CPU to avoid excessive memory usage on each GPU
                 # in comparison to the sharded model across GPUs.
@@ -4626,7 +4635,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         gguf_path=None,
         weights_only=True,
         device_mesh=None,
-
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
@@ -4928,7 +4936,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
                     prefix=cls.base_model_prefix,
-                    resolved_archive_file=resolved_archive_file
+                    resolved_archive_file=resolved_archive_file,
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
@@ -5019,7 +5027,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
                             device_mesh=device_mesh,
-                            shard_file=shard_file
+                            shard_file=shard_file,
                         )
                         error_msgs += new_error_msgs
                 else:
