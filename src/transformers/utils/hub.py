@@ -364,7 +364,6 @@ def cached_files(
     model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
     ```
     """
-
     use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
     if use_auth_token is not None:
         warnings.warn(
@@ -444,7 +443,9 @@ def cached_files(
             resume_download=resume_download,
             token=token,
             local_files_only=local_files_only,
-            tqdm_class=AlwaysEmptyTqdm() if len(filenames) == 1 else None,  # remove the 2nd bar with only 1 file
+            # Snapshot download creates an outer bar for the number of files, then 1 bar for each file
+            # So remove the outer bar if we only have 1 file
+            tqdm_class=AlwaysEmptyTqdm() if len(filenames) == 1 else None,
         )
 
     except Exception as e:
@@ -472,18 +473,24 @@ def cached_files(
 
         # Raise based on the flags. Note that we will raise for missing entries at the very end, even when
         # not entering this Except block, as it may also happen when `snapshot_download` does not raise
-        if isinstance(e, GatedRepoError) and _raise_exceptions_for_gated_repo:
+        if isinstance(e, GatedRepoError):
+            if not _raise_exceptions_for_gated_repo:
+                return None
             raise EnvironmentError(
                 "You are trying to access a gated repo.\nMake sure to have access to it at "
                 f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
             ) from e
-        elif isinstance(e, LocalEntryNotFoundError) and _raise_exceptions_for_connection_errors:
+        elif isinstance(e, LocalEntryNotFoundError):
+            if not _raise_exceptions_for_connection_errors:
+                return None
             raise EnvironmentError(
                 f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
                 f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
                 " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
             ) from e
-        elif isinstance(e, HTTPError) and _raise_exceptions_for_connection_errors:
+        elif isinstance(e, HTTPError):
+            if not _raise_exceptions_for_connection_errors:
+                return None
             raise EnvironmentError(
                 f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}"
             )
@@ -495,7 +502,7 @@ def cached_files(
     if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
         missing_entries = [original for original, resolved in zip(filenames, resolved_files) if resolved is None]
         revision_ = "main" if revision is None else revision
-        msg = f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files names {*missing_entries,}"
+        msg = f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {*missing_entries,}"
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
             "for available files."
@@ -503,7 +510,7 @@ def cached_files(
 
     # Remove potential missing entries (we can silently remove them at this point based on the flags)
     resolved_files = [file for file in resolved_files if file is not None]
-    # For BC, we return `None` if the list is empty
+    # Return `None` if the list is empty, coherent with other Exception when the flag is not active
     resolved_files = None if len(resolved_files) == 0 else resolved_files
 
     return resolved_files
