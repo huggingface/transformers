@@ -288,6 +288,12 @@ class EuroBertAttention(LlamaAttention):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
+@add_start_docstrings(
+    "The bare ModernBert Model outputting raw hidden-states without any specific head on top.",
+    EUROBERT_START_DOCSTRING,
+)
+class EuroBertPreTrainedModel(LlamaPreTrainedModel):
+    pass
 
 EUROBERT_INPUTS_DOCSTRING = r"""
     Args:
@@ -465,11 +471,11 @@ class EuroBertModel(LlamaModel):
     "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
 )
-class EuroBertForMaskedLM(LlamaPreTrainedModel):
+class EuroBertForMaskedLM(EuroBertPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: EuroBertConfig):
-        LlamaPreTrainedModel().__init__(config)
+        super().__init__(config)
         self.model = EuroBertModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, config.mlp_bias)
         self.post_init()
@@ -522,11 +528,11 @@ class EuroBertForMaskedLM(LlamaPreTrainedModel):
     "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
 )
-class EuroBertForSequenceClassification(LlamaPreTrainedModel):
+class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: EuroBertConfig):
-        LlamaPreTrainedModel().__init__(config)
+        super().__init__(config)
         self.num_labels = config.num_labels
         self.clf_pooling = config.clf_pooling
 
@@ -636,6 +642,7 @@ class EuroBertForSequenceClassification(LlamaPreTrainedModel):
 
 __all__ = [
     "EuroBertConfig",
+    "EuroBertPreTrainedModel",
     "EuroBertModel",
     "EuroBertForMaskedLM",
     "EuroBertForSequenceClassification",
