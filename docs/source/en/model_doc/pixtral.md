@@ -59,7 +59,7 @@ chat = [
     {
       "role": "user", "content": [
         {"type": "text", "content": "Can this animal"}, 
-        {"type": "image", "ur": "https://picsum.photos/id/237/200/300"}, 
+        {"type": "image", "url": "https://picsum.photos/id/237/200/300"}, 
         {"type": "text", "content": "live here?"}, 
         {"type": "image", "url": "https://picsum.photos/seed/picsum/200/300"}
       ]
