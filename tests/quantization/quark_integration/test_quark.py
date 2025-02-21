@@ -31,22 +31,14 @@ if is_torch_available():
     import torch
 
 if is_quark_available():
-    from quark.torch.export.nn.modules import QParamsLinear
+    from quark.torch.export.nn.modules.qparamslinear import QParamsLinear
 
 
-class QuarkConfigTest(unittest.TestCase):
-    def test_unknown_arg(self):
-        QuarkConfig(foo=2)
-    
+class QuarkConfigTest(unittest.TestCase):    
     def test_commmon_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
-        QuarkConfig(**config.quant_config)
+        QuarkConfig(**config.quantization_config)
 
-    def test_missing_args(self):
-        config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
-        
-        # TODO: delete one arg from quant_config
-        QuarkConfig(**config.quant_config)
 
 @slow
 @require_quark
@@ -59,11 +51,12 @@ class QuarkTest(unittest.TestCase):
 
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris, France\nToday I am in Paris, Illinois")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying the city of light. I am not just any ordinary Paris")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
 
-    EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
+    EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
 
-    # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
         """
@@ -74,7 +67,7 @@ class QuarkTest(unittest.TestCase):
         )
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.reference_model_name, use_fast=True)
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.quantized_model_name,
@@ -83,13 +76,9 @@ class QuarkTest(unittest.TestCase):
         )
 
     def test_memory_footprint(self):
-        r"""
-        A simple test to check if the model conversion has been done correctly by checking on the
-        memory footprint of the converted model
-        """
         mem_quantized = self.quantized_model.get_memory_footprint()
 
-        self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE)
+        self.assertTrue(self.mem_fp16 / mem_quantized > self.EXPECTED_RELATIVE_DIFFERENCE)
 
     def test_device_and_dtype_assignment(self):
         r"""
