@@ -364,9 +364,13 @@ class TextGenerationPipeline(Pipeline):
         # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
         prefix_length = generate_kwargs.pop("prefix_length", 0)
         if prefix_length > 0:
-            has_max_new_tokens = "max_new_tokens" in generate_kwargs or (
-                "generation_config" in generate_kwargs
-                and generate_kwargs["generation_config"].max_new_tokens is not None
+            has_max_new_tokens = (
+                "max_new_tokens" in generate_kwargs
+                or (
+                    "generation_config" in generate_kwargs
+                    and generate_kwargs["generation_config"].max_new_tokens is not None
+                )
+                or self.model.generation_config.max_new_tokens is not None
             )
             if not has_max_new_tokens:
                 generate_kwargs["max_length"] = generate_kwargs.get("max_length") or self.generation_config.max_length
