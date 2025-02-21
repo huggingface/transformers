@@ -1133,17 +1133,14 @@ class ProcessorMixin(PushToHubMixin):
             transformers_module.TOKENIZER_MAPPING,
             transformers_module.FEATURE_EXTRACTOR_MAPPING,
         ]
-        class_lookup = dict()
         for lookup_location in lookup_locations:
-            for custom_class in lookup_location.values():
+            for custom_class in lookup_location._extra_content.values():
                 if isinstance(custom_class, tuple):
                     for custom_subclass in custom_class:
-                        if custom_subclass is not None:
-                            class_lookup[custom_subclass.__name__] = custom_subclass
-                elif custom_class is not None:
-                    class_lookup[custom_class.__name__] = custom_class
-        if module_name in class_lookup:
-            return class_lookup[module_name]
+                        if custom_subclass is not None and custom_subclass.__name__ == module_name:
+                            return custom_subclass
+                elif custom_class is not None and custom_class.__name__ == module_name:
+                    return custom_class
         else:
             raise ValueError(
                 f"Could not find module {module_name} in `transformers`. If this is a custom class, "
