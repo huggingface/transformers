@@ -175,8 +175,8 @@ class StyleTextToSpeech2ProsodicTextEncoder(nn.Module):
         bert_out = self.bert_model(input_ids, attention_mask=attention_mask)
         hidden_states = self.proj_out(bert_out.last_hidden_state)
 
-        # # TODO: NOT REALLY NECESSARY 
-        hidden_states = _mask_hidden_states(hidden_states, input_lengths)
+        # # # TODO: NOT REALLY NECESSARY 
+        # hidden_states = _mask_hidden_states(hidden_states, input_lengths)
         return hidden_states
 
 
@@ -527,7 +527,6 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
         noise_amp = uv * self.add_noise_std + (1 - uv) * self.sine_amplitude / 3
         noise = noise_amp * torch.randn_like(sine_waves)
         sine_waves = sine_waves * uv + noise
-        sine_waves = sine_waves * uv
 
         return sine_waves
         
@@ -890,8 +889,9 @@ class StyleTextToSpeech2Model(StyleTextToSpeech2PretrainedModel):
     ) -> Union[Tuple, StyleTextToSpeech2ModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        prosodic_style = style[:, self.config.style_size // 2:]
-        acoustic_style = style[:, :self.config.style_size // 2]
+        style = style.unsqueeze(1)
+        prosodic_style = style[:, :, self.config.style_size // 2:]
+        acoustic_style = style[:, :, :self.config.style_size // 2]
 
         # predict durations, pitch and energy
         predictor_output = self.predictor(input_ids, prosodic_style, input_lengths, speed)
