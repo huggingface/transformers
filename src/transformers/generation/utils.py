@@ -420,6 +420,7 @@ class GenerationMixin:
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
 
         # 4. Create missing `position_ids` on the fly
+        encoder_attention_mask = attention_mask if self.config.is_encoder_decoder else None
         attention_mask = (
             kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
         )
@@ -489,6 +490,9 @@ class GenerationMixin:
                 )
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
+
+        if encoder_attention_mask is not None:
+            model_inputs["attention_mask"] = encoder_attention_mask
 
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():

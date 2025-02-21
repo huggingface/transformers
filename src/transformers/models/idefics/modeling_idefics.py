@@ -1667,62 +1667,32 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- custom processing based on `config.use_resampler`
 
-        model_inputs = {}
+        images_kwargs = {}
         if image_hidden_states is not None:
             if self.config.use_resampler:
-                model_inputs["perceiver_embeddings"] = image_hidden_states
+                images_kwargs["perceiver_embeddings"] = image_hidden_states
             else:
-                model_inputs["image_encoder_embeddings"] = image_hidden_states
+                images_kwargs["image_encoder_embeddings"] = image_hidden_states
         else:
-            model_inputs["pixel_values"] = pixel_values
+            images_kwargs["pixel_values"] = pixel_values
+        images_kwargs["interpolate_pos_encoding"] = kwargs.pop("interpolate_pos_encoding", False)
 
-        # If we have cache: let's slice `input_ids` or `input embeds` through `cache_position`, to keep only the unprocessed tokens
-        if past_key_values is not None:
-            if inputs_embeds is not None:
-                if input_ids.shape[1] == 0:
-                    inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-                else:
-                    input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:
-                input_ids = input_ids[:, cache_position]
-                if image_attention_mask is not None:
-                    image_attention_mask = image_attention_mask[:, -input_ids.shape[1] :]
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-
-            # If past_key_values are present then slice the postion ids for only only the unprocessed tokens.
-            if past_key_values:
-                if inputs_embeds is not None and input_ids.shape[1] == 0:
-                    position_ids = position_ids[:, -inputs_embeds.shape[1] :]
-                else:
-                    position_ids = position_ids[:, -input_ids.shape[1] :]
-
-                # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
-                position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
-            model_inputs.update({"inputs_embeds": inputs_embeds, "input_ids": None})
-        else:
-            # The clone here is for the same reason as for `position_ids`.
-            model_inputs.update(
-                {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
-            )
-
-        model_inputs.update(
-            {
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "cache_position": cache_position,
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
-                "image_attention_mask": image_attention_mask,
-                "interpolate_pos_encoding": kwargs.get("interpolate_pos_encoding", False),
-            }
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            use_cache=use_cache,
+            image_attention_mask=image_attention_mask,
+            **images_kwargs,
+            **kwargs,
         )
+
+        if image_attention_mask is not None and inputs_embeds is None:
+            seq_length = model_inputs["input_ids"].shape[1]
+            model_inputs["image_attention_mask"] = image_attention_mask[:, -seq_length:]
 
         return model_inputs
 

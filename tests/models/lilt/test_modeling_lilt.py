@@ -19,7 +19,6 @@ import unittest
 from transformers import LiltConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -218,7 +217,7 @@ class LiltModelTester:
 
 
 @require_torch
-class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class LiltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LiltModel,
