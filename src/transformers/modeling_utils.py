@@ -899,9 +899,9 @@ def _load_state_dict_into_meta_model(
                     layer = model.get_submodule(param_name.rsplit(".", 1)[0])
                     row, col = param_shape
                     if "row" in current_module_plan or "down" in param_name:
-                        param = param[:, rank * (col // device_mesh.max()) : (rank + 1) * (col // device_mesh.max())]
+                        param = param[:, rank * (col // len(device_mesh)) : (rank + 1) * (col // len(device_mesh))]
                     else:
-                        param = param[rank * (row // device_mesh.max()) : (rank + 1) * (row // device_mesh.max()), :]
+                        param = param[rank * (row // len(device_mesh)) : (rank + 1) * (row // len(device_mesh)), :]
                     with torch.no_grad():
                         layer.weight._local_tensor = param.to(
                             device_map[""], dtype=param_casting_dtype, non_blocking=True
