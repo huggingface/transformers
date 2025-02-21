@@ -14,10 +14,12 @@
 # limitations under the License.
 import json
 import os
-from typing import Optional
+from typing import Optional, List, Union
 
 import numpy as np
+import torch
 
+from ...tokenization_utils_base import AudioInput, BatchEncoding, PreTokenizedInput, TextInput
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...utils import logging
@@ -27,5 +29,41 @@ from ..auto import AutoTokenizer
 
 logger = logging.get_logger(__name__)
 
+
+
+class StyleTextToSpeech2Processor(ProcessorMixin):
+
+    attributes = ["tokenizer"]
+
+    def __init__(self, tokenizer, ):
+        super().__init__(tokenizer)
+
+    def _load_voice_preset(
+        self, 
+        voice_preset: Optional[str, List[str]] = None,
+    ):
+        
+        
+        
+        
+        
+
+    def __call__(
+        self, 
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        voice_preset: Optional[Union[str, List[str], torch.Tensor]] = None, 
+        **tokenizer_kwargs
+    ):
+        inputs = self.tokenizer(text, **tokenizer_kwargs)
+
+
+
+        style = torch.load(voices, weights_only=True)
+        style = style.repeat(len(text), 1)
+        inputs["style"] = style
+        return inputs
+    
+
+        
 
 __all__ = ["StyleTextToSpeech2Processor"]
