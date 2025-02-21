@@ -38,6 +38,7 @@ import torch
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
+import torch.distributed.tensor
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
@@ -524,12 +525,16 @@ def load_state_dict(
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
-            raise OSError(
-                f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
-                "you save your model with the `save_pretrained` method."
-            )
-        return safe_load_file(checkpoint_file)
+        
+            if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
+                raise OSError(
+                    f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
+                    "you save your model with the `save_pretrained` method."
+                )
+            state_dict ={}
+            for k in f.keys():
+                state_dict[k] = f.get_slice(k).get_shape()
+            return state_dict
     try:
         if map_location is None:
             if (
@@ -770,7 +775,6 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
 
-
 def _load_state_dict_into_meta_model(
     model,
     state_dict,
@@ -787,6 +791,9 @@ def _load_state_dict_into_meta_model(
     keep_in_fp32_modules=None,
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
     pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
+    device_mesh=None,
+    prefix=None, 
+    shard_file=None
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -796,20 +803,28 @@ def _load_state_dict_into_meta_model(
     `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
     `bert.pooler.dense.weight`
 
+    It also initialize tensor parallelism for each module if needed.
+
     """
 
     # XXX: remaining features to implement to be fully compatible with _load_state_dict_into_model
     # - deepspeed zero 3 support
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
-
+    file_pointers = safe_open(shard_file, framework="pt")
     error_msgs = []
 
     is_quantized = hf_quantizer is not None
 
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
-    for param_name, param in state_dict.items():
+    # we need this later to initialize tensor parallelism
+    if device_mesh is not None:
+        full_tp_plan = model.config.base_model_tp_plan
+        for submodule in model.modules():
+            full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
+
+    for param_name, param_shape in state_dict.items():
         if param_name not in expected_keys:
             continue
 
@@ -818,11 +833,11 @@ def _load_state_dict_into_meta_model(
 
         module_name = param_name
         set_module_kwargs = {}
-
+        param =file_pointers.get_slice(param_name)
         # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
         # in int/uint/bool and not cast them.
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
-        if dtype is not None and torch.is_floating_point(param) and not is_param_float8_e4m3fn:
+        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.get_dtype()== torch.float8_e4m3fn
+        if dtype is not None and "F" in param.get_dtype() and not is_param_float8_e4m3fn:
             if (
                 keep_in_fp32_modules is not None
                 and any(
@@ -830,19 +845,13 @@ def _load_state_dict_into_meta_model(
                 )
                 and dtype == torch.float16
             ):
-                param = param.to(torch.float32)
-
-                # For backward compatibility with older versions of `accelerate`
-                # TODO: @sgugger replace this check with version check at the next `accelerate` release
-                if "dtype" in list(inspect.signature(set_module_tensor_to_device).parameters):
-                    set_module_kwargs["dtype"] = torch.float32
+                param_casting_dtype = torch.float32
             else:
-                param = param.to(dtype)
+                param_casting_dtype = dtype
 
         # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
         # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
         # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
-
         old_param = model
         splits = param_name.split(".")
         for split in splits:
@@ -855,62 +864,97 @@ def _load_state_dict_into_meta_model(
             old_param = None
 
         if old_param is not None:
-            if dtype is None:
-                param = param.to(old_param.dtype)
+            if param_casting_dtype is None:
+                param_casting_dtype = old_param.dtype
 
             if old_param.is_contiguous():
-                param = param.contiguous()
+                param_to_contiguous = True
 
-        set_module_kwargs["value"] = param
+        
 
-        if device_map is None:
-            param_device = "cpu"
+        # In this case, let's parallelize the modules!
+        if device_mesh is not None:
+            layer = param_name.rsplit('.', 1)[0]
+            try:
+                module_to_tp: torch.nn.Module = model.get_submodule(layer)
+            except Exception as e:
+                raise ValueError("The config tp plan is wrong because the layer is not a liner layer, nor an embedding")
+
+            prefix = "model"
+            if prefix is not None:
+                param_name_ = param_name.replace(f"{prefix}.","")
+
+            current_module_plan = None
+            full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
+            if plan:= re.search(full_tp_plan_, param_name_):
+                match = re.sub("[0-9]+","*", plan[0])
+                current_module_plan = full_tp_plan[match]
+            if current_module_plan is not None:
+                set_module_kwargs["value"] = param[:]
+                if current_module_plan is not None:
+                    rank = device_map[''].index
+                    translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
+                    layer = model.get_submodule(param_name.rsplit('.', 1)[0])
+                    if "row" in current_module_plan or "down" in param_name:
+                        _, col = param.shape
+                        param =  param[:, rank * (col//device_mesh.max()) : (rank +1)* (col//device_mesh.max()) ]
+                    else:
+                        row, _ = param.shape
+                        param =  param[rank * (row//device_mesh.max()) : (rank +1)* (row//device_mesh.max()), :]
+                    with torch.no_grad():
+                        layer.weight._local_tensor = param.to(device_map[''], non_blocking=False)
+                else:
+                    set_module_tensor_to_device(model, param_name,  device_map[''], **set_module_kwargs)
         else:
-            # find next higher level module that is defined in device_map:
-            # bert.lm_head.weight -> bert.lm_head -> bert -> ''
-            while len(module_name) > 0 and module_name not in device_map:
-                module_name = ".".join(module_name.split(".")[:-1])
-            if module_name == "" and "" not in device_map:
-                # TODO: group all errors and raise at the end.
-                raise ValueError(f"{param_name} doesn't have any device set.")
-            param_device = device_map[module_name]
+            set_module_kwargs["param"] = param[:]
+            if device_map is None:
+                param_device = "cpu"
+            else:
+                # find next higher level module that is defined in device_map:
+                # bert.lm_head.weight -> bert.lm_head -> bert -> ''
+                while len(module_name) > 0 and module_name not in device_map:
+                    module_name = ".".join(module_name.split(".")[:-1])
+                if module_name == "" and "" not in device_map:
+                    # TODO: group all errors and raise at the end.
+                    raise ValueError(f"{param_name} doesn't have any device set.")
+                param_device = device_map[module_name]
 
-        if param_device == "disk":
-            if not is_safetensors:
-                offload_index = offload_weight(param, param_name, offload_folder, offload_index)
-        elif param_device == "cpu" and state_dict_index is not None:
-            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-        elif (
-            not is_quantized
-            or (not hf_quantizer.requires_parameters_quantization)
-            or (
-                not hf_quantizer.check_quantized_param(
-                    model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+            if param_device == "disk":
+                if not is_safetensors:
+                    offload_index = offload_weight(param, param_name, offload_folder, offload_index)
+            elif param_device == "cpu" and state_dict_index is not None:
+                state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+            elif (
+                not is_quantized
+                or (not hf_quantizer.requires_parameters_quantization)
+                or (
+                    not hf_quantizer.check_quantized_param(
+                        model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+                    )
                 )
-            )
-        ):
-            if is_fsdp_enabled():
-                param_device = "cpu" if is_local_dist_rank_0() else "meta"
+            ):
+                if is_fsdp_enabled():
+                    param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
-            # For backward compatibility with older versions of `accelerate` and for non-quantized params
-            set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
-        else:
-            hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
-            # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-            # and then cast it to CPU to avoid excessive memory usage on each GPU
-            # in comparison to the sharded model across GPUs.
-            if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                module, tensor_name = get_module_from_name(model, param_name)
-                value = getattr(module, tensor_name)
-                param_to = "cpu"
-                if is_fsdp_enabled() and not is_local_dist_rank_0():
-                    param_to = "meta"
-                val_kwargs = {}
-                if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
-                    val_kwargs["requires_grad"] = False
-                value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
-                setattr(module, tensor_name, value)
-            # TODO: consider removing used param_parts from state_dict before return
+                # For backward compatibility with older versions of `accelerate` and for non-quantized params
+                set_module_tensor_to_device(model, param_name, param_device, param[:])
+            else:
+                hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
+                # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+                # and then cast it to CPU to avoid excessive memory usage on each GPU
+                # in comparison to the sharded model across GPUs.
+                if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                    module, tensor_name = get_module_from_name(model, param_name)
+                    value = getattr(module, tensor_name)
+                    param_to = "cpu"
+                    if is_fsdp_enabled() and not is_local_dist_rank_0():
+                        param_to = "meta"
+                    val_kwargs = {}
+                    if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                        val_kwargs["requires_grad"] = False
+                    value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                    setattr(module, tensor_name, value)
+                # TODO: consider removing used param_parts from state_dict before return
 
     return error_msgs, offload_index, state_dict_index
 
@@ -3489,12 +3533,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
-        # `device_map` pointing to the correct device. If we don't, torch will use the default device (index 0) for all
-        # childs processes at parallelization time, resulting in excessive memory usage on device 0 and OOMs.
-        # And temporarily setting the default device to current process rank result in the following error
-        # `torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group`
-        tp_device = None
+        # `device_map` pointing to the correct device
+        device_mesh = None
         if tp_plan is not None:
+            if not is_torch_greater_or_equal("2.5"):
+                raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
             if not torch.distributed.is_initialized():
                 raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
 
@@ -3505,6 +3548,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
+
+            # Assuming sharding the model onto the world
+            world_size = torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
 
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
@@ -3600,7 +3647,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
             elif not low_cpu_mem_usage:
-                raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
+                raise ValueError("Passing along a `device_map` or a `tp_plan` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
             if is_deepspeed_zero3_enabled():
@@ -3609,7 +3656,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             elif not is_accelerate_available():
                 raise ImportError(
-                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                    f"Using `low_cpu_mem_usage=True`, a `device_map` or a `tp_plan` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
@@ -3706,8 +3753,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_map = hf_quantizer.update_device_map(device_map)
 
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
-
+            if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
+                user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
+            else:
+                user_agent["quant"] = hf_quantizer.quantization_config.quant_method
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
@@ -4184,6 +4233,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        if device_mesh is not None and not model.supports_tp_plan:
+            raise NotImplementedError("This model does not have a tensor parallel plan.")
+
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
@@ -4334,6 +4386,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 keep_in_fp32_modules=keep_in_fp32_modules,
                 gguf_path=gguf_path,
                 weights_only=weights_only,
+                device_mesh=device_mesh,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -4368,8 +4421,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        # Dispatch model with hooks on all devices if necessary
-        if device_map is not None:
+        # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
+        # harm performances)
+        if device_map is not None and device_mesh is None:
             device_map_kwargs = {
                 "device_map": device_map,
                 "offload_dir": offload_folder,
@@ -4396,6 +4450,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
                 dispatch_model(model, **device_map_kwargs)
 
+        # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
+        # not part of the state_dict (persistent=False)
+        if device_mesh is not None:
+            for buffer in model.buffers():
+                if buffer.device != tp_device:
+                    buffer.data = buffer.to(tp_device)
+
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
@@ -4417,16 +4478,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "error_msgs": error_msgs,
                 }
             return model, loading_info
-
-        if tp_plan is not None:
-            assert tp_device is not None, "tp_device not set!"
-            if not model.supports_tp_plan:
-                raise NotImplementedError("This model does not have a tensor parallel plan.")
-            # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
-            # Apply Tensor Parallelism
-            model.tensor_parallel(device_mesh)
 
         return model
 
@@ -4521,6 +4572,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules=None,
         gguf_path=None,
         weights_only=True,
+        device_mesh=None,
+ 
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
@@ -4750,10 +4803,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     if (
                         model_key in model_state_dict
-                        and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+                        and state_dict[checkpoint_key] != model_state_dict[model_key].shape
                     ):
                         if (
-                            state_dict[checkpoint_key].shape[-1] == 1
+                            state_dict[checkpoint_key][-1] == 1
                             and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
                         ):
                             # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
@@ -4761,7 +4814,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             pass
                         else:
                             mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                                (checkpoint_key, state_dict[checkpoint_key], model_state_dict[model_key].shape)
                             )
                             del state_dict[checkpoint_key]
             return mismatched_keys
@@ -4820,6 +4873,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     is_safetensors=is_safetensors,
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
+                    device_mesh=device_mesh,
+                    prefix=cls.base_model_prefix,
+                    resolved_archive_file=resolved_archive_file
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
@@ -4909,6 +4965,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             is_safetensors=is_safetensors,
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
+                            device_mesh=device_mesh,
+                            shard_file=shard_file
                         )
                         error_msgs += new_error_msgs
                 else:
@@ -5186,7 +5244,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def tensor_parallel(self, device_mesh):
         """
-        Tensor parallelize the model across the given device mesh.
+        Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
+        was already loaded in memory, note however that this means that each process will first initialize the whole model,
+        then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
+
+        Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
+        so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
 
         Args:
             device_mesh (`torch.distributed.DeviceMesh`):
