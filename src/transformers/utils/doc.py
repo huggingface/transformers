@@ -19,11 +19,25 @@ import functools
 import re
 import textwrap
 import types
+import inspect
+
+
+def get_docstring_indentation_level(func):
+    """Return the indentation level of the start of the docstring of a class or function."""
+    # We assume classes are always defined in the global scope
+    if inspect.isclass(func):
+        return 4
+    source = inspect.getsource(func)
+    first_line = source.splitlines()[0]
+    function_def_level = len(first_line) - len(first_line.lstrip())
+    return 4 + function_def_level
 
 
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
-        fn.__doc__ = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
+        indentation = get_docstring_indentation_level(fn)
+        docs = [textwrap.indent(textwrap.dedent(doc), " " * indentation) for doc in docstr]
+        fn.__doc__ = "".join(docs) + (fn.__doc__ if fn.__doc__ is not None else "")
         return fn
 
     return docstring_decorator
@@ -32,8 +46,8 @@ def add_start_docstrings(*docstr):
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
         # Indent the full docstr with 2 Python indentation level as it is a class method
-        docstr = textwrap.indent(textwrap.dedent(docstr), "        ")
-        docstring = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
+        docs = [textwrap.indent(textwrap.dedent(doc), " " * 8) for doc in docstr]
+        docstring = "".join(docs) + (fn.__doc__ if fn.__doc__ is not None else "")
         class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
         intro = f"        The {class_name} forward method, overrides the `__call__` special method."
         note = r"""
@@ -55,7 +69,9 @@ def add_start_docstrings_to_model_forward(*docstr):
 
 def add_end_docstrings(*docstr):
     def docstring_decorator(fn):
-        fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "".join(docstr)
+        indentation = get_docstring_indentation_level(fn)
+        docs = [textwrap.indent(textwrap.dedent(doc), " " * indentation) for doc in docstr]
+        fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "".join(docs)
         return fn
 
     return docstring_decorator
