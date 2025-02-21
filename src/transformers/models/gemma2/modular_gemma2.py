@@ -592,9 +592,9 @@ class Gemma2ForCausalLM(GemmaForCausalLM):
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         ```python
-        >>> from transformers import AutoTokenizer, GemmaForCausalLM
+        >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
 
-        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma2ForCausalLM.from_pretrained("google/gemma-2-9b")
         >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 
         >>> prompt = "What is your favorite condiment?"
