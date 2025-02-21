@@ -55,19 +55,10 @@ def get_module_source_from_name(module_name: str) -> str:
     return source_code
 
 
-# Exclude names to prevent edge cases where we want to keep a name that may
-# exist in the mapping, e.g. `Wav2Vec2BaseModelOutput` where `Wav2Vec2` is
-# a "base" model identifier but we want the type to pass as is in the produced modeling file
-EXCLUDE_NAMES = ["Wav2Vec2BaseModelOutput"]
-
-
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
-
-    # Create exclude pattern
-    exclude_pattern = "|".join(re.escape(key) for key in EXCLUDE_NAMES)
-    compiled_regex = re.compile(f"(?<![a-z0-9])(?!{exclude_pattern})({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
+    compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
     def replace(match):
         matched_pattern = match.group(1)
@@ -1197,24 +1188,14 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     existing_protected_statements = set()  # str repr of the import nodes - does not work with the nodes directly
     for node in all_imports:
         if m.matches(node, m.If()):  # handle safe imports
-            import_statements = [
-                stmt
-                for stmt in node.body.body
-                if m.matches(stmt, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()]))
-            ]
-
-            if import_statements and len(import_statements) == len(node.body.body):
-                new_statements = []
-                for stmt_node in import_statements:
-                    append_new_import_node(stmt_node, unused_imports, added_names, new_statements)
-                new_statements = [stmt for stmt in new_statements if str(stmt) not in existing_protected_statements]
-                if len(new_statements) > 0:
-                    new_node = node.with_changes(body=node.body.with_changes(body=new_statements))
-                    imports_to_keep.append(new_node)
-                    existing_protected_statements.update({str(stmt) for stmt in new_statements})
-            else:
-                # There's a with statement or other code in the if block, so skip it
-                pass
+            new_statements = []
+            for stmt_node in node.body.body:
+                append_new_import_node(stmt_node, unused_imports, added_names, new_statements)
+            new_statements = [stmt for stmt in new_statements if str(stmt) not in existing_protected_statements]
+            if len(new_statements) > 0:
+                new_node = node.with_changes(body=node.body.with_changes(body=new_statements))
+                imports_to_keep.append(new_node)
+                existing_protected_statements.update({str(stmt) for stmt in new_statements})
         else:
             append_new_import_node(node, unused_imports, added_names, imports_to_keep)
 

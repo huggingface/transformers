@@ -64,6 +64,15 @@ if is_safetensors_available():
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
+
+if is_deepspeed_zero3_enabled():
+    import deepspeed
+
+
+if is_peft_available():
+    from peft.tuners.lora import LoraLayer
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -379,8 +388,6 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             weight_norm = nn.utils.parametrizations.weight_norm
 
         if is_deepspeed_zero3_enabled():
-            import deepspeed
-
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
                 self.conv = weight_norm(self.conv, name="weight", dim=2)
             if hasattr(self.conv, "parametrizations"):
@@ -2546,8 +2553,6 @@ class TDNNLayer(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if is_peft_available():
-            from peft.tuners.lora import LoraLayer
-
             if isinstance(self.kernel, LoraLayer):
                 warnings.warn(
                     "Detected LoRA on TDNNLayer. LoRA weights won't be applied due to optimization. "

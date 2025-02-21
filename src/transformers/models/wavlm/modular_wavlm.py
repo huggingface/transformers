@@ -652,6 +652,8 @@ WAVLM_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+WavLMBaseModelOutput = Wav2Vec2BaseModelOutput
+
 
 @add_start_docstrings(
     "The bare WavLM Model transformer outputting raw hidden-states without any specific head on top.",
@@ -661,7 +663,7 @@ class WavLMModel(Wav2Vec2Model):
     @add_start_docstrings_to_model_forward(WAVLM_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
+        output_type=WavLMBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
