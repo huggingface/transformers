@@ -413,6 +413,8 @@
         title: ErnieM
       - local: model_doc/esm
         title: ESM
+      - loacal: model_doc/eurobert
+        title: EuroBERT
       - local: model_doc/falcon
         title: Falcon
       - local: model_doc/falcon3
