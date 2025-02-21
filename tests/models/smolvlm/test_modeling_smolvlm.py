@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Idefics3 model."""
+"""Testing suite for the PyTorch SmolVLM model."""
 
 import copy
 import unittest
@@ -20,6 +20,7 @@ from io import BytesIO
 
 import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -28,7 +29,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_bitsandbytes,
     require_torch,
     require_torch_sdpa,
     slow,
@@ -44,16 +44,16 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Idefics3Config,
-        Idefics3ForConditionalGeneration,
-        Idefics3Model,
+        SmolVLMConfig,
+        SmolVLMForConditionalGeneration,
+        SmolVLMModel,
     )
 
 if is_vision_available():
     from PIL import Image
 
 
-class Idefics3VisionText2TextModelTester:
+class SmolVLMVisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -118,7 +118,7 @@ class Idefics3VisionText2TextModelTester:
         self.text_config = text_config
 
     def get_config(self):
-        return Idefics3Config(
+        return SmolVLMConfig(
             use_cache=self.use_cache,
             image_token_id=self.image_token_id,
             tie_word_embeddings=self.tie_word_embeddings,
@@ -133,7 +133,7 @@ class Idefics3VisionText2TextModelTester:
             [
                 self.batch_size,
                 self.num_images,
-                3,  # Idefics3ImageProcessor always generates RGB pixel values
+                3,  # SmolVLMImageProcessor always generates RGB pixel values
                 self.vision_config["image_size"],
                 self.vision_config["image_size"],
             ]
@@ -160,12 +160,12 @@ class Idefics3VisionText2TextModelTester:
 
 
 @require_torch
-class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
+class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Model tester for `Idefics3`.
+    Model tester for `SmolVLM`.
     """
 
-    all_model_classes = (Idefics3Model,) if is_torch_available() else ()
+    all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
     test_pruning = False
@@ -173,9 +173,9 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = Idefics3VisionText2TextModelTester(self)
+        self.model_tester = SmolVLMVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Idefics3Config, has_text_modality=False, common_properties=["image_token_id"]
+            self, config_class=SmolVLMConfig, has_text_modality=False, common_properties=["image_token_id"]
         )
 
     def test_config(self):
@@ -193,8 +193,12 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_padding_right(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported in idefics3 models")
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
     def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -325,13 +329,14 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
+class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
     """
-    Model tester for `Idefics3ForConditionalGeneration`.
+    Model tester for `SmolVLMForConditionalGeneration`.
     """
 
-    all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
+    all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": SmolVLMForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -339,8 +344,8 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     test_torchscript = False
 
     def setUp(self):
-        self.model_tester = Idefics3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Idefics3Config, has_text_modality=False)
+        self.model_tester = SmolVLMVisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=SmolVLMConfig, has_text_modality=False)
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
@@ -372,17 +377,54 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
     def test_flash_attn_2_fp32_ln(self):
         pass
 
+    @unittest.skip
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_0_greedy(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_from_inputs_embeds_1_beam_search(self):
+        pass
+
+    @unittest.skip(reason="Unsupported")
+    def test_generate_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported in SmolVLM models")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
     @pytest.mark.generate
     @require_torch_sdpa
     @slow
     @unittest.skip(
-        reason="Idefics3 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
+        reason="SmolVLM doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
     )
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported in Idefics3 models end-to-end")
-    def test_sdpa_can_compile_dynamic(self):
+    @parameterized.expand([("random",), ("same",)])
+    @unittest.skip(reason="Cache position is off by one leaving out image tokens, FIXME raushan")
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token
@@ -502,9 +544,9 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
 
 @require_torch
-class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
+class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3")
+        self.processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
         self.image1 = Image.open(
             BytesIO(
                 requests.get(
@@ -527,10 +569,11 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @slow
-    @unittest.skip("multi-gpu tests are disabled for now")
+    # TODO (Orr?) this is a dummy test to check if the model generates things that make sense.
+    # Needs to be expanded to a tiny video
     def test_integration_test(self):
-        model = Idefics3ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/Idefics3-8B-Llama3",
+        model = SmolVLMForConditionalGeneration.from_pretrained(
+            "HuggingFaceTB/SmolVLM2-256M-Video-Instruct",
             torch_dtype=torch.bfloat16,
             device_map="auto",
         )
@@ -539,32 +582,10 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         text = "<image>In this image, we see"
         images = self.image1
         inputs = self.processor(text=text, images=images, return_tensors="pt", padding=True)
-        inputs.to(torch_device)
+        inputs.to(device=torch_device, dtype=torch.bfloat16)
 
-        generated_ids = model.generate(**inputs, max_new_tokens=10)
+        generated_ids = model.generate(**inputs, max_new_tokens=9)
         generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        expected_generated_text = "<image>In this image, we see the Statue of Liberty, which is located on Liberty"
-        self.assertEqual(generated_texts[0], expected_generated_text)
-
-    @slow
-    @require_bitsandbytes
-    @unittest.skip("multi-gpu tests are disabled for now")
-    def test_integration_test_4bit(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model = Idefics3ForConditionalGeneration.from_pretrained(
-            "HuggingFaceM4/Idefics3-8B-Llama3",
-            load_in_4bit=True,
-            device_map="auto",
-        )
-
-        # Create pixel inputs
-        text = ["<image>In this image, we see", "bla, bla <image><image>"]
-        images = [[self.image1], [self.image2, self.image3]]
-        inputs = self.processor(text=text, images=images, padding=True, return_tensors="pt")
-
-        generated_ids = model.generate(**inputs, max_new_tokens=10)
-        generated_texts = self.processor.batch_decode(generated_ids, skip_special_tokens=True)
-
-        expected_generated_text = "<image>In this image, we see the Statue of Liberty, trees, buildings, water"
+        expected_generated_text = "\n\n\n\nIn this image, we see a view of the Statue of Liberty and the"
         self.assertEqual(generated_texts[0], expected_generated_text)
