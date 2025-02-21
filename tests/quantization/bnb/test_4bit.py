@@ -330,7 +330,7 @@ class Bnb4BitTest(Base4bitTest):
 
         if torch_device in ["cuda", "xpu"]:
             # Check that this does not throw an error
-            _ = self.model_fp16.to(torch.device(torch_device))
+            _ = self.model_fp16.to(torch_device)
 
         # Check this does not throw an error
         _ = self.model_fp16.to("cpu")
