@@ -890,7 +890,6 @@ def _load_state_dict_into_meta_model(
                 match = re.sub("[0-9]+","*", plan[0])
                 current_module_plan = full_tp_plan[match]
             if current_module_plan is not None:
-                set_module_kwargs["value"] = param[:]
                 if current_module_plan is not None:
                     rank = device_map[''].index
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
