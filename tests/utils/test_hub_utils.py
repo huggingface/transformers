@@ -86,8 +86,8 @@ class GetFromCacheTests(unittest.TestCase):
         path = cached_file(RANDOM_BERT, "conf", local_files_only=True, _raise_exceptions_for_missing_entries=False)
         self.assertIsNone(path)
 
-        # Under the mock environment, snapshot_download will always raise an HTTPError
-        with mock.patch("transformers.utils.hub.snapshot_download", side_effect=HTTPError) as mock_head:
+        # Under the mock environment, hf_hub_download will always raise an HTTPError
+        with mock.patch("transformers.utils.hub.hf_hub_download", side_effect=HTTPError) as mock_head:
             path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False)
             self.assertIsNone(path)
             # This check we did call the fake head request

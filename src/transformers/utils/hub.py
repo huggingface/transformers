@@ -41,6 +41,7 @@ from huggingface_hub import (
     hf_hub_url,
     snapshot_download,
     try_to_load_from_cache,
+    hf_hub_download
 )
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
@@ -68,7 +69,6 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
-from .logging import EmptyTqdm
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -125,19 +125,6 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
-
-
-class AlwaysEmptyTqdm:
-    """Allow to remove default tqdm bar in `snapshot_download`."""
-
-    def __call__(self, *args, **kwargs):
-        return EmptyTqdm(*args, **kwargs)
-
-    def set_lock(self, *args, **kwargs):
-        self._lock = None
-
-    def get_lock(self):
-        pass
 
 
 def _get_cache_file_to_return(
@@ -381,11 +368,11 @@ def cached_files(
         subfolder = ""
 
     # Add folder to filenames
-    filenames = [os.path.join(subfolder, file) for file in filenames]
+    full_filenames = [os.path.join(subfolder, file) for file in filenames]
 
     path_or_repo_id = str(path_or_repo_id)
     existing_files = []
-    for filename in filenames:
+    for filename in full_filenames:
         if os.path.isdir(path_or_repo_id):
             resolved_file = os.path.join(path_or_repo_id, filename)
             if not os.path.isfile(resolved_file):
@@ -400,7 +387,7 @@ def cached_files(
             existing_files.append(resolved_file)
 
     # All files exist
-    if len(existing_files) == len(filenames):
+    if len(existing_files) == len(full_filenames):
         return existing_files
 
     if cache_dir is None:
@@ -411,7 +398,7 @@ def cached_files(
     existing_files = []
     file_counter = 0
     if _commit_hash is not None and not force_download:
-        for filename in filenames:
+        for filename in full_filenames:
             # If the file is cached under that commit hash, we return it directly.
             resolved_file = try_to_load_from_cache(
                 path_or_repo_id, filename, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
@@ -426,28 +413,42 @@ def cached_files(
                     raise EnvironmentError(f"Could not locate {filename} inside {path_or_repo_id}.")
 
     # Either all the files were found, or some were _CACHED_NO_EXIST but we do not raise for missing entries
-    if file_counter == len(filenames):
+    if file_counter == len(full_filenames):
         return existing_files if len(existing_files) > 0 else None
 
     user_agent = http_user_agent(user_agent)
+    # download the files if needed
     try:
-        # Load from URL or cache if already cached
-        _ = snapshot_download(
-            path_or_repo_id,
-            allow_patterns=filenames,
-            repo_type=repo_type,
-            revision=revision,
-            cache_dir=cache_dir,
-            user_agent=user_agent,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            token=token,
-            local_files_only=local_files_only,
-            # Snapshot download creates an outer bar for the number of files, then 1 bar for each file
-            # So remove the outer bar if we only have 1 file
-            tqdm_class=AlwaysEmptyTqdm() if len(filenames) == 1 else None,
-        )
+        if len(full_filenames) == 1:
+            # This is slightly better for only 1 file
+            hf_hub_download(
+                path_or_repo_id,
+                filenames[0],
+                subfolder=None if len(subfolder) == 0 else subfolder,
+                repo_type=repo_type,
+                revision=revision,
+                cache_dir=cache_dir,
+                user_agent=user_agent,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                token=token,
+                local_files_only=local_files_only,
+            )
+        else:
+            snapshot_download(
+                path_or_repo_id,
+                allow_patterns=full_filenames,
+                repo_type=repo_type,
+                revision=revision,
+                cache_dir=cache_dir,
+                user_agent=user_agent,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                token=token,
+                local_files_only=local_files_only,
+            )
 
     except Exception as e:
         # We cannot recover from them
@@ -467,7 +468,7 @@ def cached_files(
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
-            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
         ]
         if all(file is not None for file in resolved_files):
             return resolved_files
@@ -497,11 +498,11 @@ def cached_files(
             )
 
     resolved_files = [
-        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
+        _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in full_filenames
     ]
     # If there are any missing file and the flag is active, raise
     if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
-        missing_entries = [original for original, resolved in zip(filenames, resolved_files) if resolved is None]
+        missing_entries = [original for original, resolved in zip(full_filenames, resolved_files) if resolved is None]
         revision_ = "main" if revision is None else revision
         msg = f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files named {*missing_entries,}"
         raise EnvironmentError(

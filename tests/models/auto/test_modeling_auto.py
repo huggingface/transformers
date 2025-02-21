@@ -546,6 +546,13 @@ class AutoModelTest(unittest.TestCase):
         self.assertEqual(counter["HEAD"], 0)
         self.assertEqual(counter.total_calls, 2)
 
+        from huggingface_hub import HfApi
+        with RequestCounter() as counter:
+            api = HfApi()
+            repo_info = api.repo_info(repo_id="hf-internal-testing/tiny-random-bert-sharded")
+        print(f'GET: {counter["GET"]}   HEAD: {counter["HEAD"]}   tot: {counter.total_calls}')
+
+
     def test_attr_not_existing(self):
         from transformers.models.auto.auto_factory import _LazyAutoMapping
 
