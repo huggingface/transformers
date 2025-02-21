@@ -23,7 +23,7 @@ import inspect
 
 
 def get_docstring_indentation_level(func):
-    """Return the indentation level of the start of the docstring of a class or function."""
+    """Return the indentation level of the start of the docstring of a class or function (or method)."""
     # We assume classes are always defined in the global scope
     if inspect.isclass(func):
         return 4

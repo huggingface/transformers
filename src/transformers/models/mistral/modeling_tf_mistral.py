@@ -849,7 +849,6 @@ class TFMistralForCausalLM(TFMistralPreTrainedModel, TFCausalLanguageModelingLos
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TFCausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
                 or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -975,7 +974,6 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, TFSequenceClassifierOutputWithPast]:
         r"""
-        Args:
             labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
