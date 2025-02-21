@@ -7334,7 +7334,6 @@ if TYPE_CHECKING:
             EuroBertForMaskedLM,
             EuroBertForSequenceClassification,
             EuroBertModel,
-            EuroBertPreTrainedModel,
         )
         from .models.falcon import (
             FalconForCausalLM,
