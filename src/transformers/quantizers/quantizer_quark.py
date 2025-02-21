@@ -25,9 +25,6 @@ from ..utils import is_quark_available, is_accelerate_available, logging
 if is_accelerate_available():
     from accelerate.utils import set_module_tensor_to_device
 
-if is_quark_available():
-    from quark.torch import ModelImporter
-
 logger = logging.get_logger(__name__)
 
 
@@ -67,8 +64,12 @@ class QuarkHfQuantizer(HfQuantizer):
             )
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # TODO: support legacy? legacy=self.quantization_config.legacy
-        ModelImporter.map_to_quark(model, self.quantization_config.quant_config, pack_method=self.json_export_config.pack_method, custom_mode=self.quantization_config.custom_mode)
+        # Having imports not at the top of files is the approach taken for quantizers
+        # in Transformers - they quantizer_*.py files are not imported lazily.
+        if is_quark_available():
+            from quark.torch.export.api import _map_to_quark
+
+        _map_to_quark(model, self.quantization_config.quant_config, pack_method=self.json_export_config.pack_method, custom_mode=self.quantization_config.custom_mode)
 
         return model
 

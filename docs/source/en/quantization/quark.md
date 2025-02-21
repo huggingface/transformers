@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [Quark](https://quark.docs.amd.com/latest/) is a deep learning quantization toolkit designed to be agnostic to specific data types, algorithms, and hardware. Different pre-processing strategies, algorithms and data-types can be combined in Quark.
 
-The PyTorch support integrated through 🤗 Transformers primarily targets AMD CPUs and GPUs, and is primarily meant to be used for evaluation purposes.
+The PyTorch support integrated through 🤗 Transformers primarily targets AMD CPUs and GPUs, and is primarily meant to be used for evaluation purposes. For example, it is possible to use [lm-evaluation-harness](https://github.com/EleutherAI/lm-evaluation-harness) with 🤗 Transformers backend and evaluate a wide range of models quantized through Quark seamlessly.
 
 Users interested in Quark can refer to its [documentation](https://quark.docs.amd.com/latest/) to get started quantizing models and using them in supported open-source libraries!
 
@@ -27,6 +27,8 @@ Although Quark has its own checkpoint / [configuration format](https://huggingfa
 ## Support matrix
 
 Models quantized through Quark support a large range of features, that can be combined together. All quantized models independently of their configuration can seamlessly be reloaded through `PretrainedModel.from_pretrained`.
+
+The table below shows a few features supported by Quark:
 
 | **Feature**                     | **Supported subset in Quark**                                                                             |   |
 |---------------------------------|-----------------------------------------------------------------------------------------------------------|---|
@@ -47,17 +49,30 @@ Although Quark also supports [models using `quant_method="fp8"`](https://hugging
 
 ## Using Quark models in Transformers
 
+Here is an example of how one can load a Quark model in Transformers:
+
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("EmbeddedLLM/Llama-3.1-8B-Instruct-w_fp8_per_channel_sym")
+model_id = "EmbeddedLLM/Llama-3.1-8B-Instruct-w_fp8_per_channel_sym"
+model = AutoModelForCausalLM.from_pretrained(model_id)
 model = model.to("cuda")
 
-tokenizer = AutoTokenizer.from_pretrained("EmbeddedLLM/Llama-3.1-8B-Instruct-w_fp8_per_channel_sym")
+print(model.model.layers[0].self_attn.q_proj)
+# QParamsLinear(
+#   (weight_quantizer): ScaledRealQuantizer()
+#   (input_quantizer): ScaledRealQuantizer()
+#   (output_quantizer): ScaledRealQuantizer()
+# )
 
-inp = tokenizer("Where is a good place to cycle around Tokyo?", return_tensors="pt").to("cuda")
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+inp = tokenizer("Where is a good place to cycle around Tokyo?", return_tensors="pt")
+inp = inp.to("cuda")
 
-res = model.generate(**inp)
+res = model.generate(**inp, min_new_tokens=50, max_new_tokens=100)
 
-print(tokenizer.batch_decode(res))
+print(tokenizer.batch_decode(res)[0])
+# <|begin_of_text|>Where is a good place to cycle around Tokyo? There are several places in Tokyo that are suitable for cycling, depending on your skill level and interests. Here are a few suggestions:
+# 1. Yoyogi Park: This park is a popular spot for cycling and has a wide, flat path that's perfect for beginners. You can also visit the Meiji Shrine, a famous Shinto shrine located in the park.
+# 2. Imperial Palace East Garden: This beautiful garden has a large, flat path that's perfect for cycling. You can also visit the
 ```

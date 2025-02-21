@@ -61,7 +61,7 @@ class QuantizationMethod(str, Enum):
     BITNET = "bitnet"
     SPQR = "spqr"
     FP8 = "fp8"
-	QUARK = "quark"
+    QUARK = "quark"
 
 
 class AWQLinearVersion(str, Enum):
