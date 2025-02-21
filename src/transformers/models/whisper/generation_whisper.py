@@ -1779,7 +1779,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
         prev_start_of_text = getattr(generation_config, "prev_sot_token_id", None)
         if prev_start_of_text is None:
-            if suppress_tokens and len(suppress_tokens) >= 2:
+            if suppress_tokens is not None and len(suppress_tokens) >= 2:
                 prev_start_of_text = suppress_tokens[-2]
             else:
                 prev_start_of_text = None
