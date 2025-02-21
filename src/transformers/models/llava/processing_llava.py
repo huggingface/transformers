@@ -16,7 +16,9 @@
 Processor class for Llava.
 """
 
-from typing import List, Union
+from typing import Dict, List, Union
+
+import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
@@ -30,9 +32,7 @@ logger = logging.get_logger(__name__)
 
 class LlavaProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
+        "text_kwargs": {"padding": False, "return_mm_token_type_ids": False},
         "images_kwargs": {},
     }
 
@@ -89,6 +89,7 @@ class LlavaProcessor(ProcessorMixin):
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -155,21 +156,61 @@ class LlavaProcessor(ProcessorMixin):
         prompt_strings = text
         if image_inputs.get("pixel_values") is not None:
             # Replace the image token with the expanded image token sequence
-            pixel_values = image_inputs["pixel_values"]
-            height, width = get_image_size(to_numpy_array(pixel_values[0]))
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= 1
-
+            num_image_tokens = self._get_num_mm_tokens(image_inputs)["image"][0]
             prompt_strings = []
             for sample in text:
                 sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
                 prompt_strings.append(sample)
 
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-        return BatchFeature(data={**text_inputs, **image_inputs})
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None)
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(text_inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
+            mm_token_type_ids[array_ids == self.image_token_id] = 1
+            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _get_num_mm_tokens(
+        self,
+        image_inputs: Union[BatchFeature, Dict] = None,
+        video_inputs: Union[BatchFeature, Dict] = None,
+        audio_inputs: Union[BatchFeature, Dict] = None,
+        **kwargs,
+    ) -> Dict[str, List[int]]:
+        """
+        Computes the number of placeholder tokens needed for each multimodal input type
+        (image, video, and audio) in the given input dictionary. Each modality input has
+        to be already processed by its respective modality preprocessor.
+
+        Args:
+            image_inputs (Union[BatchFeature, Dict], *optional*):
+                The image input containing pixel values.
+            video_inputs (Union[BatchFeature, Dict], *optional*):
+                The video input containing pixel values for videos.
+            audio_inputs (Union[BatchFeature, Dict], *optional*):
+                The audio input containing audio features.
+
+        Returns:
+            Dict[str, List[int]]: A dictionary mapping each modality ("image", "video", "audio")
+            to a list containing the number of placeholder tokens required. If the model doesn't accept
+            a certain modality, the dict value is set to `0`
+        """
+        if image_inputs is None:
+            raise ValueError("Cannot infer length of placeholder tokens if no image inputs are provided!")
+
+        pixel_values = image_inputs["pixel_values"]
+        height, width = get_image_size(to_numpy_array(pixel_values[0]))
+        num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+        num_image_tokens += self.num_additional_image_tokens
+        if self.vision_feature_select_strategy == "default":
+            num_image_tokens -= 1
+
+        num_image_tokens_per_item = [num_image_tokens] * len(pixel_values)
+        return {"image": num_image_tokens_per_item, "video": 0, "audio": 0}
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):

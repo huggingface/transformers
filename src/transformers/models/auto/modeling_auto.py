@@ -158,6 +158,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("levit", "LevitModel"),
         ("lilt", "LiltModel"),
         ("llama", "LlamaModel"),
+        ("llava", "LlavaModel"),
         ("longformer", "LongformerModel"),
         ("longt5", "LongT5Model"),
         ("luke", "LukeModel"),
