@@ -180,9 +180,9 @@ class QuantoQuantizationTest(unittest.TestCase):
         """
         self.check_inference_correctness(self.quantized_model, "cpu")
 
-    def test_generate_quality_gpu(self):
+    def test_generate_quality_accelerator(self):
         """
-        Simple test to check the quality of the model on cuda by comparing the generated tokens with the expected tokens
+        Simple test to check the quality of the model on accelerators by comparing the generated tokens with the expected tokens
         """
         self.check_inference_correctness(self.quantized_model, torch_device)
 
