@@ -244,6 +244,7 @@ EUROBERT_START_DOCSTRING = r"""
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+
 class EuroBertAttention(LlamaAttention):
     def forward(
         self,
@@ -288,12 +289,14 @@ class EuroBertAttention(LlamaAttention):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
+
 @add_start_docstrings(
     "The bare ModernBert Model outputting raw hidden-states without any specific head on top.",
     EUROBERT_START_DOCSTRING,
 )
 class EuroBertPreTrainedModel(LlamaPreTrainedModel):
     pass
+
 
 EUROBERT_INPUTS_DOCSTRING = r"""
     Args:
@@ -524,6 +527,7 @@ class EuroBertForMaskedLM(EuroBertPreTrainedModel):
             attentions=encoder_output.attentions,
         )
 
+
 @add_start_docstrings(
     "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
@@ -639,6 +643,7 @@ class EuroBertForSequenceClassification(EuroBertPreTrainedModel):
             hidden_states=encoder_output.hidden_states,
             attentions=encoder_output.attentions,
         )
+
 
 __all__ = [
     "EuroBertConfig",
