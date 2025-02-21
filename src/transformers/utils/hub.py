@@ -485,11 +485,13 @@ def cached_files(
         elif isinstance(e, LocalEntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
-            raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
-                f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
-                " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-            ) from e
+            # Here we only raise if both flags for missing entry and connection errors are True
+            elif _raise_exceptions_for_missing_entries:
+                raise EnvironmentError(
+                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
+                    f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
+                    " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+                ) from e
         # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. Either way, we treat it later
         elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
