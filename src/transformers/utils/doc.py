@@ -1097,6 +1097,9 @@ def add_code_sample_docstrings(
     revision=None,
 ):
     def docstring_decorator(fn):
+        indentation = get_docstring_indentation_level(fn)
+        docs = [textwrap.indent(textwrap.dedent(doc), " " * indentation) for doc in docstr]
+
         # model_class defaults to function's class if not specified otherwise
         model_class = fn.__qualname__.split(".")[0] if model_cls is None else model_cls
 
@@ -1160,7 +1163,7 @@ def add_code_sample_docstrings(
         )
         if real_checkpoint is not None:
             code_sample = FAKE_MODEL_DISCLAIMER + code_sample
-        func_doc = (fn.__doc__ or "") + "".join(docstr)
+        func_doc = (fn.__doc__ or "") + "".join(docs)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
         if revision is not None:
@@ -1172,6 +1175,9 @@ def add_code_sample_docstrings(
             built_doc = built_doc.replace(
                 f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
             )
+
+        output_doc = textwrap.indent(textwrap.dedent(output_doc), " " * indentation)
+        built_doc = textwrap.indent(textwrap.dedent(built_doc), " " * indentation)
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 
