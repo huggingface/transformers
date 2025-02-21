@@ -843,7 +843,7 @@ def load_video(
         file_obj = BytesIO(requests.get(video).content)
     elif os.path.isfile(video):
         file_obj = video
-    elif is_valid_image(video) or (isinstance(video, (list, tuple) and is_valid_image(video[0]))):
+    elif is_valid_image(video) or (isinstance(video, (list, tuple)) and is_valid_image(video[0])):
         file_obj = None
     else:
         raise TypeError("Incorrect format used for video. Should be an url linking to an video or a local path.")

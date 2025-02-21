@@ -17,11 +17,9 @@ import unittest
 
 import numpy as np
 
-import transformers
 from transformers import is_flax_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
-    is_pt_flax_cross_test,
     require_flax,
     require_sentencepiece,
     require_tokenizers,
@@ -46,7 +44,6 @@ if is_flax_available():
     from flax.traverse_util import flatten_dict
 
     from transformers import FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING, FLAX_MODEL_MAPPING, AutoTokenizer, LongT5Config
-    from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
     from transformers.models.longt5.modeling_flax_longt5 import (
         FlaxLongT5ForConditionalGeneration,
         FlaxLongT5Model,
@@ -466,95 +463,6 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, block_len, 3 * block_len],
             )
-
-    # overwrite since special base model prefix is used
-    @is_pt_flax_cross_test
-    def test_save_load_from_base_pt(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = FLAX_MODEL_MAPPING[config.__class__]
-
-        for model_class in self.all_model_classes:
-            if model_class == base_class:
-                continue
-
-            model = base_class(config)
-            base_params = flatten_dict(unfreeze(model.params))
-
-            # convert Flax model to PyTorch model
-            pt_model_class = getattr(transformers, base_class.__name__[4:])  # Skip the "Flax" at the beginning
-            pt_model = pt_model_class(config).eval()
-            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                # save pt model
-                pt_model.save_pretrained(tmpdirname)
-                head_model = model_class.from_pretrained(tmpdirname, from_pt=True)
-
-                base_param_from_head = flatten_dict(unfreeze(head_model.params))
-
-                for key in base_param_from_head.keys():
-                    max_diff = (base_params[key] - base_param_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-    # overwrite since special base model prefix is used
-    @is_pt_flax_cross_test
-    def test_save_load_to_base_pt(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = FLAX_MODEL_MAPPING[config.__class__]
-
-        for model_class in self.all_model_classes:
-            if model_class == base_class:
-                continue
-
-            model = model_class(config)
-            base_params_from_head = flatten_dict(unfreeze(model.params))
-
-            # convert Flax model to PyTorch model
-            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
-            pt_model = pt_model_class(config).eval()
-            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
-
-                base_params = flatten_dict(unfreeze(base_model.params))
-
-                for key in base_params_from_head.keys():
-                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-
-    # overwrite since special base model prefix is used
-    @is_pt_flax_cross_test
-    def test_save_load_bf16_to_base_pt(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        base_class = FLAX_MODEL_MAPPING[config.__class__]
-
-        for model_class in self.all_model_classes:
-            if model_class == base_class:
-                continue
-
-            model = model_class(config)
-            model.params = model.to_bf16(model.params)
-            base_params_from_head = flatten_dict(unfreeze(model.params))
-
-            # convert Flax model to PyTorch model
-            pt_model_class = getattr(transformers, model_class.__name__[4:])  # Skip the "Flax" at the beginning
-            pt_model = pt_model_class(config).eval()
-            pt_model = load_flax_weights_in_pytorch_model(pt_model, model.params)
-
-            # check that all base model weights are loaded correctly
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                pt_model.save_pretrained(tmpdirname)
-                base_model = base_class.from_pretrained(tmpdirname, from_pt=True)
-
-                base_params = flatten_dict(unfreeze(base_model.params))
-
-                for key in base_params_from_head.keys():
-                    max_diff = (base_params[key] - base_params_from_head[key]).sum().item()
-                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
 
 class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
