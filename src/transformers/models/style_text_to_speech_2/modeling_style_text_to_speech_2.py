@@ -880,7 +880,7 @@ class StyleTextToSpeech2Model(StyleTextToSpeech2PretrainedModel):
         self, 
         input_ids: torch.Tensor,
         style: torch.Tensor, 
-        input_lengths: Optional[List[int]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
         speed: Optional[float] = 1.0,
         return_dict: Optional[bool] = None,
         output_durations: Optional[bool] = None,
@@ -888,6 +888,18 @@ class StyleTextToSpeech2Model(StyleTextToSpeech2PretrainedModel):
         output_energy: Optional[bool] = None,
     ) -> Union[Tuple, StyleTextToSpeech2ModelOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if attention_mask is not None:
+            input_lengths = attention_mask.sum(dim=-1).tolist()
+            last_valid_token_idxs = [(mask == 1).nonzero()[-1].item() + 1 for mask in attention_mask]
+            if any(lengths < idx  for lengths, idx in zip(input_lengths, last_valid_token_idxs)):
+                logger.warning(
+                    "`attention_mask` seems to be incorrect, it is expected to be causal."
+                    " The attention mask should be causal, meaning all tokens up to and"
+                    " including the last attended token should have a value of 1."
+                )
+        else:
+            input_lengths = None
 
         style = style.unsqueeze(1)
         prosodic_style = style[:, :, self.config.style_size // 2:]
