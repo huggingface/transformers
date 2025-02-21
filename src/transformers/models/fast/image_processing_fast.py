@@ -159,7 +159,6 @@ class FastImageProcessor(BaseImageProcessor):
             "data_format",
             "input_data_format",
         ]
-
     def resize(
         self,
         image: np.ndarray,
