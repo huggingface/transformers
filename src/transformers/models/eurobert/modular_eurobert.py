@@ -147,7 +147,7 @@ class EuroBertConfig(LlamaConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
-        classifier_pooling (`str`, *optional*, defaults to `late`):
+        classifier_pooling (`str`, *optional*, defaults to `"late"`):
             The pooling strategy to use for the classifier. Can be one of ['bos', 'mean', 'late'].
 
     ```python
@@ -218,8 +218,6 @@ class EuroBertConfig(LlamaConfig):
         )
         self.mask_token_id = mask_token_id
         self.clf_pooling = classifier_pooling
-        del self.use_cache
-
 
 class EuroBertRMSNorm(LlamaRMSNorm):
     def __init__(self, hidden_size, eps=1e-5):
