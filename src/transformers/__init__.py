@@ -208,6 +208,7 @@ _import_structure = {
         "StyleTextToSpeech2PredictorConfig",
         "StyleTextToSpeech2DecoderConfig",
         "StyleTextToSpeech2Tokenizer",
+        "StyleTextToSpeech2Processor",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
@@ -5240,6 +5241,7 @@ if TYPE_CHECKING:
         StyleTextToSpeech2PredictorConfig,
         StyleTextToSpeech2DecoderConfig,
         StyleTextToSpeech2Tokenizer,
+        StyleTextToSpeech2Processor,
     )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BeitConfig
@@ -6656,6 +6658,7 @@ if TYPE_CHECKING:
             StyleTextToSpeech2Predictor,
             StyleTextToSpeech2Decoder,
             StyleTextToSpeech2Tokenizer,
+            StyleTextToSpeech2Processor,
         )
         from .models.bart import (
             BartForCausalLM,
