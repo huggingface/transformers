@@ -898,10 +898,10 @@ def _load_state_dict_into_meta_model(
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
                     layer = model.get_submodule(param_name.rsplit(".", 1)[0])
                     if "row" in current_module_plan or "down" in param_name:
-                        _, col = param.shape
+                        _, col = param_shape
                         param = param[:, rank * (col // device_mesh.max()) : (rank + 1) * (col // device_mesh.max())]
                     else:
-                        row, _ = param.shape
+                        row, _ = param_shape
                         param = param[rank * (row // device_mesh.max()) : (rank + 1) * (row // device_mesh.max()), :]
                     with torch.no_grad():
                         layer.weight._local_tensor = param.to(
@@ -963,37 +963,6 @@ def _load_state_dict_into_meta_model(
                     value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                     setattr(module, tensor_name, value)
                 # TODO: consider removing used param_parts from state_dict before return
-
-        # In this case, let's parallelize the modules!
-        if device_mesh is not None:
-            # Immediate parent
-            split_parent_module_name = param_name.split(".")[:-1]
-            parent_module_name = ".".join(split_parent_module_name)
-            parent_module = model
-            for name in split_parent_module_name:
-                parent_module = getattr(parent_module, name)
-
-            # Check if we are part of the tp_plan
-            current_module_plan = None
-            for param, plan in full_tp_plan.items():
-                # "*" are a placeholder for layer indices, so we replace them by "[0-9]+" in the regex pattern
-                pattern = param.replace("*", "[0-9]+")
-                if re.search(pattern, parent_module_name):
-                    current_module_plan = plan
-                    break
-
-            # We can only apply the tp_plan after all parameters of the current module have been correctly initialized (e.g.
-            # if we have bias, we need both `weights` and `bias` of a nn.Linear to be initialized)
-            process_device = list(device_map.values())[0]
-            all_module_parameters_initialized = all(
-                m.device == process_device for m in parent_module.parameters(recurse=False)
-            ) and all(m.device == process_device for m in parent_module.buffers(recurse=False))
-            if current_module_plan is not None and all_module_parameters_initialized:
-                torch.distributed.tensor.parallel.parallelize_module(
-                    parent_module,
-                    device_mesh=device_mesh,
-                    parallelize_plan=translate_to_torch_parallel_style(current_module_plan),
-                )
 
     return error_msgs, offload_index, state_dict_index
 
