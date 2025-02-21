@@ -391,9 +391,10 @@ def cached_files(
             resolved_file = os.path.join(path_or_repo_id, filename)
             if not os.path.isfile(resolved_file):
                 if _raise_exceptions_for_missing_entries and filename != os.path.join(subfolder, "config.json"):
+                    revision_ = "main" if revision is None else revision
                     raise EnvironmentError(
                         f"{path_or_repo_id} does not appear to have a file named {filename}. Checkout "
-                        f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
+                        f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
                     )
                 else:
                     return None
@@ -409,6 +410,7 @@ def cached_files(
         cache_dir = str(cache_dir)
 
     existing_files = []
+    file_counter = 0
     if _commit_hash is not None and not force_download:
         for filename in filenames:
             # If the file is cached under that commit hash, we return it directly.
@@ -417,14 +419,15 @@ def cached_files(
             )
             if resolved_file is not None:
                 if resolved_file is not _CACHED_NO_EXIST:
+                    file_counter += 1
                     existing_files.append(resolved_file)
                 elif not _raise_exceptions_for_missing_entries:
-                    return None
+                    file_counter += 1
                 else:
                     raise EnvironmentError(f"Could not locate {filename} inside {path_or_repo_id}.")
 
-    if len(existing_files) == len(filenames):
-        return existing_files
+    if file_counter == len(filenames):
+        return existing_files if len(existing_files) > 0 else None
 
     user_agent = http_user_agent(user_agent)
     try:
@@ -492,9 +495,10 @@ def cached_files(
     if any(file is None for file in resolved_files) and _raise_exceptions_for_missing_entries:
         missing_entries = [original for original, resolved in zip(filenames, resolved_files) if resolved is None]
         revision_ = "main" if revision is None else revision
+        msg = f"a file named {missing_entries[0]}" if len(missing_entries) == 1 else f"files names {*missing_entries,}"
         raise EnvironmentError(
-            f"{path_or_repo_id} does not appear to have file(s) named {*missing_entries,}. Checkout "
-            f"'https://huggingface.co/{path_or_repo_id}/tree/{revision_}' for available files."
+            f"{path_or_repo_id} does not appear to have {msg}. Checkout 'https://huggingface.co/{path_or_repo_id}/tree/{revision_}'"
+            "for available files."
         )
 
     # Remove potential missing entries (we can silently remove them at this point based on the flags)
