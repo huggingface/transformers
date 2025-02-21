@@ -485,7 +485,8 @@ def cached_files(
         elif isinstance(e, LocalEntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
-            # Here we only raise if both flags for missing entry and connection errors are True
+            # Here we only raise if both flags for missing entry and connection errors are True (because it can be raised
+            # even when `local_files_only` is True, in which case raising for connections errors only would not make sense)
             elif _raise_exceptions_for_missing_entries:
                 raise EnvironmentError(
                     f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
