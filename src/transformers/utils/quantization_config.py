@@ -1699,7 +1699,11 @@ class QuarkConfig(QuantizationConfigMixin):
 
         if self.custom_mode in ["awq", "fp8"]:
             # Legacy (quark<1.0) or custom export.
-            self.quant_config = quark.torch.export.main_export.quant_config_parser.QuantConfigParser.from_custom_config(kwargs, is_bias_quantized=False)
+            self.quant_config = (
+                quark.torch.export.main_export.quant_config_parser.QuantConfigParser.from_custom_config(
+                    kwargs, is_bias_quantized=False
+                )
+            )
             self.json_export_config = quark.torch.export.config.config.JsonExporterConfig()
         else:
             self.quant_config = quark.torch.quantization.config.config.Config.from_dict(kwargs)

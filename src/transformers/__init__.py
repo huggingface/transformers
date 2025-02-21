@@ -6249,7 +6249,7 @@ if TYPE_CHECKING:
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
-		QuarkConfig,
+        QuarkConfig,
         SpQRConfig,
         TorchAoConfig,
         VptqConfig,

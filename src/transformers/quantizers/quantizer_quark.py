@@ -14,11 +14,15 @@
 
 from typing import TYPE_CHECKING, Any, Dict
 
+from ..file_utils import is_torch_available
 from .base import HfQuantizer
 
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+
+    if is_torch_available():
+        import torch
 
 from ..utils import is_accelerate_available, is_quark_available, logging
 
@@ -39,6 +43,7 @@ CHECKPOINT_KEYS = {
     "input_zero_point": "input_quantizer.zero_point",
     "output_zero_point": "output_quantizer.zero_point",
 }
+
 
 class QuarkHfQuantizer(HfQuantizer):
     """
@@ -70,7 +75,12 @@ class QuarkHfQuantizer(HfQuantizer):
         if is_quark_available():
             from quark.torch.export.api import _map_to_quark
 
-        _map_to_quark(model, self.quantization_config.quant_config, pack_method=self.json_export_config.pack_method, custom_mode=self.quantization_config.custom_mode)
+        _map_to_quark(
+            model,
+            self.quantization_config.quant_config,
+            pack_method=self.json_export_config.pack_method,
+            custom_mode=self.quantization_config.custom_mode,
+        )
 
         return model
 
@@ -84,7 +94,9 @@ class QuarkHfQuantizer(HfQuantizer):
     ) -> bool:
         return True
 
-    def create_quantized_param(self, model, param, param_name, param_device, state_dict, unexpected_keys) -> "torch.nn.Parameter":
+    def create_quantized_param(
+        self, model, param, param_name, param_device, state_dict, unexpected_keys
+    ) -> "torch.nn.Parameter":
         postfix = param_name.split(".")[-1]
 
         if postfix in CHECKPOINT_KEYS:

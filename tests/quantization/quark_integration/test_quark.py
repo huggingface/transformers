@@ -140,6 +140,7 @@ class QuarkTest(unittest.TestCase):
         else:
             self.check_inference_correctness(self.quantized_model)
 
+
 @require_accelerate
 @require_torch_multi_gpu
 @require_quark

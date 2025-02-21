@@ -33,7 +33,7 @@ from ..utils.quantization_config import (
     QuantizationMethod,
     QuantoConfig,
     QuarkConfig,
-	SpQRConfig,
+    SpQRConfig,
     TorchAoConfig,
     VptqConfig,
 )
