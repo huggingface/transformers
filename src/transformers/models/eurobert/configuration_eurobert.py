@@ -27,7 +27,7 @@ class EuroBertConfig(LlamaConfig):
     r"""
     This is the configuration class to store the configuration of a [`EuroBertModel`]. It is used to instantiate an EuroBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the EuroBert-base.
+    defaults will yield a similar configuration to that of the EuroBERT-210m.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

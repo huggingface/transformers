@@ -40,7 +40,7 @@ from .configuration_eurobert import EuroBertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "EuroBert/EuroBert-base"
+_CHECKPOINT_FOR_DOC = "EuroBERT/EuroBERT-210m"
 _CONFIG_FOR_DOC = "EuroBertConfig"
 
 
