@@ -219,6 +219,7 @@ class EuroBertConfig(LlamaConfig):
         self.mask_token_id = mask_token_id
         self.clf_pooling = classifier_pooling
 
+
 class EuroBertRMSNorm(LlamaRMSNorm):
     def __init__(self, hidden_size, eps=1e-5):
         super().__init__(hidden_size, eps)
