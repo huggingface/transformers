@@ -8905,7 +8905,6 @@ class SmolVLMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-
 class SmolVLMProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
