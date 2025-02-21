@@ -337,7 +337,7 @@ class EuroBertDecoderLayer(nn.Module):
         return outputs
 
 
-EURO_BERT_START_DOCSTRING = r"""
+EUROBERT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -356,7 +356,7 @@ EURO_BERT_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare EuroBert Model outputting raw hidden-states without any specific head on top.",
-    EURO_BERT_START_DOCSTRING,
+    EUROBERT_START_DOCSTRING,
 )
 class EuroBertPreTrainedModel(PreTrainedModel):
     config_class = EuroBertConfig
@@ -382,23 +382,6 @@ class EuroBertPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-
-EUROBERT_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`EuroBertConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
 
 
 EUROBERT_INPUTS_DOCSTRING = r"""
@@ -469,6 +452,10 @@ EUROBERT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
 """
 
 
@@ -719,11 +706,35 @@ class EuroBertModel(EuroBertPreTrainedModel):
     "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
 )
-class EuroBertForMaskedLM(EuroBertModel):
+class EuroBertForMaskedLM(PreTrainedModel):
+    config_class = EuroBertConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["EuroBertDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
     _tied_weights_keys = ["lm_head.weight"]
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
+        self.model = EuroBertModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, config.mlp_bias)
         self.post_init()
 
@@ -744,7 +755,7 @@ class EuroBertForMaskedLM(EuroBertModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
-        encoder_output = super().forward(
+        encoder_output = self.encoder.forward(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -776,12 +787,38 @@ class EuroBertForMaskedLM(EuroBertModel):
     "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
 )
-class EuroBertForSequenceClassification(EuroBertModel):
+class EuroBertForSequenceClassification(PreTrainedModel):
+    config_class = EuroBertConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["EuroBertDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+    _supports_attention_backend = True
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
     def __init__(self, config: EuroBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.clf_pooling = config.clf_pooling
 
+        self.model = EuroBertModel(config)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.GELU()
         self.out_proj = nn.Linear(config.hidden_size, self.num_labels)
@@ -804,7 +841,7 @@ class EuroBertForSequenceClassification(EuroBertModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        encoder_output = super().forward(
+        encoder_output = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,

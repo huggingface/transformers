@@ -37,6 +37,7 @@ from ..llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaModel,
+    LlamaPreTrainedModel,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -464,11 +465,12 @@ class EuroBertModel(LlamaModel):
     "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
 )
-class EuroBertForMaskedLM(EuroBertModel):
+class EuroBertForMaskedLM(LlamaPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: EuroBertConfig):
-        super().__init__(config)
+        LlamaPreTrainedModel().__init__(config)
+        self.model = EuroBertModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, config.mlp_bias)
         self.post_init()
 
@@ -489,7 +491,7 @@ class EuroBertForMaskedLM(EuroBertModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
-        encoder_output = super().forward(
+        encoder_output = self.encoder.forward(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -520,12 +522,15 @@ class EuroBertForMaskedLM(EuroBertModel):
     "The EuroBert Model with a decoder head on top that is used for masked language modeling.",
     EUROBERT_START_DOCSTRING,
 )
-class EuroBertForSequenceClassification(EuroBertModel):
+class EuroBertForSequenceClassification(LlamaPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
     def __init__(self, config: EuroBertConfig):
-        super().__init__(config)
+        LlamaPreTrainedModel().__init__(config)
         self.num_labels = config.num_labels
         self.clf_pooling = config.clf_pooling
 
+        self.model = EuroBertModel(config)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.GELU()
         self.out_proj = nn.Linear(config.hidden_size, self.num_labels)
@@ -548,7 +553,7 @@ class EuroBertForSequenceClassification(EuroBertModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        encoder_output = super().forward(
+        encoder_output = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
