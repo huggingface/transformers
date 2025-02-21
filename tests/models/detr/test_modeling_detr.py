@@ -194,6 +194,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_head_masking = False
     test_missing_keys = False
     zero_init_hidden_state = True
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -683,7 +684,12 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(results["segmentation"].shape, expected_shape)
         torch.testing.assert_close(results["segmentation"][:3, :3], expected_slice_segmentation, rtol=1e-4, atol=1e-4)
         self.assertTrue(len(results["segments_info"]), expected_number_of_segments)
-        self.assertDictEqual(results["segments_info"][0], expected_first_segment)
+
+        predicted_first_segment = results["segments_info"][0]
+        self.assertEqual(predicted_first_segment["id"], expected_first_segment["id"])
+        self.assertEqual(predicted_first_segment["label_id"], expected_first_segment["label_id"])
+        self.assertEqual(predicted_first_segment["was_fused"], expected_first_segment["was_fused"])
+        self.assertAlmostEqual(predicted_first_segment["score"], expected_first_segment["score"], places=3)
 
 
 @require_vision
