@@ -1128,8 +1128,22 @@ class ProcessorMixin(PushToHubMixin):
     def get_possibly_dynamic_module(module_name):
         if hasattr(transformers_module, module_name):
             return getattr(transformers_module, module_name)
-        elif module_name in transformers_module.models.auto.configuration_auto.ALL_CUSTOM_CLASSES:
-            return transformers_module.models.auto.configuration_auto.ALL_CUSTOM_CLASSES[module_name]
+        lookup_locations = [
+            transformers_module.IMAGE_PROCESSOR_MAPPING,
+            transformers_module.TOKENIZER_MAPPING,
+            transformers_module.FEATURE_EXTRACTOR_MAPPING,
+        ]
+        class_lookup = dict()
+        for lookup_location in lookup_locations:
+            for custom_class in lookup_location.values():
+                if isinstance(custom_class, tuple):
+                    for custom_subclass in custom_class:
+                        if custom_subclass is not None:
+                            class_lookup[custom_subclass.__name__] = custom_subclass
+                elif custom_class is not None:
+                    class_lookup[custom_class.__name__] = custom_class
+        if module_name in class_lookup:
+            return class_lookup[module_name]
         else:
             raise ValueError(
                 f"Could not find module {module_name} in `transformers`. If this is a custom class, "
