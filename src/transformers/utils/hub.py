@@ -492,7 +492,8 @@ def cached_files(
                     f" cached files.\nCheckout your internet connection or see how to run the library in offline mode at"
                     " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 ) from e
-        # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. Either way, we treat it later
+        # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. If this is the case, it will be treated
+        # later on anyway and re-raised if needed
         elif isinstance(e, HTTPError) and not isinstance(e, EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
