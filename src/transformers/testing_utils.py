@@ -37,7 +37,6 @@ from collections.abc import Mapping
 from dataclasses import MISSING, fields
 from functools import wraps
 from io import StringIO
-from packaging import version
 from pathlib import Path
 from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
@@ -46,6 +45,7 @@ from unittest.mock import patch
 import huggingface_hub.utils
 import urllib3
 from huggingface_hub import delete_repo
+from packaging import version
 
 from transformers import logging as transformers_logging
 
