@@ -1177,6 +1177,10 @@ class ModelTesterMixin:
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
+                    elif "Siglip2" in model_class.__name__:
+                        outputs = model(**inputs)
+                        example_inputs = [t for t in inputs.values() if isinstance(t, torch.Tensor)]
+                        traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
                     else:
                         main_input = inputs[main_input_name]
 
@@ -3037,6 +3041,7 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
+                "Siglip2ForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
                 "UniSpeechSatForSequenceClassification",
