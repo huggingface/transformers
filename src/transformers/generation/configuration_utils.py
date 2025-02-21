@@ -52,6 +52,7 @@ ALL_CACHE_IMPLEMENTATIONS = []
 
 if is_torch_available():
     from ..cache_utils import (
+        CacheConfig,
         HQQQuantizedCache,
         HybridCache,
         MambaCache,
@@ -606,7 +607,7 @@ class GenerationConfig(BaseModel, PushToHubMixin):
     model_config = ConfigDict(extra="allow", strict=True, revalidate_instances="subclass-instances")
 
     # Parameters that control the length of the output
-    max_length: Optional[conint(ge=0)] = 20
+    max_length: Optional[conint(ge=1)] = 20
     max_new_tokens: Optional[conint(gt=0)] = None
     min_length: Optional[conint(ge=0)] = 0
     min_new_tokens: Optional[conint(ge=0)] = None
@@ -624,7 +625,7 @@ class GenerationConfig(BaseModel, PushToHubMixin):
     # Parameters that control the cache
     use_cache: bool = True
     cache_implementation: Optional[str] = None
-    cache_config: Optional[Dict] = None
+    cache_config: Optional[Union[dict, "CacheConfig"]] = None
     if cache_implementation is not None and cache_implementation in CACHE_CONFIG_MAPPING:
         cache_config_class = CACHE_CONFIG_MAPPING[cache_implementation]
         if isinstance(cache_config, dict):
@@ -632,16 +633,16 @@ class GenerationConfig(BaseModel, PushToHubMixin):
     return_legacy_cache: Optional[bool] = None
 
     # Parameters for manipulation of the model output logits
-    temperature: Optional[confloat(ge=0.0, le=2.0)] = 1.0
-    top_k: Optional[conint(ge=0)] = 50
+    temperature: Optional[confloat(ge=0.0)] = 1.0
+    top_k: Optional[conint(ge=1)] = 50
     top_p: Optional[confloat(ge=0.0, le=1.0)] = 1.0
     min_p: Optional[confloat(ge=0.0, le=1.0)] = None
     typical_p: Optional[confloat(ge=0.0, le=1.0)] = 1.0
     epsilon_cutoff: Optional[confloat(ge=0.0, le=1.0)] = 0.0
     eta_cutoff: Optional[confloat(ge=0.0, le=1.0)] = 0.0
     diversity_penalty: Optional[confloat(ge=0.0)] = 0.0
-    repetition_penalty: Optional[confloat(ge=1.0)] = 1.0
-    encoder_repetition_penalty: Optional[confloat(ge=1.0)] = 1.0
+    repetition_penalty: Optional[confloat(ge=0.0)] = 1.0
+    encoder_repetition_penalty: Optional[confloat(ge=0.0)] = 1.0
     length_penalty: float = 1.0
     no_repeat_ngram_size: Optional[conint(ge=0)] = 0
     bad_words_ids: Optional[List[List[int]]] = None
@@ -678,7 +679,7 @@ class GenerationConfig(BaseModel, PushToHubMixin):
     # Special tokens that can be used at generation time
     pad_token_id: Optional[int] = None
     bos_token_id: Optional[conint(ge=0)] = None
-    eos_token_id: Optional[Union[conint(ge=0), List[conint(ge=0)]]] = None
+    eos_token_id: Optional[Union[int, List[int]]] = None
 
     # Generation parameters exclusive to encoder-decoder models
     encoder_no_repeat_ngram_size: Optional[conint(ge=0)] = 0
@@ -689,12 +690,12 @@ class GenerationConfig(BaseModel, PushToHubMixin):
     num_assistant_tokens: Optional[conint(ge=1)] = 20
     num_assistant_tokens_schedule: Optional[str] = "constant"
     assistant_confidence_threshold: Optional[confloat(ge=0.0, le=1.0)] = 0.4
-    prompt_lookup_num_tokens: Optional[conint(ge=0)] = None
-    max_matching_ngram_size: Optional[conint(ge=0)] = None
+    prompt_lookup_num_tokens: Optional[conint(ge=1)] = None
+    max_matching_ngram_size: Optional[conint(ge=1)] = None
     assistant_early_exit: Optional[conint(ge=0)] = None
     ## assistant generation for different tokenizers, the windows size for assistant/target model
-    assistant_lookbehind: Optional[conint(ge=0)] = 10
-    target_lookbehind: Optional[conint(ge=0)] = 10
+    assistant_lookbehind: Optional[conint(ge=1)] = 10
+    target_lookbehind: Optional[conint(ge=1)] = 10
 
     # Performances
     compile_config: Optional["CompileConfig"] = CompileConfig()
