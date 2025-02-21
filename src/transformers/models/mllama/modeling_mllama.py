@@ -32,6 +32,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -191,7 +192,7 @@ class MllamaVisionAttention(nn.Module):
         hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = None,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         query = self.q_proj(hidden_state)
         key = self.k_proj(hidden_state)
         value = self.v_proj(hidden_state)
@@ -1122,7 +1123,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1182,7 +1183,9 @@ class MllamaPreTrainedModel(PreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -1538,7 +1541,9 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         aspect_ratio_ids = aspect_ratio_ids.reshape(batch_size * num_concurrent_media, -1)
 
         # Patch embedding
-        patch_embeds = self.patch_embedding(pixel_values.to(self.dtype).to(self.device))
+        target_dtype = self.patch_embedding.weight.dtype
+        target_device = self.patch_embedding.weight.device
+        patch_embeds = self.patch_embedding(pixel_values.to(target_device, target_dtype))
         hidden_state = patch_embeds.flatten(2).transpose(1, 2)
 
         # Tile embeddings
@@ -2174,8 +2179,13 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]

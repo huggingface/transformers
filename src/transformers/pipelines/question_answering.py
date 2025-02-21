@@ -399,7 +399,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         return super().__call__(examples, **kwargs)
 
     def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
-        # XXX: This is specal, args_parser will not handle anything generator or dataset like
+        # XXX: This is special, args_parser will not handle anything generator or dataset like
         # For those we expect user to send a simple valid example either directly as a SquadExample or simple dict.
         # So we still need a little sanitation here.
         if isinstance(example, dict):

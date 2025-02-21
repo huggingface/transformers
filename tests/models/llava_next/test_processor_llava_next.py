@@ -50,7 +50,11 @@ class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
     def prepare_processor_dict(self):
-        return {"chat_template": "dummy_template", "patch_size": 3, "vision_feature_select_strategy": "default"}
+        return {
+            "chat_template": "{% for message in messages %}{% if message['role'] != 'system' %}{{ message['role'].upper() + ': '}}{% endif %}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>\n' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ content['text'] + ' '}}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ content['text'] + ' '}}{% endgeneration %}{% endfor %}{% endif %}{% endfor %}{% if add_generation_prompt %}{{ 'ASSISTANT:' }}{% endif %}",
+            "patch_size": 3,
+            "vision_feature_select_strategy": "default"
+        }  # fmt: skip
 
     @unittest.skip(
         "Skip because the model has no processor kwargs except for chat template and"

@@ -49,7 +49,6 @@ from transformers import (
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     get_tests_dir,
-    is_pt_tf_cross_test,
     require_jinja,
     require_read_token,
     require_tf,
@@ -62,6 +61,7 @@ from transformers.tokenization_utils import AddedToken
 
 
 if is_torch_available():
+    import torch
     import torch.nn as nn
 
 
@@ -1219,6 +1219,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(len(strftime_output), 10)
                 self.assertEqual(len(strftime_output.split("-")), 3)
 
+    @require_torch
     @require_jinja
     def test_chat_template_return_assistant_tokens_mask(self):
         dummy_template = (
@@ -1263,6 +1264,9 @@ class TokenizerTesterMixin:
                     self.skipTest(reason="No fast tokenizer defined")
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+                self._check_no_pad_token_padding(tokenizer_r, conversations)
+
+                tokenizer_r.padding_side = "right"
 
                 # check batched
                 output = tokenizer_r.apply_chat_template(
@@ -1272,6 +1276,20 @@ class TokenizerTesterMixin:
                     return_assistant_tokens_mask=True,
                     return_dict=True,
                 )
+
+                output_pt = tokenizer_r.apply_chat_template(
+                    conversations,
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    padding=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                )
+
+                self.assertEqual(type(output_pt["assistant_masks"]), torch.Tensor)
+                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
+
                 for i, conv in enumerate(conversations):
                     chat_string = tokenizer_r.apply_chat_template(
                         conversations[i], tokenize=False, chat_template=dummy_template
@@ -1297,17 +1315,29 @@ class TokenizerTesterMixin:
                         output["assistant_masks"][i][assistant_start : assistant_end + 1],
                         [1] * (assistant_end - assistant_start + 1),
                     )
+                    self.assertTrue(
+                        (output_pt["assistant_masks"][i, assistant_start : assistant_end + 1] == 1).all(),
+                    )
+
                     # assert 1 second assistant message
                     self.assertEqual(
                         output["assistant_masks"][i][assistant_start2 : assistant_end2 + 1],
                         [1] * (assistant_end2 - assistant_start2 + 1),
                     )
+                    self.assertTrue(
+                        (output_pt["assistant_masks"][i, assistant_start2 : assistant_end2 + 1] == 1).all(),
+                    )
 
                     # assert 0 in user/system indices
                     self.assertEqual(output["assistant_masks"][i][:assistant_start], [0] * assistant_start)
+                    self.assertTrue((output_pt["assistant_masks"][i, :assistant_start] == 0).all())
+
                     self.assertEqual(
                         output["assistant_masks"][i][assistant_end + 1 : assistant_start2],
                         [0] * (assistant_start2 - assistant_end - 1),
+                    )
+                    self.assertTrue(
+                        (output_pt["assistant_masks"][i, assistant_end + 1 : assistant_start2] == 0).all(),
                     )
 
                 # check not batched
@@ -1318,6 +1348,17 @@ class TokenizerTesterMixin:
                     return_assistant_tokens_mask=True,
                     return_dict=True,
                 )
+                output_pt = tokenizer_r.apply_chat_template(
+                    conversations[0],
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                    return_tensors="pt",
+                )
+
+                self.assertEqual(type(output_pt["assistant_masks"]), torch.Tensor)
+                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
 
                 chat_string = tokenizer_r.apply_chat_template(
                     conversations[0], tokenize=False, chat_template=dummy_template
@@ -1336,16 +1377,26 @@ class TokenizerTesterMixin:
                     output["assistant_masks"][assistant_start : assistant_end + 1],
                     [1] * (assistant_end - assistant_start + 1),
                 )
+                self.assertTrue(
+                    (output_pt["assistant_masks"][assistant_start : assistant_end + 1] == 1).all(),
+                )
                 self.assertEqual(
                     output["assistant_masks"][assistant_start2 : assistant_end2 + 1],
                     [1] * (assistant_end2 - assistant_start2 + 1),
                 )
+                self.assertTrue(
+                    (output_pt["assistant_masks"][assistant_start2 : assistant_end2 + 1] == 1).all(),
+                )
 
                 # assert 0 in user/system indices
                 self.assertEqual(output["assistant_masks"][:assistant_start], [0] * assistant_start)
+                self.assertTrue((output_pt["assistant_masks"][0, :assistant_start] == 0).all())
                 self.assertEqual(
                     output["assistant_masks"][assistant_end + 1 : assistant_start2],
                     [0] * (assistant_start2 - assistant_end - 1),
+                )
+                self.assertTrue(
+                    (output_pt["assistant_masks"][0, assistant_end + 1 : assistant_start2] == 0).all(),
                 )
 
     @require_jinja
@@ -2918,48 +2969,6 @@ class TokenizerTesterMixin:
             tokenizer.batch_encode_plus(
                 string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
             )
-
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                sequences = [
-                    "Testing batch encode plus",
-                    "Testing batch encode plus with different sequence lengths",
-                    "Testing batch encode plus with different sequence lengths correctly pads",
-                ]
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(sequences, padding=True, return_tensors="pt")
-                    tensorflow_tensor = tokenizer.batch_encode_plus(sequences, padding="longest", return_tensors="tf")
-                    encoded_sequences = tokenizer.batch_encode_plus(sequences, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     def _check_no_pad_token_padding(self, tokenizer, sequences):
         # if tokenizer does not have pad_token_id, an error should be thrown

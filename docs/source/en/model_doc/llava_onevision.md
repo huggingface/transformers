@@ -47,8 +47,18 @@ Tips:
 
 </Tip>
 
-- Note that the model should use a specific prompt format, on which the large language model (LLM) was trained. You can use the processor's `apply_chat_template` to format your prompts correctly. For that you have to construct a conversation history, passing a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities.
 
+### Formatting Prompts with Chat Templates  
+
+Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
+
+**Important:**  
+- You must construct a conversation history — passing a plain string won't work.  
+- Each message should be a dictionary with `"role"` and `"content"` keys.  
+- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
+
+
+Here’s an example of how to structure your input. 
 We will use [llava-onevision-qwen2-7b-si-hf](https://huggingface.co/llava-hf/llava-onevision-qwen2-7b-si-hf) and a conversation history of text and image. Each content field has to be a list of dicts, as follows:
 
 ```python
@@ -84,6 +94,9 @@ print(text_prompt)
 '<|im_start|>user\n<image>What is shown in this image?<|im_end|>\n<|im_start|>assistant\nPage showing the list of options.<|im_end|>'
 ```
 
+🚀 **Bonus:** If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the **Usage Examples** below for more details on how to use it.
+
+
 This model was contributed by [RaushanTurganbay](https://huggingface.co/RaushanTurganbay).
 The original code can be found [here](https://github.com/LLaVA-VL/LLaVA-NeXT/tree/main).
 
@@ -97,28 +110,28 @@ Here's how to load the model and perform inference in half-precision (`torch.flo
 ```python
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 import torch
-from PIL import Image
-import requests
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
-model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, low_cpu_mem_usage=True) 
-model.to("cuda:0")
+model = LlavaOnevisionForConditionalGeneration.from_pretrained(
+    "llava-hf/llava-onevision-qwen2-7b-ov-hf",
+    torch_dtype=torch.float16,
+    low_cpu_mem_usage=True,
+    device_map="cuda:0"
+)
 
 # prepare image and text prompt, using the appropriate prompt template
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
-image = Image.open(requests.get(url, stream=True).raw)
-
 conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": url},
             {"type": "text", "text": "What is shown in this image?"},
         ],
     },
 ]
-prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(images=image, text=prompt, return_tensors="pt").to("cuda:0", torch.float16)
+inputs = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = inputs.to("cuda:0", torch.float16)
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
@@ -140,22 +153,12 @@ from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
-# Get three different images
-url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-image_stop = Image.open(requests.get(url, stream=True).raw)
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image_cats = Image.open(requests.get(url, stream=True).raw)
-
-url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-image_snowman = Image.open(requests.get(url, stream=True).raw)
-
 # Prepare a batch of two prompts, where the first one is a multi-turn conversation and the second is not
 conversation_1 = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
             {"type": "text", "text": "What is shown in this image?"},
             ],
     },
@@ -168,7 +171,7 @@ conversation_1 = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
             {"type": "text", "text": "What about this image? How many cats do you see?"},
             ],
     },
@@ -178,18 +181,20 @@ conversation_2 = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"},
             {"type": "text", "text": "What is shown in this image?"},
             ],
     },
 ]
 
-prompt_1 = processor.apply_chat_template(conversation_1, add_generation_prompt=True)
-prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=True)
-prompts = [prompt_1, prompt_2]
-
-# We can simply feed images in the order they have to be used in the text prompt
-inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device, torch.float16)
+inputs = processor.apply_chat_template(
+    [conversation_1, conversation_2],
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    padding=True,
+    return_tensors="pt"
+).to(model.device, torch.float16)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
@@ -202,10 +207,7 @@ processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokeniza
 LLaVa-OneVision also can perform inference with videos as input, where video frames are treated as multiple images. Here is how you can do it:
 
 ```python
-import av
-import numpy as np
 from huggingface_hub import hf_hub_download
-
 import torch
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 
@@ -213,48 +215,26 @@ from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
 model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
-
-def read_video_pyav(container, indices):
-    '''
-    Decode the video with PyAV decoder.
-    Args:
-        container (`av.container.input.InputContainer`): PyAV container.
-        indices (`List[int]`): List of frame indices to decode.
-    Returns:
-        result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
-    '''
-    frames = []
-    container.seek(0)
-    start_index = indices[0]
-    end_index = indices[-1]
-    for i, frame in enumerate(container.decode(video=0)):
-        if i > end_index:
-            break
-        if i >= start_index and i in indices:
-            frames.append(frame)
-    return np.stack([x.to_ndarray(format="rgb24") for x in frames])
-
-# Load the video as an np.array, sampling uniformly 8 frames (can sample more for longer videos, up to 32 frames)
 video_path = hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset")
-container = av.open(video_path)
-total_frames = container.streams.video[0].frames
-indices = np.arange(0, total_frames, total_frames / 8).astype(int)
-video = read_video_pyav(container, indices)
-
-# For videos we have to feed a "video" type instead of "image"
 conversation = [
     {
 
         "role": "user",
         "content": [
-            {"type": "video"},
+            {"type": "video", "path": video_path},
             {"type": "text", "text": "Why is this video funny?"},
             ],
     },
 ]
 
-prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(videos=list(video), text=prompt, return_tensors="pt").to("cuda:0", torch.float16)
+inputs = processor.apply_chat_template(
+    conversation,
+    num_frames=8
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to(model.device, torch.float16)
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -298,8 +278,8 @@ First make sure to install flash-attn. Refer to the [original repository of Flas
 from transformers import LlavaOnevisionForConditionalGeneration
 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
-    model_id, 
-    torch_dtype=torch.float16, 
+    model_id,
+    torch_dtype=torch.float16,
     low_cpu_mem_usage=True,
     use_flash_attention_2=True
 ).to(0)
@@ -317,6 +297,11 @@ model = LlavaOnevisionForConditionalGeneration.from_pretrained(
 ## LlavaOnevisionImageProcessor
 
 [[autodoc]] LlavaOnevisionImageProcessor
+
+## LlavaOnevisionImageProcessorFast
+
+[[autodoc]] LlavaOnevisionImageProcessorFast
+    - preprocess
 
 ## LlavaOnevisionVideoProcessor
 

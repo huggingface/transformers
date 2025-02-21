@@ -285,7 +285,6 @@ class BrosModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = () if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": BrosModel, "token-classification": BrosForTokenClassification}
         if is_torch_available()

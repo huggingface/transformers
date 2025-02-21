@@ -28,8 +28,6 @@ COMMON_ENV_VARIABLES = {
     "TRANSFORMERS_IS_CI": True,
     "PYTEST_TIMEOUT": 120,
     "RUN_PIPELINE_TESTS": False,
-    "RUN_PT_TF_CROSS_TESTS": False,
-    "RUN_PT_FLAX_CROSS_TESTS": False,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "vvv": None, "rsfE":None}
@@ -177,23 +175,6 @@ class CircleCIJob:
 
 
 # JOBS
-torch_and_tf_job = CircleCIJob(
-    "torch_and_tf",
-    docker_image=[{"image":"huggingface/transformers-torch-tf-light"}],
-    additional_env={"RUN_PT_TF_CROSS_TESTS": True},
-    marker="is_pt_tf_cross_test",
-    pytest_options={"rA": None, "durations": 0},
-)
-
-
-torch_and_flax_job = CircleCIJob(
-    "torch_and_flax",
-    additional_env={"RUN_PT_FLAX_CROSS_TESTS": True},
-    docker_image=[{"image":"huggingface/transformers-torch-jax-light"}],
-    marker="is_pt_flax_cross_test",
-    pytest_options={"rA": None, "durations": 0},
-)
-
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
@@ -353,7 +334,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_and_tf_job, torch_and_flax_job, torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+REGULAR_TESTS = [torch_job, tf_job, flax_job, hub_job, onnx_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job, examples_tensorflow_job]
 PIPELINE_TESTS = [pipelines_torch_job, pipelines_tf_job]
 REPO_UTIL_TESTS = [repo_utils_job]

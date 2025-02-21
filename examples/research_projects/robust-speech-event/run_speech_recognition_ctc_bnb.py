@@ -680,8 +680,7 @@ def main():
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)
 
-    decay_parameters = get_parameter_names(model, [torch.nn.LayerNorm])
-    decay_parameters = [name for name in decay_parameters if "bias" not in name]
+    decay_parameters = get_parameter_names(model, [torch.nn.LayerNorm], ["bias", "layernorm", "rmsnorm"])
     optimizer_grouped_parameters = [
         {
             "params": [p for n, p in model.named_parameters() if n in decay_parameters],

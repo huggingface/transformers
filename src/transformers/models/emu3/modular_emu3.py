@@ -1113,6 +1113,7 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["text_model.lm_head.weight"]
+    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compileable
 
     def __init__(self, config):
         super().__init__(config)
@@ -1273,6 +1274,37 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         )
 
         return outputs
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        cache_position=None,
+        position_ids=None,
+        use_cache=True,
+        pixel_values=None,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            pixel_values=pixel_values,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        if cache_position[0] != 0:
+            model_inputs["pixel_values"] = None
+
+        return model_inputs
 
 
 __all__ = [

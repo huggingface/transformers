@@ -109,6 +109,21 @@ class MixtralConfig(PretrainedConfig):
 
     model_type = "mixtral"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.block_sparse_moe.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
+        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
+        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     def __init__(
         self,

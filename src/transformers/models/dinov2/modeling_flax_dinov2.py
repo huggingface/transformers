@@ -136,11 +136,12 @@ class FlaxDinov2Embeddings(nn.Module):
             jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
             (1, 1, self.config.hidden_size),
         )
-        self.mask_token = self.param(
-            "mask_token",
-            jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
-            (1, self.config.hidden_size),
-        )
+        if self.config.use_mask_token:
+            self.mask_token = self.param(
+                "mask_token",
+                jax.nn.initializers.variance_scaling(self.config.initializer_range**2, "fan_in", "truncated_normal"),
+                (1, self.config.hidden_size),
+            )
         self.patch_embeddings = FlaxDinov2PatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(

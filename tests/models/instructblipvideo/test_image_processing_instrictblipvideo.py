@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import InstructBlipVideoImageProcessor
 
 
-class InstructBlipVideoProcessingTester(unittest.TestCase):
+class InstructBlipVideoProcessingTester:
     def __init__(
         self,
         parent,
@@ -50,7 +50,6 @@ class InstructBlipVideoProcessingTester(unittest.TestCase):
         do_convert_rgb=True,
         frames=4,
     ):
-        super().__init__()
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size

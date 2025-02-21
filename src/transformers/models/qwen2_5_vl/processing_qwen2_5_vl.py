@@ -48,10 +48,10 @@ class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
 class Qwen2_5_VLProcessor(ProcessorMixin):
     r"""
     Constructs a Qwen2.5-VL processor which wraps a Qwen2.5-VL image processor and a Qwen2 tokenizer into a single processor.
-    [`Qwen2_5_VLProcessor`] offers all the functionalities of [`Qwen2_5_VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`Qwen2_5_VLProcessor`] offers all the functionalities of [`Qwen2VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
     [`~Qwen2_5_VLProcessor.__call__`] and [`~Qwen2_5_VLProcessor.decode`] for more information.
     Args:
-        image_processor ([`Qwen2_5_VLImageProcessor`], *optional*):
+        image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -62,7 +62,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
 
-    image_processor_class = "Qwen2_5_VLImageProcessor"
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
@@ -81,7 +81,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
-        Qwen2_5_VLImageProcessor's [`~Qwen2_5_VLImageProcessor.__call__`] if `vision_infos` is not `None`.
+        Qwen2VLImageProcessor's [`~Qwen2VLImageProcessor.__call__`] if `vision_infos` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -192,7 +192,9 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def post_process_image_text_to_text(self, generated_outputs):
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
+    ):
         """
         Post-process the output of the model to decode the text.
 
@@ -200,19 +202,29 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
             generated_outputs (`torch.Tensor` or `np.ndarray`):
                 The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 or `(sequence_length,)`.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            Clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
+                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
             `List[str]`: The decoded text.
         """
         return self.tokenizer.batch_decode(
-            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
         )
 
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return names_from_processor + ["second_per_grid_ts"]
 
 
 __all__ = ["Qwen2_5_VLProcessor"]

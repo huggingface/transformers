@@ -59,9 +59,17 @@ Adding these attributes means that LLaVA will try to infer the number of image t
 The attributes can be obtained from model config, as `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. The `num_additional_image_tokens` should be `1` if the vision backbone adds a CLS token or `0` if nothing extra is added to the vision patches.
 
 
-- Note that each checkpoint has been trained with a specific prompt format, depending on which large language model (LLM) was used. You can use the processor's `apply_chat_template` to format your prompts correctly. For that you have to construct a conversation history, passing a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities. Below is an example of how to do that and the list of formats accepted by each checkpoint.
+### Formatting Prompts with Chat Templates  
 
-We will use [llava-v1.6-mistral-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf) and a conversation history of text and image. Each content field has to be a list of dicts, as follows:
+Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.  
+
+**Important:**  
+- You must construct a conversation history — passing a plain string won't work.  
+- Each message should be a dictionary with `"role"` and `"content"` keys.  
+- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.  
+
+
+Here’s an example of how to structure your input. We will use [llava-v1.6-mistral-7b-hf](https://huggingface.co/llava-hf/llava-v1.6-mistral-7b-hf) and a conversation history of text and image.
 
 ```python
 from transformers import LlavaNextProcessor
@@ -124,6 +132,10 @@ print(text_prompt)
 ```bash
 "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
 ```
+
+🚀 **Bonus:** If you're using `transformers>=4.49.0`, you can also get a vectorized output from `apply_chat_template`. See the **Usage Examples** below for more details on how to use it.
+
+
 
 ## Usage example
 
@@ -286,6 +298,11 @@ model = AutoModelForImageTextToText.from_pretrained(
 ## LlavaNextImageProcessor
 
 [[autodoc]] LlavaNextImageProcessor
+    - preprocess
+
+## LlavaNextImageProcessorFast
+
+[[autodoc]] LlavaNextImageProcessorFast
     - preprocess
 
 ## LlavaNextProcessor

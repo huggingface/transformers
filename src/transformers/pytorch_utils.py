@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import inspect
+from functools import lru_cache, wraps
 from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
@@ -21,7 +22,7 @@ from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, logging
+from .utils import is_torch_greater_or_equal, is_torch_xla_available, is_torchdynamo_compiling, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]
@@ -343,6 +344,8 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
         return torch.isin(elements, test_elements)
 
 
+# TODO need to add the __repr__ that shows that it is a colwise parallel
+# See https://github.com/pytorch/pytorch/issues/145726
 def translate_to_torch_parallel_style(style: str):
     """
     In model configurations, we use a neutral type (string) to specify parallel
@@ -358,5 +361,33 @@ def translate_to_torch_parallel_style(style: str):
         return RowwiseParallel()
     elif style == "colwise_rep":
         return ColwiseParallel(output_layouts=Replicate())
+    elif style == "rowwise_rep":
+        return RowwiseParallel(input_layouts=Replicate())
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
+
+
+def compile_compatible_method_lru_cache(*lru_args, **lru_kwargs):
+    """
+    LRU cache decorator from standard functools library, but with a workaround to disable
+    caching when torchdynamo is compiling. Expected to work with class methods.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if not is_torchdynamo_compiling():
+                # Cache the function only if the model is not being compiled
+                # check if the function is already cached, otherwise create it
+                if not hasattr(self, f"_cached_{func.__name__}"):
+                    self.__setattr__(
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                    )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+            else:
+                # Otherwise, just call the original function
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

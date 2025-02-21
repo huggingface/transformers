@@ -48,7 +48,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.49.0.dev0")
+check_min_version("4.50.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/object-detection/requirements.txt")
 
@@ -271,6 +271,10 @@ class DataTrainingArguments:
             )
         },
     )
+    use_fast: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Use a fast torchvision-base image processor if it is supported for a given model."},
+    )
 
 
 @dataclass
@@ -427,6 +431,7 @@ def main():
         size={"max_height": data_args.image_square_size, "max_width": data_args.image_square_size},
         do_pad=True,
         pad_size={"height": data_args.image_square_size, "width": data_args.image_square_size},
+        use_fast=data_args.use_fast,
         **common_pretrained_args,
     )
 

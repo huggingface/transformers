@@ -31,13 +31,8 @@ Tips:
 Sample inference:
 ```python
 from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
-from PIL import Image
-import requests
 
-# Note: These docs were written prior to the public model release,
-# and this path is subject to change.
-# Please see https://huggingface.co/ibm-granite for the current model list.
-model_path = "ibm-granite/granite-3.1-2b-instruct-vision"
+model_path = "ibm-granite/granite-vision-3.1-2b-preview"
 processor = LlavaNextProcessor.from_pretrained(model_path)
 
 model = LlavaNextForConditionalGeneration.from_pretrained(model_path).to("cuda")

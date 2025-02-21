@@ -229,7 +229,6 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MBartModel,
@@ -727,7 +726,6 @@ class MBartStandaloneDecoderModelTester:
 @require_torch
 class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MBartDecoder, MBartForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (MBartForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

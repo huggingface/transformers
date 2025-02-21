@@ -45,7 +45,9 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
+    MistralPreTrainedModel,
     MistralRMSNorm,
+    MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
 
@@ -311,6 +313,14 @@ class MixtralDecoderLayer(nn.Module):
             outputs += (router_logits,)
 
         return outputs
+
+
+class MixtralRotaryEmbedding(MistralRotaryEmbedding):
+    pass
+
+
+class MixtralPreTrainedModel(MistralPreTrainedModel):
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
 
 class MixtralModel(MistralModel):

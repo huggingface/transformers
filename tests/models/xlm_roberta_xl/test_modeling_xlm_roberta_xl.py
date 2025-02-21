@@ -372,7 +372,6 @@ class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (XLMRobertaXLForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": XLMRobertaXLModel,

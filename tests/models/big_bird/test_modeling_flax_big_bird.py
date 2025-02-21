@@ -35,7 +35,7 @@ if is_flax_available():
     )
 
 
-class FlaxBigBirdModelTester(unittest.TestCase):
+class FlaxBigBirdModelTester:
     def __init__(
         self,
         parent,
@@ -90,7 +90,6 @@ class FlaxBigBirdModelTester(unittest.TestCase):
         self.use_bias = use_bias
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
-        super().__init__()
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -213,12 +212,3 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
-
-    # overwrite from common in order to skip the check on `attentions`
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        # `bigbird_block_sparse_attention` in `FlaxBigBird` returns `attention_probs = None`, while in PyTorch version,
-        # an effort was done to return `attention_probs` (yet to be verified).
-        if name.startswith("outputs.attentions"):
-            return
-        else:
-            super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)

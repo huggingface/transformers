@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     CaptureLogger,
     cleanup,
     is_flaky,
-    is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
     require_flash_attn,
@@ -567,16 +566,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="Model has no inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
-    def test_equivalence_flax_to_pt(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-rubst architecture does not exist in Flax")
-    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):

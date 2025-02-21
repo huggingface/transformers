@@ -386,7 +386,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 각 차원마다 적어도 2개의 GPU가 필요하므로 최소한 4개의 GPU가 필요합니다.
 
 구현:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed)
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed)
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
@@ -405,7 +405,7 @@ DeepSpeed [pipeline tutorial](https://www.deepspeed.ai/tutorials/pipeline/)에�
 각 차원마다 적어도 2개의 GPU가 필요하므로 최소한 8개의 GPU가 필요합니다.
 
 구현:
-- [DeepSpeed](https://github.com/microsoft/DeepSpeed) - DeepSpeed는 더욱 효율적인 DP인 ZeRO-DP라고도 부릅니다.
+- [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) - DeepSpeed는 더욱 효율적인 DP인 ZeRO-DP라고도 부릅니다.
 - [Megatron-LM](https://github.com/NVIDIA/Megatron-LM)
 - [Varuna](https://github.com/microsoft/varuna)
 - [SageMaker](https://arxiv.org/abs/2111.05972)
