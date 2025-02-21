@@ -1399,11 +1399,10 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    # ToDo: How to restrict the image generation to only few generation startegies.
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor, **kwargs):
         generation_config = kwargs.get("generation_config")
-        # Perform usual auto-regressive generation for text generation.
+        # Perform usual auto-regressive text generation.
         if kwargs.get("generation_mode", None) == "text":
             kwargs.pop("generation_mode", None)
             return super().generate(input_ids=input_ids, **kwargs)

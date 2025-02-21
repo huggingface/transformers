@@ -5,7 +5,7 @@
 #                          modular_janus.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2024 Deepseek and The HuggingFace Team. All rights reserved.
+# Copyright 2024 Google AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -57,9 +57,6 @@ if is_vision_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-# Modular Image Processor of Janus.
 
 
 def expand2square(pil_img, background_color):
@@ -150,6 +147,7 @@ class JanusImageProcessor(BaseImageProcessor):
     def resize(
         self,
         image: np.ndarray,
+        size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -179,24 +177,31 @@ class JanusImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        # Remove the size arg from kwargs as we will be dynamically calculating the output size.
-        # _ = kwargs.pop("size", None)
         height, width, _ = image.shape
         max_size = max(height, width)
-        # ToDo: Make this logic better.
-        image_size = self.size['height'] # get the image size
-        size = [
+
+        if isinstance(size, dict):
+            if "height" not in size or "width" not in size:
+                raise ValueError(
+                    f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+                )
+            image_size = size["height"]  # Assign height as image_size assuming height=width
+        else:
+            image_size = size
+
+        output_size = [
             max(int(height / max_size * image_size), self.min_size),
             max(int(width / max_size * image_size), self.min_size),
         ]
 
         image = resize(
             image,
-            size=size,
+            size=output_size,
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
             return_numpy=False,
+            **kwargs,
         )
         # expand and pad the images
         image = expand2square(image, self.background_color)
