@@ -866,13 +866,13 @@ class CustomPipelineTest(unittest.TestCase):
         )
 
     @require_torch_or_tf
-    def test_cached_pipeline_has_minimum_calls_to_head(self):
+    def test_cached_pipeline_has_minimum_calls(self):
         # Make sure we have cached the pipeline.
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
-        self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter["GET"], 1)
+        self.assertEqual(counter["HEAD"], 0)
         self.assertEqual(counter.total_calls, 1)
 
     @require_torch

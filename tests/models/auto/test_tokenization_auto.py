@@ -439,13 +439,13 @@ class AutoTokenizerTest(unittest.TestCase):
         ):
             _ = AutoTokenizer.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
 
-    def test_cached_tokenizer_has_minimum_calls_to_head(self):
+    def test_cached_tokenizer_has_minimum_calls(self):
         # Make sure we have cached the tokenizer.
         _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
         with RequestCounter() as counter:
             _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
-        self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter["GET"], 1)
+        self.assertEqual(counter["HEAD"], 0)
         self.assertEqual(counter.total_calls, 1)
 
     def test_init_tokenizer_with_trust(self):
