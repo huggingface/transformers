@@ -421,7 +421,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
     # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
     first_key = next(iter(model_to_load.state_dict().keys()))
     if start_prefix + first_key in state_dict:
-        return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
+        return state_dict[start_prefix + first_key].get_dtype() == model_to_load.state_dict()[first_key].dtype
 
     # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
     return False
@@ -4463,23 +4463,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and ("cpu" in device_map.values() or "disk" in device_map.values())
             ):
                 device_map_kwargs["offload_buffers"] = True
-
-            # if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-            #     dispatch_model(model, **device_map_kwargs)
-
-        # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
-        # not part of the state_dict (persistent=False)
-        if device_mesh is not None:
-            for buffer in model.buffers():
-                if buffer.device != tp_device:
-                    buffer.data = buffer.to(tp_device)
-
-        # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
-        # not part of the state_dict (persistent=False)
-        if device_mesh is not None:
-            for buffer in model.buffers():
-                if buffer.device != tp_device:
-                    buffer.data = buffer.to(tp_device)
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
