@@ -870,9 +870,7 @@ def _load_state_dict_into_meta_model(
                 param_casting_dtype = old_param.dtype
 
             if old_param.is_contiguous():
-                param_to_contiguous = True
-
-        
+                param_to_contiguous = True # TODO not taking into account anymore
 
         # In this case, let's parallelize the modules!
         if device_mesh is not None:
@@ -904,9 +902,9 @@ def _load_state_dict_into_meta_model(
                         row, _ = param.shape
                         param =  param[rank * (row//device_mesh.max()) : (rank +1)* (row//device_mesh.max()), :]
                     with torch.no_grad():
-                        layer.weight._local_tensor = param.to(device_map[''], non_blocking=False)
+                        layer.weight._local_tensor = param.to(device_map[''], dtype=param_casting_dtype, non_blocking=False)
                 else:
-                    set_module_tensor_to_device(model, param_name,  device_map[''], **set_module_kwargs)
+                    set_module_tensor_to_device(model, param_name,  device_map[''], param[:].to(dtype=param_casting_dtype))
         else:
             set_module_kwargs["param"] = param[:]
             if device_map is None:
