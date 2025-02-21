@@ -525,7 +525,7 @@ def load_state_dict(
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        
+
             if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
                 raise OSError(
                     f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
@@ -792,7 +792,7 @@ def _load_state_dict_into_meta_model(
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
     pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
     device_mesh=None,
-    prefix=None, 
+    prefix=None,
     shard_file=None
 ):
     """
@@ -4432,7 +4432,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 gguf_path=gguf_path,
                 weights_only=weights_only,
                 device_mesh=device_mesh,
-                device_mesh=device_mesh,
             )
 
         # make sure token embedding weights are still tied if needed
@@ -4629,7 +4628,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         gguf_path=None,
         weights_only=True,
         device_mesh=None,
- 
+
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
