@@ -777,7 +777,7 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 
 
 def _load_state_dict_into_meta_model(
-    model,
+    model: torch.nn.Module,
     state_dict,
     start_prefix,
     expected_keys,
@@ -814,164 +814,158 @@ def _load_state_dict_into_meta_model(
     # - deepspeed zero 3 support
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
-    file_pointers = safe_open(shard_file, framework="pt")
-    error_msgs = []
+    with safe_open(shard_file, framework="pt", device=device_map[""]) as file_pointer:
+        error_msgs = []
 
-    is_quantized = hf_quantizer is not None
+        is_quantized = hf_quantizer is not None
 
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
-    # we need this later to initialize tensor parallelism
-    if device_mesh is not None:
-        full_tp_plan = model.config.base_model_tp_plan
-        for submodule in model.modules():
-            full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
-
-    for param_name, param_shape in state_dict.items():
-        if param_name not in expected_keys:
-            continue
-
-        if param_name.startswith(start_prefix):
-            param_name = param_name[len(start_prefix) :]
-
-        module_name = param_name
-        set_module_kwargs = {}
-        param = file_pointers.get_slice(param_name)
-        # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-        # in int/uint/bool and not cast them.
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.get_dtype() == torch.float8_e4m3fn
-        if dtype is not None and "F" in param.get_dtype() and not is_param_float8_e4m3fn:
-            if (
-                keep_in_fp32_modules is not None
-                and any(
-                    module_to_keep_in_fp32 in param_name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
-                )
-                and dtype == torch.float16
-            ):
-                param_casting_dtype = torch.float32
-            else:
-                param_casting_dtype = dtype
-
-        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
-        # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
-        # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
-        old_param = model
-        splits = param_name.split(".")
-        for split in splits:
-            # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
-            old_param = getattr(old_param, split, None)
-            if old_param is None:
-                break
-
-        if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
-            old_param = None
-
-        if old_param is not None:
-            if param_casting_dtype is None:
-                param_casting_dtype = old_param.dtype
-
-            if old_param.is_contiguous():
-                _param_to_contiguous = True  # TODO not taking into account anymore
-
-        # In this case, let's parallelize the modules!
+        # we need this later to initialize tensor parallelism
         if device_mesh is not None:
-            layer = param_name.rsplit(".", 1)[0]
-            try:
-                module_to_tp: torch.nn.Module = model.get_submodule(layer)
-            except Exception:
-                raise ValueError(
-                    "The config tp plan is wrong because the layer is not a liner layer, nor an embedding"
-                )
+            full_tp_plan = model.config.base_model_tp_plan
+            for submodule in model.modules():
+                full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
-            prefix = "model"
-            if prefix is not None:
-                param_name_ = param_name.replace(f"{prefix}.", "")
+        for param_name, param_shape in state_dict.items():
+            if param_name not in expected_keys:
+                continue
 
-            current_module_plan = None
-            full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
-            if plan := re.search(full_tp_plan_, param_name_):
-                match = re.sub("[0-9]+", "*", plan[0])
-                current_module_plan = full_tp_plan[match]
-            if current_module_plan is not None:
-                if current_module_plan is not None:
-                    rank = device_map[""].index
-                    translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
-                    layer = model.get_submodule(param_name.rsplit(".", 1)[0])
-                    row, col = param_shape
-                    if "row" in current_module_plan or "down" in param_name:
-                        param = param[:, rank * (col // len(device_mesh)) : (rank + 1) * (col // len(device_mesh))]
-                    else:
-                        param = param[rank * (row // len(device_mesh)) : (rank + 1) * (row // len(device_mesh)), :]
-                    with torch.no_grad():
-                        layer.weight._local_tensor = param.to(
-                            device_map[""], dtype=param_casting_dtype, non_blocking=True
-                        )
+            if param_name.startswith(start_prefix):
+                param_name = param_name[len(start_prefix) :]
+
+            module_name = param_name
+            set_module_kwargs = {}
+            param = file_pointer.get_slice(param_name)
+            # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+            # in int/uint/bool and not cast them.
+            is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.get_dtype() == torch.float8_e4m3fn
+            if dtype is not None and "F" in param.get_dtype() and not is_param_float8_e4m3fn:
+                if (
+                    keep_in_fp32_modules is not None
+                    and keep_in_fp32_modules.search(param_name)
+                    and dtype == torch.float16
+                ):
+                    param_casting_dtype = torch.float32
                 else:
-                    set_module_tensor_to_device(
-                        model, param_name, device_map[""], param[:].to(dtype=param_casting_dtype, non_blocking=True)
+                    param_casting_dtype = dtype
+
+            # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
+            # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
+            # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+            old_param = model
+            splits = param_name.split(".")
+            for split in splits:
+                # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
+                old_param = getattr(old_param, split, None)
+                if old_param is None:
+                    break
+
+            if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+                old_param = None
+
+            if old_param is not None:
+                if param_casting_dtype is None:
+                    param_casting_dtype = old_param.dtype
+
+                if old_param.is_contiguous():
+                    _param_to_contiguous = True  # TODO not taking into account anymore
+
+            # In this case, let's parallelize the modules!
+            if device_mesh is not None:
+                layer = param_name.rsplit(".", 1)[0]
+                try:
+                    module_to_tp: torch.nn.Module = model.get_submodule(layer)
+                except Exception:
+                    raise ValueError(
+                        "The config tp plan is wrong because the layer is not a liner layer, nor an embedding"
                     )
-        else:
-            set_module_kwargs["param"] = param[:]
-            if device_map is None:
-                param_device = "cpu"
-            else:
-                # find next higher level module that is defined in device_map:
-                # bert.lm_head.weight -> bert.lm_head -> bert -> ''
-                while len(module_name) > 0 and module_name not in device_map:
-                    module_name = ".".join(module_name.split(".")[:-1])
-                if module_name == "" and "" not in device_map:
-                    # TODO: group all errors and raise at the end.
-                    raise ValueError(f"{param_name} doesn't have any device set.")
-                param_device = device_map[module_name]
 
-            if param_device == "disk":
-                if not is_safetensors:
-                    offload_index = offload_weight(param, param_name, offload_folder, offload_index)
-            elif param_device == "cpu" and state_dict_index is not None:
-                state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-            elif (
-                not is_quantized
-                or (not hf_quantizer.requires_parameters_quantization)
-                or (
-                    not hf_quantizer.check_quantized_param(
-                        model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+                prefix = "model"
+                if prefix is not None:
+                    param_name_ = param_name.replace(f"{prefix}.", "")
+
+                current_module_plan = None
+                full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
+                if plan := re.search(full_tp_plan_, param_name_):
+                    match = re.sub("[0-9]+", "*", plan[0])
+                    current_module_plan = full_tp_plan[match]
+                if current_module_plan is not None:
+                    if current_module_plan is not None:
+                        rank = device_map[""].index
+                        translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
+                        layer = model.get_submodule(param_name.rsplit(".", 1)[0])
+                        row, col = param_shape
+                        if "row" in current_module_plan or "down" in param_name:
+                            param = param[:, rank * (col // device_mesh.size) : (rank + 1) * (col // device_mesh.size)]
+                        else:
+                            param = param[rank * (row // device_mesh.size) : (rank + 1) * (row // device_mesh.size), :]
+                        with torch.no_grad():
+                            layer.weight._local_tensor = param.to(
+                                device_map[""], dtype=param_casting_dtype, non_blocking=True
+                            )
+                    else:
+                        setattr(model,param_name, param[:].to(dtype=param_casting_dtype,device=device_map[""], non_blocking=True))
+
+            else:
+                set_module_kwargs["param"] = param[:]
+                if device_map is None:
+                    param_device = "cpu"
+                else:
+                    # find next higher level module that is defined in device_map:
+                    # bert.lm_head.weight -> bert.lm_head -> bert -> ''
+                    while len(module_name) > 0 and module_name not in device_map:
+                        module_name = ".".join(module_name.split(".")[:-1])
+                    if module_name == "" and "" not in device_map:
+                        # TODO: group all errors and raise at the end.
+                        raise ValueError(f"{param_name} doesn't have any device set.")
+                    param_device = device_map[module_name]
+
+                if param_device == "disk":
+                    if not is_safetensors:
+                        offload_index = offload_weight(param, param_name, offload_folder, offload_index)
+                elif param_device == "cpu" and state_dict_index is not None:
+                    state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+                elif (
+                    not is_quantized
+                    or (not hf_quantizer.requires_parameters_quantization)
+                    or (
+                        not hf_quantizer.check_quantized_param(
+                            model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+                        )
                     )
-                )
-            ):
-                if is_fsdp_enabled():
-                    param_device = "cpu" if is_local_dist_rank_0() else "meta"
+                ):
+                    if is_fsdp_enabled():
+                        param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
-                # For backward compatibility with older versions of `accelerate` and for non-quantized params
-                set_module_tensor_to_device(model, param_name, param_device, param[:])
-            else:
-                hf_quantizer.create_quantized_param(
-                    model, param, param_name, param_device, state_dict, unexpected_keys
-                )
-                # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-                # and then cast it to CPU to avoid excessive memory usage on each GPU
-                # in comparison to the sharded model across GPUs.
-                if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                    module, tensor_name = get_module_from_name(model, param_name)
-                    value = getattr(module, tensor_name)
-                    param_to = "cpu"
-                    if is_fsdp_enabled() and not is_local_dist_rank_0():
-                        param_to = "meta"
-                    val_kwargs = {}
-                    if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
-                        val_kwargs["requires_grad"] = False
-                    value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
-                    setattr(module, tensor_name, value)
-                # TODO: consider removing used param_parts from state_dict before return
-
+                    # For backward compatibility with older versions of `accelerate` and for non-quantized params
+                    setattr(model,param_name, param[:].to(dtype=torch.float16, non_blocking=True))
+                else:
+                    hf_quantizer.create_quantized_param(
+                        model, param, param_name, param_device, state_dict, unexpected_keys
+                    )
+                    # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+                    # and then cast it to CPU to avoid excessive memory usage on each GPU
+                    # in comparison to the sharded model across GPUs.
+                    if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                        module, tensor_name = get_module_from_name(model, param_name)
+                        value = getattr(module, tensor_name)
+                        param_to = "cpu"
+                        if is_fsdp_enabled() and not is_local_dist_rank_0():
+                            param_to = "meta"
+                        val_kwargs = {}
+                        if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                            val_kwargs["requires_grad"] = False
+                        value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                        setattr(module, tensor_name, value)
+                    # TODO: consider removing used param_parts from state_dict before return
     return error_msgs, offload_index, state_dict_index
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
-        splits = weights_name.split(".")
-        splits = splits[:-1] + [variant] + splits[-1:]
-        weights_name = ".".join(splits)
-
+        path, name = weights_name.rsplit(".")
+        weights_name = f"{path}.{variant}.{name}"
     return weights_name
 
 
@@ -4470,8 +4464,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ):
                 device_map_kwargs["offload_buffers"] = True
 
-            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-                dispatch_model(model, **device_map_kwargs)
+            # if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+            #     dispatch_model(model, **device_map_kwargs)
 
         # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
         # not part of the state_dict (persistent=False)
@@ -4787,8 +4781,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
+            keep_in_fp32_modules = re.compile("|".join(keep_in_fp32_modules))
             for name, param in model.named_parameters():
-                if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                if keep_in_fp32_modules.search(name):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
