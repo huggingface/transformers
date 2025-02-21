@@ -854,6 +854,13 @@ class JanusVQVAEHead(nn.Module):
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["language_model.lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
+    # Add modules that should not be split across GPUs during parallelization
+    _no_split_modules = ["JanusVisionTransformer",
+                         "JanusVisionAlignerMLP",
+                         "JanusVQVAE",
+                         "JanusVQVAEAligner",
+                         "JanusVQVAEHead"
+                         ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)

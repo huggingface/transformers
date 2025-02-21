@@ -14,6 +14,8 @@
 """Janus model configuration"""
 
 from typing import List
+
+from ... import LlamaConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -236,11 +238,25 @@ class JanusConfig(PretrainedConfig):
     def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
         super().__init__(**kwargs)
 
+        for config_name, config_class in self.sub_configs.items():
+            if config_name == "text_config":
+                continue
+            elif locals()[config_name] is None:
+                logger.info(f"`{config_name}` is None. Initializing with default {config_class.__name__} values")
+                setattr(self, config_name, config_class())
+            elif isinstance(locals()[config_name], dict):
+                setattr(self, config_name, config_class(**locals()[config_name]))
+            elif isinstance(locals()[config_name], config_class):
+                setattr(self, config_name, locals()[config_name])
+            else:
+                raise ValueError(f"Invalid type for `{config_name}`. Must be either `dict` or `{config_class.__name__}`."
+                                 f" Type found: {type(locals()[config_name])}")
+
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
             self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
-            logger.info("`text_config` is None. Initializing with default JanusTextConfig values")
+            logger.info("`text_config` is None. Initializing with default values")
             self.text_config = CONFIG_MAPPING["llama"](
                 hidden_size=2048,
                 num_hidden_layers=24,
@@ -250,17 +266,12 @@ class JanusConfig(PretrainedConfig):
                 num_key_value_heads=16,
                 vocab_size=102400,
             )
+        elif isinstance(text_config, LlamaConfig):
+            self.text_config = text_config
+        else:
+            raise ValueError(f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
+                             f" Type found: {type(text_config)}")
 
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`encodr_vision_config` is None. Initializing with default JanusVisionConfig values")
-
-        if vq_config is None:
-            vq_config = {}
-            logger.info("`text_config` is None. Initializing with default JanusVQVAEConfig values")
-
-        self.vision_config = JanusVisionConfig(**vision_config)
-        self.vq_config = JanusVQVAEConfig(**vq_config)
 
         # This dimension is required when decoding discrete image tokens to continous input.
         self.vq_config.num_patches = self.vision_config.image_size//self.vision_config.patch_size

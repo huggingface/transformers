@@ -32,12 +32,11 @@ from huggingface_hub import snapshot_download
 
 from transformers import (
     AutoTokenizer,
-    JanusConfig,
-    JanusForConditionalGeneration,
+    JanusForConditionalGeneration, LlamaConfig,
 )
 # TODO: Temporary, was getting import errors if not importing like this
 from transformers.models.janus.configuration_janus import (
-    JanusTextConfig,
+    JanusConfig,
     JanusVisionConfig,
     JanusVQVAEConfig,
 )
@@ -311,7 +310,7 @@ def convert_model(
         "eos_token_id": tokenizer.eos_token_id,
     })
             
-    text_config = JanusTextConfig(**text_config_kwargs)
+    text_config = LlamaConfig(**text_config_kwargs)
 
     # Create vision config
     vision_config_kwargs = {}

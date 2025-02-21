@@ -795,6 +795,7 @@ class JanusVQVAEVectorQuantizer(nn.Module):
 
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
+        # l2 normalization on the last dimension
         hidden_state_quant = F.normalize(hidden_state_quant, p=2, dim=-1)
 
         # reshape back to match original input shape
@@ -1243,6 +1244,14 @@ class JanusVQVAEHead(nn.Module):
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["language_model.lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
+    # Add modules that should not be split across GPUs during parallelization
+    _no_split_modules = [
+        "JanusVisionTransformer",
+        "JanusVisionAlignerMLP",
+        "JanusVQVAE",
+        "JanusVQVAEAligner",
+        "JanusVQVAEHead",
+    ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -1267,7 +1276,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
 
-    def prepare_emeddings_for_image_generation(self, inputs):
+    def prepare_embeddings_for_image_generation(self, inputs):
         hidden_state = self.gen_embed(inputs)
         hidden_state = self.gen_aligner(hidden_state)
         return hidden_state
@@ -1399,6 +1408,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
+    # ToDo: How to restrict the image generation to only few generation startegies.
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor, **kwargs):
         generation_config = kwargs.get("generation_config")
