@@ -967,6 +967,8 @@
         title: Segment Anything
       - local: model_doc/siglip
         title: SigLIP
+      - local: model_doc/smolvlm
+        title: SmolVLM
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas

@@ -777,6 +777,7 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.smolvlm": ["SmolVLMConfig"],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "Speech2TextConfig",
@@ -1289,6 +1290,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.smolvlm"].extend(["SmolVLMImageProcessor"])
     _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
@@ -3564,6 +3566,16 @@ else:
             "SiglipPreTrainedModel",
             "SiglipTextModel",
             "SiglipVisionModel",
+        ]
+    )
+    _import_structure["models.smolvlm"].extend(
+        [
+            "SmolVLMForConditionalGeneration",
+            "SmolVLMModel",
+            "SmolVLMPreTrainedModel",
+            "SmolVLMProcessor",
+            "SmolVLMVisionConfig",
+            "SmolVLMVisionTransformer",
         ]
     )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
@@ -5940,6 +5952,7 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.smolvlm import SmolVLMConfig
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         Speech2TextConfig,
@@ -6469,6 +6482,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.smolvlm import SmolVLMImageProcessor
         from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
@@ -8289,6 +8303,14 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
+        )
+        from .models.smolvlm import (
+            SmolVLMForConditionalGeneration,
+            SmolVLMModel,
+            SmolVLMPreTrainedModel,
+            SmolVLMProcessor,
+            SmolVLMVisionConfig,
+            SmolVLMVisionTransformer,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
