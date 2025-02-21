@@ -35,10 +35,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVa
 from zipfile import is_zipfile
 
 import torch
+import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
-import torch.distributed.tensor
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
@@ -877,7 +877,7 @@ def _load_state_dict_into_meta_model(
             layer = param_name.rsplit('.', 1)[0]
             try:
                 module_to_tp: torch.nn.Module = model.get_submodule(layer)
-            except Exception as e:
+            except Exception:
                 raise ValueError("The config tp plan is wrong because the layer is not a liner layer, nor an embedding")
 
             prefix = "model"
@@ -4467,7 +4467,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances)
-        if device_map is not None and device_mesh is None:
         # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances)
         if device_map is not None and device_mesh is None:
