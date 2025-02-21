@@ -564,8 +564,11 @@ _import_structure = {
     ],
     "models.janus": [
         "JanusConfig",
+        "JanusVQVAEConfig",
+        "JanusVisionConfig",
         "JanusImageProcessor",
-        "JanusProcessor"
+        "JanusProcessor",
+
     ],
     "models.llava_next": [
         "LlavaNextConfig",
@@ -1264,6 +1267,7 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.janus"].append("JanusImageProcessor")
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -5675,6 +5679,9 @@ if TYPE_CHECKING:
     from .models.jamba import JambaConfig
     from .models.janus import (
         JanusConfig,
+        JanusProcessor,
+        JanusVQVAEConfig,
+        JanusVisionConfig,
     )
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (

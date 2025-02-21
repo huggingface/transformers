@@ -15,7 +15,6 @@
 
 from typing import List
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
