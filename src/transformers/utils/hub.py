@@ -425,6 +425,7 @@ def cached_files(
                 else:
                     raise EnvironmentError(f"Could not locate {filename} inside {path_or_repo_id}.")
 
+    # Either all the files were found, or some were _CACHED_NO_EXIST but we do not raise for missing entries
     if file_counter == len(filenames):
         return existing_files if len(existing_files) > 0 else None
 
