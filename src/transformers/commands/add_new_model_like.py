@@ -29,6 +29,7 @@ from ..models import auto as auto_module
 from ..models.auto.configuration_auto import model_type_to_module_name
 from ..utils import is_flax_available, is_tf_available, is_torch_available, logging
 from . import BaseTransformersCLICommand
+from .add_fast_image_processor import add_fast_image_processor
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -959,7 +960,6 @@ def add_model_to_main_init(
                 block.append(lines[idx])
                 idx += 1
             block = "\n".join(block)
-            print("block", block)
             new_lines.append(block)
 
             add_block = True
@@ -1064,7 +1064,6 @@ def add_model_to_auto_classes(
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
         model_classes (`Dict[str, List[str]]`): A dictionary framework to list of model classes implemented.
     """
-    print("AUTO_CLASSES_PATTERNS", AUTO_CLASSES_PATTERNS)
     for filename in AUTO_CLASSES_PATTERNS:
         # Extend patterns with all model classes if necessary
         new_patterns = []
@@ -1126,7 +1125,6 @@ def add_model_to_auto_classes(
             new_model_line = new_model_line.replace(
                 old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
             )
-            print("full_name", full_name, "old_model_line", old_model_line, "new_model_line", new_model_line)
             add_content_to_file(full_name, new_model_line, add_after=old_model_line)
 
     # Tokenizers require special handling
@@ -1310,6 +1308,7 @@ def create_new_model_like(
     add_copied_from: bool = True,
     frameworks: Optional[List[str]] = None,
     old_checkpoint: Optional[str] = None,
+    create_fast_image_processor: bool = False,
 ):
     """
     Creates a new model module like a given model of the Transformers library.
@@ -1324,6 +1323,8 @@ def create_new_model_like(
         old_checkpoint (`str`, *optional*):
             The name of the base checkpoint for the old model. Should be passed along when it can't be automatically
             recovered from the `model_type`.
+        create_fast_image_processor (`bool`, *optional*, defaults to `False`):
+            Whether or not to add a fast image processor to the new model, if the old model had only a slow one.
     """
     # Retrieve all the old model info.
     model_info = retrieve_info_for_model(model_type, frameworks=frameworks)
@@ -1451,6 +1452,10 @@ def create_new_model_like(
     duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
     insert_model_in_doc_toc(old_model_patterns, new_model_patterns)
 
+    # 6. Add fast image processor if necessary
+    if create_fast_image_processor:
+        add_fast_image_processor(model_name=new_model_patterns.model_lower_cased)
+
     # 6. Warn the user for duplicate patterns
     if old_model_patterns.model_type == old_model_patterns.checkpoint:
         print(
@@ -1519,6 +1524,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
                 self.add_copied_from,
                 self.frameworks,
                 self.old_checkpoint,
+                self.create_fast_image_processor,
             ) = get_user_input()
 
         self.path_to_repo = path_to_repo
@@ -1538,6 +1544,7 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
             add_copied_from=self.add_copied_from,
             frameworks=self.frameworks,
             old_checkpoint=self.old_checkpoint,
+            create_fast_image_processor=self.create_fast_image_processor,
         )
 
 
@@ -1691,6 +1698,7 @@ def get_user_input():
         feature_extractor_class = old_feature_extractor_class
         processor_class = old_processor_class
         tokenizer_class = old_tokenizer_class
+        create_fast_image_processor = False
     else:
         if old_tokenizer_class is not None:
             tokenizer_class = get_user_field(
@@ -1727,6 +1735,16 @@ def get_user_input():
             )
         else:
             processor_class = None
+        if old_image_processor_class is not None and old_image_processor_fast_class is None:
+            create_fast_image_processor = get_user_field(
+                "A fast image processor can be created from the slow one, but modifications might be needed. "
+                "Should we add a fast image processor class for this model (recommended, yes/no)? ",
+                convert_to=convert_to_bool,
+                default_value="yes",
+                fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
+            )
+        else:
+            create_fast_image_processor = False
 
     model_patterns = ModelPatterns(
         model_name,
@@ -1757,6 +1775,7 @@ def get_user_input():
         default_value="yes",
         fallback_message="Please answer yes/no, y/n, true/false or 1/0.",
     )
+
     if all_frameworks:
         frameworks = None
     else:
@@ -1766,4 +1785,4 @@ def get_user_input():
         )
         frameworks = list(set(frameworks.split(" ")))
 
-    return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint)
+    return (old_model_type, model_patterns, add_copied_from, frameworks, old_checkpoint, create_fast_image_processor)
