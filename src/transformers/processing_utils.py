@@ -1129,7 +1129,7 @@ class ProcessorMixin(PushToHubMixin):
         if hasattr(transformers_module, module_name):
             return getattr(transformers_module, module_name)
         elif module_name in transformers_module.models.auto.configuration_auto.ALL_CUSTOM_CLASSES:
-            return transformers_module.auto.configuration_auto.ALL_CUSTOM_CLASSES[module_name]
+            return transformers_module.models.auto.configuration_auto.ALL_CUSTOM_CLASSES[module_name]
         else:
             raise ValueError(
                 f"Could not find module {module_name} in `transformers`. If this is a custom class, "
