@@ -147,6 +147,8 @@ class EuroBertConfig(LlamaConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_attention_heads
+        classifier_pooling (`str`, *optional*, defaults to `late`):
+            The pooling strategy to use for the classifier. Can be one of ['bos', 'mean', 'late'].
 
     ```python
     >>> from transformers import EuroBertModel, EuroBertConfig
@@ -186,7 +188,6 @@ class EuroBertConfig(LlamaConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        pretraining_tp=1,
         classifier_pooling="late",
         **kwargs,
     ):
@@ -205,7 +206,7 @@ class EuroBertConfig(LlamaConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
-            pretraining_tp=pretraining_tp,
+            pretraining_tp=1,
             tie_word_embeddings=tie_word_embeddings,
             rope_theta=rope_theta,
             rope_scaling=rope_scaling,
