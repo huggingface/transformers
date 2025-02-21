@@ -430,21 +430,17 @@ class JanusConfig(PretrainedConfig):
     def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
         super().__init__(**kwargs)
 
-        if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is None. Initializing with default JanusTextConfig values")
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`encodr_vision_config` is None. Initializing with default JanusVisionConfig values")
-
-        if vq_config is None:
-            vq_config = {}
-            logger.info("`text_config` is None. Initializing with default JanusVQVAEConfig values")
-
-        self.text_config = JanusTextConfig(**text_config)
-        self.vision_config = JanusVisionConfig(**vision_config)
-        self.vq_config = JanusVQVAEConfig(**vq_config)
+        for config_name, config_class in self.sub_configs.items():
+            if locals()[config_name] is None:
+                logger.info(f"`{config_name}` is None. Initializing with default {config_class.__name__} values")
+                setattr(self, config_name, config_class())
+            elif isinstance(locals()[config_name], dict):
+                setattr(self, config_name, config_class(**locals()[config_name]))
+            elif isinstance(locals()[config_name], config_class):
+                setattr(self, config_name, locals()[config_name])
+            else:
+                raise ValueError(f"Invalid type for `{config_name}`. Must be either `dict` or `{config_class.__name__}`."
+                                 f" Type found: {type(locals()[config_name])}")
 
 
 __all__ = ["JanusVQVAEConfig", "JanusTextConfig", "JanusVisionConfig", "JanusConfig"]

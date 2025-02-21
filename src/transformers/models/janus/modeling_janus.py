@@ -953,6 +953,7 @@ class JanusVQVAEVectorQuantizer(nn.Module):
         emb_dim: int = self.embedding.weight.shape[-1]
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
+        # l2 normalization on the last dimension
         hidden_state_quant = F.normalize(hidden_state_quant, p=2, dim=-1)
 
         # reshape back to match original input shape

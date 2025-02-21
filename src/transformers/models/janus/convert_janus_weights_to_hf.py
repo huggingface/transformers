@@ -24,19 +24,18 @@ from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
 from transformers import (
-    AutoConfig,
-    AutoImageProcessor,
-    AutoModelForCausalLM,
     AutoTokenizer,
     JanusConfig,
     JanusForConditionalGeneration,
-    JanusImageProcessor,
-    JanusProcessor,
-    SiglipVisionConfig,
+)
+# TODO: Temporary, was getting import errors if not importing like this
+from transformers.models.janus.configuration_janus import (
     JanusTextConfig,
     JanusVisionConfig,
     JanusVQVAEConfig,
 )
+from transformers.models.janus.image_processing_janus import JanusImageProcessor
+from transformers.models.janus.processing_janus import JanusProcessor
 from safetensors.torch import load_file
 
 # Mapping dictionaries for converting keys
@@ -121,7 +120,7 @@ def convert_state_dict_to_hf(state_dict):
                 if re.search(rf'\b{re.escape(old)}\b', new_key):
                     new_key = new_key.replace(old, new)
             new_key = new_key.replace("vision_tower", "encoder")
-        elif "vqmodel" in new_key:
+        else:
             for old, new in VQ_MAPPINGS.items():
                 new_key = new_key.replace(old, new)
 
@@ -147,14 +146,17 @@ def ensure_model_downloaded(repo_id: str = None, revision: str = None, local_dir
         revision: Optional git revision to use
         local_dir: Optional local directory path where model files should be stored/found
     """
+    if local_dir is not None:
+        if os.path.exists(local_dir):
+            print(f"Using provided local directory: {local_dir}")
+            return local_dir
+        else:
+            raise ValueError(f"Provided local_dir {local_dir} does not exist")
+            
     if repo_id is None:
-        raise ValueError("repo_id must be provided")
+        raise ValueError("Either repo_id or local_dir must be provided")
         
     print(f"Ensuring {repo_id} (revision: {revision or 'latest'}) is downloaded...")
-    
-    if local_dir is not None:
-        print(f"Using provided local directory: {local_dir}")
-        os.makedirs(local_dir, exist_ok=True)
     
     try:
         # First try to find files locally
@@ -211,8 +213,9 @@ def load_model_state_dict(input_path: str) -> dict:
         raise ValueError(f"No model files found in {input_path}")
 
 def convert_model(
-    repo_id,
-    text_model_id,
+    repo_id=None,
+    local_dir=None,
+    text_model_id=None,
     output_dir=None,
     output_hub_path=None,
     safe_serialization=True,
@@ -221,11 +224,14 @@ def convert_model(
     """Convert and save the model weights, processor, and configuration."""
     if output_dir is None and output_hub_path is None:
         raise ValueError("At least one of output_dir or output_hub_path must be specified")
+    
+    if repo_id is None and local_dir is None:
+        raise ValueError("Either repo_id or local_dir must be specified")
 
     torch.set_default_dtype(torch.float16)
 
     # Download or locate model files
-    input_path = ensure_model_downloaded(repo_id, revision)
+    input_path = ensure_model_downloaded(repo_id=repo_id, revision=revision, local_dir=local_dir)
     
     # Load configuration files
     with open(os.path.join(input_path, "config.json"), "r") as f:
@@ -239,25 +245,35 @@ def convert_model(
     with open(os.path.join(input_path, "tokenizer_config.json"), "r") as f:
         tokenizer_config = json.load(f)
 
-    # Create tokenizer with special tokens
-    tokenizer = AutoTokenizer.from_pretrained(
-        text_model_id,
-        bos_token=special_tokens_map["bos_token"],
-        eos_token=special_tokens_map["eos_token"],
-        pad_token=special_tokens_map["pad_token"],
-        additional_special_tokens=special_tokens_map["additional_special_tokens"],
-        model_max_length=tokenizer_config["model_max_length"],
-    )
+    # Create tokenizer directly from tokenizer.json if it exists
+    tokenizer_json_path = os.path.join(input_path, "tokenizer.json")
+    if os.path.exists(tokenizer_json_path) and not text_model_id:
+        tokenizer = AutoTokenizer.from_pretrained(
+            input_path,  # This will load tokenizer.json directly
+            model_max_length=tokenizer_config["model_max_length"],
+        )
+    else:
+        # Fallback to creating from text_model_id with special tokens
+        tokenizer = AutoTokenizer.from_pretrained(
+            text_model_id,
+            bos_token=special_tokens_map["bos_token"],
+            eos_token=special_tokens_map["eos_token"],
+            pad_token=special_tokens_map["pad_token"],
+            additional_special_tokens=special_tokens_map["additional_special_tokens"],
+            model_max_length=tokenizer_config["model_max_length"],
+        )
 
     # Create image processor from config
-    image_processor = JanusImageProcessor(
-        do_resize=preprocessor_config.get("do_resize", True),
-        size={"height": preprocessor_config["image_size"], "width": preprocessor_config["image_size"]},
-        do_normalize=preprocessor_config.get("do_normalize", True),
-        image_mean=preprocessor_config.get("image_mean", [0.5, 0.5, 0.5]),
-        image_std=preprocessor_config.get("image_std", [0.5, 0.5, 0.5]),
-        min_size=preprocessor_config.get("min_size", 14),
-    )
+    image_processor_kwargs = {}
+    for key in ["do_normalize", "image_mean", "image_std", "min_size", "rescale_factor"]:
+        if key in preprocessor_config:
+            image_processor_kwargs[key] = preprocessor_config[key]
+    
+    if "image_size" in preprocessor_config:
+        image_processor_kwargs["size"] = {"height": preprocessor_config["image_size"], "width": preprocessor_config["image_size"]}
+    
+    
+    image_processor = JanusImageProcessor(**image_processor_kwargs)
     
     # Create processor with chat template
     processor = JanusProcessor(
@@ -274,26 +290,36 @@ def convert_model(
         processor.push_to_hub(output_hub_path)
 
     # Create model configurations
-    text_config = JanusTextConfig(
-        vocab_size=config_data["language_config"]["vocab_size"],
-        hidden_size=config_data["language_config"]["hidden_size"],
-        intermediate_size=config_data["language_config"]["intermediate_size"],
-        num_hidden_layers=config_data["language_config"]["num_hidden_layers"],
-        num_attention_heads=config_data["language_config"]["num_attention_heads"],
-        num_key_value_heads=config_data["language_config"].get("num_key_value_heads", None),
-        hidden_act=config_data["language_config"].get("hidden_act", "silu"),
-        max_position_embeddings=config_data["language_config"]["max_position_embeddings"],
-        torch_dtype=config_data["language_config"].get("torch_dtype", "bfloat16"),
-    )
+    text_config_kwargs = {}
+    for key in ["vocab_size", "hidden_size", "intermediate_size", "num_hidden_layers", 
+                "num_attention_heads", "num_key_value_heads", "hidden_act", "max_position_embeddings",
+                "torch_dtype"]:
+        if key in config_data["language_config"]:
+            text_config_kwargs[key] = config_data["language_config"][key]
+    
+    # Add token IDs from tokenizer
+    text_config_kwargs.update({
+        "pad_token_id": tokenizer.pad_token_id,
+        "bos_token_id": tokenizer.bos_token_id,
+        "eos_token_id": tokenizer.eos_token_id,
+    })
+            
+    text_config = JanusTextConfig(**text_config_kwargs)
 
-    vision_config = JanusVisionConfig(
-        hidden_size=config_data["vision_config"]["params"]["model_name"].endswith("large") and 1024 or 768,
-        image_size=config_data["vision_config"]["params"]["image_size"],
-        select_feature=config_data["vision_config"]["params"]["select_feature"],
-        select_layer=config_data["vision_config"]["params"]["select_layer"],
-        aligner_projection_size=config_data["aligner_config"]["params"]["n_embed"],
-        depth=config_data["aligner_config"]["params"]["depth"],
-    )
+    # Create vision config
+    vision_config_kwargs = {}
+    for key in ["image_size", "select_feature", "select_layer"]:
+        if key in config_data["vision_config"]["params"]:
+            vision_config_kwargs[key] = config_data["vision_config"]["params"][key]
+    
+    # Add aligner params if present
+    if "aligner_config" in config_data and "params" in config_data["aligner_config"]:
+        if "n_embed" in config_data["aligner_config"]["params"]:
+            vision_config_kwargs["aligner_projection_size"] = config_data["aligner_config"]["params"]["n_embed"]
+        if "depth" in config_data["aligner_config"]["params"]:
+            vision_config_kwargs["depth"] = config_data["aligner_config"]["params"]["depth"]
+            
+    vision_config = JanusVisionConfig(**vision_config_kwargs)
 
     vq_config = JanusVQVAEConfig(
         embed_dim=config_data["gen_vision_config"]["params"]["n_embed"],
@@ -328,7 +354,7 @@ def convert_model(
 
     # Load converted state dict
     print("Loading converted weights into model...")
-    model.load_state_dict(state_dict, strict=True)
+    model.load_state_dict(state_dict, strict=True, assign=True)
 
     # Save the model
     if output_dir:
@@ -352,7 +378,12 @@ def main():
     parser.add_argument(
         "--repo_id",
         help="HuggingFace Hub repo ID for the model",
-        required=True,
+        default=None,
+    )
+    parser.add_argument(
+        "--local_dir",
+        help="Local directory containing the model files",
+        default=None,
     )
     parser.add_argument(
         "--revision",
@@ -371,22 +402,25 @@ def main():
     )
     parser.add_argument(
         "--text_model_id",
-        help="Hub ID of the text model to get tokenizer from",
-        required=True,
+        help="Hub ID of the text model to get tokenizer from. Optional if tokenizer.json exists in the model directory.",
+        required=False,
     )
     parser.add_argument(
         "--safe_serialization",
-        type=bool,
-        default=True,
+        action="store_true",
         help="Whether to save using safetensors",
     )
     args = parser.parse_args()
 
     if args.output_dir is None and args.output_hub_path is None:
         raise ValueError("At least one of --output_dir or --output_hub_path must be specified")
+        
+    if args.repo_id is None and args.local_dir is None:
+        raise ValueError("Either --repo_id or --local_dir must be specified")
 
     convert_model(
         repo_id=args.repo_id,
+        local_dir=args.local_dir,
         text_model_id=args.text_model_id,
         output_dir=args.output_dir,
         output_hub_path=args.output_hub_path,
@@ -395,5 +429,4 @@ def main():
     )
 
 if __name__ == "__main__":
-    # main()
-    ensure_model_downloaded("deepseek-ai/Janus-Pro-1B", local_dir="tmp/hub_code")
+    main()
