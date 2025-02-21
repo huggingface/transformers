@@ -35,9 +35,7 @@ def get_docstring_indentation_level(func):
 
 def add_start_docstrings(*docstr):
     def docstring_decorator(fn):
-        indentation = get_docstring_indentation_level(fn)
-        docs = [textwrap.indent(textwrap.dedent(doc), " " * indentation) for doc in docstr]
-        fn.__doc__ = "".join(docs) + (fn.__doc__ if fn.__doc__ is not None else "")
+        fn.__doc__ = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
         return fn
 
     return docstring_decorator
@@ -45,23 +43,36 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
-        # Indent the full docstr with 2 Python indentation level as it is a class method
-        docs = [textwrap.indent(textwrap.dedent(doc), " " * 8) for doc in docstr]
-        docstring = "".join(docs) + (fn.__doc__ if fn.__doc__ is not None else "")
+
         class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
-        intro = f"        The {class_name} forward method, overrides the `__call__` special method."
-        note = r"""
+        intro = rf"""    The {class_name} forward method, overrides the `__call__` special method.
 
-        <Tip>
+    <Tip>
 
-        Although the recipe for forward pass needs to be defined within this function, one should call the [`Module`]
-        instance afterwards instead of this since the former takes care of running the pre and post processing steps while
-        the latter silently ignores them.
+    Although the recipe for forward pass needs to be defined within this function, one should call the [`Module`]
+    instance afterwards instead of this since the former takes care of running the pre and post processing steps while
+    the latter silently ignores them.
 
-        </Tip>
+    </Tip>
 """
 
-        fn.__doc__ = intro + note + docstring
+        correct_indentation = get_docstring_indentation_level(fn)
+        current_doc = fn.__doc__ if fn.__doc__ is not None else ""
+        try:
+            first_non_empty = next(line for line in current_doc.splitlines() if line.strip() != "")
+            doc_indentation = len(first_non_empty) - len(first_non_empty.lstrip())
+        except StopIteration:
+            doc_indentation = correct_indentation
+        
+        docs = docstr
+        # In this case, the correct indentation level (class method, 2 Python levels) was respected, and we should
+        # correctly reindent everything. Otherwise, the doc uses a single indentation level
+        if doc_indentation == 4 + correct_indentation:
+            docs = [textwrap.indent(textwrap.dedent(doc), " " * correct_indentation) for doc in docstr]
+            intro = textwrap.indent(textwrap.dedent(intro), " " * correct_indentation)
+            
+        docstring = "".join(docs) + current_doc
+        fn.__doc__ = intro + docstring
         return fn
 
     return docstring_decorator
@@ -69,9 +80,7 @@ def add_start_docstrings_to_model_forward(*docstr):
 
 def add_end_docstrings(*docstr):
     def docstring_decorator(fn):
-        indentation = get_docstring_indentation_level(fn)
-        docs = [textwrap.indent(textwrap.dedent(doc), " " * indentation) for doc in docstr]
-        fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "".join(docs)
+        fn.__doc__ = (fn.__doc__ if fn.__doc__ is not None else "") + "".join(docstr)
         return fn
 
     return docstring_decorator
@@ -1097,9 +1106,6 @@ def add_code_sample_docstrings(
     revision=None,
 ):
     def docstring_decorator(fn):
-        indentation = get_docstring_indentation_level(fn)
-        docs = [textwrap.indent(textwrap.dedent(doc), " " * indentation) for doc in docstr]
-
         # model_class defaults to function's class if not specified otherwise
         model_class = fn.__qualname__.split(".")[0] if model_cls is None else model_cls
 
@@ -1163,7 +1169,7 @@ def add_code_sample_docstrings(
         )
         if real_checkpoint is not None:
             code_sample = FAKE_MODEL_DISCLAIMER + code_sample
-        func_doc = (fn.__doc__ or "") + "".join(docs)
+        func_doc = (fn.__doc__ or "") + "".join(docstr)
         output_doc = "" if output_type is None else _prepare_output_docstrings(output_type, config_class)
         built_doc = code_sample.format(**doc_kwargs)
         if revision is not None:
@@ -1176,8 +1182,6 @@ def add_code_sample_docstrings(
                 f'from_pretrained("{checkpoint}")', f'from_pretrained("{checkpoint}", revision="{revision}")'
             )
 
-        output_doc = textwrap.indent(textwrap.dedent(output_doc), " " * indentation)
-        built_doc = textwrap.indent(textwrap.dedent(built_doc), " " * indentation)
         fn.__doc__ = func_doc + output_doc + built_doc
         return fn
 
