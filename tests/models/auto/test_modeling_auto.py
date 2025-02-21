@@ -535,16 +535,16 @@ class AutoModelTest(unittest.TestCase):
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 2)
-        self.assertEqual(counter.total_calls, 2)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
         # With a sharded checkpoint
         _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         with RequestCounter() as counter:
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 2)
-        self.assertEqual(counter.total_calls, 2)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
     def test_attr_not_existing(self):
         from transformers.models.auto.auto_factory import _LazyAutoMapping

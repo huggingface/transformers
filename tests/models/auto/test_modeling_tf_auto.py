@@ -298,13 +298,13 @@ class TFAutoModelTest(unittest.TestCase):
         with RequestCounter() as counter:
             _ = TFAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 2)
-        self.assertEqual(counter.total_calls, 2)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
         # With a sharded checkpoint
         _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
         with RequestCounter() as counter:
             _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
         self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 2)
-        self.assertEqual(counter.total_calls, 2)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)

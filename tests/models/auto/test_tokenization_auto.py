@@ -445,8 +445,8 @@ class AutoTokenizerTest(unittest.TestCase):
         with RequestCounter() as counter:
             _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
         self.assertEqual(counter["GET"], 0)
-        self.assertEqual(counter["HEAD"], 2)
-        self.assertEqual(counter.total_calls, 2)
+        self.assertEqual(counter["HEAD"], 1)
+        self.assertEqual(counter.total_calls, 1)
 
     def test_init_tokenizer_with_trust(self):
         nop_tokenizer_code = """
