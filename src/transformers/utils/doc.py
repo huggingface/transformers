@@ -18,6 +18,7 @@ Doc utilities: Utilities related to documentation
 import functools
 import re
 import types
+import textwrap
 
 
 def add_start_docstrings(*docstr):
@@ -30,6 +31,8 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
+        # Indent the full docstr with 2 Python indentation level as it is a class method
+        docstr = textwrap.indent(textwrap.dedent(docstr), "        ")
         docstring = "".join(docstr) + (fn.__doc__ if fn.__doc__ is not None else "")
         class_name = f"[`{fn.__qualname__.split('.')[0]}`]"
         intro = f"        The {class_name} forward method, overrides the `__call__` special method."
