@@ -1,19 +1,15 @@
 # uv pip install kornia einops hydra-core opencv-python-headless pillow requests matplotlib
-import pathlib
 
-import cv2
 import hydra.utils
-import numpy as np
 import requests
 import torch
 from datasets import load_dataset
 from omegaconf import OmegaConf
 from PIL import Image
-from torch import Tensor
 
-from transformers import AutoImageProcessor, AutoModel
+from transformers import AutoImageProcessor
 from transformers.models.efficientloftr.compare_versions import plot_pair
-from transformers.models.efficientloftr.original_eloftr import EfficientLoFTR
+
 
 torch.manual_seed(42)
 torch.set_printoptions(precision=15)

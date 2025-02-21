@@ -22,14 +22,11 @@ from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
 from transformers import SuperGlueImageProcessor
-from transformers.models.efficientloftr.modular_efficientloftr import (
+from transformers.models.efficientloftr.modeling_efficientloftr import (
     EfficientLoFTRConfig,
     EfficientLoFTRForKeypointMatching,
 )
 
-
-torch.manual_seed(42)
-torch.set_printoptions(precision=15)
 
 DEFAULT_MODEL_REPO = "stevenbucaille/efficient_loftr_pth"
 DEFAULT_FILE = "eloftr.pth"
@@ -58,16 +55,16 @@ def verify_model_outputs(model, device):
 
     predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
 
-    expected_max_number_keypoints = 384
+    expected_max_number_keypoints = 501
     expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
     expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
 
     expected_matches_values = torch.tensor([20, 21, 22, 23, 24, 25, 26, 27, 28, 29], dtype=torch.int64).to(device)
     expected_matching_scores_values = torch.tensor(
-        [0.8684, 0.5940, 0.5613, 0.5330, 0.8655, 0.7659, 0.4496, 0.3777, 0.4482, 0.6045]
+        [0.4148, 0.4459, 0.4732, 0.4315, 0.3388, 0.5651, 0.4266, 0.4288, 0.6642, 0.5476]
     ).to(device)
 
-    expected_number_of_matches = 384
+    expected_number_of_matches = 501
 
     assert outputs.matches.shape == expected_matches_shape
     assert outputs.matching_scores.shape == expected_matching_scores_shape
@@ -142,7 +139,7 @@ def write_model(
     os.makedirs(model_path, exist_ok=True)
 
     # ------------------------------------------------------------
-    # LightGlue config
+    # EfficientLoFTR config
     # ------------------------------------------------------------
 
     config = EfficientLoFTRConfig()
@@ -170,7 +167,7 @@ def write_model(
     del original_state_dict
     gc.collect()
 
-    print("Loading the checkpoint in a LightGlue model...")
+    print("Loading the checkpoint in a EfficientLoFTR model...")
     device = "cuda"
     with torch.device(device):
         model = EfficientLoFTRForKeypointMatching(config)

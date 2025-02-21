@@ -35,9 +35,9 @@ class EfficientLoFTRConfig(PretrainedConfig):
         batch_norm_eps: float = 1e-5,
         hidden_size: int = 256,
         rope_type: str = "2d",
-        rope_theta=10000.0,
-        fine_matching_slicedim=8,
-        fine_matching_regress_temperature=10.0,
+        rope_theta: float = 10000.0,
+        fine_matching_slicedim: int = 8,
+        fine_matching_regress_temperature: float = 10.0,
         **kwargs,
     ):
         self.stage_block_dims = stage_block_dims if stage_block_dims is not None else [64, 64, 128, 256]
@@ -71,6 +71,5 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.rope_type = rope_type
         self.rope_theta = rope_theta
 
-        # TODO checks on config size compatibilities
         assert self.hidden_size == self.stage_block_dims[-1]
         super().__init__(**kwargs)
