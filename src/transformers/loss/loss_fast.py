@@ -38,6 +38,74 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         self.weights = weights
         self.bg_sample = bg_sample
     
+    def preprocess_inputs(emb: torch.Tensor, instance: torch.Tensor, kernel: torch.Tensor, training_mask: torch.Tensor):
+        """
+        Preprocess input tensors by applying masks and reshaping them.
+        """
+        training_mask = (training_mask > 0.5).long()
+        kernel = (kernel > 0.5).long()
+        instance = instance * training_mask
+        instance_kernel = (instance * kernel).view(-1)
+        instance = instance.view(-1)
+        emb = emb.view(emb.shape[0], -1)
+        return emb, instance, instance_kernel
+
+    def compute_embedding_means(emb: torch.Tensor, instance_kernel: torch.Tensor, unique_labels: torch.Tensor):
+        """
+        Compute the mean embedding for each instance.
+        """
+        num_instance = unique_labels.size(0)
+        emb_mean = emb.new_zeros((emb.shape[0], num_instance), dtype=torch.float32)
+        for i, label in enumerate(unique_labels):
+            if label == 0:
+                continue
+            indices = instance_kernel == label
+            emb_mean[:, i] = torch.mean(emb[:, indices], dim=1)
+        return emb_mean
+
+    def compute_aggregation_loss(emb: torch.Tensor, instance: torch.Tensor, emb_mean: torch.Tensor, unique_labels: torch.Tensor, delta_v: float):
+        """
+        Compute the aggregation loss, which ensures that embeddings are close to their instance mean.
+        """
+        num_instance = unique_labels.size(0)
+        aggregation_loss = emb.new_zeros(num_instance, dtype=torch.float32)
+        for i, label in enumerate(unique_labels):
+            if label == 0:
+                continue
+            indices = instance == label
+            instance_embeddings = emb[:, indices]
+            distance = (instance_embeddings - emb_mean[:, i : i + 1]).norm(p=2, dim=0)
+            distance = F.relu(distance - delta_v) ** 2
+            aggregation_loss[i] = torch.mean(torch.log(distance + 1.0))
+        return torch.mean(aggregation_loss[1:])
+
+    def compute_discriminative_loss(emb_mean: torch.Tensor, unique_labels: torch.Tensor, delta_d: float, bg_sample: bool):
+        """
+        Compute the discriminative loss, which ensures that different instances are separated.
+        """
+        num_instance = unique_labels.size(0)
+        if num_instance <= 2:
+            return 0
+        
+        emb_interleave = emb_mean.permute(1, 0).repeat(num_instance, 1)
+        emb_band = emb_mean.permute(1, 0).repeat(1, num_instance).view(-1, emb_mean.shape[0])
+        
+        mask = (1 - torch.eye(num_instance, dtype=torch.int8)).view(-1, 1).repeat(1, emb_mean.shape[0])
+        mask = mask.view(num_instance, num_instance, -1)
+        mask[0, :, :] = 0
+        mask[:, 0, :] = 0
+        mask = mask.view(num_instance * num_instance, -1)
+        
+        distance = emb_interleave - emb_band
+        distance = distance[mask > 0].view(-1, emb_mean.shape[0]).norm(p=2, dim=1)
+        distance = F.relu(2 * delta_d - distance) ** 2
+        discriminative_loss = torch.mean(torch.log(distance + 1.0))
+        
+        if bg_sample:
+            bg_loss = [torch.log(distance + 1.0)]
+            return torch.mean(torch.cat(bg_loss))
+        return discriminative_loss
+    
     def emb_loss(
         emb: torch.Tensor,
         instance: torch.Tensor,
@@ -52,76 +120,21 @@ class FastForSceneTextRecognitionLoss(nn.Module):
         """
         Computes the embedding loss based on variance and distance constraints.
         """
-        training_mask = (training_mask > 0.5).long()
-        kernel = (kernel > 0.5).long()
-        instance = instance * training_mask
-        instance_kernel = (instance * kernel).view(-1)
-        instance = instance.view(-1)
-        emb = emb.view(feature_dim, -1)
-
-        unique_labels, unique_ids = torch.unique(instance_kernel, sorted=True, return_inverse=True)
+        emb, instance, instance_kernel = preprocess_inputs(emb, instance, kernel, training_mask)
+        unique_labels, _ = torch.unique(instance_kernel, sorted=True, return_inverse=True)
         num_instance = unique_labels.size(0)
+        
         if num_instance <= 1:
             return 0
-
-        emb_mean = emb.new_zeros((feature_dim, num_instance), dtype=torch.float32)
-        for i, lb in enumerate(unique_labels):
-            if lb == 0:
-                continue
-            ind_k = instance_kernel == lb
-            emb_mean[:, i] = torch.mean(emb[:, ind_k], dim=1)
-
-        l_agg = emb.new_zeros(num_instance, dtype=torch.float32)  # bug
-        for i, lb in enumerate(unique_labels):
-            if lb == 0:
-                continue
-            ind = instance == lb
-            emb_ = emb[:, ind]
-            dist = (emb_ - emb_mean[:, i : i + 1]).norm(p=2, dim=0)
-            dist = F.relu(dist - delta_v) ** 2
-            l_agg[i] = torch.mean(torch.log(dist + 1.0))
-        l_agg = torch.mean(l_agg[1:])
-
-        if num_instance > 2:
-            emb_interleave = emb_mean.permute(1, 0).repeat(num_instance, 1)
-            emb_band = emb_mean.permute(1, 0).repeat(1, num_instance).view(-1, feature_dim)
-            # print(seg_band)
-
-            mask = (1 - torch.eye(num_instance, dtype=torch.int8)).view(-1, 1).repeat(1, feature_dim)
-            mask = mask.view(num_instance, num_instance, -1)
-            mask[0, :, :] = 0
-            mask[:, 0, :] = 0
-            mask = mask.view(num_instance * num_instance, -1)
-            # print(mask)
-
-            dist = emb_interleave - emb_band
-            dist = dist[mask > 0].view(-1, feature_dim).norm(p=2, dim=1)
-            dist = F.relu(2 * delta_d - dist) ** 2
-            l_dis = torch.mean(torch.log(dist + 1.0))
-
-            if bg_sample:
-                l_dis = [torch.log(dist + 1.0)]
-                emb_bg = emb[:, instance == 0].view(feature_dim, -1)
-                if emb_bg.size(1) > 100:
-                    rand_ind = np.random.permutation(emb_bg.size(1))[:100]
-                    emb_bg = emb_bg[:, rand_ind]
-                if emb_bg.size(1) > 0:
-                    for i, lb in enumerate(unique_labels):
-                        if lb == 0:
-                            continue
-                        dist = (emb_bg - emb_mean[:, i : i + 1]).norm(p=2, dim=0)
-                        dist = F.relu(2 * delta_d - dist) ** 2
-                        l_dis_bg = torch.mean(torch.log(dist + 1.0), 0, keepdim=True)
-                        l_dis.append(l_dis_bg)
-                l_dis = torch.mean(torch.cat(l_dis))
-        else:
-            l_dis = 0
-
-        l_agg = weights[0] * l_agg
-        l_dis = weights[1] * l_dis
-        l_reg = torch.mean(torch.log(torch.norm(emb_mean, 2, 0) + 1.0)) * 0.001
-        loss = l_agg + l_dis + l_reg
-        return loss 
+        
+        emb_mean = compute_embedding_means(emb, instance_kernel, unique_labels)
+        aggregation_loss = compute_aggregation_loss(emb, instance, emb_mean, unique_labels, delta_v)
+        discriminative_loss = compute_discriminative_loss(emb_mean, unique_labels, delta_d, bg_sample)
+        
+        regularization_loss = torch.mean(torch.log(torch.norm(emb_mean, 2, 0) + 1.0)) * 0.001
+        
+        total_loss = (weights[0] * aggregation_loss) + (weights[1] * discriminative_loss) + regularization_loss
+        return total_loss
 
     
     def emb_loss_batch(emb, instance, kernel, training_mask, reduce=True, loss_weight=0.25):
