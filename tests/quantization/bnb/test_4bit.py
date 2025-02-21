@@ -324,7 +324,6 @@ class Bnb4BitTest(Base4bitTest):
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
         self.model_fp16 = self.model_fp16.to(torch.float32)
-
         _ = self.model_fp16.generate(
             input_ids=encoded_input["input_ids"].to(self.model_fp16.device), max_new_tokens=10
         )
@@ -621,7 +620,7 @@ class BaseSerializationTest(unittest.TestCase):
 
     def tearDown(self):
         gc.collect()
-        torch.xpu.empty_cache()
+        backend_empty_cache(torch_device)
 
     def test_serialization(self, quant_type="nf4", double_quant=True, safe_serialization=True):
         r"""
