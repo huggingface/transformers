@@ -17,6 +17,7 @@ def test_clear_import_cache():
 
     # Import and verify module exists
     from transformers.models.auto import modeling_auto
+
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
 
     # Restore initial state
