@@ -30,20 +30,62 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
     Extends RTDetrResNetConfig with D-FINE specific parameters.
 
     Args:
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        embedding_size (`int`, *optional*, defaults to 64):
+            Dimensionality (hidden size) for the embedding layer.
+        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
+            Dimensionality (hidden size) at each stage.
+        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
+            Depth (number of layers) for each stage.
+        layer_type (`str`, *optional*, defaults to `"bottleneck"`):
+            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
+            `"bottleneck"` (used for larger models like resnet-50 and above).
+        hidden_act (`str`, *optional*, defaults to `"relu"`):
+            The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
+            are supported.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
         stem_channels (`List[int]`, *optional*, defaults to [3, 32, 48]):
             Channel dimensions for the stem layers:
             - First number (3) is input image channels
             - Second number (32) is intermediate stem channels
             - Third number (48) is output stem channels
-        stage_config (`List[List[Any]]` *optional*):
-            Configuration for the four stages of the backbone.
-            [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
+        stage_in_channels (`List[int]`, *optional*):
+            Input channel dimensions for each stage of the backbone.
+            This defines how many channels the input to each stage will have.
+        stage_mid_channels (`List[int]`, *optional*):
+            Mid-channel dimensions for each stage of the backbone.
+            This defines the number of channels used in the intermediate layers of each stage.
+        stage_out_channels (`List[int]`, *optional*):
+            Output channel dimensions for each stage of the backbone.
+            This defines how many channels the output of each stage will have.
+        stage_num_blocks (`List[int]`, *optional*):
+            Number of blocks to be used in each stage of the backbone.
+            This controls the depth of each stage by specifying how many convolutional blocks to stack.
+        stage_downsample (`List[bool]`, *optional*):
+            Indicates whether to downsample the feature maps at each stage.
+            If `True`, the spatial dimensions of the feature maps will be reduced.
+        stage_light_block (`List[bool]`, *optional*):
+            Indicates whether to use light blocks in each stage.
+            Light blocks are a variant of convolutional blocks that may have fewer parameters.
+        stage_kernel_size (`List[int]`, *optional*):
+            Kernel sizes for the convolutional layers in each stage.
+        stage_numb_of_layers (`List[int]`, *optional*):
+            Number of layers to be used in each block of the stage.
         use_learnable_affine_block (`bool`, *optional*, defaults to False):
             Whether to use Learnable Affine Blocks (LAB) in the network.
             LAB adds learnable scale and bias parameters after certain operations.
-        **super_kwargs:
-            Additional arguments from RTDetrResNetConfig, including standard
-            ResNet parameters like hidden_act, layer_norm_eps, etc.
+        aggregation (`str`, *optional*, defaults to se):
+            Method of feature aggregation to be used after processing the input through the convolutional layers.
     """
 
     model_type = "d_fine_resnet"
@@ -62,13 +104,16 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         out_features=None,
         out_indices=None,
         stem_channels=[3, 32, 48],
-        stage_config=[
-            [48, 48, 128, 1, False, False, 3, 6],
-            [128, 96, 512, 1, True, False, 3, 6],
-            [512, 192, 1024, 3, True, True, 5, 6],
-            [1024, 384, 2048, 1, True, True, 5, 6],
-        ],
+        stage_in_channels=[48, 128, 512, 1024],
+        stage_mid_channels=[48, 96, 192, 384],
+        stage_out_channels=[128, 512, 1024, 2048],
+        stage_num_blocks=[1, 1, 3, 1],
+        stage_downsample=[False, True, True, True],
+        stage_light_block=[False, False, True, True],
+        stage_kernel_size=[3, 3, 5, 5],
+        stage_numb_of_layers=[6, 6, 6, 6],
         use_learnable_affine_block=False,
+        aggregation="se",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -80,15 +125,33 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.depths = depths
         self.layer_type = layer_type
         self.hidden_act = hidden_act
-        self.downsample_in_first_stage = downsample_in_first_stage
-        self.downsample_in_bottleneck = downsample_in_bottleneck
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
         self.stem_channels = stem_channels
-        self.stage_config = stage_config
+        self.stage_in_channels = stage_in_channels
+        self.stage_mid_channels = stage_mid_channels
+        self.stage_out_channels = stage_out_channels
+        self.stage_num_blocks = stage_num_blocks
+        self.stage_downsample = stage_downsample
+        self.stage_light_block = stage_light_block
+        self.stage_kernel_size = stage_kernel_size
+        self.stage_numb_of_layers = stage_numb_of_layers
         self.use_learnable_affine_block = use_learnable_affine_block
+        self.aggregation = aggregation
+
+        if not (
+            len(stage_in_channels)
+            == len(stage_mid_channels)
+            == len(stage_out_channels)
+            == len(stage_num_blocks)
+            == len(stage_downsample)
+            == len(stage_light_block)
+            == len(stage_kernel_size)
+            == len(stage_numb_of_layers)
+        ):
+            raise ValueError("All stage configuration lists must have the same length.")
 
 
 __all__ = ["DFineResNetConfig"]
