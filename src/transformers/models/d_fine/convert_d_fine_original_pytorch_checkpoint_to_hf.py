@@ -51,12 +51,14 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
 
     if model_name in ["dfine_x_coco", "dfine_x_obj2coco", "dfine_x_obj365"]:
         config.backbone_config.hidden_sizes = [256, 512, 1024, 2048]
-        config.backbone_config.stage_config = [
-            [64, 64, 128, 1, False, False, 3, 6],
-            [128, 128, 512, 2, True, False, 3, 6],
-            [512, 256, 1024, 5, True, True, 5, 6],
-            [1024, 512, 2048, 2, True, True, 5, 6],
-        ]
+        config.backbone_config.stage_in_channels = [64, 128, 512, 1024]
+        config.backbone_config.stage_mid_channels = [64, 128, 256, 512]
+        config.backbone_config.stage_out_channels = [128, 512, 1024, 2048]
+        config.backbone_config.stage_num_blocks = [1, 2, 5, 2]
+        config.backbone_config.stage_downsample = [False, True, True, True]
+        config.backbone_config.stage_light_block = [False, False, True, True]
+        config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
+        config.backbone_config.stage_numb_of_layers = [6, 6, 6, 6]
         config.backbone_config.stem_channels = [3, 32, 64]
         config.encoder_in_channels = [512, 1024, 2048]
         config.encoder_hidden_dim = 384
@@ -68,12 +70,14 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     elif model_name in ["dfine_m_coco", "dfine_m_obj2coco", "dfine_m_obj365"]:
         config.backbone_config.hidden_sizes = [192, 384, 768, 1536]
         config.backbone_config.stem_channels = [3, 24, 32]
-        config.backbone_config.stage_config = [
-            [32, 32, 96, 1, False, False, 3, 4],
-            [96, 64, 384, 1, True, False, 3, 4],
-            [384, 128, 768, 3, True, True, 5, 4],
-            [768, 256, 1536, 1, True, True, 5, 4],
-        ]
+        config.backbone_config.stage_in_channels = [32, 96, 384, 768]
+        config.backbone_config.stage_mid_channels = [32, 64, 128, 256]
+        config.backbone_config.stage_out_channels = [96, 384, 768, 1536]
+        config.backbone_config.stage_num_blocks = [1, 1, 3, 1]
+        config.backbone_config.stage_downsample = [False, True, True, True]
+        config.backbone_config.stage_light_block = [False, False, True, True]
+        config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
+        config.backbone_config.stage_numb_of_layers = [4, 4, 4, 4]
         config.decoder_layers = 4
         config.encoder_in_channels = [384, 768, 1536]
         config.backbone_config.use_learnable_affine_block = True
@@ -83,12 +87,14 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     elif model_name in ["dfine_l_coco", "dfine_l_obj2coco_e25", "dfine_l_obj365"]:
         config.backbone_config.hidden_sizes = [256, 512, 1024, 2048]
         config.backbone_config.stem_channels = [3, 32, 48]
-        config.backbone_config.stage_config = [
-            [48, 48, 128, 1, False, False, 3, 6],
-            [128, 96, 512, 1, True, False, 3, 6],
-            [512, 192, 1024, 3, True, True, 5, 6],
-            [1024, 384, 2048, 1, True, True, 5, 6],
-        ]
+        config.backbone_config.stage_in_channels = [48, 128, 512, 1024]
+        config.backbone_config.stage_mid_channels = [48, 96, 192, 384]
+        config.backbone_config.stage_out_channels = [128, 512, 1024, 2048]
+        config.backbone_config.stage_num_blocks = [1, 1, 3, 1]
+        config.backbone_config.stage_downsample = [False, True, True, True]
+        config.backbone_config.stage_light_block = [False, False, True, True]
+        config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
+        config.backbone_config.stage_numb_of_layers = [6, 6, 6, 6]
         config.encoder_ffn_dim = 1024
         config.encoder_in_channels = [512, 1024, 2048]
         if model_name == "dfine_l_obj365":
@@ -96,12 +102,14 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     else:
         config.backbone_config.hidden_sizes = [128, 256, 512, 1024]
         config.backbone_config.stem_channels = [3, 16, 16]
-        config.backbone_config.stage_config = [
-            [16, 16, 64, 1, False, False, 3, 3],
-            [64, 32, 256, 1, True, False, 3, 3],
-            [256, 64, 512, 2, True, True, 5, 3],
-            [512, 128, 1024, 1, True, True, 5, 3],
-        ]
+        config.backbone_config.stage_in_channels = [16, 64, 256, 512]
+        config.backbone_config.stage_mid_channels = [16, 32, 64, 128]
+        config.backbone_config.stage_out_channels = [64, 256, 512, 1024]
+        config.backbone_config.stage_num_blocks = [1, 1, 2, 1]
+        config.backbone_config.stage_downsample = [False, True, True, True]
+        config.backbone_config.stage_light_block = [False, False, True, True]
+        config.backbone_config.stage_kernel_size = [3, 3, 5, 5]
+        config.backbone_config.stage_numb_of_layers = [3, 3, 3, 3]
         config.decoder_layers = 3
         config.hidden_expansion = 0.5
         config.depth_mult = 0.34
