@@ -1143,12 +1143,17 @@ PIX2STRUCT_TEXT_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention layers. Can be used to speed up decoding.
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+            four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
+            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
+            when `config.use_cache=True`. It is usually a [`~cache_utils.EncoderDecoderCache`]. However, this model
+            can also be configured to behave as a decoder-only model, i.e. without cross-attention, in which case a
+            [`~cache_utils.Cache`] can be used.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
@@ -1236,12 +1241,17 @@ PIX2STRUCT_INPUTS_DOCSTRING = r"""
             Tuple consists of (`last_hidden_state`, `optional`: *hidden_states*, `optional`: *attentions*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` is a sequence of hidden states at
             the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention layers. Can be used to speed up decoding.
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states that can be used to speed up auto-regressive (sequential) decoding. There are
+            four sets of pre-computed hidden-states: key and values states in the self-attention blocks (2) and
+            in the cross-attention blocks (2). The `past_key_values` are returned when `use_cache=True` is passed or
+            when `config.use_cache=True`. It is usually a [`~cache_utils.EncoderDecoderCache`]. However, this model
+            can also be configured to behave as a decoder-only model, i.e. without cross-attention, in which case a
+            [`~cache_utils.Cache`] can be used.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+            that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+            all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
             representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
@@ -1297,37 +1307,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         self.post_init()
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._reorder_cache
-    def _reorder_cache(self, past_key_values, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past_key_values is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past_key_values
-
-        reordered_decoder_past = ()
-        for layer_past_states in past_key_values:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx.to(layer_past_state.device)),
-                )
-
-            if reordered_layer_past_states[0].shape != layer_past_states[0].shape:
-                raise ValueError(
-                    f"reordered_layer_past_states[0] shape {reordered_layer_past_states[0].shape} and layer_past_states[0] shape {layer_past_states[0].shape} mismatched"
-                )
-            if len(reordered_layer_past_states) != len(layer_past_states):
-                raise ValueError(
-                    f"length of reordered_layer_past_states {len(reordered_layer_past_states)} and length of layer_past_states {len(layer_past_states)} mismatched"
-                )
-
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
-
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -1351,7 +1330,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         inputs_embeds: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1399,23 +1378,32 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 
         batch_size, seq_length = input_shape
 
-        # initialize past_key_values
-        return_legacy_cache = False
-        return_self_attention_cache = False
-        if use_cache or past_key_values is not None:
-            if isinstance(past_key_values, Cache) and not isinstance(past_key_values, EncoderDecoderCache):
-                return_self_attention_cache = True
-                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
-            elif not isinstance(past_key_values, EncoderDecoderCache):
-                return_legacy_cache = True
+        # initialize `past_key_values`
+        # - if the model is an encoder-decoder or has encoder inputs passed, the cache will be an encoder-decoder cache
+        # - otherwise, a self-attention cache is used
+        # - if `use_cache` is False, e.g. when using the encoder only, we remove cache if it is passed
+        if use_cache:
+            if (
+                isinstance(past_key_values, Cache)
+                and not isinstance(past_key_values, EncoderDecoderCache)
+                and encoder_hidden_states is not None
+            ):
                 logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.48.0. "
-                    "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                    "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
+                    "You are passing a decoder-only cache to a model that is used as an encoder-decoder model. "
+                    "This behavior is deprecated and will be removed in v4.52. To avoid this warning, please pass an "
+                    "`EncoderDecoderCache` (e.g. `EncoderDecoderCache(past_key_values, DynamicCache())`)."
                 )
-                past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+                past_key_values = EncoderDecoderCache(past_key_values, DynamicCache())
             elif past_key_values is None:
-                past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                if encoder_hidden_states is not None:
+                    past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
+                else:
+                    past_key_values = DynamicCache()
+        elif past_key_values is not None:
+            logger.warning_once(
+                "`use_cache` is set to `False` but `past_key_values` is passed. `past_key_values` will be ignored."
+            )
+            past_key_values = None
 
         past_key_values_length = 0
         if cache_position is not None:
@@ -1436,12 +1424,17 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
 
         if self.config.is_decoder:
+            decoder_cache = (
+                past_key_values.self_attention_cache
+                if isinstance(past_key_values, EncoderDecoderCache)
+                else past_key_values
+            )
             causal_mask = self._update_causal_mask(
-                attention_mask,
-                inputs_embeds,
-                cache_position,
-                past_key_values.self_attention_cache if past_key_values is not None else None,
-                output_attentions,
+                attention_mask=attention_mask,
+                input_tensor=inputs_embeds,
+                cache_position=cache_position,
+                past_key_values=decoder_cache,
+                output_attentions=output_attentions,
             )
         else:
             causal_mask = attention_mask[:, None, None, :]
@@ -1550,11 +1543,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
             loss = loss_fct(logits.contiguous().view(-1, logits.size(-1)), labels.contiguous().view(-1))
 
         next_cache = next_decoder_cache if use_cache else None
-        if return_self_attention_cache:
-            next_cache = past_key_values.self_attention_cache
-        if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
-
         if not return_dict:
             return tuple(
                 v
@@ -1753,7 +1741,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         decoder_head_mask: Optional[torch.FloatTensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[EncoderDecoderCache] = None,
         labels: Optional[torch.LongTensor] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,

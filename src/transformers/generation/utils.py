@@ -1652,7 +1652,9 @@ class GenerationMixin:
             if requires_cross_attention_cache:
                 encoder_kwargs = cache_kwargs.copy()
                 encoder_kwargs["max_cache_len"] = model_kwargs["encoder_outputs"][0].shape[1]
-                self._cache = EncoderDecoderCache(self._cache, cache_cls(**encoder_kwargs))
+                self._cache = EncoderDecoderCache(
+                    self_attention_cache=self._cache, cross_attention_cache=cache_cls(**encoder_kwargs)
+                )
         else:
             self._cache.reset()
         return self._cache
