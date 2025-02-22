@@ -16,6 +16,7 @@ def test_clear_import_cache():
     assert len(remaining_modules) < len(initial_modules)
 
     # Verify we can reimport a module
+    from transformers.models.auto.modeling_auto import AutoModel  # Actually import the module first
     assert "transformers.models.auto.modeling_auto" in sys.modules
 
     # Restore initial state
