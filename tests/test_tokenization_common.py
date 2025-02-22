@@ -49,7 +49,6 @@ from transformers import (
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     get_tests_dir,
-    is_pt_tf_cross_test,
     require_jinja,
     require_read_token,
     require_tf,
@@ -2970,48 +2969,6 @@ class TokenizerTesterMixin:
             tokenizer.batch_encode_plus(
                 string_sequences, return_overflowing_tokens=True, truncation=True, padding=True, max_length=3
             )
-
-    @is_pt_tf_cross_test
-    def test_batch_encode_plus_tensors(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                sequences = [
-                    "Testing batch encode plus",
-                    "Testing batch encode plus with different sequence lengths",
-                    "Testing batch encode plus with different sequence lengths correctly pads",
-                ]
-
-                # A Tensor cannot be build by sequences which are not the same size
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="pt")
-                self.assertRaises(ValueError, tokenizer.batch_encode_plus, sequences, return_tensors="tf")
-
-                if tokenizer.pad_token_id is None:
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding=True,
-                        return_tensors="pt",
-                    )
-                    self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding="longest",
-                        return_tensors="tf",
-                    )
-                else:
-                    pytorch_tensor = tokenizer.batch_encode_plus(sequences, padding=True, return_tensors="pt")
-                    tensorflow_tensor = tokenizer.batch_encode_plus(sequences, padding="longest", return_tensors="tf")
-                    encoded_sequences = tokenizer.batch_encode_plus(sequences, padding=True)
-
-                    for key in encoded_sequences.keys():
-                        pytorch_value = pytorch_tensor[key].tolist()
-                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
-                        encoded_value = encoded_sequences[key]
-
-                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     def _check_no_pad_token_padding(self, tokenizer, sequences):
         # if tokenizer does not have pad_token_id, an error should be thrown
