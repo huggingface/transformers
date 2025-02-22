@@ -184,12 +184,14 @@ class DFineModelTester:
     def get_config(self):
         hidden_sizes = [64, 128, 256, 512]
         backbone_config = DFineResNetConfig(
-            stage_config=[
-                [16, 16, 64, 1, False, False, 3, 3],
-                [64, 32, 128, 1, True, False, 3, 3],
-                [128, 64, 256, 2, True, True, 5, 3],
-                [256, 128, 512, 1, True, True, 5, 3],
-            ],
+            stage_in_channels = [16, 64, 128, 256],
+            stage_mid_channels = [16, 32, 64, 128],
+            stage_out_channels = [64, 128, 256, 512],
+            stage_num_blocks = [1, 1, 2, 1],
+            stage_downsample = [False, True, True, True],
+            stage_light_block = [False, False, True, True],
+            stage_kernel_size = [3, 3, 5, 5],
+            stage_numb_of_layers = [3, 3, 3, 3],
             embeddings_size=10,
             hidden_sizes=hidden_sizes,
             depths=[1, 1, 2, 1],
@@ -288,6 +290,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torch_exportable = True
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

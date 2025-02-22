@@ -263,10 +263,10 @@ class DFineResNetBasicLayer(nn.Module):
             self.layers.append(block)
 
         # feature aggregation
-        total_chs = in_channels + layer_num * middle_channels
+        total_channels = in_channels + layer_num * middle_channels
         if aggregation == "se":
             aggregation_squeeze_conv = DFineResNetConvLayer(
-                total_chs,
+                total_channels,
                 out_channels // 2,
                 kernel_size=1,
                 stride=1,
@@ -285,12 +285,16 @@ class DFineResNetBasicLayer(nn.Module):
             )
         else:
             aggregation_conv = DFineResNetConvLayer(
-                total_chs, out_channels, kernel_size=1, stride=1, use_learnable_affine_block=use_learnable_affine_block
+                total_channels,
+                out_channels,
+                kernel_size=1,
+                stride=1,
+                use_learnable_affine_block=use_learnable_affine_block,
             )
-            att = DFineResNetEseModule(out_channels)
+            ese_aggregation_module = DFineResNetEseModule(out_channels)
             self.aggregation = nn.Sequential(
                 aggregation_conv,
-                att,
+                ese_aggregation_module,
             )
         self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
 
@@ -310,19 +314,22 @@ class DFineResNetBasicLayer(nn.Module):
 class DFineResNetStage(nn.Module):
     def __init__(
         self,
-        in_channels: int,
-        mid_channels: int,
-        out_channels: int,
-        block_num: int,
-        layer_num: int,
-        downsample: bool = True,
-        light_block: bool = False,
-        kernel_size: int = 3,
-        aggregation: str = "se",
+        config: DFineResNetConfig,
+        stage_index: int,
         drop_path: float = 0.0,
-        use_learnable_affine_block: bool = False,
     ):
         super().__init__()
+        in_channels = config.stage_in_channels[stage_index]
+        mid_channels = config.stage_mid_channels[stage_index]
+        out_channels = config.stage_out_channels[stage_index]
+        num_blocks = config.stage_num_blocks[stage_index]
+        num_layers = config.stage_numb_of_layers[stage_index]
+        downsample = config.stage_downsample[stage_index]
+        light_block = config.stage_light_block[stage_index]
+        kernel_size = config.stage_kernel_size[stage_index]
+        aggregation = config.aggregation
+        use_learnable_affine_block = config.use_learnable_affine_block
+
         if downsample:
             self.downsample = DFineResNetConvLayer(
                 in_channels, in_channels, kernel_size=3, stride=2, groups=in_channels, activation=None
@@ -331,13 +338,13 @@ class DFineResNetStage(nn.Module):
             self.downsample = nn.Identity()
 
         blocks_list = []
-        for i in range(block_num):
+        for i in range(num_blocks):
             blocks_list.append(
                 DFineResNetBasicLayer(
                     in_channels if i == 0 else out_channels,
                     mid_channels,
                     out_channels,
-                    layer_num,
+                    num_layers,
                     residual=False if i == 0 else True,
                     kernel_size=kernel_size,
                     light_block=light_block,
@@ -359,21 +366,9 @@ class DFineResNetEncoder(nn.Module):
     def __init__(self, config: DFineResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
-        for _, stage in enumerate(config.stage_config):
-            in_channels, mid_channels, out_channels, block_num, downsample, light_block, kernel_size, layer_num = stage
-            self.stages.append(
-                DFineResNetStage(
-                    in_channels,
-                    mid_channels,
-                    out_channels,
-                    block_num,
-                    layer_num,
-                    downsample,
-                    light_block,
-                    kernel_size,
-                    use_learnable_affine_block=config.use_learnable_affine_block,
-                )
-            )
+        for stage_index in range(len(config.stage_in_channels)):
+            resnet_stage = DFineResNetStage(config, stage_index)
+            self.stages.append(resnet_stage)
 
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
