@@ -33,6 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -44,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_doge import DogeConfig
 
 
@@ -200,17 +202,17 @@ def eager_attention_forward(
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(-1, -2)) * scaling
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = F.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -325,19 +327,17 @@ class DogeDynamicMaskAttention(nn.Module):
             dynamic_mask_ratio (`float`, *optional*): Ratio from 0.0 to 1.0 used to control the proportion of the dynamic mask filled with the minimum value.
             attention_mask (`torch.Tensor`, *optional*): attention mask of shape `(batch_size, 1, query_sequence_length, key_sequence_length)`.
         """
-        attn_mask = None
-        if dynamic_mask is not None:
-            attn_mask = dynamic_mask[:, :, None, :]
-            if 0.0 < dynamic_mask_ratio < 1.0:
-                min_type = torch.finfo(hidden_states.dtype).min
-                num_dynamic_mask = int(attn_mask.shape[-1] * dynamic_mask_ratio)
-                if num_dynamic_mask > 0:
-                    rate_value = torch.kthvalue(attn_mask, num_dynamic_mask, dim=-1, keepdim=True).values
-                    attn_mask = attn_mask.masked_fill(attn_mask < rate_value, min_type)
-            if attention_mask is not None:
-                attn_mask = attn_mask + attention_mask[:, :, :, : attn_mask.shape[-1]]
+        attn_mask = dynamic_mask[:, :, None, :]
+        if 0.0 < dynamic_mask_ratio < 1.0:
+            min_type = torch.finfo(hidden_states.dtype).min
+            num_dynamic_mask = int(attn_mask.shape[-1] * dynamic_mask_ratio)
+            if num_dynamic_mask > 0:
+                rate_value = torch.kthvalue(attn_mask, num_dynamic_mask, dim=-1, keepdim=True).values
+                attn_mask = attn_mask.masked_fill(attn_mask < rate_value, min_type)
         else:
-            attn_mask = attention_mask
+            ValueError("`dynamic_mask_ratio` should be in the range (0.0, 1.0)")
+        if attention_mask is not None:
+            attn_mask = attn_mask + attention_mask[:, :, :, : attn_mask.shape[-1]]
 
         return attn_mask
 
@@ -345,21 +345,18 @@ class DogeDynamicMaskAttention(nn.Module):
 class DogeMLP(nn.Module):
     def __init__(self, config: DogeConfig):
         super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.intermediate_size
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.hidden_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.hidden_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
-        self.gate_proj = nn.Linear(self.hidden_dim, self.intermediate_dim, bias=config.hidden_bias)
-        self.up_proj = nn.Linear(self.hidden_dim, self.intermediate_dim, bias=config.hidden_bias)
-        self.down_proj = nn.Linear(self.intermediate_dim, self.hidden_dim, bias=config.hidden_bias)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs,
-    ) -> torch.Tensor:
-        hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
-        return hidden_states
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class DogeCDMoE(DogeMLP):
@@ -440,7 +437,7 @@ class DogeDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         # sequence transformation
@@ -502,15 +499,17 @@ class DogePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["DogeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, (nn.Linear)):
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -609,26 +608,25 @@ class DogeModel(DogePreTrainedModel):
 
     def __init__(self, config: DogeConfig):
         super().__init__(config)
-        self.config = config
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.word_embed = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.rotary_emb = DogeRotaryEmbedding(config)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.layers = nn.ModuleList(
             [DogeDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.final_layernorm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = DogeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = DogeRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.word_embed
+        return self.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.word_embed = value
+        self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
     def forward(
@@ -636,14 +634,14 @@ class DogeModel(DogePreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -653,16 +651,16 @@ class DogeModel(DogePreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You cannot specify both input_ids and inputs_embeds")
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
             )
             use_cache = False
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embed(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -715,7 +713,7 @@ class DogeModel(DogePreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    **kwargs,
+                    **flash_attn_kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -723,7 +721,7 @@ class DogeModel(DogePreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.final_layernorm(hidden_states)
+        hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -833,7 +831,9 @@ class DogeModel(DogePreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -842,25 +842,29 @@ class DogeModel(DogePreTrainedModel):
         return causal_mask
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: DogeConfig):
         super().__init__(config)
-        self.config = config
         self.model = DogeModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.config = config
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.word_embed
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.word_embed = value
+        self.model.embed_tokens = value
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -868,12 +872,13 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def get_decoder(self):
-        return self.model
-
     def set_decoder(self, decoder):
         self.model = decoder
 
+    def get_decoder(self):
+        return self.model
+
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -890,7 +895,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
-        **kwargs: Unpack[LossKwargs],
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -899,7 +904,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            logits_to_keep (`int`, *optional*):
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
                 If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
@@ -911,10 +916,10 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-         >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+        >>> from transformers import AutoTokenizer, DogeForCausalLM
 
-        >>> model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
-        >>> tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
+        >>> model = DogeForCausalLM.from_pretrained("meta-doge/Doge-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-doge/Doge-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -930,7 +935,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # decoder output consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -946,13 +951,13 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.vocab_size, **kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -995,10 +1000,10 @@ class DogeForSequenceClassification(DogePreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.word_embed
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.word_embed = value
+        self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
     def forward(
