@@ -15,9 +15,9 @@ def test_clear_import_cache():
     remaining_modules = {name: mod for name, mod in sys.modules.items() if name.startswith("transformers.")}
     assert len(remaining_modules) < len(initial_modules)
 
-    # Verify we can reimport a module
-    from transformers.models.auto.modeling_auto import AutoModel  # Actually import the module first
-    assert "transformers.models.auto.modeling_auto" in sys.modules
+    # Import and verify module exists
+    from transformers.models.auto import modeling_auto
+    assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
 
     # Restore initial state
     for name, module in initial_modules.items():
