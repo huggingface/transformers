@@ -884,7 +884,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         image_embeds = self.vision_model(pixel_values)
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
-    def prepare_embeddings_for_image_generation(self,inputs):
+
+    def prepare_embeddings_for_image_generation(self, inputs):
         hidden_state = self.gen_embed(inputs)
         hidden_state = self.gen_aligner(hidden_state)
         return hidden_state
@@ -1015,7 +1016,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             }
         )
         return model_inputs
-    # ToDo: How to restrict the image generation to only few generation startegies.
+
+    # ToDo: How to restrict the image generation to only few generation strategies.
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor, **kwargs):
         generation_config = kwargs.get("generation_config")
