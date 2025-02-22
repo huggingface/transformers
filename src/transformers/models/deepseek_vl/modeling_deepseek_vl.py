@@ -14,6 +14,7 @@ from ..siglip.modeling_siglip import SiglipVisionModel
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..sam.configuration_sam import SamVisionConfig
 from ..sam.modeling_sam import SamVisionEncoder
+from ..llama.modeling_llama import LlamaForCausalLM
 from .configuration_deepseek_vl import DeepseekVLVisionConfig, DeepseekVLConfig
 
 
@@ -148,7 +149,7 @@ class DeepseekVLVisionEncoder(nn.Module):
 
         self.projection = DeepseekVLVisionProjection(config)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, n_images, n_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * n_images, n_channels, height, width)
 
@@ -157,10 +158,8 @@ class DeepseekVLVisionEncoder(nn.Module):
 
         encodings = self.projection(low_res_encodings, high_res_encodings)
 
-        show_tensor(encodings, name="visual_encodings")
-
-        # TODO: revert to original shape
-        ...
+        batch_size_x_n_images, seq_len, hidden_size = encodings.shape
+        encodings = encodings.reshape(batch_size, n_images * seq_len, hidden_size)
 
         return encodings
 
@@ -175,8 +174,8 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
     def __init__(self, config: DeepseekVLConfig):
         super().__init__(config)
         self.config = config
-
         self.vision_model = DeepseekVLVisionEncoder(config.vision_config)
+        self.text_model = LlamaForCausalLM(config.text_config)
 
     def forward(
         self,
@@ -196,7 +195,10 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ):
-        self.vision_model(pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        if inputs_embeds is None:
+            inputs_embeds = self.text_model.get_input_embeddings()(input_ids)
+            show_tensor(inputs_embeds, name="inputs_embeds")
+            images_embeds = self.vision_model(pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
 
 class DeepseekVLForVisionText2Text(DeepseekVLPreTrainedModel, GenerationMixin):

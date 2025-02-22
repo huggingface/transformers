@@ -69,6 +69,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"aligner.(high|low)_up_proj.(weight|bias)": r"model.vision_model.projection.\1_res_proj.\2",
     r"aligner.layers.1.(weight|bias)": r"model.vision_model.projection.proj.\1",
 
+    # Llama (Text Model)
+    r"language_model.(\w+)": r"model.text_model.\1",
 }
 # fmt: on
 
