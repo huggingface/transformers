@@ -72,7 +72,7 @@ class DeekseekImageProcessor(BaseImageProcessor):
         min_size: int = 14,
         background_color: tuple = (127, 127, 127),
         do_resize: bool = True,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BICUBIC, # type: ignore
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = False,
@@ -103,7 +103,7 @@ class DeekseekImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: int,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        resample: PILImageResampling = PILImageResampling.BICUBIC, # type: ignore
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         **kwargs,
