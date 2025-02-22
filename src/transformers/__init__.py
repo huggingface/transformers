@@ -764,8 +764,8 @@ _import_structure = {
         "SamHQConfig",
         "SamHQMaskDecoderConfig",
         "SamHQProcessor",
-        "SamHQVisionConfig",
         "SamHQPromptEncoderConfig",
+        "SamHQVisionConfig",
     ],
     "models.seamless_m4t": [
         "SeamlessM4TConfig",
