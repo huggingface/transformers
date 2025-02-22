@@ -150,12 +150,10 @@ class DogeConfig(PretrainedConfig):
             The ratio to control the proportion of the dynamic mask filled with the minimum value. For more details checkout [this paper](https://arxiv.org/pdf/2412.11834).
         is_moe (`bool`, *optional*, defaults to `False`):
             Whether to use the Cross Domain Mixture of Experts, if `True`, the MoE will inherit the MLP to initialize. For more details checkout [this paper](https://arxiv.org/pdf/2412.11834).
-        num_cdmoe_experts (`int`, *optional*, defaults to 16348):
+        num_experts (`int`, *optional*, defaults to 2048):
             Number of Experts for the Cross Domain Mixture of Experts.
-        num_cdmoe_heads (`int`, *optional*, defaults to 4):
-            Number of retrieval heads, used to mix multi-head experts.
-        num_cdmoe_experts_per_head (`int`, *optional*, defaults to 8):
-            Number of Experts per retrieval head, used to mix multi-head experts.
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            Number of selected experts to route per-token.
         expert_retrieval_size (`int`, *optional*, defaults to 64):
             Dimension of the Expert retrieval states for calculating the dot product of query and key to determine the expert index.
 
@@ -210,9 +208,8 @@ class DogeConfig(PretrainedConfig):
         attention_dropout=0.0,
         dynamic_mask_ratio=0.0,
         is_moe=False,
-        num_cdmoe_experts=16348,
-        num_cdmoe_heads=4,
-        num_cdmoe_experts_per_head=8,
+        num_experts=2048,
+        num_experts_per_tok=8,
         expert_retrieval_size=64,
         **kwargs,
     ):
@@ -236,9 +233,8 @@ class DogeConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.dynamic_mask_ratio = dynamic_mask_ratio
         self.is_moe = is_moe
-        self.num_cdmoe_experts = num_cdmoe_experts
-        self.num_cdmoe_heads = num_cdmoe_heads
-        self.num_cdmoe_experts_per_head = num_cdmoe_experts_per_head
+        self.num_experts = num_experts
+        self.num_experts_per_tok = num_experts_per_tok
         self.expert_retrieval_size = expert_retrieval_size
 
         # Validate the correctness of rotary position embeddings parameters
@@ -473,18 +469,17 @@ class DogeCDMoE(DogeMLP):
         self.act_fn = ACT2FN[config.hidden_act]
 
         self.expert_retrieval_dim = config.expert_retrieval_size
-        self.num_cdmoe_experts = config.num_cdmoe_experts
-        self.num_cdmoe_heads = config.num_cdmoe_heads
-        self.num_cdmoe_experts_per_head = config.num_cdmoe_experts_per_head
-        self.num_keys = int(math.sqrt(self.num_cdmoe_experts))
+        self.num_experts = config.num_experts
+        self.top_k = config.num_experts_per_tok
+        self.num_keys = int(math.sqrt(self.num_experts))
 
         # queries and keys for retrieval experts
-        self.queries_proj = nn.Linear(self.hidden_dim, self.num_cdmoe_heads * self.expert_retrieval_dim, bias=False)
-        self.keys = nn.Parameter(torch.zeros(2 * self.num_cdmoe_heads, self.expert_retrieval_dim // 2, self.num_keys))
+        self.queries_proj = nn.Linear(self.hidden_dim, self.expert_retrieval_dim, bias=False)
+        self.keys = nn.Parameter(torch.zeros(2, self.expert_retrieval_dim // 2, self.num_keys))
 
         # experts
-        self.down_embed = nn.Embedding(self.num_cdmoe_experts, self.hidden_dim)
-        self.up_embed = nn.Embedding(self.num_cdmoe_experts, self.hidden_dim)
+        self.down_embed = nn.Embedding(self.num_experts, self.hidden_dim)
+        self.up_embed = nn.Embedding(self.num_experts, self.hidden_dim)
 
     def forward(
         self,
@@ -494,23 +489,25 @@ class DogeCDMoE(DogeMLP):
         bsz, seq_len, _ = hidden_states.shape
 
         # get routing weights with queries and keys
-        queries = self.queries_proj(hidden_states).view(2 * self.num_cdmoe_heads, bsz * seq_len, -1)
-        routing_weights = torch.bmm(queries, self.keys).view(2, bsz * seq_len, self.num_cdmoe_heads, self.num_keys)
+        queries = self.queries_proj(hidden_states).view(2, bsz * seq_len, -1)
+        routing_weights = torch.bmm(queries, self.keys).view(2, bsz * seq_len, self.num_keys)
 
         # get experts with the highest routing weights
-        (scores_x, scores_y), (indices_x, indices_y) = routing_weights.topk(self.num_cdmoe_experts_per_head, dim=-1)
+        (scores_x, scores_y), (indices_x, indices_y) = routing_weights.topk(self.top_k, dim=-1)
         all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
         all_scores = all_scores.view(*scores_x.shape[:-1], -1)
         all_indices = (indices_x.unsqueeze(-1) * self.num_keys) + indices_y.unsqueeze(-2)
         all_indices = all_indices.view(*indices_x.shape[:-1], -1)
-        scores, pk_indices = all_scores.topk(self.num_cdmoe_experts_per_head, dim=-1)
-        scores = scores.view(bsz * seq_len, self.num_cdmoe_heads * self.num_cdmoe_experts_per_head)
-        indices = all_indices.gather(-1, pk_indices).view(bsz * seq_len, self.num_cdmoe_heads * self.num_cdmoe_experts_per_head)
+        scores, pk_indices = all_scores.topk(self.top_k, dim=-1)
+        scores = scores.view(bsz * seq_len, self.top_k)
+        indices = all_indices.gather(-1, pk_indices).view(bsz * seq_len, self.top_k)
         down_embed = self.down_embed(indices)
         up_embed = self.up_embed(indices)
 
         # mix experts states with cross domain states
-        experts_weights = torch.bmm(hidden_states.view(bsz * seq_len, 1, -1), down_embed.transpose(1, 2)).view(bsz * seq_len, -1)
+        experts_weights = torch.bmm(hidden_states.view(bsz * seq_len, 1, -1), down_embed.transpose(1, 2)).view(
+            bsz * seq_len, -1
+        )
         experts_weights = self.act_fn(experts_weights) * scores.softmax(dim=-1)
         experts_states = torch.bmm(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
