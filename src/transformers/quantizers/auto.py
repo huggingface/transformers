@@ -35,6 +35,7 @@ from ..utils.quantization_config import (
     TorchAoConfig,
     VptqConfig,
 )
+from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
 from .quantizer_bitnet import BitNetHfQuantizer
@@ -226,3 +227,35 @@ class AutoHfQuantizer:
             )
             return False
         return True
+
+
+def register_quantization_config(method: str):
+    """Register a custom quantization configuration."""
+
+    def register_config_fn(cls):
+        if method in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(f"Config '{method}' already registered")
+
+        if not issubclass(cls, QuantizationConfigMixin):
+            raise ValueError("Config must extend QuantizationConfigMixin")
+
+        AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
+        return cls
+
+    return register_config_fn
+
+
+def register_quantizer(name: str):
+    """Register a custom quantizer."""
+
+    def register_quantizer_fn(cls):
+        if name in AUTO_QUANTIZER_MAPPING:
+            raise ValueError(f"Quantizer '{name}' already registered")
+
+        if not issubclass(cls, HfQuantizer):
+            raise ValueError("Quantizer must extend HfQuantizer")
+
+        AUTO_QUANTIZER_MAPPING[name] = cls
+        return cls
+
+    return register_quantizer_fn

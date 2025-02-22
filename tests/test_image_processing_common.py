@@ -223,9 +223,14 @@ class ImageProcessingTestMixin:
             # Warmup
             for _ in range(5):
                 _ = image_processor(image, return_tensors="pt")
-            start = time.time()
-            _ = image_processor(image, return_tensors="pt")
-            return time.time() - start
+            all_times = []
+            for _ in range(10):
+                start = time.time()
+                _ = image_processor(image, return_tensors="pt")
+                all_times.append(time.time() - start)
+            # Take the average of the fastest 3 runs
+            avg_time = sum(sorted(all_times[:3])) / 3.0
+            return avg_time
 
         dummy_images = torch.randint(0, 255, (4, 3, 224, 224), dtype=torch.uint8)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
