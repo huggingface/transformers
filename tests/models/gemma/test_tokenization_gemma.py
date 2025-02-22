@@ -342,8 +342,8 @@ class GemmaIntegrationTest(unittest.TestCase):
                 encoded1,
                 encoded2,
                 msg="Hint: the following tokenization diff were obtained for slow vs fast:\n "
-                f"elements in slow: {set(pyth_tokenizer.tokenize(string))-set(rust_tokenizer.tokenize(string))} \nvs\n "
-                f"elements in fast: {set(rust_tokenizer.tokenize(string))-set(pyth_tokenizer.tokenize(string))} \n\n{string}",
+                f"elements in slow: {set(pyth_tokenizer.tokenize(string)) - set(rust_tokenizer.tokenize(string))} \nvs\n "
+                f"elements in fast: {set(rust_tokenizer.tokenize(string)) - set(pyth_tokenizer.tokenize(string))} \n\n{string}",
             )
 
             decoded1 = pyth_tokenizer.decode(encoded1, skip_special_tokens=True)

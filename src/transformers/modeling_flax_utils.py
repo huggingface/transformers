@@ -153,7 +153,7 @@ def flax_shard_checkpoint(params, max_shard_size="10GB"):
     weight_map = {}
     shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
-        shard_file = FLAX_WEIGHTS_NAME.replace(".msgpack", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.msgpack")
+        shard_file = FLAX_WEIGHTS_NAME.replace(".msgpack", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.msgpack")
         shards[shard_file] = shard
         for weight_name in shard.keys():
             weight_map[weight_name] = shard_file

@@ -73,8 +73,7 @@ class VivitTubeletEmbeddings(nn.Module):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
-                f"Image image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
+                f"Image image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
 
         # permute to (batch_size, num_channels, num_frames, height, width)
@@ -172,7 +171,7 @@ class VivitSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 

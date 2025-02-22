@@ -142,7 +142,7 @@ class Wav2Vec2Aligner:
             score: float
 
             def __repr__(self):
-                return f"{self.label}\t{self.score:4.2f}\t{self.start*20:5d}\t{self.end*20:5d}"
+                return f"{self.label}\t{self.score:4.2f}\t{self.start * 20:5d}\t{self.end * 20:5d}"
 
             @property
             def length(self):

@@ -52,6 +52,20 @@ _CHECKPOINT_FOR_DOC = "microsoft/git-base"
 _CONFIG_FOR_DOC = "GitConfig"
 
 
+class GitSelfOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
+
 @dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Git
 class GitVisionModelOutput(ModelOutput):
@@ -248,7 +262,7 @@ class GitSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class GitSelfOutput(nn.Module):
+class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -256,9 +270,20 @@ class GitSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        # In-place operations where possible for memory efficiency. However, depending on the
+        # specifics of autograd, this *might* not be ideal.  If there are issues with
+        # training using these in-place ops, they can be reverted.  Empirical testing
+        # recommended for large models.  Readability is maintained with comments.
+
+        # Perform dense and dropout operations in-place if possible
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dropout(hidden_states)  # Dropout might not have in-place version
+
+        hidden_states.add_(input_tensor)  # In-place addition
+
+        # LayerNorm typically operates in-place anyway, but explicitly call in-place version if available.
+        hidden_states = self.LayerNorm(hidden_states)
+
         return hidden_states
 
 
@@ -683,7 +708,7 @@ class GitVisionEmbeddings(nn.Module):
         batch_size, _, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
             )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]

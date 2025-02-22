@@ -339,7 +339,7 @@ class Distiller:
 
         for _ in range(self.params.n_epoch):
             if self.is_master:
-                logger.info(f"--- Starting epoch {self.epoch}/{self.params.n_epoch-1}")
+                logger.info(f"--- Starting epoch {self.epoch}/{self.params.n_epoch - 1}")
             if self.multi_gpu:
                 torch.distributed.barrier()
 
@@ -356,12 +356,15 @@ class Distiller:
 
                 iter_bar.update()
                 iter_bar.set_postfix(
-                    {"Last_loss": f"{self.last_loss:.2f}", "Avg_cum_loss": f"{self.total_loss_epoch/self.n_iter:.2f}"}
+                    {
+                        "Last_loss": f"{self.last_loss:.2f}",
+                        "Avg_cum_loss": f"{self.total_loss_epoch / self.n_iter:.2f}",
+                    }
                 )
             iter_bar.close()
 
             if self.is_master:
-                logger.info(f"--- Ending epoch {self.epoch}/{self.params.n_epoch-1}")
+                logger.info(f"--- Ending epoch {self.epoch}/{self.params.n_epoch - 1}")
             self.end_epoch()
 
         if self.is_master:

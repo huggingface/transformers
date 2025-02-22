@@ -584,7 +584,7 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 with CaptureStd() as cs:
                     trainer.hyperparameter_search(direction="maximize", n_trials=n_trials)
             self.assertIn("DeepSpeed info", cl.out, "expected DeepSpeed logger output but got none")
-            self.assertIn(f"Trial {n_trials-1} finished with value", cs.err, "expected hyperparameter_search output")
+            self.assertIn(f"Trial {n_trials - 1} finished with value", cs.err, "expected hyperparameter_search output")
             self.assertIn("Best is trial", cs.err, "expected hyperparameter_search output")
 
     # --- These tests need to run on both zero stages --- #

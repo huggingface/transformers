@@ -205,8 +205,7 @@ class TorchAoHfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None):
         if safe_serialization:
             logger.warning(
-                "torchao quantized model does not support safe serialization, "
-                "please set `safe_serialization` to False"
+                "torchao quantized model does not support safe serialization, please set `safe_serialization` to False"
             )
             return False
         _is_torchao_serializable = version.parse(importlib.metadata.version("huggingface_hub")) >= version.parse(

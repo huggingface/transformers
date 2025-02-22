@@ -356,7 +356,7 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                     logs["learning_rate"] = learning_rate_scalar[0]
                     if len(learning_rate_scalar) > 1:
                         for idx, lr in enumerate(learning_rate_scalar[1:]):
-                            logs[f"learning_rate/{idx+1}"] = lr
+                            logs[f"learning_rate/{idx + 1}"] = lr
                     logs["loss"] = loss_scalar
                     if teacher is not None:
                         logs["loss/distil"] = loss_logits.item()

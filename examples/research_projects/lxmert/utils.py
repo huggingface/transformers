@@ -160,7 +160,7 @@ class Config:
     def __str__(self):
         t = "    "
         if self._name != "root":
-            r = f"{t * (self._level-1)}{self._name}:\n"
+            r = f"{t * (self._level - 1)}{self._name}:\n"
         else:
             r = ""
         level = self._level
@@ -229,7 +229,7 @@ def compare(in_tensor):
     print(n1.shape, n1[0, 0, :5])
     print(n2.shape, n2[0, 0, :5])
     assert np.allclose(n1, n2, rtol=0.01, atol=0.1), (
-        f"{sum([1 for x in np.isclose(n1, n2, rtol=0.01, atol=0.1).flatten() if x is False])/len(n1.flatten())*100:.4f} %"
+        f"{sum([1 for x in np.isclose(n1, n2, rtol=0.01, atol=0.1).flatten() if x is False]) / len(n1.flatten()) * 100:.4f} %"
         " element-wise mismatch"
     )
     raise Exception("tensors are all good")

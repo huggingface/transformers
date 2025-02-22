@@ -438,7 +438,7 @@ class FlavaSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -1495,9 +1495,9 @@ class FlavaImageCodebookLayerGroup(nn.Module):
         blocks = OrderedDict()
         for i in range(num_blocks):
             if i == 0:
-                blocks[f"block_{i+1}"] = FlavaImageCodebookBlock(in_size, out_size, num_layers)
+                blocks[f"block_{i + 1}"] = FlavaImageCodebookBlock(in_size, out_size, num_layers)
             else:
-                blocks[f"block_{i+1}"] = FlavaImageCodebookBlock(out_size, out_size, num_layers)
+                blocks[f"block_{i + 1}"] = FlavaImageCodebookBlock(out_size, out_size, num_layers)
 
         if use_pool:
             blocks["pool"] = nn.MaxPool2d(kernel_size=2)

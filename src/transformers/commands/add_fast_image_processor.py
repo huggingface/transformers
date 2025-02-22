@@ -288,7 +288,7 @@ def add_fast_image_processor_to_dummy(fast_image_processor_name: str):
     if new_dummy_object not in content:
         if index_new != len(image_processor_names) - 1:
             # add the dummy object just before the next ImageProcessorFast
-            first_line = f"class {image_processor_names[index_new+1]}(metaclass=DummyObject):"
+            first_line = f"class {image_processor_names[index_new + 1]}(metaclass=DummyObject):"
             updated_content = content.replace(first_line, new_dummy_object + "\n\n" + first_line)
         else:
             # add the dummy object at the very end
@@ -313,11 +313,9 @@ def add_fast_image_processor_to_doc(fast_image_processor_name: str, model_name: 
         raise ValueError(f"No doc files found for {model_name}")
 
     base_doc_string = (
-        f"## {fast_image_processor_name[:-4]}\n\n" f"[[autodoc]] {fast_image_processor_name[:-4]}\n" "    - preprocess"
+        f"## {fast_image_processor_name[:-4]}\n\n[[autodoc]] {fast_image_processor_name[:-4]}\n    - preprocess"
     )
-    fast_doc_string = (
-        f"## {fast_image_processor_name}\n\n" f"[[autodoc]] {fast_image_processor_name}\n" "    - preprocess"
-    )
+    fast_doc_string = f"## {fast_image_processor_name}\n\n[[autodoc]] {fast_image_processor_name}\n    - preprocess"
 
     for doc_file in doc_files:
         with open(doc_file, "r", encoding="utf-8") as f:
@@ -385,7 +383,7 @@ def add_fast_image_processor_to_tests(fast_image_processor_name: str, model_name
     # add the fast image processor to the imports
     base_import_string = f"    from transformers import {fast_image_processor_name[:-4]}"
     fast_import_string = (
-        "    if is_torchvision_available():\n" f"        from transformers import {fast_image_processor_name}"
+        f"    if is_torchvision_available():\n        from transformers import {fast_image_processor_name}"
     )
     if fast_import_string not in updated_content:
         updated_content = updated_content.replace(base_import_string, base_import_string + "\n\n" + fast_import_string)
@@ -522,17 +520,17 @@ def add_fast_image_processor_file(
         "    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.\n\n"
         "    # Default values should be checked against the slow image processor\n"
         "    # None values left after checking can be removed\n"
-        f'    resample = {default_args_dict.get("resample")}\n'
-        f'    image_mean = {default_args_dict.get("image_mean")}\n'
-        f'    image_std = {default_args_dict.get("image_std")}\n'
-        f'    size = {default_args_dict.get("size")}\n'
-        f'    default_to_square = {default_args_dict.get("default_to_square")}\n'
-        f'    crop_size = {default_args_dict.get("crop_size")}\n'
-        f'    do_resize = {default_args_dict.get("do_resize")}\n'
-        f'    do_center_crop = {default_args_dict.get("do_center_crop")}\n'
-        f'    do_rescale = {default_args_dict.get("do_rescale")}\n'
-        f'    do_normalize = {default_args_dict.get("do_normalize")}\n'
-        f'    do_convert_rgb = {default_args_dict.get("do_convert_rgb")}\n\n\n'
+        f"    resample = {default_args_dict.get('resample')}\n"
+        f"    image_mean = {default_args_dict.get('image_mean')}\n"
+        f"    image_std = {default_args_dict.get('image_std')}\n"
+        f"    size = {default_args_dict.get('size')}\n"
+        f"    default_to_square = {default_args_dict.get('default_to_square')}\n"
+        f"    crop_size = {default_args_dict.get('crop_size')}\n"
+        f"    do_resize = {default_args_dict.get('do_resize')}\n"
+        f"    do_center_crop = {default_args_dict.get('do_center_crop')}\n"
+        f"    do_rescale = {default_args_dict.get('do_rescale')}\n"
+        f"    do_normalize = {default_args_dict.get('do_normalize')}\n"
+        f"    do_convert_rgb = {default_args_dict.get('do_convert_rgb')}\n\n\n"
         f'__all__ = ["{fast_image_processor_name}"]\n'
     )
 

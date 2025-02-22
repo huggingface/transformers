@@ -435,7 +435,38 @@ class YosoSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+class BertSelfOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        # In-place operations where possible for memory efficiency. However, depending on the
+        # specifics of autograd, this *might* not be ideal.  If there are issues with
+        # training using these in-place ops, they can be reverted.  Empirical testing
+        # recommended for large models.  Readability is maintained with comments.
+
+        # Perform dense and dropout operations in-place if possible
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)  # Dropout might not have in-place version
+
+        hidden_states.add_(input_tensor)  # In-place addition
+
+        # LayerNorm typically operates in-place anyway, but explicitly call in-place version if available.
+        hidden_states = self.LayerNorm(hidden_states)
+
+        return hidden_states
+
+
 class YosoSelfOutput(nn.Module):
+    """
+    The residual connection is defined in YosoLayer instead of here
+    (as is the case with other models), due to the layernorm applied before each
+    block.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)

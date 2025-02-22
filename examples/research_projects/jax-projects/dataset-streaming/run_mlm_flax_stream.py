@@ -630,7 +630,7 @@ if __name__ == "__main__":
                     training_args.output_dir,
                     params=params,
                     push_to_hub=training_args.push_to_hub,
-                    commit_message=f"Saving weights and logs of step {step+1}",
+                    commit_message=f"Saving weights and logs of step {step + 1}",
                 )
 
         # update tqdm bar

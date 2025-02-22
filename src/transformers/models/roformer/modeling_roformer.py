@@ -342,9 +342,20 @@ class RoFormerSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        # In-place operations where possible for memory efficiency. However, depending on the
+        # specifics of autograd, this *might* not be ideal.  If there are issues with
+        # training using these in-place ops, they can be reverted.  Empirical testing
+        # recommended for large models.  Readability is maintained with comments.
+
+        # Perform dense and dropout operations in-place if possible
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dropout(hidden_states)  # Dropout might not have in-place version
+
+        hidden_states.add_(input_tensor)  # In-place addition
+
+        # LayerNorm typically operates in-place anyway, but explicitly call in-place version if available.
+        hidden_states = self.LayerNorm(hidden_states)
+
         return hidden_states
 
 

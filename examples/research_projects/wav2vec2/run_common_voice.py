@@ -310,7 +310,7 @@ def main():
     eval_dataset = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="test")
 
     # Create and save tokenizer
-    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]'
+    chars_to_ignore_regex = f"[{''.join(data_args.chars_to_ignore)}]"
 
     def remove_special_characters(batch):
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "

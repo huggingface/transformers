@@ -178,9 +178,11 @@ if not os.path.exists("temp_engine"):
     os.makedirs("temp_engine")
 
 EXPLICIT_BATCH = 1 << (int)(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-with trt.Builder(TRT_LOGGER) as builder, builder.create_network(EXPLICIT_BATCH) as network, trt.OnnxParser(
-    network, TRT_LOGGER
-) as parser:
+with (
+    trt.Builder(TRT_LOGGER) as builder,
+    builder.create_network(EXPLICIT_BATCH) as network,
+    trt.OnnxParser(network, TRT_LOGGER) as parser,
+):
     with open(args.onnx_model_path, "rb") as model:
         if not parser.parse(model.read()):
             for error in range(parser.num_errors):
@@ -393,9 +395,12 @@ metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
 
 # Evaluation!
 logger.info("Loading ONNX model %s for evaluation", args.onnx_model_path)
-with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.deserialize_cuda_engine(
-    f.read()
-) as engine, engine.create_execution_context() as context:
+with (
+    open(engine_name, "rb") as f,
+    trt.Runtime(TRT_LOGGER) as runtime,
+    runtime.deserialize_cuda_engine(f.read()) as engine,
+    engine.create_execution_context() as context,
+):
     # setup for TRT inferrence
     for i in range(len(input_names)):
         context.set_binding_shape(i, INPUT_SHAPE)

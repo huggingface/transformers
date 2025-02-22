@@ -362,7 +362,7 @@ if __name__ == "__main__":
 
     DEVICE = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     if DEVICE.type not in ("cuda", "tpu"):
-        raise ValueError("We have found the training stable on GPU and TPU, we are working on" " a fix for CPUs")
+        raise ValueError("We have found the training stable on GPU and TPU, we are working on a fix for CPUs")
 
     model = None
     if not load_from_hf_hub:

@@ -1585,7 +1585,7 @@ class TikTokenConverter:
             from tiktoken.load import load_tiktoken_bpe
         except Exception:
             raise ValueError(
-                "`tiktoken` is required to read a `tiktoken` file. Install it with " "`pip install tiktoken`."
+                "`tiktoken` is required to read a `tiktoken` file. Install it with `pip install tiktoken`."
             )
 
         bpe_ranks = load_tiktoken_bpe(tiktoken_url)

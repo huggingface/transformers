@@ -3169,7 +3169,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Checkpoint at intermediate step
             enable_full_determinism(0)
-            checkpoint = os.path.join(tmpdir, f"checkpoint-{resume_from_step+1}")
+            checkpoint = os.path.join(tmpdir, f"checkpoint-{resume_from_step + 1}")
             trainer = get_language_model_trainer(**kwargs)
             trainer.train(resume_from_checkpoint=checkpoint)
             model_params = torch.cat([p.cpu().flatten() for p in trainer.model.parameters()])
