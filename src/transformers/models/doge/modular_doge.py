@@ -499,15 +499,12 @@ class DogeCDMoE(DogeMLP):
         all_indices = (indices_x.unsqueeze(-1) * self.num_keys) + indices_y.unsqueeze(-2)
         all_indices = all_indices.view(*indices_x.shape[:-1], -1)
         scores, pk_indices = all_scores.topk(self.top_k, dim=-1)
-        scores = scores.view(bsz * seq_len, self.top_k)
-        indices = all_indices.gather(-1, pk_indices).view(bsz * seq_len, self.top_k)
-        down_embed = self.down_embed(indices)
+        indices = all_indices.gather(-1, pk_indices)
+        down_embed = self.down_embed(indices).transpose(1, 2)
         up_embed = self.up_embed(indices)
 
         # mix experts states with cross domain states
-        experts_weights = torch.bmm(hidden_states.view(bsz * seq_len, 1, -1), down_embed.transpose(1, 2)).view(
-            bsz * seq_len, -1
-        )
+        experts_weights = torch.bmm(hidden_states.view(bsz * seq_len, 1, -1), down_embed).view(bsz * seq_len, -1)
         experts_weights = self.act_fn(experts_weights) * scores.softmax(dim=-1)
         experts_states = torch.bmm(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
