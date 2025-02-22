@@ -480,7 +480,7 @@ class DogeCDMoE(DogeMLP):
 
         # queries and keys for retrieval experts
         self.queries_proj = nn.Linear(self.hidden_dim, self.num_cdmoe_heads * self.expert_retrieval_dim, bias=False)
-        self.keys = nn.Parameter(torch.zeros(self.num_cdmoe_heads, self.expert_retrieval_dim, self.num_keys))
+        self.keys = nn.Parameter(torch.zeros(2 * self.num_cdmoe_heads, self.expert_retrieval_dim // 2, self.num_keys))
 
         # experts
         self.down_embed = nn.Embedding(self.num_cdmoe_experts, self.hidden_dim)
@@ -494,11 +494,8 @@ class DogeCDMoE(DogeMLP):
         bsz, seq_len, _ = hidden_states.shape
 
         # get routing weights with queries and keys
-        queries = self.queries_proj(hidden_states)
-        queries = queries.view(2, self.num_cdmoe_heads, bsz * seq_len, -1)
-        keys = self.keys.view(2, self.num_cdmoe_heads, -1, self.num_keys)
-        routing_weights = torch.matmul(queries, keys)
-        routing_weights = routing_weights.transpose(-2, -3).view(2, bsz, seq_len, self.num_cdmoe_heads, self.num_keys)
+        queries = self.queries_proj(hidden_states).view(2 * self.num_cdmoe_heads, bsz * seq_len, -1)
+        routing_weights = torch.bmm(queries, self.keys).view(2, bsz * seq_len, self.num_cdmoe_heads, self.num_keys)
 
         # get experts with the highest routing weights
         (scores_x, scores_y), (indices_x, indices_y) = routing_weights.topk(self.num_cdmoe_experts_per_head, dim=-1)
@@ -507,14 +504,15 @@ class DogeCDMoE(DogeMLP):
         all_indices = (indices_x.unsqueeze(-1) * self.num_keys) + indices_y.unsqueeze(-2)
         all_indices = all_indices.view(*indices_x.shape[:-1], -1)
         scores, pk_indices = all_scores.topk(self.num_cdmoe_experts_per_head, dim=-1)
-        indices = all_indices.gather(-1, pk_indices)
+        scores = scores.view(bsz * seq_len, self.num_cdmoe_heads * self.num_cdmoe_experts_per_head)
+        indices = all_indices.gather(-1, pk_indices).view(bsz * seq_len, self.num_cdmoe_heads * self.num_cdmoe_experts_per_head)
         down_embed = self.down_embed(indices)
         up_embed = self.up_embed(indices)
 
         # mix experts states with cross domain states
-        experts_weights = torch.sum(hidden_states[:, :, None, None, :] * down_embed, dim=-1)
+        experts_weights = torch.bmm(hidden_states.view(bsz * seq_len, 1, -1), down_embed.transpose(1, 2)).view(bsz * seq_len, -1)
         experts_weights = self.act_fn(experts_weights) * scores.softmax(dim=-1)
-        experts_states = torch.sum(experts_weights[:, :, :, :, None] * up_embed, dim=(-2, -3))
+        experts_states = torch.bmm(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         hidden_states = hidden_states + experts_states
         return hidden_states
