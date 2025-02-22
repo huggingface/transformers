@@ -374,9 +374,6 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (XLMWithLMHeadModel,) if is_torch_available() else ()
-    )  # TODO (PVP): Check other models whether language generation is also applicable
     pipeline_model_mapping = (
         {
             "feature-extraction": XLMModel,

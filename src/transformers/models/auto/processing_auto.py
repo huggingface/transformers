@@ -99,6 +99,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
         ("siglip", "SiglipProcessor"),
+        ("siglip2", "Siglip2Processor"),
         ("speech_to_text", "Speech2TextProcessor"),
         ("speech_to_text_2", "Speech2Text2Processor"),
         ("speecht5", "SpeechT5Processor"),

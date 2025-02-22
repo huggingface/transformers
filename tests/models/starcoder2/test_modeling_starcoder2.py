@@ -294,7 +294,6 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Starcoder2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": Starcoder2Model,

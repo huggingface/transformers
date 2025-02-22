@@ -1183,7 +1183,9 @@ class MllamaPreTrainedModel(PreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -1539,7 +1541,9 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         aspect_ratio_ids = aspect_ratio_ids.reshape(batch_size * num_concurrent_media, -1)
 
         # Patch embedding
-        patch_embeds = self.patch_embedding(pixel_values.to(self.dtype).to(self.device))
+        target_dtype = self.patch_embedding.weight.dtype
+        target_device = self.patch_embedding.weight.device
+        patch_embeds = self.patch_embedding(pixel_values.to(target_device, target_dtype))
         hidden_state = patch_embeds.flatten(2).transpose(1, 2)
 
         # Tile embeddings

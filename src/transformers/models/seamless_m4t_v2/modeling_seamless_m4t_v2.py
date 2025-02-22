@@ -3192,7 +3192,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     "The speech-to-text SeamlessM4Tv2 Model transformer which can be used for S2TT.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
@@ -3473,7 +3473,7 @@ class SeamlessM4Tv2ForSpeechToText(SeamlessM4Tv2PreTrainedModel):
     "The text-to-speech SeamlessM4Tv2 Model transformer which can be used for T2ST.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
@@ -3844,7 +3844,7 @@ class SeamlessM4Tv2ForTextToSpeech(SeamlessM4Tv2PreTrainedModel):
     "The speech-to-speech SeamlessM4Tv2 Model transformer which can be used for S2ST.",
     SEAMLESS_M4T_V2_START_DOCSTRING,
 )
-class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
@@ -4229,7 +4229,7 @@ class SeamlessM4Tv2ForSpeechToSpeech(SeamlessM4Tv2PreTrainedModel):
             This will be updated automatically according to the modality passed to the forward and generate passes (`input_ids` for text and `input_features` for audio).
     """,
 )
-class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel):
+class SeamlessM4Tv2Model(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = [
         "lm_head.weight",
         "text_encoder.embed_tokens.weight",

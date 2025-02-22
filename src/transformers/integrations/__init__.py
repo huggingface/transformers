@@ -54,6 +54,7 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
@@ -105,6 +106,7 @@ _import_structure = {
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
+    "spqr": ["replace_with_spqr_linear"],
     "vptq": ["replace_with_vptq_linear"],
 }
 
@@ -157,6 +159,7 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
     from .fsdp import is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,
@@ -208,6 +211,7 @@ if TYPE_CHECKING:
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
+    from .spqr import replace_with_spqr_linear
     from .vptq import replace_with_vptq_linear
 
     try:

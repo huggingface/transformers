@@ -369,7 +369,6 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (XmodForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": XmodModel,

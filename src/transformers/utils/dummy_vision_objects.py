@@ -604,13 +604,6 @@ class PvtImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class Qwen2_5_VLImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class Qwen2VLImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -654,6 +647,20 @@ class SegGptImageProcessor(metaclass=DummyObject):
 
 
 class SiglipImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class Siglip2ImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class SmolVLMImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

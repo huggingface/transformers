@@ -535,10 +535,6 @@ class TFTapasModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_loss_computation(self):
         pass
 
-    @unittest.skip("tfp is not defined even if installed. FIXME @Arthur in a followup PR!")
-    def test_pt_tf_model_equivalence(self):
-        pass
-
 
 def prepare_tapas_single_inputs_for_inference():
     # Here we prepare a single table-question pair to test TAPAS inference on:

@@ -993,6 +993,7 @@ class ModelUtilsTest(TestCasePlus):
         for mname in mnames:
             _ = BertModel.from_pretrained(mname, low_cpu_mem_usage=True)
 
+    @slow
     @require_usr_bin_time
     @require_accelerate
     @mark.accelerate_tests
@@ -1001,30 +1002,29 @@ class ModelUtilsTest(TestCasePlus):
         # Now though these should be around the same.
         # TODO: Look for good bounds to check that their timings are near the same
 
-        mname = "hf-internal-testing/tiny-random-bert"
+        mname = "HuggingFaceTB/SmolLM-135M"
 
         preamble = "from transformers import AutoModel"
         one_liner_str = f'{preamble}; AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=False)'
         # Save this output as `max_rss_normal` if testing memory results
         max_rss_normal = self.python_one_liner_max_rss(one_liner_str)
-        # print(f"{max_rss_normal=}")
 
         one_liner_str = f'{preamble};  AutoModel.from_pretrained("{mname}", low_cpu_mem_usage=True)'
         # Save this output as `max_rss_low_mem` if testing memory results
         max_rss_low_mem = self.python_one_liner_max_rss(one_liner_str)
 
-        # Should be within 2MBs of each other (overhead)
+        # Should be within 5MBs of each other (overhead)
         self.assertAlmostEqual(
             max_rss_normal / 1024 / 1024,
             max_rss_low_mem / 1024 / 1024,
-            delta=2,
+            delta=5,
             msg="using `low_cpu_mem_usage` should incur the same memory usage in both cases.",
         )
 
         # if you want to compare things manually, let's first look at the size of the model in bytes
-        # model = BertModel.from_pretrained(mname, low_cpu_mem_usage=False)
+        # model = AutoModel.from_pretrained(mname, low_cpu_mem_usage=False)
         # total_numel = sum(dict((p.data_ptr(), p.numel()) for p in model.parameters()).values())
-        # total_bytes = total_numel * 4  # 420MB
+        # total_bytes = total_numel * 4
         # Now the diff_bytes should be very close to total_bytes, but the reports are inconsistent.
         # The easiest way to test this is to switch the model and torch.load to do all the work on
         # gpu - that way one can measure exactly the total and peak memory used. Perhaps once we add
@@ -1709,17 +1709,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 3 - Alternatively, a model can implement a `generate` method
-        class DummyBertWithGenerate(BertModel):
-            def generate(self):
-                pass
-
-        with CaptureLogger(logger) as cl:
-            can_generate = DummyBertWithGenerate.can_generate()
-        self.assertTrue("" == cl.out)
-        self.assertTrue(can_generate)
-
-        # 4 - Finally, it can inherit from a model that can generate
+        # 3 - Finally, it can inherit from a model that can generate
         class DummyBertWithParent(DummyBertWithMixin):
             pass
 
@@ -1728,7 +1718,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 5 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
+        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
         # `GenerationMixin`)
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
@@ -2064,7 +2054,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
-        self.api.update_repo_visibility(self.repo_name, private=False)
+        self.api.update_repo_settings(self.repo_name, private=False)
 
         # We once again call from_pretrained, which should call the bot to open a PR
         BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)

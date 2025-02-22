@@ -433,10 +433,6 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
-        # Use a slightly higher default tol to make the tests non-flaky
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol=tol, name=name, attributes=attributes)
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "facebook/sam-vit-huge"

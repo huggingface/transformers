@@ -609,7 +609,7 @@ def compile_jinja_template(template):
         raise ImportError("template requires jinja2 to be installed.")
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
-        raise ImportError("template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}.")
+        raise ImportError(f"template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}.")
 
     def raise_exception(message):
         raise TemplateError(message)
