@@ -47,7 +47,6 @@ class SamHQPromptEncoderConfig(PretrainedConfig):
             The number of point embeddings to be used.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the encoder and pooler.
-        layer_norm_eps (`<fill_type>`, *optional*, defaults to 1e-06): <fill_docstring>
     """
 
     base_config_key = "prompt_encoder_config"
@@ -259,7 +258,6 @@ class SamHQConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`SamHQPromptEncoderConfig`].
         mask_decoder_config (Union[`dict`, `SamHQMaskDecoderConfig`], *optional*):
             Dictionary of configuration options used to initialize [`SamHQMaskDecoderConfig`].
-        initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
