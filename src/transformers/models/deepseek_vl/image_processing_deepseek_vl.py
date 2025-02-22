@@ -104,8 +104,8 @@ class DeekseekImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: int,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = "channels_first",
-        input_data_format: Optional[Union[str, ChannelDimension]] = 'channels_first',
+        data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
         **kwargs,
     ) -> np.ndarray:
         
