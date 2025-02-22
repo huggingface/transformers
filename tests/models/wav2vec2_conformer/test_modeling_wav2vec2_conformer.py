@@ -24,7 +24,6 @@ from datasets import load_dataset
 from transformers import Wav2Vec2ConformerConfig, is_torch_available
 from transformers.testing_utils import (
     is_flaky,
-    is_pt_flax_cross_test,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -533,16 +532,6 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
     @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
-    def test_equivalence_flax_to_pt(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
-    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):

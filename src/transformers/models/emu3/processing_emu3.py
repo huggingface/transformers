@@ -63,6 +63,7 @@ class Emu3Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast")
     image_processor_class = "Emu3ImageProcessor"
 
@@ -179,7 +180,7 @@ class Emu3Processor(ProcessorMixin):
         data = self.tokenizer(text, **output_kwargs["text_kwargs"])
         data.update(**image_features)
 
-        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"].pop("return_tensors", None))
 
     def calculate_generate_size(self, ratio, image_area, spatial_factor):
         width, height = map(int, ratio.split(":"))

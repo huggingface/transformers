@@ -81,17 +81,13 @@ class TestTensorParallel(TestCasePlus):
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, tp_plan="auto")
             torch.distributed.barrier()
 
-            # The expected full model memory footprint
-            expected_model_memory = 16
+            # The expected model memory footprint. We add 1 as not all the modules are split (e.g. the embeddings)
+            expected_model_memory_per_device = (16 / world_size) + 1
             overhead_factor = 1.2
 
-            # Assert we did not use more than the full model expected memory (with some overhead)
-            if not torch.cuda.max_memory_allocated(device) / 1024**3 < expected_model_memory * overhead_factor:
-                raise ValueError("Loading the model used more than the full model size")
-
-            # Assert we correctly handled the sharding between devices
-            if not torch.cuda.memory_allocated(device) / 1024**3 < (expected_model_memory / world_size) * overhead_factor:
-                raise ValueError("Each model shard is larger than what is expected.")
+            # Check that we do not use more than the expected sharded size during initialization
+            if torch.cuda.max_memory_allocated(device) / 1024**3 > expected_model_memory_per_device * overhead_factor:
+                raise ValueError("Loading the model used more than the expected fraction of model size per device")
 
             torch.distributed.barrier()
             torch.distributed.destroy_process_group()

@@ -23,12 +23,10 @@ import tempfile
 import unittest
 from importlib import import_module
 
-import numpy as np
 import requests
 
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 from transformers.testing_utils import (
-    is_pt_tf_cross_test,
     require_tensorflow_probability,
     require_tf,
     require_vision,
@@ -148,10 +146,6 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_head_masking = False
     test_onnx = False
-
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as this model tends to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
 
     def setUp(self):
         self.model_tester = TFGroupViTVisionModelTester(self)
@@ -290,25 +284,6 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        # `GroupViT` computes some indices using argmax, uses them as
-        # one-hot encoding for further computation. The problem is
-        # while PT/TF have very small difference in `y_soft` (~ 1e-9),
-        # the argmax could be totally different, if there are at least
-        # 2 indices with almost identical values. This leads to very
-        # large difference in the outputs. We need specific seeds to
-        # avoid almost identical values happening in `y_soft`.
-        import torch
-
-        seed = 338
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        tf.random.set_seed(seed)
-        return super().test_pt_tf_model_equivalence()
 
     @slow
     def test_model_from_pretrained(self):
@@ -462,10 +437,6 @@ class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_onnx = False
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as this model tends to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
     def setUp(self):
         self.model_tester = TFGroupViTTextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GroupViTTextConfig, hidden_size=37)
@@ -588,10 +559,6 @@ class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
     test_attention_outputs = False
     test_onnx = False
 
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
-        # We override with a slightly higher tol value, as this model tends to diverge a bit more
-        super().check_pt_tf_outputs(tf_outputs, pt_outputs, model_class, tol, name, attributes)
-
     def setUp(self):
         self.model_tester = TFGroupViTModelTester(self)
 
@@ -615,25 +582,6 @@ class TFGroupViTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Test
     @slow
     def test_keras_fit(self):
         super().test_keras_fit()
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self):
-        # `GroupViT` computes some indices using argmax, uses them as
-        # one-hot encoding for further computation. The problem is
-        # while PT/TF have very small difference in `y_soft` (~ 1e-9),
-        # the argmax could be totally different, if there are at least
-        # 2 indices with almost identical values. This leads to very
-        # large difference in the outputs. We need specific seeds to
-        # avoid almost identical values happening in `y_soft`.
-        import torch
-
-        seed = 158
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
-        tf.random.set_seed(seed)
-        return super().test_pt_tf_model_equivalence()
 
     # overwrite from common since `TFGroupViTModelTester` set `return_loss` to `True` and causes the preparation of
     # `symbolic_inputs` failed.

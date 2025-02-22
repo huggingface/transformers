@@ -289,7 +289,7 @@ class Idefics3ImageProcessor(BaseImageProcessor):
             sample in the batch, such that the returned tensor is of shape (batch_size, max_num_images, num_channels, max_height, max_width).
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "pixel_attention_mask"]
 
     def __init__(
         self,

@@ -20,7 +20,6 @@ import timeout_decorator  # noqa
 from transformers import BlenderbotSmallConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -308,7 +307,7 @@ class BlenderbotHeadTests(unittest.TestCase):
 
 
 @require_flax
-class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
+class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (
         (
@@ -318,7 +317,6 @@ class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, Flax
         if is_flax_available()
         else ()
     )
-    all_generative_model_classes = (FlaxBlenderbotSmallForConditionalGeneration,) if is_flax_available() else ()
 
     def is_pipeline_test_to_skip(
         self,

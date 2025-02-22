@@ -268,7 +268,6 @@ class FuyuModelTester:
 @require_torch
 class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
-    all_generative_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
     )
@@ -324,6 +323,10 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip(reason="Does not work on the tiny model.")
     def test_model_parallelism(self):
         super().test_model_parallelism()
+
+    @unittest.skip(reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position.")
+    def test_generate_continue_from_inputs_embeds():
+        pass
 
 
 @slow

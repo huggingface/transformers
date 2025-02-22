@@ -17,8 +17,6 @@
 import tempfile
 import unittest
 
-from huggingface_hub.hf_api import list_models
-
 from transformers import MarianConfig, is_torch_available
 from transformers.testing_utils import (
     require_sentencepiece,
@@ -46,11 +44,6 @@ if is_torch_available():
         MarianModel,
         MarianMTModel,
         TranslationPipeline,
-    )
-    from transformers.models.marian.convert_marian_to_pytorch import (
-        ORG_NAME,
-        convert_hf_name_to_opus_name,
-        convert_opus_name_to_hf_name,
     )
     from transformers.models.marian.modeling_marian import (
         MarianDecoder,
@@ -237,7 +230,6 @@ class MarianModelTester:
 @require_torch
 class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MarianModel, MarianMTModel) if is_torch_available() else ()
-    all_generative_model_classes = (MarianMTModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": MarianModel,
@@ -394,17 +386,6 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
 
 def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
-
-
-class ModelManagementTests(unittest.TestCase):
-    @slow
-    @require_torch
-    def test_model_names(self):
-        model_list = list_models()
-        model_ids = [x.id for x in model_list if x.id.startswith(ORG_NAME)]
-        bad_model_ids = [mid for mid in model_ids if "+" in model_ids]
-        self.assertListEqual([], bad_model_ids)
-        self.assertGreater(len(model_ids), 500)
 
 
 @require_torch
@@ -655,30 +636,6 @@ class TestMarian_FI_EN_V2(MarianIntegrationTest):
         self._assert_generated_batch_equal_expected()
 
 
-@require_torch
-class TestConversionUtils(unittest.TestCase):
-    def test_renaming_multilingual(self):
-        old_names = [
-            "opus-mt-cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
-            "opus-mt-cmn+cn-fi",  # no group
-            "opus-mt-en-de",  # standard name
-            "opus-mt-en-de",  # standard name
-        ]
-        expected = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
-        self.assertListEqual(expected, [convert_opus_name_to_hf_name(x) for x in old_names])
-
-    def test_undoing_renaming(self):
-        hf_names = ["opus-mt-ZH-fi", "opus-mt-cmn_cn-fi", "opus-mt-en-de", "opus-mt-en-de"]
-        converted_opus_names = [convert_hf_name_to_opus_name(x) for x in hf_names]
-        expected_opus_names = [
-            "cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh-fi",
-            "cmn+cn-fi",
-            "en-de",  # standard name
-            "en-de",
-        ]
-        self.assertListEqual(expected_opus_names, converted_opus_names)
-
-
 class MarianStandaloneDecoderModelTester:
     def __init__(
         self,
@@ -871,7 +828,6 @@ class MarianStandaloneDecoderModelTester:
 @require_torch
 class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MarianDecoder, MarianForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (MarianForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     is_encoder_decoder = False
 

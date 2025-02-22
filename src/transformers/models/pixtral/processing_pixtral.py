@@ -154,9 +154,13 @@ class PixtralProcessor(ProcessorMixin):
         if images is not None:
             if is_image_or_image_url(images):
                 images = [images]
-            elif isinstance(images, list) and is_image_or_image_url(images[0]):
+            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
                 pass
-            elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
+            elif (
+                isinstance(images, (list, tuple))
+                and isinstance(images[0], (list, tuple))
+                and is_image_or_image_url(images[0][0])
+            ):
                 images = [image for sublist in images for image in sublist]
             else:
                 raise ValueError(
