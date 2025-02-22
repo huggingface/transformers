@@ -34,7 +34,6 @@ from utils_mmimdb import ImageEncoder, JsonlDataset, collate_fn, get_image_trans
 import transformers
 from transformers import (
     WEIGHTS_NAME,
-    AdamW,
     AutoConfig,
     AutoModel,
     AutoTokenizer,
@@ -93,7 +92,7 @@ def train(args, train_dataset, model, tokenizer, criterion):
         {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0},
     ]
 
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total
     )
