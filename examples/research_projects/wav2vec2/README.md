@@ -1,4 +1,4 @@
-**NOTE**: This example is outdated and is not longer actively maintained. Please 
+**NOTE**: This example is outdated and is no longer actively maintained. Please 
 follow the new instructions of fine-tuning Wav2Vec2 [here](https://github.com/huggingface/transformers/blob/main/examples/pytorch/speech-recognition/README.md)
 
 ## Fine-tuning Wav2Vec2

@@ -30,7 +30,7 @@ It is very much possible that prizes will be given to groups of people instead o
 - [Rules of training and evaluation](#rules-of-training-and-evaluation)
 - [Tips and tricks](#tips-and-tricks)
 	- [How to combine multiple datasests into one](#how-to-combine-multiple-datasets-into-one)
-	- [How to effectively preprocess the data](#how-to-effectively-preprocess-the-data)
+	- [How to effectively preprocess the data](#how-to-effectively-preprocesss-the-data)
 	- [How to efficiently preproces the data](#how-to-do-efficiently-load-datasets-with-limited-ram-and-hard-drive-space)
 	- [How to do hyperparameter tuning](#how-to-do-hyperparameter-tuning)
 	- [How to preprocess and evaluate character based languages](#how-to-preprocess-and-evaluate-character-based-languages)
@@ -134,7 +134,7 @@ Awesome you have successfully trained a XLSR-Wav2Vec2 model 😎. Now you can ju
 We have provided `run_common_voice.py` script to run fine-tuning on local machine. The script is similar to the colab but allows you to launch training using command line, save and continue training from previous checkpoints and launch training on multiple GPUs.
 For bigger datasets, we recommend to train Wav2Vec2 locally instead of in a google colab.
 
-1. To begin with, we should clone transformers localy and install all the required packages.
+1. To begin with, we should clone transformers locally and install all the required packages.
 
 First, you need to clone the `transformers` repo with:
 
@@ -155,7 +155,7 @@ packages are listed in the `requirements.txt` file and can be installed with
 $ pip install -r requirements.txt
 ```
 
-	**Note**: Installing the latest version of `torchaudio` will also upgrade `torch` to it's latest stable version. If you are using specific version of `torch` then make sure
+	**Note**: Installing the latest version of `torchaudio` will also upgrade `torch` to its latest stable version. If you are using specific version of `torch` then make sure
 	to use the correct `torchaudio` version compatible with your version of `torch`. By default the `requirements.txt` will install the latest version of `torchaudio`.
 
 2. Next, take a look at the `run_common_voice.py` script to get an understanding of how it works. In short the script does the following:
@@ -170,7 +170,7 @@ $ pip install -r requirements.txt
 3. The following examples show how you can launch fine-tuning for the common voice dataset. 
 Here we will run the script on the *Turkish* Common Voice dataset for demonstration purposes.
 	
-	**To lanuch fine-tuninig on a single GPU:**
+	**To launch fine-tuninig on a single GPU:**
 	
 	```bash
 	python run_common_voice.py \
@@ -196,7 +196,7 @@ Here we will run the script on the *Turkish* Common Voice dataset for demonstrat
 		--do_train --do_eval
 	```
 
-	**To lanuch fine-tuninig on multiple GPUs:**
+	**To launch fine-tuninig on multiple GPUs:**
 	
 	```bash
 	python -m torch.distributed.launch \
@@ -439,19 +439,19 @@ leave a reasonable amount of data for evaluation.
 
 Second, the rules regarding the preprocessing are not that as straight-forward. It is allowed (and recommended) to 
 normalize the data to only have lower-case characters. It is also allowed (and recommended) to remove typographical 
-symbols and punctuation marks. A list of such symbols can *e.g.* be fonud [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks) - however here we already must be careful. We should **not** remove a symbol that 
+symbols and punctuation marks. A list of such symbols can *e.g.* be found [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks) - however here we already must be careful. We should **not** remove a symbol that 
 would change the meaning of the words, *e.g.* in English, we should not remove the single quotation mark `'` since it 
 would change the meaning of the word `"it's"` to `"its"` which would then be incorrect. So the golden rule here is to 
 not remove any characters that could change the meaning of a word into another word. This is not always obvious and should 
 be given some consideration. As another example, it is fine to remove the "Hypen-minus" sign "`-`" since it doesn't change the 
-meaninng of a word to another one. *E.g.* "`fine-tuning`" would be changed to "`finetuning`" which has still the same meaning.
+meaning of a word to another one. *E.g.* "`fine-tuning`" would be changed to "`finetuning`" which has still the same meaning.
 
 Since those choices are not always obvious when in doubt feel free to ask on Slack or even better post on the forum, as was 
 done, *e.g.* [here](https://discuss.huggingface.co/t/spanish-asr-fine-tuning-wav2vec2/4586).
 
 ## Tips and tricks
 
-This section summarizes a couple of tips and tricks across various topics. It will continously be updated during the week.
+This section summarizes a couple of tips and tricks across various topics. It will continuously be updated during the week.
 
 ### How to combine multiple datasets into one
 

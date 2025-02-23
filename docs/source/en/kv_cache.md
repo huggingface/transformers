@@ -268,7 +268,7 @@ Cache offloading requires a CUDA GPU.
 
 ### Sliding Window Cache
 
-As the name suggests, this cache type implements a sliding window over previous keys and values, retaining only the last `sliding_window` tokens. It should be used with models like Mistral that support sliding window attention. Additionally, similar to Static Cache, this one is JIT-friendly and can be used with the same compile tecniques as Static Cache.
+As the name suggests, this cache type implements a sliding window over previous keys and values, retaining only the last `sliding_window` tokens. It should be used with models like Mistral that support sliding window attention. Additionally, similar to Static Cache, this one is JIT-friendly and can be used with the same compile techniques as Static Cache.
 
 Note that you can use this cache only for models that support sliding window, e.g. Mistral models.
 
@@ -390,7 +390,7 @@ Sometimes you would want to first fill-in cache object with key/values for certa
 
 >>> INITIAL_PROMPT = "You are a helpful assistant. "
 >>> inputs_initial_prompt = tokenizer(INITIAL_PROMPT, return_tensors="pt").to(DEVICE)
->>> # This is the common prompt cached, we need to run forward without grad to be abel to copy
+>>> # This is the common prompt cached, we need to run forward without grad to be able to copy
 >>> with torch.no_grad():
 ...      prompt_cache = model(**inputs_initial_prompt, past_key_values = prompt_cache).past_key_values
 

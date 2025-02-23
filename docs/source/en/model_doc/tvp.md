@@ -107,7 +107,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     Returns:
         frames (tensor): decoded frames from the video.
     '''
-    assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
+    assert clip_idx >= -2, "Not a valid clip_idx {}".format(clip_idx)
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
     clip_size = sampling_rate * num_frames / target_fps * fps
     index = np.linspace(0, clip_size - 1, num_frames)
