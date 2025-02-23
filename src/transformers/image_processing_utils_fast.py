@@ -369,6 +369,45 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return F.normalize(image, mean, std)
 
+    @lru_cache(maxsize=1)
+    def _get_rescale_and_normalize_map(
+        self,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+    ) -> "torch.Tensor":
+        """
+        Cache an uint8 RGB pixels lookup table for fast rescale and normalize process.
+
+        Args:
+            mean (`torch.Tensor`, `float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`torch.Tensor`, `float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+
+        Returns:
+            `torch.Tensor`: The lookup table with shape (3, 256).
+        """
+        pixels_map = torch.arange(256, dtype=torch.float32).repeat(3, 1)
+
+        if isinstance(image_mean, float) and isinstance(image_std, float):
+            pixels_map = (pixels_map - image_mean) / image_std
+        else:
+            for i, (mean, std) in enumerate(zip(image_mean, image_std)):
+                pixels_map[i] = (pixels_map[i] - mean) / std
+        return pixels_map
+
+    def fast_rescale_and_normalize(
+        self,
+        images_in: "torch.IntTensor",
+        images_out: "torch.FloatTensor",
+        image_mean: Union[float, List[float]],
+        image_std: Union[float, List[float]],
+    ):
+        pixels_map = self._get_rescale_and_normalize_map(image_mean, image_std)
+        for i in range(images_in.size(1)):
+            images_out[:, i, ...] = pixels_map[i, images_in[:, i, ...]]
+        return images_out
+
     def rescale_and_normalize(
         self,
         images: "torch.Tensor",
@@ -382,11 +421,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Rescale and normalize images.
         """
         if do_rescale and do_normalize:
-            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+            images = self.fast_rescale_and_normalize(images.int(), images.float(), image_mean, image_std)
         elif do_rescale:
             images = images * rescale_factor
         elif do_normalize:
-            images = self.normalize(images, image_mean, image_std)
+            images = self.fast_rescale_and_normalize(images.int(), images.float(), image_mean, image_std)
 
         return images
 
