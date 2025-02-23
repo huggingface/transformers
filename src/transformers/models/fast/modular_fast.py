@@ -13,7 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for FAST."""
-from ..textnet.image_processing_textnet import TextNetImageProcessor
+from ...utils.import_utils import is_cv2_available, is_torch_available
+if is_cv2_available():
+    import cv2
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
 
 class FastImageProcessor(TextNetImageProcessor):
     def __init__(self):
