@@ -179,14 +179,11 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     @lru_cache
     def _get_pixel_map(
         self,
-        rescale_factor: float = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        rescale_factor: float,
+        image_mean: Union[float, List[float]],
+        image_std: Union[float, List[float]],
     ) -> np.ndarray:
-        if rescale_factor:
-            pixel = np.linspace(0, 1, 256, dtype=np.float32)
-        else:
-            pixel = np.linspace(0, 255, 256, dtype=np.float32)
+        pixel = np.linspace(0, 255, 256, dtype=np.float32) * rescale_factor
         image_mean = np.array(image_mean, dtype=np.float32)[:, np.newaxis]
         image_std = np.array(image_std, dtype=np.float32)[:, np.newaxis]
         pixel_map = (np.tile(pixel, (3, 1)) - image_mean) / image_std
