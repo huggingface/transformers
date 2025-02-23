@@ -369,11 +369,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return F.normalize(image, mean, std)
 
-    @lru_cache(maxsize=1)
+    @lru_cache(maxsize=2)
     def _get_rescale_and_normalize_map(
         self,
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
+        device: Optional["torch.device"] = None,
     ) -> "torch.Tensor":
         """
         Cache an uint8 RGB pixels lookup table for fast rescale and normalize process.
@@ -387,7 +388,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `torch.Tensor`: The lookup table with shape (3, 256).
         """
-        pixels_map = torch.arange(256, dtype=torch.float32).repeat(3, 1)
+        pixels_map = torch.arange(256, dtype=torch.float32, device=device).repeat(3, 1)
 
         if isinstance(image_mean, float) and isinstance(image_std, float):
             pixels_map = (pixels_map - image_mean) / image_std
@@ -403,7 +404,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_mean: Union[float, List[float]],
         image_std: Union[float, List[float]],
     ):
-        pixels_map = self._get_rescale_and_normalize_map(image_mean, image_std)
+        pixels_map = self._get_rescale_and_normalize_map(image_mean, image_std, device=images_in.device)
         for i in range(images_in.size(1)):
             images_out[:, i, ...] = pixels_map[i, images_in[:, i, ...]]
         return images_out
