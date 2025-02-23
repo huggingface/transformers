@@ -124,11 +124,11 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {'height': 384, 'width': 384})
+        self.assertEqual(image_processor.size, {"height": 384, "width": 384})
         self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {'height': 384, 'width': 384})
+        self.assertEqual(image_processor.size, {"height": 384, "width": 384})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     def test_call_pil(self):
