@@ -4,9 +4,22 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -63,7 +76,7 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class EfficientLoFTRRotaryEmbedding(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, device="cpu"):
+    def __init__(self, config: EfficientLoFTRConfig, device="cpu") -> None:
         super().__init__()
         self.config = config
         self.rope_type = config.rope_type
@@ -74,7 +87,7 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
 
     @torch.no_grad()
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         b, _, h, w = x.shape
 
         i_position_indices = torch.ones(h, w, device=x.device).cumsum(0).float().unsqueeze(-1)
@@ -131,7 +144,7 @@ class EfficientLoFTRRepVGGBlock(nn.Module):
     RepVGG architecture block introduced by the work "RepVGG: Making VGG-style ConvNets Great Again".
     """
 
-    def __init__(self, config: EfficientLoFTRConfig, in_channels: int, out_channels: int, stride: int = 1):
+    def __init__(self, config: EfficientLoFTRConfig, in_channels: int, out_channels: int, stride: int = 1) -> None:
         super().__init__()
         activation = config.activation_function
         self.conv1 = EfficientLoFTRConvNormLayer(
@@ -143,7 +156,7 @@ class EfficientLoFTRRepVGGBlock(nn.Module):
         self.identity = nn.BatchNorm2d(in_channels) if in_channels == out_channels and stride == 1 else None
         self.activation = nn.Identity() if activation is None else ACT2FN[activation]
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.identity is not None:
             identity_out = self.identity(hidden_states)
         else:
@@ -154,7 +167,7 @@ class EfficientLoFTRRepVGGBlock(nn.Module):
 
 
 class EfficientLoFTRRepVGGStage(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, in_channels, out_channels, num_blocks, stride):
+    def __init__(self, config: EfficientLoFTRConfig, in_channels, out_channels, num_blocks, stride) -> None:
         super().__init__()
 
         strides = [stride] + [1] * (num_blocks - 1)
@@ -172,15 +185,19 @@ class EfficientLoFTRRepVGGStage(nn.Module):
             current_channel_dim = out_channels
         self.blocks = nn.ModuleList(blocks)
 
-    def forward(self, hidden_states):
+    def forward(
+        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+        all_hidden_states = () if output_hidden_states else None
         for block in self.blocks:
             hidden_states = block(hidden_states)
-
-        return hidden_states
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+        return hidden_states, all_hidden_states
 
 
 class EfficientLoFTRepVGG(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig):
+    def __init__(self, config: EfficientLoFTRConfig) -> None:
         super().__init__()
 
         self.stages = nn.ModuleList([])
@@ -195,10 +212,16 @@ class EfficientLoFTRepVGG(nn.Module):
             current_in_channels = out_channels
             self.stages.append(stage)
 
-    def forward(self, hidden_states):
+    def forward(
+        self, hidden_states: torch.Tensor, output_hidden_states: Optional[bool] = False
+    ) -> Tuple[torch.Tensor, List[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         outputs = []
+        all_hidden_states = () if output_hidden_states else None
         for stage in self.stages:
-            hidden_states = stage(hidden_states)
+            stage_outputs = stage(hidden_states, output_hidden_states=output_hidden_states)
+            hidden_states = stage_outputs[0]
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + stage_outputs[1]
             outputs.append(hidden_states)
 
         # Exclude first stage in outputs
@@ -207,11 +230,11 @@ class EfficientLoFTRepVGG(nn.Module):
         coarse_features = outputs[-1]
         # Rest is residual features used in EfficientLoFTRFineFusionLayer
         residual_features = outputs[:-1]
-        return coarse_features, residual_features
+        return coarse_features, residual_features, all_hidden_states
 
 
 class EfficientLoFTRAggregationLayer(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig):
+    def __init__(self, config: EfficientLoFTRConfig) -> None:
         super().__init__()
 
         hidden_size = config.hidden_size
@@ -238,7 +261,13 @@ class EfficientLoFTRAggregationLayer(nn.Module):
 
         self.norm = nn.LayerNorm(hidden_size)
 
-    def forward(self, hidden_states, attention_mask=None, encoder_hidden_states=None, encoder_attention_mask=None):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor], Optional[torch.Tensor]]:
         query_states = hidden_states
         is_cross_attention = encoder_hidden_states is not None
         kv_states = encoder_hidden_states if is_cross_attention else hidden_states
@@ -412,7 +441,7 @@ class EfficientLoFTRAttention(nn.Module):
 
 
 class EfficientLoFTRMLP(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig):
+    def __init__(self, config: EfficientLoFTRConfig) -> None:
         super().__init__()
         hidden_size = config.hidden_size
         self.fc1 = nn.Linear(2 * hidden_size, 2 * hidden_size, bias=False)
@@ -428,21 +457,24 @@ class EfficientLoFTRMLP(nn.Module):
         return hidden_states
 
 
+def get_positional_embeddings_slice(
+    hidden_states: torch.Tensor, positional_embeddings: Tuple[torch.Tensor, torch.Tensor]
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    batch_size, h, w, _ = hidden_states.shape
+    positional_embeddings = tuple(
+        tensor[:, :h, :w, :].expand(batch_size, -1, -1, -1) for tensor in positional_embeddings
+    )
+    return positional_embeddings
+
+
 class EfficientLoFTRAggregatedAttention(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int) -> None:
         super().__init__()
 
         self.aggregation_sizes = config.aggregation_sizes
         self.aggregation = EfficientLoFTRAggregationLayer(config)
         self.attention = EfficientLoFTRAttention(config, layer_idx)
         self.mlp = EfficientLoFTRMLP(config)
-
-    def get_positional_embeddings_slice(self, hidden_states, positional_embeddings):
-        batch_size, h, w, _ = hidden_states.shape
-        positional_embeddings = tuple(
-            tensor[:, :h, :w, :].expand(batch_size, -1, -1, -1) for tensor in positional_embeddings
-        )
-        return positional_embeddings
 
     def forward(
         self,
@@ -451,9 +483,10 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor] = None,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor]:
         batch_size, channels, h, w = hidden_states.shape
 
+        # Aggregate features
         aggregated_hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask = self.aggregation(
             hidden_states, attention_mask, encoder_hidden_states, encoder_attention_mask
         )
@@ -462,10 +495,10 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
         encoder_hidden_states = encoder_hidden_states.reshape(batch_size, -1, channels)
 
         if position_embeddings is not None:
-            position_embeddings = self.get_positional_embeddings_slice(aggregated_hidden_states, position_embeddings)
+            position_embeddings = get_positional_embeddings_slice(aggregated_hidden_states, position_embeddings)
             position_embeddings = tuple(tensor.reshape(batch_size, -1, channels) for tensor in position_embeddings)
 
-        # Multi head attention
+        # Multi-head attention
         attention_outputs = self.attention(
             attention_hidden_states,
             attention_mask,
@@ -477,9 +510,8 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
 
         # Upsample features
         _, aggregated_h, aggregated_w, _ = aggregated_hidden_states.shape
-        # (batch_size, seq_len, channels) -> (batch_size, channels, seq_len)
+        # (batch_size, seq_len, channels) -> (batch_size, channels, h, w) with seq_len = h * w
         message = message.permute(0, 2, 1)
-        # (batch_size, channels, seq_len) -> (batch_size, channels, h, w) with seq_len = h * w
         message = message.reshape(batch_size, channels, aggregated_h, aggregated_w)
         if self.aggregation_sizes[0] != 1:
             message = torch.nn.functional.interpolate(
@@ -492,22 +524,25 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
 
         hidden_states = hidden_states + output_states
 
-        return (hidden_states,)
+        outputs = (hidden_states,) + attention_outputs[1:]
+        return outputs
 
 
 class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
+    def __init__(self, config: EfficientLoFTRConfig, layer_idx: int) -> None:
         super().__init__()
 
         self.self_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
         self.cross_attention = EfficientLoFTRAggregatedAttention(config, layer_idx)
 
-    def get_positional_embeddings_slice(self, hidden_states, positional_embeddings):
-        _, h, w, _ = hidden_states.shape
-        positional_embeddings = tuple(tensor[:, :h, :w, :] for tensor in positional_embeddings)
-        return positional_embeddings
-
-    def forward(self, hidden_states, position_embeddings, attention_mask=None, **kwargs):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+        all_attentions = () if output_attentions else None
         batch_size, _, c, h, w = hidden_states.shape
 
         hidden_states = hidden_states.reshape(-1, c, h, w)
@@ -515,9 +550,7 @@ class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
             attention_mask = attention_mask.reshape(-1, c, h, w)
 
         self_attention_outputs = self.self_attention(
-            hidden_states,
-            attention_mask,
-            position_embeddings=position_embeddings,
+            hidden_states, attention_mask, position_embeddings=position_embeddings
         )
         hidden_states = self_attention_outputs[0]
 
@@ -535,11 +568,15 @@ class EfficientLoFTRLocalFeatureTransformerLayer(nn.Module):
 
         hidden_states = cross_attention_outputs[0]
         hidden_states = hidden_states.reshape(batch_size, -1, c, h, w)
-        return hidden_states
+
+        if output_attentions:
+            all_attentions = all_attentions + (self_attention_outputs[1], cross_attention_outputs[1])
+
+        return hidden_states, all_attentions
 
 
 class EfficientLoFTRLocalFeatureTransformer(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig):
+    def __init__(self, config: EfficientLoFTRConfig) -> None:
         super().__init__()
 
         self.layers = nn.ModuleList(
@@ -549,14 +586,27 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
             ]
         )
 
-    def forward(self, hidden_states, position_embeddings):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+        all_attentions = () if output_attentions else None
+
         for layer in self.layers:
-            hidden_states = layer(hidden_states, position_embeddings=position_embeddings)
-        return hidden_states
+            layer_outputs = layer(
+                hidden_states, position_embeddings=position_embeddings, output_attentions=output_attentions
+            )
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + layer_outputs[1]
+        return hidden_states, all_attentions
 
 
 class EfficientLoFTROutConvBlock(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig, hidden_size: int, intermediate_size: int):
+    def __init__(self, config: EfficientLoFTRConfig, hidden_size: int, intermediate_size: int) -> None:
         super().__init__()
 
         self.out_conv1 = nn.Conv2d(hidden_size, intermediate_size, kernel_size=1, stride=1, padding=0, bias=False)
@@ -567,7 +617,7 @@ class EfficientLoFTROutConvBlock(nn.Module):
         self.activation = ACT2CLS[config.mlp_activation_function]()
         self.out_conv3 = nn.Conv2d(intermediate_size, hidden_size, kernel_size=3, stride=1, padding=1, bias=False)
 
-    def forward(self, hidden_states, residual_states):
+    def forward(self, hidden_states: torch.Tensor, residual_states: List[torch.Tensor]) -> torch.Tensor:
         residual_states = self.out_conv1(residual_states)
         residual_states = residual_states + hidden_states
         residual_states = self.out_conv2(residual_states)
@@ -581,7 +631,7 @@ class EfficientLoFTROutConvBlock(nn.Module):
 
 
 class EfficientLoFTRFineFusionLayer(nn.Module):
-    def __init__(self, config: EfficientLoFTRConfig):
+    def __init__(self, config: EfficientLoFTRConfig) -> None:
         super().__init__()
 
         self.fine_kernel_size = config.fine_kernel_size
@@ -596,50 +646,58 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
             out_conv = EfficientLoFTROutConvBlock(config, stage_block_dims[i], stage_block_dims[i - 1])
             self.out_conv_layers.append(out_conv)
 
-    def forward_pyramid(self, hidden_states, residual_states):
+    def forward_pyramid(
+        self,
+        hidden_states: torch.Tensor,
+        residual_states: List[torch.Tensor],
+        output_hidden_states: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]]]:
+        all_hidden_states = () if output_hidden_states else None
         hidden_states = self.out_conv(hidden_states)
         hidden_states = nn.functional.interpolate(
             hidden_states, scale_factor=2.0, mode="bilinear", align_corners=False
         )
 
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
         for i, layer in enumerate(self.out_conv_layers):
             hidden_states = self.out_conv_layers[i](hidden_states, residual_states[i])
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return hidden_states
+        return hidden_states, all_hidden_states
 
-    def forward(self, coarse_features, residual_features):
+    def forward(
+        self,
+        coarse_features: torch.Tensor,
+        residual_features: List[torch.Tensor],
+        output_hidden_states: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[Tuple[torch.Tensor]]]:
         """
         For each image pair, compute the fine features of pixels.
-        For each coarse pixel, in the first image, unfold the fine features around it by a kernel of size
-        self.fine_kernel_size (8 by default). In the second image, unfold the fine features around it by a kernel of
-        size self.fine_kernel_size + 2 (10 by default).
-        Thus, for the first image, for each coarse pixel, we have (self.fine_kernel_size * self.fine_kernel_size) (64
-        by default). In the second image, for each coarse pixel, we have ((self.fine_kernel_size + 2) *
-        (self.fine_kernel_size + 2)) (100 by default).
-        The fine feature dim being config.stage_block_dims[0].
-
-        Args:
-            coarse_features:
-            residual_features:
-
-        Returns:
-
+        In both images, compute a patch of fine features center cropped around each coarse pixel.
+        In the first image, the feature patch is kernel_size large and long.
+        In the second image, it is (kernel_size + 2) large and long.
         """
-        batch_size, _, channels, h, w = coarse_features.shape
+        batch_size, _, channels, coarse_height, coarse_width = coarse_features.shape
 
-        coarse_features = coarse_features.reshape(-1, channels, h, w)
+        coarse_features = coarse_features.reshape(-1, channels, coarse_height, coarse_width)
         residual_features = list(reversed(residual_features))
 
-        # 1. fine feature extraction
-        fine_features = self.forward_pyramid(coarse_features, residual_features)
+        # 1. Fine feature extraction
+        pyramid_outputs = self.forward_pyramid(
+            coarse_features, residual_features, output_hidden_states=output_hidden_states
+        )
+        fine_features = pyramid_outputs[0]
         _, fine_channels, fine_height, fine_width = fine_features.shape
 
         fine_features = fine_features.reshape(batch_size, 2, fine_channels, fine_height, fine_width)
         fine_features_0 = fine_features[:, 0]
         fine_features_1 = fine_features[:, 1]
 
-        # 2. unfold(crop) all local windows
-        stride = fine_height // h
+        # 2. Unfold all local windows in crops
+        stride = int(fine_height // coarse_height)
         fine_features_0 = nn.functional.unfold(
             fine_features_0, kernel_size=self.fine_kernel_size, stride=stride, padding=0
         )
@@ -653,7 +711,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
         fine_features_1 = fine_features_1.reshape(batch_size, -1, (self.fine_kernel_size + 2) ** 2, seq_len)
         fine_features_1 = fine_features_1.permute(0, 3, 2, 1)
 
-        return fine_features_0, fine_features_1
+        return fine_features_0, fine_features_1, pyramid_outputs[1]
 
 
 class EfficientLoFTRPreTrainedModel(PreTrainedModel):
@@ -666,10 +724,12 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "efficientloftr"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -696,35 +756,141 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
         return pixel_values[:, 0, :, :][:, None, :, :]
 
 
-def get_matches_from_scores(scores: torch.Tensor, threshold: float, border_removal: int):
-    """obtain matches from a score matrix [Bx M+1 x N+1]"""
-    batch_size, height0, width0, height1, width1 = scores.shape
+def create_meshgrid(
+    height: int,
+    width: int,
+    normalized_coordinates: bool = False,
+    device: torch.device = None,
+    dtype: torch.dtype = None,
+) -> torch.Tensor:
+    """
+    Copied from kornia library : kornia/kornia/utils/grid.py:26
 
-    scores = scores.reshape(batch_size, height0 * width0, height1 * width1)
+    Generate a coordinate grid for an image.
 
-    # For each keypoint, get the best match
-    max_0 = scores.max(2, keepdim=True).values
-    max_1 = scores.max(1, keepdim=True).values
+    When the flag ``normalized_coordinates`` is set to True, the grid is
+    normalized to be in the range :math:`[-1,1]` to be consistent with the pytorch
+    function :py:func:`torch.nn.functional.grid_sample`.
 
-    # 1. Thresholding
-    mask = scores > threshold
+    Args:
+        height (`int`):
+            The image height (rows).
+        width (`int`):
+            The image width (cols).
+        normalized_coordinates (`bool`):
+            Whether to normalize coordinates in the range :math:`[-1,1]` in order to be consistent with the
+            PyTorch function :py:func:`torch.nn.functional.grid_sample`.
+        device (`torch.device`):
+            The device on which the grid will be generated.
+        dtype (`torch.dtype`):
+            The data type of the generated grid.
 
-    # 2. Border removal
-    mask = mask.reshape(batch_size, height0, width0, height1, width1)
-    mask = mask_border(mask, border_removal, False)
-    mask = mask.reshape(batch_size, height0 * width0, height1 * width1)
+    Return:
+        grid (`torch.Tensor` of shape `(1, height, width, 2)`):
+            The grid tensor.
 
-    # 3. Mutual nearest neighbors
-    mask = mask * (scores == max_0) * (scores == max_1)
+    Example:
+        >>> create_meshgrid(2, 2)
+        tensor([[[[-1., -1.],
+                  [ 1., -1.]],
+        <BLANKLINE>
+                 [[-1.,  1.],
+                  [ 1.,  1.]]]])
 
-    # 4. Fine coarse matches
-    mask_values, mask_indices = mask.max(dim=2)
-    batch_indices, matched_indices_0 = torch.where(mask_values)
-    matched_indices_1 = mask_indices[batch_indices, matched_indices_0]
-    matching_scores = scores[batch_indices, matched_indices_0, matched_indices_1]
+        >>> create_meshgrid(2, 2, normalized_coordinates=False)
+        tensor([[[[0., 0.],
+                  [1., 0.]],
+        <BLANKLINE>
+                 [[0., 1.],
+                  [1., 1.]]]])
 
-    matched_indices = torch.stack([matched_indices_0, matched_indices_1], dim=0)
-    return matched_indices, matching_scores, batch_indices
+    """
+    xs = torch.linspace(0, width - 1, width, device=device, dtype=dtype)
+    ys = torch.linspace(0, height - 1, height, device=device, dtype=dtype)
+    if normalized_coordinates:
+        xs = (xs / (width - 1) - 0.5) * 2
+        ys = (ys / (height - 1) - 0.5) * 2
+    grid = torch.stack(torch.meshgrid(ys, xs, indexing="ij"), dim=-1)
+    grid = grid.permute(1, 0, 2).unsqueeze(0)
+    return grid
+
+
+def spatial_expectation2d(input: torch.Tensor, normalized_coordinates: bool = True) -> torch.Tensor:
+    r"""
+    Copied from kornia library : kornia/geometry/subpix/dsnt.py:76
+    Compute the expectation of coordinate values using spatial probabilities.
+
+    The input heatmap is assumed to represent a valid spatial probability distribution,
+    which can be achieved using :func:`~kornia.geometry.subpixel.spatial_softmax2d`.
+
+    Args:
+        input (`torch.Tensor` of shape `(batch_size, channels, height, width)`):
+            The input tensor representing dense spatial probabilities.
+        normalized_coordinates (`bool`):
+            Whether to return the coordinates normalized in the range of :math:`[-1, 1]`. Otherwise, it will return
+            the coordinates in the range of the input shape.
+
+    Returns:
+        output (`torch.Tensor` of shape `(batch_size, channels, 2)`)
+            Expected value of the 2D coordinates. Output order of the coordinates is (x, y).
+
+    Examples:
+        >>> heatmaps = torch.tensor([[[
+        ... [0., 0., 0.],
+        ... [0., 0., 0.],
+        ... [0., 1., 0.]]]])
+        >>> spatial_expectation2d(heatmaps, False)
+        tensor([[[1., 2.]]])
+
+    """
+    batch_size, channels, height, width = input.shape
+
+    # Create coordinates grid.
+    grid = create_meshgrid(height, width, normalized_coordinates, input.device)
+    grid = grid.to(input.dtype)
+
+    pos_x = grid[..., 0].reshape(-1)
+    pos_y = grid[..., 1].reshape(-1)
+
+    input_flat = input.view(batch_size, channels, -1)
+
+    # Compute the expectation of the coordinates.
+    expected_y = torch.sum(pos_y * input_flat, -1, keepdim=True)
+    expected_x = torch.sum(pos_x * input_flat, -1, keepdim=True)
+
+    output = torch.cat([expected_x, expected_y], -1)
+
+    return output.view(batch_size, channels, 2)
+
+
+def mask_border(tensor: torch.Tensor, border_margin: int, value: bool | float | int) -> torch.Tensor:
+    """
+    Mask a tensor border with a given value
+
+    Args:
+        tensor (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
+            The tensor to mask
+        border_margin (`int`) :
+            The size of the border
+        value (`Union[bool, int, float]`):
+            The value to place in the tensor's borders
+
+    Returns:
+        tensor (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
+            The masked tensor
+    """
+    if border_margin <= 0:
+        return tensor
+
+    tensor[:, :border_margin] = value
+    tensor[:, :, :border_margin] = value
+    tensor[:, :, :, :border_margin] = value
+    tensor[:, :, :, :, :border_margin] = value
+    tensor[:, -border_margin:] = value
+    tensor[:, :, -border_margin:] = value
+    tensor[:, :, :, -border_margin:] = value
+    tensor[:, :, :, :, -border_margin:] = value
+    return tensor
 
 
 EFFICIENTLOFTR_START_DOCSTRING = r"""
@@ -753,88 +919,23 @@ EFFICIENTLOFTR_INPUTS_DOCSTRING = r"""
 """
 
 
-def create_grid(height: int, width: int, normalized_coordinates: bool = False, device: str = None, dtype=None):
-    xs = torch.linspace(0, width - 1, width, device=device, dtype=dtype)
-    ys = torch.linspace(0, height - 1, height, device=device, dtype=dtype)
-    if normalized_coordinates:
-        xs = (xs / (width - 1) - 0.5) * 2
-        ys = (ys / (height - 1) - 0.5) * 2
-    grid = torch.stack(torch.meshgrid(ys, xs, indexing="ij"), dim=-1)
-    grid = grid.permute(1, 0, 2).unsqueeze(0)
-    return grid
-
-
-def spatial_expectation2d(input: torch.Tensor, normalized_coordinates: bool = True) -> torch.Tensor:
-    r"""Compute the expectation of coordinate values using spatial probabilities.
-
-    The input heatmap is assumed to represent a valid spatial probability distribution,
-    which can be achieved using :func:`~kornia.geometry.subpixel.spatial_softmax2d`.
-
-    Args:
-        input: the input tensor representing dense spatial probabilities with shape :math:`(B, N, H, W)`.
-        normalized_coordinates: whether to return the coordinates normalized in the range
-          of :math:`[-1, 1]`. Otherwise, it will return the coordinates in the range of the input shape.
-
-    Returns:
-       expected value of the 2D coordinates with shape :math:`(B, N, 2)`. Output order of the coordinates is (x, y).
-
-    Examples:
-        >>> heatmaps = torch.tensor([[[
-        ... [0., 0., 0.],
-        ... [0., 0., 0.],
-        ... [0., 1., 0.]]]])
-        >>> spatial_expectation2d(heatmaps, False)
-        tensor([[[1., 2.]]])
-
-    """
-    batch_size, channels, height, width = input.shape
-
-    # Create coordinates grid.
-    grid = create_grid(height, width, normalized_coordinates, input.device)
-    grid = grid.to(input.dtype)
-
-    pos_x = grid[..., 0].reshape(-1)
-    pos_y = grid[..., 1].reshape(-1)
-
-    input_flat = input.view(batch_size, channels, -1)
-
-    # Compute the expectation of the coordinates.
-    expected_y = torch.sum(pos_y * input_flat, -1, keepdim=True)
-    expected_x = torch.sum(pos_x * input_flat, -1, keepdim=True)
-
-    output = torch.cat([expected_x, expected_y], -1)
-
-    return output.view(batch_size, channels, 2)  # BxNx2
-
-
-def mask_border(m, b: int, v):
-    """Mask borders with value
-    Args:
-        m (torch.Tensor): [N, H0, W0, H1, W1]
-        b (int)
-        v (m.dtype)
-    """
-    if b <= 0:
-        return m
-
-    m[:, :b] = v
-    m[:, :, :b] = v
-    m[:, :, :, :b] = v
-    m[:, :, :, :, :b] = v
-    m[:, -b:] = v
-    m[:, :, -b:] = v
-    m[:, :, :, -b:] = v
-    m[:, :, :, :, -b:] = v
-    return m
-
-
 @add_start_docstrings(
-    "SuperGlue model taking images as inputs and outputting the matching of them.",
+    "EfficientLoFTR model taking images as inputs and outputting the matching of them.",
     EFFICIENTLOFTR_START_DOCSTRING,
 )
 class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
-    """
-    TODO
+    """EfficientLoFTR dense image matcher
+
+    Given two images, we determine the correspondences by:
+      1. Extracting coarse and fine features through a backbone
+      2. Transforming coarse features through self and cross attention
+      3. Matching coarse features to obtain coarse coordinates of matches
+      4. Obtaining full resolution fine features by fusing transformed and backbone coarse features
+      5. Refining the coarse matches using fine feature patches centered at each coarse match in a two-stage refinement
+
+    Yifan Wang, Xingyi He, Sida Peng, Dongli Tan and Xiaowei Zhou.
+    Efficient LoFTR: Semi-Dense Local Feature Matching with Sparse-Like Speed
+    In CVPR, 2024. https://arxiv.org/abs/2403.04765
     """
 
     def __init__(self, config: EfficientLoFTRConfig) -> None:
@@ -847,25 +948,80 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         self.rotary_emb = EfficientLoFTRRotaryEmbedding(config=config)
 
-        # self.post_init() #TODO
+        self.post_init()
 
-    def coarse_matching(self, coarse_features: torch.Tensor, coarse_scale: float):
+    def get_matches_from_scores(self, scores: torch.Tensor):
         """
-        For each image pair, compute the matching confidence between each coarse element (by default (image_height / 8)
-        * (image_width / 8 elements)) from the first image to the second image.
-
+        Based on a keypoint score matrix, compute the best keypoint matches between the first and second image.
+        Since each image pair can have different number of matches, the matches are concatenated together for all pair
+        in the batch and a batch_indices tensor is returned to specify which match belong to which element in the batch.
         Args:
-            coarse_features: tensor of shape (batch_size, 2, channels, coarse_height, coarse_width)
-            mask:
+            scores (`torch.Tensor` of shape `(batch_size, height_0, width_0, height_1, width_1)`):
+                Scores of keypoints
 
         Returns:
-            matches: tensor of shape (batch_size, (coarse_height * coarse_width), 2) representing x and y values
-            matching_scores: tensor of shape ( TODO
+            matched_indices (`torch.Tensor` of shape `(2, num_matches)`):
+                Indices representing which pixel in the first image matches which pixel in the second image
+            matching_scores (`torch.Tensor` of shape `(num_matches,)`):
+                Scores of each match
+            batch_indices (`torch.Tensor` of shape `(num_matches,)`):
+                Batch correspondences of matches
         """
-        batch_size, _, channels, h, w = coarse_features.shape
-        # (batch_size, 2, channels, h, w) -> (batch_size, 2, h, w, channels)
+        batch_size, height0, width0, height1, width1 = scores.shape
+
+        scores = scores.reshape(batch_size, height0 * width0, height1 * width1)
+
+        # For each keypoint, get the best match
+        max_0 = scores.max(2, keepdim=True).values
+        max_1 = scores.max(1, keepdim=True).values
+
+        # 1. Thresholding
+        mask = scores > self.config.coarse_matching_threshold
+
+        # 2. Border removal
+        mask = mask.reshape(batch_size, height0, width0, height1, width1)
+        mask = mask_border(mask, self.config.coarse_matching_border_removal, False)
+        mask = mask.reshape(batch_size, height0 * width0, height1 * width1)
+
+        # 3. Mutual nearest neighbors
+        mask = mask * (scores == max_0) * (scores == max_1)
+
+        # 4. Fine coarse matches
+        mask_values, mask_indices = mask.max(dim=2)
+        batch_indices, matched_indices_0 = torch.where(mask_values)
+        matched_indices_1 = mask_indices[batch_indices, matched_indices_0]
+        matching_scores = scores[batch_indices, matched_indices_0, matched_indices_1]
+
+        matched_indices = torch.stack([matched_indices_0, matched_indices_1], dim=0)
+        return matched_indices, matching_scores, batch_indices
+
+    def coarse_matching(
+        self, coarse_features: torch.Tensor, coarse_scale: float
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        For each image pair, compute the matching confidence between each coarse element (by default (image_height / 8)
+        * (image_width / 8 elements)) from the first image to the second image. Since the number of matches can vary
+        with different image pairs, the matches are concatenated together in a dimension. A batch_indices tensor is
+        returned to inform which keypoint is part of which image pair.
+
+        Args:
+            coarse_features (`torch.Tensor` of shape `(batch_size, 2, hidden_size, coarse_height, coarse_width)`):
+                Coarse features
+            coarse_scale (`float`): Scale between the image size and the coarse size
+
+        Returns:
+            matched_keypoints (`torch.Tensor` of shape `(2, num_matches, 2)`):
+                Matched keypoint between the first and the second image. All matched keypoints are concatenated in the
+                second dimension.
+            matching_scores (`torch.Tensor` of shape `(batch_size, num_matches)`):
+                The confidence score of each matched keypoint.
+            batch_indices (`torch.Tensor` of shape `(num_matches,)`):
+                Indices of batches for each matched keypoint found.
+        """
+        batch_size, _, channels, height, width = coarse_features.shape
+
+        # (batch_size, 2, channels, height, width) -> (batch_size, 2, height * width, channels)
         coarse_features = coarse_features.permute(0, 1, 3, 4, 2)
-        # (batch_size, 2, h, w, channels) -> (batch_size, 2, h * w, channels)
         coarse_features = coarse_features.reshape(batch_size, 2, -1, channels)
 
         coarse_features = coarse_features / coarse_features.shape[-1] ** 0.5
@@ -880,46 +1036,52 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         else:
             confidence = nn.functional.softmax(similarity, 1) * nn.functional.softmax(similarity, 2)
 
-        confidence = confidence.reshape(batch_size, h, w, h, w)
-        matched_indices, matching_scores, batch_ids = get_matches_from_scores(
-            confidence, self.config.coarse_matching_threshold, self.config.coarse_matching_border_removal
-        )
+        confidence = confidence.reshape(batch_size, height, width, height, width)
+        matched_indices, matching_scores, batch_indices = self.get_matches_from_scores(confidence)
 
-        matched_keypoints = torch.stack([matched_indices % w, matched_indices // w], dim=-1) * coarse_scale
+        matched_keypoints = torch.stack([matched_indices % width, matched_indices // width], dim=-1) * coarse_scale
 
         return (
             matched_keypoints,
             matching_scores,
-            batch_ids,
+            batch_indices,
             matched_indices,
         )
 
     def get_first_stage_fine_matching(
         self,
-        fine_confidence,
-        coarse_matched_keypoints,
-        fine_kernel_size,
-        fine_window_size,
-        fine_scale,
-    ):
+        fine_confidence: torch.Tensor,
+        coarse_matched_keypoints: torch.Tensor,
+        fine_window_size: int,
+        fine_scale: float,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         For each coarse pixel, retrieve the highest fine confidence score and index.
         The index represents the matching between a pixel position in the fine window in the first image and a pixel
         position in the fine window of the second image.
         For example, for a fine_window_size of 64 (8 * 8), the index 2474 represents the matching between the index 38
         (2474 // 64) in the fine window of the first image, and the index 42 in the second image. This means that 38
-        which corresponds to the position (4, 6) (4 // 8 and 4 % 8) is matched with the position (5, 2).
+        which corresponds to the position (4, 6) (4 // 8 and 4 % 8) is matched with the position (5, 2). In this example
+        the coarse matched coordinate will be shifted to the matched fine coordinates in the first and second image.
 
         Args:
-            fine_confidence:
-            coarse_grid:
-            fine_kernel_size:
-            fine_window_size:
+            fine_confidence (`torch.Tensor` of shape `(num_matches, fine_window_size, fine_window_size)`):
+                First stage confidence of matching fine features between the first and the second image
+            coarse_matched_keypoints (`torch.Tensor` of shape `(2, num_matches, 2)`):
+                Coarse matched keypoint between the first and the second image.
+            fine_window_size (`int`):
+                Size of the window used to refine matches
+            fine_scale (`float`):
+                Scale between the size of fine features and coarse features
 
         Returns:
-
+            indices (`torch.Tensor` of shape `(2, num_matches, 1)`):
+                Indices of the fine coordinate matched in the fine window
+            fine_matches (`torch.Tensor` of shape `(2, num_matches, 2)`):
+                Coordinates of matched keypoints after the first fine stage
         """
         num_matches, _, _ = fine_confidence.shape
+        fine_kernel_size = int(math.sqrt(fine_window_size))
 
         fine_confidence = fine_confidence.reshape(num_matches, -1)
         values, indices = torch.max(fine_confidence, dim=-1)
@@ -927,7 +1089,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         indices_0 = indices // fine_window_size
         indices_1 = indices % fine_window_size
 
-        grid = create_grid(
+        grid = create_meshgrid(
             fine_kernel_size,
             fine_kernel_size,
             normalized_coordinates=False,
@@ -950,25 +1112,36 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         return indices, fine_matches
 
     def get_second_stage_fine_matching(
-        self, indices, fine_matches, confidence, fine_kernel_size, fine_window_size, fine_scale
-    ):
+        self,
+        indices: torch.Tensor,
+        fine_matches: torch.Tensor,
+        fine_confidence: torch.Tensor,
+        fine_window_size: int,
+        fine_scale: float,
+    ) -> torch.Tensor:
         """
         For the given position in their respective fine windows, retrieve the 3x3 fine confidences around this position.
         After applying softmax to these confidences, compute the 2D spatial expected coordinates.
+        Shift the first stage fine matching with these expected coordinates.
 
         Args:
-            indices_0:
-            indices_1:
-            confidence:
-            fine_kernel_size:
-            fine_window_size:
-            coarse_coordinates:
-            fine_scale:
-
+            indices (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
+                Indices representing the position of each keypoint in the fine window
+            fine_matches (`torch.Tensor` of shape `(2, num_matches, 2)`):
+                Coordinates of matched keypoints after the first fine stage
+            fine_confidence (`torch.Tensor` of shape `(num_matches, fine_window_size, fine_window_size)`):
+                Second stage confidence of matching fine features between the first and the second image
+            fine_window_size (`int`):
+                Size of the window used to refine matches
+            fine_scale (`float`):
+                Scale between the size of fine features and coarse features
         Returns:
-
+            fine_matches (`torch.Tensor` of shape `(2, num_matches, 2)`):
+                Coordinates of matched keypoints after the second fine stage
         """
-        num_matches, _, _ = confidence.shape
+        num_matches, _, _ = fine_confidence.shape
+        fine_kernel_size = int(math.sqrt(fine_window_size))
+
         indices_0 = indices[0]
         indices_1 = indices[1]
         indices_1_i = indices_1 // fine_kernel_size
@@ -982,68 +1155,80 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         indices_1_i = indices_1_i[..., None].expand(-1, 3, 3)
         indices_1_j = indices_1_j[..., None].expand(-1, 3, 3)
 
-        delta = create_grid(3, 3, normalized_coordinates=True, device=indices_0.device).to(torch.long)
+        delta = create_meshgrid(3, 3, normalized_coordinates=True, device=indices_0.device).to(torch.long)
         delta = delta[None, ...]
 
         indices_1_i = indices_1_i + delta[..., 1]
         indices_1_j = indices_1_j + delta[..., 0]
 
-        confidence = confidence.reshape(num_matches, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2)
+        fine_confidence = fine_confidence.reshape(
+            num_matches, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2
+        )
         # (batch_size, seq_len, fine_window_size, fine_kernel_size + 2, fine_kernel_size + 2) -> (batch_size, seq_len, 3, 3)
-        confidence = confidence[matches_indices, indices_0, indices_1_i, indices_1_j]
-        confidence = confidence.reshape(num_matches, 9)
-        confidence = nn.functional.softmax(confidence / self.config.fine_matching_regress_temperature, dim=-1)
+        fine_confidence = fine_confidence[matches_indices, indices_0, indices_1_i, indices_1_j]
+        fine_confidence = fine_confidence.reshape(num_matches, 9)
+        fine_confidence = nn.functional.softmax(
+            fine_confidence / self.config.fine_matching_regress_temperature, dim=-1
+        )
 
-        heatmap = confidence.reshape(1, -1, 3, 3)
+        heatmap = fine_confidence.reshape(1, -1, 3, 3)
         fine_coordinates_normalized = spatial_expectation2d(heatmap, True)[0]
 
-        fine_coordinates_0 = fine_matches[0]
-        fine_coordinates_1 = fine_matches[1] + (fine_coordinates_normalized * (3 // 2) * fine_scale)
+        fine_matches_0 = fine_matches[0]
+        fine_matches_1 = fine_matches[1] + (fine_coordinates_normalized * (3 // 2) * fine_scale)
 
-        fine_coordinates = torch.stack([fine_coordinates_0, fine_coordinates_1], dim=0)
+        fine_matches = torch.stack([fine_matches_0, fine_matches_1], dim=0)
 
-        return fine_coordinates, confidence
+        return fine_matches
 
     def fine_matching(
         self,
-        fine_features_0,
-        fine_features_1,
-        coarse_matched_keypoints,
-        coarse_matching_scores,
-        batch_ids,
-        fine_scale,
-    ):
+        fine_features_0: torch.Tensor,
+        fine_features_1: torch.Tensor,
+        coarse_matched_keypoints: torch.Tensor,
+        fine_scale: float,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         For each coarse pixel with a corresponding window of fine features, compute the matching confidence between fine
-        features in the first image to the second image.
+        features in the first image and the second image.
 
-        Fine features are sliced in two part. The first part used for the first stage are the first fine_hidden_size -
-        config.fine_matching_slicedim (64 - 8 = 56 by default) features. The second part used for the second stage are
-        the last config.fine_matching_slicedim (8 by default) features.
+        Fine features are sliced in two part :
+        - The first part used for the first stage are the first fine_hidden_size - config.fine_matching_slicedim (64 - 8
+         = 56 by default) features.
+        - The second part used for the second stage are the last config.fine_matching_slicedim (8 by default) features.
 
-        Each part is used to compute a fine confidence tensor of the following shape : (batch_size, (coarse_height *
-        coarse_width), fine_window_size, fine_window_size). They correspond to the score between each fine pixel in the
-        first image and each fine pixel in the second image.
-
-        **1st Stage** :
-            In the first stage, we take the first fine confidence tensor and compute
+        Each part is used to compute a fine confidence tensor of the following shape :
+        (batch_size, (coarse_height * coarse_width), fine_window_size, fine_window_size)
+        They correspond to the score between each fine pixel in the first image and each fine pixel in the second image.
 
         Args:
-            fine_features_0:
-            fine_features_1:
-            coarse_matches:
-            coarse_matching_scores:
-            coarse_coordinates:
-            fine_scale:
+            fine_features_0 (`torch.Tensor` of shape `(num_matches, fine_kernel_size ** 2, fine_kernel_size ** 2)`):
+                Fine features from the first image
+            fine_features_1 (`torch.Tensor` of shape `(num_matches, (fine_kernel_size + 2) ** 2, (fine_kernel_size + 2)
+            ** 2)`):
+                Fine features from the second image
+            coarse_matched_keypoints (`torch.Tensor` of shape `(2, num_matches, 2)`):
+                Keypoint coordinates found in coarse matching for the first and second image
+            fine_scale (`int`):
+                Scale between the size of fine features and coarse features
 
         Returns:
+            fine_coordinates (`torch.Tensor` of shape `(2, num_matches, 2)`):
+                Matched keypoint between the first and the second image. All matched keypoints are concatenated in the
+                second dimension.
+            first_stage_fine_confidence (`torch.Tensor` of shape `(num_matches, fine_kernel_size ** 2, fine_kernel_size
+            ** 2)`):
+                Scores of fine matching in the first stage
+            second_stage_fine_confidence (`torch.Tensor` of shape `(num_matches, fine_kernel_size ** 2,
+            (fine_kernel_size + 2) ** 2)`):
+                Scores of fine matching in the second stage
 
         """
-        num_matches, fine_window_size, fine_hidden_size = fine_features_0.shape
+        num_matches, fine_window_size, _ = fine_features_0.shape
 
         if num_matches == 0:
             fine_confidence = torch.empty(0, fine_window_size, fine_window_size, device=fine_features_0.device)
-            return fine_confidence, coarse_matched_keypoints
+            return coarse_matched_keypoints, fine_confidence, fine_confidence
 
         fine_kernel_size = int(math.sqrt(fine_window_size))
 
@@ -1066,7 +1251,6 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         fine_indices, fine_matches = self.get_first_stage_fine_matching(
             first_stage_fine_confidence,
             coarse_matched_keypoints,
-            fine_kernel_size,
             fine_window_size,
             fine_scale,
         )
@@ -1076,11 +1260,10 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         second_stage_fine_features_1 = second_stage_fine_features_1 / self.config.fine_matching_slicedim**0.5
         second_stage_fine_confidence = second_stage_fine_features_0 @ second_stage_fine_features_1.transpose(-1, -2)
 
-        fine_coordinates, second_stage_fine_confidence = self.get_second_stage_fine_matching(
+        fine_coordinates = self.get_second_stage_fine_matching(
             fine_indices,
             fine_matches,
             second_stage_fine_confidence,
-            fine_kernel_size,
             fine_window_size,
             fine_scale,
         )
@@ -1096,57 +1279,98 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, "KeypointMatchingOutput"]:
+        """
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoModel
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
+        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
+        >>> image2 = Image.open(requests.get(url, stream=True).raw)
+        >>> images = [image1, image2]
+
+        >>> processor = AutoImageProcessor.from_pretrained("stevenbucaille/efficient_loftr")
+        >>> model = AutoModel.from_pretrained("stevenbucaille/efficient_loftr")
+
+        >>> with torch.no_grad():
+        >>>     inputs = processor(images, return_tensors="pt")
+        >>>     outputs = model(**inputs)
+        ```"""
         loss = None
+        if labels is not None:
+            raise ValueError("SuperGlue is not trainable, no labels should be provided.")
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
+            raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
+
+        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
 
         batch_size, _, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * 2, channels, height, width)
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
         # 1. Local Feature CNN
-        coarse_features, residual_features = self.backbone(pixel_values)
-        mul = self.config.resolution[0] // self.config.resolution[1]  # TODO
+        backbone_outputs = self.backbone(pixel_values, output_hidden_states=output_hidden_states)
+        coarse_features, residual_features = backbone_outputs[:2]
         coarse_channels, coarse_height, coarse_width = coarse_features.shape[-3:]
-        fine_height = coarse_height * mul
-        fine_scale = height / fine_height
 
         # 2. Coarse-level LoFTR module
         position_embeddings = self.rotary_emb(coarse_features)
         coarse_features = coarse_features.reshape(batch_size, 2, coarse_channels, coarse_height, coarse_width)
+        local_feature_transformer_outputs = self.local_feature_transformer(
+            coarse_features, position_embeddings=position_embeddings, output_attentions=output_attentions
+        )
+        coarse_features = local_feature_transformer_outputs[0]
 
-        coarse_features = self.local_feature_transformer(coarse_features, position_embeddings=position_embeddings)
+        # 3. Compute coarse-level matching
         coarse_scale = height / coarse_height
         (
             coarse_matched_keypoints,
             coarse_matching_scores,
-            batch_ids,
+            batch_indices,
             matched_indices,
         ) = self.coarse_matching(coarse_features, coarse_scale)
 
-        # 4. fine-level refinement
-        fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
-        fine_features_0 = fine_features_0[batch_ids, matched_indices[0]]
-        fine_features_1 = fine_features_1[batch_ids, matched_indices[1]]
+        # 4. Fine-level refinement
+        refinement_layer_outputs = self.refinement_layer(
+            coarse_features, residual_features, output_hidden_states=output_hidden_states
+        )
+        fine_features_0, fine_features_1 = refinement_layer_outputs[:2]
+        fine_features_0 = fine_features_0[batch_indices, matched_indices[0]]
+        fine_features_1 = fine_features_1[batch_indices, matched_indices[1]]
 
-        # 5. match fine-level
+        # 5. Computer fine-level matching
+        fine_height = int(coarse_height * coarse_scale)
+        fine_scale = height / fine_height
         matching_keypoints, first_stage_matching_scores, second_stage_matching_scores = self.fine_matching(
             fine_features_0,
             fine_features_1,
             coarse_matched_keypoints,
-            coarse_matching_scores,
-            batch_ids,
             fine_scale,
         )
 
         matching_keypoints[:, :, 0] = matching_keypoints[:, :, 0] / width
         matching_keypoints[:, :, 1] = matching_keypoints[:, :, 1] / height
 
-        unique_values, counts = torch.unique_consecutive(batch_ids, return_counts=True)
+        unique_values, counts = torch.unique_consecutive(batch_indices, return_counts=True)
 
         if len(unique_values) > 0:
-            matching_keypoints0 = matching_keypoints[0]
-            matching_keypoints1 = matching_keypoints[1]
-            split_keypoints_0 = torch.split(matching_keypoints0, counts.tolist())
-            split_keypoints_1 = torch.split(matching_keypoints1, counts.tolist())
+            matching_keypoints_0 = matching_keypoints[0]
+            matching_keypoints_1 = matching_keypoints[1]
+            split_keypoints_0 = torch.split(matching_keypoints_0, counts.tolist())
+            split_keypoints_1 = torch.split(matching_keypoints_1, counts.tolist())
             split_scores = torch.split(coarse_matching_scores, counts.tolist())
 
             split_mask = [torch.ones(size, device=matching_keypoints.device) for size in counts.tolist()]
@@ -1169,14 +1393,28 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
             mask = torch.ones_like(keypoints)
             matches = torch.stack([matched_indices, matched_indices], dim=0).unsqueeze(0)
 
-        output = KeypointMatchingOutput(
-            loss=None,
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + backbone_outputs[2] + refinement_layer_outputs[2]
+
+        if output_attentions:
+            all_attentions = all_attentions + local_feature_transformer_outputs[1]
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [loss, matches, matching_scores, keypoints, mask, all_hidden_states, all_attentions]
+                if v is not None
+            )
+
+        return KeypointMatchingOutput(
+            loss=loss,
             matches=matches,
             matching_scores=matching_scores,
             keypoints=keypoints,
             mask=mask,
-            hidden_states=None,
-            attentions=None,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
-        return output
+
+__all__ = ["EfficientLoFTRPreTrainedModel", "EfficientLoFTRForKeypointMatching"]

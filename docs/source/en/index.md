@@ -137,6 +137,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [DPR](model_doc/dpr)                           |       ✅        |         ✅         |      ❌      |
 |                           [DPT](model_doc/dpt)                           |       ✅        |         ❌         |      ❌      |
 |               [EfficientFormer](model_doc/efficientformer)               |       ✅        |         ✅         |      ❌      |
+|                [EfficientLoFTR](model_doc/efficientloftr)                |       ✅        |         ❌         |      ❌      |
 |                  [EfficientNet](model_doc/efficientnet)                  |       ✅        |         ❌         |      ❌      |
 |                       [ELECTRA](model_doc/electra)                       |       ✅        |         ✅         |      ✅      |
 |                          [Emu3](model_doc/emu3)                          |       ✅        |         ❌         |      ❌      |
