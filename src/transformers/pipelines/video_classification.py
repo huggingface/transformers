@@ -106,9 +106,9 @@ class VideoClassificationPipeline(Pipeline):
                 post-processing.
 
         Return:
-            A dictionary or a list of dictionaries containing result. If the input is a single video, will return a
-            dictionary, if the input is a list of several videos, will return a list of dictionaries corresponding to
-            the videos.
+            A list of dictionaries or a list of list of dictionaries containing result. If the input is a single video,
+            will return a list of `top_k` dictionaries, if the input is a list of several videos, will return a list of list of
+            `top_k` dictionaries corresponding to the videos.
 
             The dictionaries contain the following keys:
 

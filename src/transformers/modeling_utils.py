@@ -28,6 +28,7 @@ import tempfile
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
+from enum import Enum
 from functools import partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
@@ -37,6 +38,7 @@ import torch
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
 from torch import Tensor, nn
+from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
 
@@ -243,6 +245,25 @@ def set_zero3_state():
         yield
     finally:
         _is_ds_init_called = False
+
+
+def restore_default_torch_dtype(func):
+    """
+    Decorator to restore the default torch dtype
+    at the end of the function. Serves
+    as a backup in case calling the function raises
+    an error after the function has changed the default dtype but before it could restore it.
+    """
+
+    @wraps(func)
+    def _wrapper(*args, **kwargs):
+        old_dtype = torch.get_default_dtype()
+        try:
+            return func(*args, **kwargs)
+        finally:
+            torch.set_default_dtype(old_dtype)
+
+    return _wrapper
 
 
 def get_parameter_device(parameter: Union[nn.Module, "ModuleUtilsMixin"]):
@@ -565,13 +586,15 @@ def set_initialized_submodules(model, state_dict_keys):
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
     """
+    state_dict_keys = set(state_dict_keys)
     not_initialized_submodules = {}
     for module_name, module in model.named_modules():
-        loaded_keys = {k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")}
-        # When checking if the root module is loaded all state_dict_keys must be used.
         if module_name == "":
-            loaded_keys = set(state_dict_keys)
-        if loaded_keys.issuperset(module.state_dict()):
+            # When checking if the root module is loaded there's no need to prepend module_name.
+            module_keys = set(module.state_dict())
+        else:
+            module_keys = {f"{module_name}.{k}" for k in module.state_dict()}
+        if module_keys.issubset(state_dict_keys):
             module._is_hf_initialized = True
         else:
             not_initialized_submodules[module_name] = module
@@ -764,6 +787,7 @@ def _load_state_dict_into_meta_model(
     keep_in_fp32_modules=None,
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
     pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
+    device_mesh=None,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -772,6 +796,8 @@ def _load_state_dict_into_meta_model(
 
     `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
     `bert.pooler.dense.weight`
+
+    It also initialize tensor parallelism for each module if needed.
 
     """
 
@@ -785,6 +811,12 @@ def _load_state_dict_into_meta_model(
     is_quantized = hf_quantizer is not None
 
     is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+
+    # we need this later to initialize tensor parallelism
+    if device_mesh is not None:
+        full_tp_plan = model.config.base_model_tp_plan
+        for submodule in model.modules():
+            full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
     for param_name, param in state_dict.items():
         if param_name not in expected_keys:
@@ -889,6 +921,37 @@ def _load_state_dict_into_meta_model(
                 setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
+        # In this case, let's parallelize the modules!
+        if device_mesh is not None:
+            # Immediate parent
+            split_parent_module_name = param_name.split(".")[:-1]
+            parent_module_name = ".".join(split_parent_module_name)
+            parent_module = model
+            for name in split_parent_module_name:
+                parent_module = getattr(parent_module, name)
+
+            # Check if we are part of the tp_plan
+            current_module_plan = None
+            for param, plan in full_tp_plan.items():
+                # "*" are a placeholder for layer indices, so we replace them by "[0-9]+" in the regex pattern
+                pattern = param.replace("*", "[0-9]+")
+                if re.search(pattern, parent_module_name):
+                    current_module_plan = plan
+                    break
+
+            # We can only apply the tp_plan after all parameters of the current module have been correctly initialized (e.g.
+            # if we have bias, we need both `weights` and `bias` of a nn.Linear to be initialized)
+            process_device = list(device_map.values())[0]
+            all_module_parameters_initialized = all(
+                m.device == process_device for m in parent_module.parameters(recurse=False)
+            ) and all(m.device == process_device for m in parent_module.buffers(recurse=False))
+            if current_module_plan is not None and all_module_parameters_initialized:
+                torch.distributed.tensor.parallel.parallelize_module(
+                    parent_module,
+                    device_mesh=device_mesh,
+                    parallelize_plan=translate_to_torch_parallel_style(current_module_plan),
+                )
+
     return error_msgs, offload_index, state_dict_index
 
 
@@ -899,6 +962,11 @@ def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
         weights_name = ".".join(splits)
 
     return weights_name
+
+
+class PipelineParallel(Enum):
+    inputs: 0
+    outputs: 1
 
 
 class ModuleUtilsMixin:
@@ -1290,6 +1358,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # `config.base_model_tp_plan` during `post_init`.
     _tp_plan = None
 
+    # A pipeline parallel plan specifying the layers which may not be present
+    # on all ranks when PP is enabled. For top-level models, this attribute is
+    # currently defined in respective model code. For base models, this
+    # attribute comes from `config.base_model_pp_plan` during `post_init`.
+    #
+    # The variable names for the inputs and outputs of the specified layers can
+    # be indexed using the `PipelineParallel` enum as follows:
+    # - `_pp_plan["layers"][PipelineParallel.inputs]`
+    # - `_pp_plan["layers"][PipelineParallel.outputs]`
+    _pp_plan = None
+
+    # This flag signal that the model can be used as an efficient backend in TGI and vLLM
+    # In practice, it means that they support attention interface functions, fully pass the kwargs
+    # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
+    _supports_attention_backend = False
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
@@ -1312,12 +1396,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "`PretrainedConfig`. To create a model from a pretrained model use "
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
-        # Save config and origin of the pretrained weights if given in model
         if not getattr(config, "_attn_implementation_autoset", False):
-            config = self._autoset_attn_implementation(
-                config, torch_dtype=torch.get_default_dtype(), check_device_map=False
-            )
+            # config usually has a `torch_dtype` but we need the next line for the `no_super_init` tests
+            dtype = config.torch_dtype if hasattr(config, "torch_dtype") else torch.get_default_dtype()
+            config = self._autoset_attn_implementation(config, torch_dtype=dtype, check_device_map=False)
         self.config = config
+
+        # for initialization of the loss
+        loss_type = self.__class__.__name__
+        if loss_type not in LOSS_MAPPING:
+            loss_groups = f"({'|'.join(LOSS_MAPPING)})"
+            loss_type = re.findall(loss_groups, self.__class__.__name__)
+            if len(loss_type) > 0:
+                loss_type = loss_type[0]
+            else:
+                loss_type = None
+        self.loss_type = loss_type
 
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
@@ -1337,6 +1431,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # If current model is a base model, attach `base_model_tp_plan` from config
         if self.base_model is self:
             self._tp_plan = self.config.base_model_tp_plan
+        # If current model is a base model, attach `base_model_pp_plan` from config
+        if self.base_model is self:
+            self._pp_plan = self.config.base_model_pp_plan
 
     def dequantize(self):
         """
@@ -1389,6 +1486,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self.model_tags.append(tag)
 
     @classmethod
+    @restore_default_torch_dtype
     def _from_config(cls, config, **kwargs):
         """
         All context managers that the model should be initialized under go here.
@@ -1400,7 +1498,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when we init a model from within another model (e.g. VLMs) and dispatch on FA2
         # a warning is raised that dtype should be fp16. Since we never pass dtype from within
         # modeling code, we can try to infer it here same way as done in `from_pretrained`
-        torch_dtype = kwargs.pop("torch_dtype", torch.get_default_dtype())
+        torch_dtype = kwargs.pop("torch_dtype", config.torch_dtype)
+        if isinstance(torch_dtype, str):
+            torch_dtype = getattr(torch, torch_dtype)
+
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
         # override default dtype if needed
@@ -1531,6 +1632,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch.version.hip is not None
                 and config._attn_implementation == "sdpa"
                 and torch.cuda.device_count() > 1
+                and version.parse(torch.__version__) < version.parse("2.4.1")
             ):
                 logger.warning_once(
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
@@ -1583,16 +1685,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def can_generate(cls) -> bool:
         """
-        Returns whether this model can generate sequences with `.generate()`.
+        Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
 
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Directly inherits `GenerationMixin` -> can generate
         if "GenerationMixin" in str(cls.__bases__):
-            return True
-        # Model class overwrites `generate` (e.g. time series models) -> can generate
-        if str(cls.__name__) in str(cls.generate):
             return True
         # The class inherits from a class that can generate (recursive check) -> can generate
         for base in cls.__bases__:
@@ -1849,7 +1948,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         If the `torchscript` flag is set in the configuration, can't handle parameter sharing so we are cloning the
         weights instead.
         """
-        if getattr(self.config, "tie_word_embeddings", True):
+        if getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", True):
             output_embeddings = self.get_output_embeddings()
             if output_embeddings is not None:
                 self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
@@ -2091,7 +2190,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 new_num_tokens = new_embeddings.weight.shape[0]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
-        if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
+        if (
+            self.get_output_embeddings() is not None
+            and not self.config.get_text_config(decoder=True).tie_word_embeddings
+        ):
             old_lm_head = self.get_output_embeddings()
             if isinstance(old_lm_head, torch.nn.Embedding):
                 new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens, mean_resizing=mean_resizing)
@@ -2401,14 +2503,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         covariance = old_centered_embeddings.T @ old_centered_embeddings / old_num_tokens
 
         # Check if the covariance is positive definite.
-        eigenvalues = torch.linalg.eigvals(covariance)
-        is_covariance_psd = bool(
-            (covariance == covariance.T).all() and not torch.is_complex(eigenvalues) and (eigenvalues > 0).all()
-        )
+        epsilon = 1e-9
+        is_covariance_psd = constraints.positive_definite.check(epsilon * covariance).all()
         if is_covariance_psd:
             # If covariances is positive definite, a distribution can be created. and we can sample new weights from it.
             distribution = torch.distributions.multivariate_normal.MultivariateNormal(
-                mean_embeddings, covariance_matrix=1e-9 * covariance
+                mean_embeddings, covariance_matrix=epsilon * covariance
             )
             new_embeddings.weight.data[-1 * added_num_tokens :, :] = distribution.sample(
                 sample_shape=(added_num_tokens,)
@@ -3119,6 +3219,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
+    @restore_default_torch_dtype
     def from_pretrained(
         cls: Type[SpecificPreTrainedModelType],
         pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
@@ -3419,6 +3520,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
 
+        if tp_plan is not None and device_map is not None:
+            raise ValueError(
+                "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
+            )
+
+        # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
+        # `device_map` pointing to the correct device
+        device_mesh = None
+        if tp_plan is not None:
+            if not is_torch_greater_or_equal("2.5"):
+                raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
+            if not torch.distributed.is_initialized():
+                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
+
+            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+            device_type = torch._C._get_accelerator().type
+            device_module = torch.get_device_module(device_type)
+            # Get device with index assuming equal number of devices per host
+            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            # This is the easiest way to dispatch to the current process device
+            device_map = tp_device
+
+            # Assuming sharding the model onto the world
+            world_size = torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -3513,7 +3640,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
             elif not low_cpu_mem_usage:
-                raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
+                raise ValueError("Passing along a `device_map` or a `tp_plan` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
             if is_deepspeed_zero3_enabled():
@@ -3522,7 +3649,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             elif not is_accelerate_available():
                 raise ImportError(
-                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                    f"Using `low_cpu_mem_usage=True`, a `device_map` or a `tp_plan` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
@@ -3588,7 +3715,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             model_kwargs = kwargs
 
-        pre_quantized = getattr(config, "quantization_config", None) is not None
+        pre_quantized = hasattr(config, "quantization_config")
+        if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
+            pre_quantized = False
+
         if pre_quantized or quantization_config is not None:
             if pre_quantized:
                 config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
@@ -3601,7 +3731,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config.quantization_config,
                 pre_quantized=pre_quantized,
             )
-
         else:
             hf_quantizer = None
 
@@ -3617,8 +3746,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_map = hf_quantizer.update_device_map(device_map)
 
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
-
+            if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
+                user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
+            else:
+                user_agent["quant"] = hf_quantizer.quantization_config.quant_method
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
@@ -3917,7 +4048,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
 
-            state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True)["tensors"]
+            # we need a dummy model to help rename state_dict
+            with torch.device("meta"):
+                dummy_model = cls(config)
+            state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True, model_to_load=dummy_model)["tensors"]
 
             resolved_archive_file = None
             is_sharded = False
@@ -4006,11 +4140,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             )
                     elif hasattr(torch, torch_dtype):
                         torch_dtype = getattr(torch, torch_dtype)
-                    else:
-                        raise ValueError(
-                            f'`torch_dtype` can be one of: `torch.dtype`, `"auto"` or a string of a valid `torch.dtype`, but received {torch_dtype}'
-                        )
+                        for sub_config_key in config.sub_configs.keys():
+                            sub_config = getattr(config, sub_config_key)
+                            sub_config.torch_dtype = torch_dtype
+                elif isinstance(torch_dtype, torch.dtype):
+                    for sub_config_key in config.sub_configs.keys():
+                        sub_config = getattr(config, sub_config_key)
+                        sub_config.torch_dtype = torch_dtype
+                elif isinstance(torch_dtype, dict):
+                    for key, curr_dtype in torch_dtype.items():
+                        if hasattr(config, key):
+                            value = getattr(config, key)
+                            value.torch_dtype = curr_dtype
+                    # main torch dtype for modules that aren't part of any sub-config
+                    torch_dtype = torch_dtype.get("")
+                    config.torch_dtype = torch_dtype
+                    if isinstance(torch_dtype, str) and hasattr(torch, torch_dtype):
+                        torch_dtype = getattr(torch, torch_dtype)
+                    elif torch_dtype is None:
+                        torch_dtype = torch.float32
+                else:
+                    raise ValueError(
+                        f"`torch_dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `torch_dtype` "
+                        f"for each sub-config in composite configs, but received {torch_dtype}"
+                    )
+
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+            else:
+                # set fp32 as the default dtype for BC
+                default_dtype = str(torch.get_default_dtype()).split(".")[-1]
+                config.torch_dtype = default_dtype
+                for key in config.sub_configs.keys():
+                    value = getattr(config, key)
+                    value.torch_dtype = default_dtype
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
@@ -4035,7 +4197,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
-        tp_device = None
 
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             import deepspeed
@@ -4051,16 +4212,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
             init_contexts.append(init_empty_weights())
-        elif tp_plan is not None:
-            if not torch.distributed.is_initialized():
-                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
-
-            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
-            device_type = torch._C._get_accelerator().type
-            device_module = torch.get_device_module(device_type)
-            # Get device with index assuming equal number of devices per host
-            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
-            init_contexts.append(tp_device)
 
         if is_deepspeed_zero3_enabled() and is_quantized:
             init_contexts.append(set_quantized_state())
@@ -4074,6 +4225,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
+
+        if device_mesh is not None and not model.supports_tp_plan:
+            raise NotImplementedError("This model does not have a tensor parallel plan.")
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
@@ -4158,6 +4312,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # check if we don't have tied param in different devices
             check_tied_parameters_on_same_device(tied_params, device_map)
 
+        if gguf_path and device_map is not None and "disk" in device_map.values():
+            raise RuntimeError(
+                "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
+                "loaded from GGUF files."
+            )
+
         if from_tf:
             if resolved_archive_file.endswith(".index"):
                 # Load from a TensorFlow 1.X checkpoint - provided by original authors
@@ -4194,38 +4354,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
-            load_contexts = []
-            # Make sure we load onto targeted device
-            if tp_device is not None:
-                load_contexts.append(tp_device)
-
-            with ContextManagers(load_contexts):
-                (
-                    model,
-                    missing_keys,
-                    unexpected_keys,
-                    mismatched_keys,
-                    offload_index,
-                    error_msgs,
-                ) = cls._load_pretrained_model(
-                    model,
-                    state_dict,
-                    loaded_state_dict_keys,  # XXX: rename?
-                    resolved_archive_file,
-                    pretrained_model_name_or_path,
-                    ignore_mismatched_sizes=ignore_mismatched_sizes,
-                    sharded_metadata=sharded_metadata,
-                    _fast_init=_fast_init,
-                    low_cpu_mem_usage=low_cpu_mem_usage,
-                    device_map=device_map,
-                    offload_folder=offload_folder,
-                    offload_state_dict=offload_state_dict,
-                    dtype=torch_dtype,
-                    hf_quantizer=hf_quantizer,
-                    keep_in_fp32_modules=keep_in_fp32_modules,
-                    gguf_path=gguf_path,
-                    weights_only=weights_only,
-                )
+            (
+                model,
+                missing_keys,
+                unexpected_keys,
+                mismatched_keys,
+                offload_index,
+                error_msgs,
+            ) = cls._load_pretrained_model(
+                model,
+                state_dict,
+                loaded_state_dict_keys,  # XXX: rename?
+                resolved_archive_file,
+                pretrained_model_name_or_path,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                sharded_metadata=sharded_metadata,
+                _fast_init=_fast_init,
+                low_cpu_mem_usage=low_cpu_mem_usage,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=offload_state_dict,
+                dtype=torch_dtype,
+                hf_quantizer=hf_quantizer,
+                keep_in_fp32_modules=keep_in_fp32_modules,
+                gguf_path=gguf_path,
+                weights_only=weights_only,
+                device_mesh=device_mesh,
+            )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -4259,8 +4414,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        # Dispatch model with hooks on all devices if necessary
-        if device_map is not None:
+        # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
+        # harm performances)
+        if device_map is not None and device_mesh is None:
             device_map_kwargs = {
                 "device_map": device_map,
                 "offload_dir": offload_folder,
@@ -4287,6 +4443,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
                 dispatch_model(model, **device_map_kwargs)
 
+        # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
+        # not part of the state_dict (persistent=False)
+        if device_mesh is not None:
+            for buffer in model.buffers():
+                if buffer.device != tp_device:
+                    buffer.data = buffer.to(tp_device)
+
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
@@ -4309,39 +4472,34 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 }
             return model, loading_info
 
-        if tp_plan is not None:
-            assert tp_device is not None, "tp_device not set!"
-            if not model.supports_tp_plan:
-                raise NotImplementedError("This model does not have a tensor parallel plan.")
-            # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
-            # Apply Tensor Parallelism
-            model.tensor_parallel(device_mesh)
-
         return model
 
     @staticmethod
-    def _fix_state_dict_key_on_load(key):
+    def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
         """Replace legacy parameter names with their modern equivalents. E.g. beta -> bias, gamma -> weight."""
 
-        if "beta" in key:
-            return key.replace("beta", "bias")
-        if "gamma" in key:
-            return key.replace("gamma", "weight")
+        # Rename LayerNorm beta & gamma params for some early models ported from Tensorflow (e.g. Bert)
+        # This rename is logged.
+        if key.endswith("LayerNorm.beta"):
+            return key.replace("LayerNorm.beta", "LayerNorm.bias"), True
+        if key.endswith("LayerNorm.gamma"):
+            return key.replace("LayerNorm.gamma", "LayerNorm.weight"), True
 
-        # to avoid logging parametrized weight norm renaming
+        # Rename weight norm parametrizations to match changes across torch versions.
+        # Impacts a number of speech/wav2vec models. e.g. Hubert, Wav2Vec2, and others.
+        # This rename is not logged.
         if hasattr(nn.utils.parametrizations, "weight_norm"):
-            if "weight_g" in key:
-                return key.replace("weight_g", "parametrizations.weight.original0")
-            if "weight_v" in key:
-                return key.replace("weight_v", "parametrizations.weight.original1")
+            if key.endswith("weight_g"):
+                return key.replace("weight_g", "parametrizations.weight.original0"), True
+            if key.endswith("weight_v"):
+                return key.replace("weight_v", "parametrizations.weight.original1"), True
         else:
-            if "parametrizations.weight.original0" in key:
-                return key.replace("parametrizations.weight.original0", "weight_g")
-            if "parametrizations.weight.original1" in key:
-                return key.replace("parametrizations.weight.original1", "weight_v")
-        return key
+            if key.endswith("parametrizations.weight.original0"):
+                return key.replace("parametrizations.weight.original0", "weight_g"), True
+            if key.endswith("parametrizations.weight.original1"):
+                return key.replace("parametrizations.weight.original1", "weight_v"), True
+
+        return key, False
 
     @classmethod
     def _fix_state_dict_keys_on_load(cls, state_dict):
@@ -4352,15 +4510,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
-            new_key = cls._fix_state_dict_key_on_load(key)
-            if new_key != key:
+            new_key, has_changed = cls._fix_state_dict_key_on_load(key)
+            if has_changed:
                 state_dict[new_key] = state_dict.pop(key)
 
-            # add it once for logging
-            if "gamma" in key and "gamma" not in renamed_keys:
-                renamed_keys["gamma"] = (key, new_key)
-            if "beta" in key and "beta" not in renamed_keys:
-                renamed_keys["beta"] = (key, new_key)
+                # track gamma/beta rename for logging
+                if key.endswith("LayerNorm.gamma"):
+                    renamed_keys["LayerNorm.gamma"] = (key, new_key)
+                elif key.endswith("LayerNorm.beta"):
+                    renamed_keys["LayerNorm.beta"] = (key, new_key)
 
         if renamed_keys:
             warning_msg = f"A pretrained model of type `{cls.__name__}` "
@@ -4373,19 +4531,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return state_dict
 
     @staticmethod
-    def _fix_state_dict_key_on_save(key):
+    def _fix_state_dict_key_on_save(key) -> Tuple[str, bool]:
         """
         Similar to `_fix_state_dict_key_on_load` allows to define hook for state dict key renaming on model save.
-        Do nothing by default, but can be overriden in particular models.
+        Do nothing by default, but can be overridden in particular models.
         """
-        return key
+        return key, False
 
     def _fix_state_dict_keys_on_save(self, state_dict):
         """
         Similar to `_fix_state_dict_keys_on_load` allows to define hook for state dict key renaming on model save.
         Apply `_fix_state_dict_key_on_save` to all keys in `state_dict`.
         """
-        return {self._fix_state_dict_key_on_save(key): value for key, value in state_dict.items()}
+        return {self._fix_state_dict_key_on_save(key)[0]: value for key, value in state_dict.items()}
 
     @classmethod
     def _load_pretrained_model(
@@ -4407,6 +4565,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         keep_in_fp32_modules=None,
         gguf_path=None,
         weights_only=True,
+        device_mesh=None,
     ):
         is_safetensors = False
         is_quantized = hf_quantizer is not None
@@ -4417,7 +4576,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             archive_file = (
                 resolved_archive_file[0] if isinstance(resolved_archive_file, (list, tuple)) else resolved_archive_file
             )
-            is_safetensors = archive_file.endswith(".safetensors")
+            is_safetensors = archive_file is not None and archive_file.endswith(".safetensors")
             if offload_folder is None and not is_safetensors:
                 raise ValueError(
                     "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
@@ -4443,7 +4602,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
         original_loaded_keys = loaded_keys
-        loaded_keys = [cls._fix_state_dict_key_on_load(key) for key in loaded_keys]
+        loaded_keys = [cls._fix_state_dict_key_on_load(key)[0] for key in loaded_keys]
 
         if len(prefix) > 0:
             has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
@@ -4475,6 +4634,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif add_prefix_to_model:
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = sorted(unexpected_keys - model_buffers)
+
+        # Clean up buffer for `inv-freq` because RoPE embedding moved under base model (https://github.com/huggingface/transformers/pull/34858)
+        has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer in model_buffers)
+        if has_inv_freq_buffers:
+            unexpected_keys = {k for k in unexpected_keys if "rotary_emb.inv_freq" not in k}
 
         model.tie_weights()
         if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
@@ -4557,7 +4721,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     _loaded_keys = loaded_keys
                 not_initialized_submodules = set_initialized_submodules(model, _loaded_keys)
                 # If we're about to tie the output embeds to the input embeds we don't need to init them
-                if hasattr(model.config, "tie_word_embeddings") and model.config.tie_word_embeddings:
+                if (
+                    hasattr(model.config.get_text_config(decoder=True), "tie_word_embeddings")
+                    and model.config.get_text_config(decoder=True).tie_word_embeddings
+                ):
                     output_embeddings = model.get_output_embeddings()
                     if output_embeddings is not None:
                         # Still need to initialize if there is a bias term since biases are not tied.
@@ -4698,6 +4865,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     is_safetensors=is_safetensors,
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
+                    device_mesh=device_mesh,
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
@@ -4787,6 +4955,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             is_safetensors=is_safetensors,
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
+                            device_mesh=device_mesh,
                         )
                         error_msgs += new_error_msgs
                 else:
@@ -5064,7 +5233,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def tensor_parallel(self, device_mesh):
         """
-        Tensor parallelize the model across the given device mesh.
+        Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
+        was already loaded in memory, note however that this means that each process will first initialize the whole model,
+        then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
+
+        Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
+        so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
 
         Args:
             device_mesh (`torch.distributed.DeviceMesh`):
@@ -5101,25 +5275,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         self.apply(tplize)
 
     @property
+    def supports_pp_plan(self):
+        if self._pp_plan is not None:
+            return True
+        # Check if base model has PP plan
+        if getattr(self.base_model, "_pp_plan", None) is not None:
+            return True
+        return False
+
+    @property
     def loss_function(self):
-        if getattr(self.config, "loss_type", None) is not None:
-            loss_type = self.config.loss_type
-        else:
-            loss_type = self.__class__.__name__
-            if loss_type not in LOSS_MAPPING:
-                loss_groups = f"({'|'.join(LOSS_MAPPING)})"
-                loss_type = re.findall(loss_groups, self.__class__.__name__)
-                if len(loss_type) > 0:
-                    loss_type = loss_type[0]
-                else:
-                    loss_type = None
-        if loss_type is None or loss_type not in LOSS_MAPPING and getattr(self.config, "loss_type", None) is not None:
+        if hasattr(self, "_loss_function"):
+            return self._loss_function
+
+        loss_type = getattr(self, "loss_type", None)
+
+        if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
                 f"`loss_type={loss_type}` was set in the config but it is unrecognised."
                 f"Using the default loss: `ForCausalLMLoss`."
             )
             loss_type = "ForCausalLM"
         return LOSS_MAPPING[loss_type]
+
+    @loss_function.setter
+    def loss_function(self, value):
+        self._loss_function = value
 
     def get_compiled_call(self, compile_config: CompileConfig):
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
@@ -5135,6 +5316,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._last_compile_config = compile_config
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
         return self._compiled_call
+
+    @classmethod
+    def is_backend_compatible(cls):
+        return cls._supports_attention_backend
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

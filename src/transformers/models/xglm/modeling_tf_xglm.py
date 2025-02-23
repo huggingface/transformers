@@ -969,7 +969,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         if labels is not None:
             # shift labels to the left and cut last logit token
             labels = tf.concat(
-                [labels[:, 1:], tf.fill((labels.shape[0], 1), tf.cast(self.config.pad_token_id, labels.dtype))],
+                [labels[:, 1:], tf.fill((labels.shape[0], 1), tf.cast(-100, labels.dtype))],
                 axis=-1,
             )
             loss = self.hf_compute_loss(labels, lm_logits)
@@ -1003,3 +1003,6 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
             return tf_weight, "model.embed_tokens.weight"
         else:
             return (tf_weight,)
+
+
+__all__ = ["TFXGLMForCausalLM", "TFXGLMModel", "TFXGLMPreTrainedModel"]

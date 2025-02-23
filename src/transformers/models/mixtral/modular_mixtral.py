@@ -45,7 +45,9 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
+    MistralPreTrainedModel,
     MistralRMSNorm,
+    MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
 
@@ -313,6 +315,14 @@ class MixtralDecoderLayer(nn.Module):
         return outputs
 
 
+class MixtralRotaryEmbedding(MistralRotaryEmbedding):
+    pass
+
+
+class MixtralPreTrainedModel(MistralPreTrainedModel):
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
+
+
 class MixtralModel(MistralModel):
     def __init__(self, config: MixtralConfig):
         super().__init__(config)
@@ -466,7 +476,7 @@ class MixtralForCausalLM(MistralForCausalLM):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
@@ -476,10 +486,12 @@ class MixtralForCausalLM(MistralForCausalLM):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -528,7 +540,8 @@ class MixtralForCausalLM(MistralForCausalLM):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:

@@ -81,28 +81,32 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = TimmWrapperConfig
     _no_split_modules = []
+    model_tags = ["timm"]
+
+    # used in Trainer to avoid passing `loss_kwargs` to model forward
+    accepts_loss_kwargs = False
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision", "timm"])
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _fix_state_dict_key_on_load(key):
+    def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
         """
         Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
         We don't want this behavior for timm wrapped models. Instead, this method adds a
         "timm_model." prefix to enable loading official timm Hub checkpoints.
         """
         if "timm_model." not in key:
-            return f"timm_model.{key}"
-        return key
+            return f"timm_model.{key}", True
+        return key, False
 
     def _fix_state_dict_key_on_save(self, key):
         """
         Overrides original method to remove "timm_model." prefix from state_dict keys.
         Makes the saved checkpoint compatible with the `timm` library.
         """
-        return key.replace("timm_model.", "")
+        return key.replace("timm_model.", ""), True
 
     def load_state_dict(self, state_dict, *args, **kwargs):
         """

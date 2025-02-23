@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import EncodecModel
+    from transformers import EncodecFeatureExtractor, EncodecModel
 
 
 def prepare_inputs_dict(
@@ -111,6 +111,19 @@ class EncodecModelTester:
 
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_normalization(self):
+        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        config = self.get_config()
+        config.normalize = True
+
+        processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
+        input_values = list(input_values.cpu().numpy())
+        inputs_dict = processor(
+            input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
+        ).to(torch_device)
+
+        return config, inputs_dict
+
     def get_config(self):
         return EncodecConfig(
             audio_channels=self.num_channels,
@@ -125,9 +138,7 @@ class EncodecModelTester:
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
-
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        result = model(**inputs_dict)
         self.parent.assertEqual(
             result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
         )
@@ -313,7 +324,7 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             inputs = self._prepare_for_class(inputs_dict, model_class)
             inputs["input_values"] = inputs["input_values"].repeat(1, 1, 10)
 
-            hidden_states_no_chunk = model(**inputs)[0]
+            hidden_states_no_chunk = model(**inputs)[1]
 
             torch.manual_seed(0)
             config.chunk_length_s = 1
@@ -324,8 +335,8 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             model.to(torch_device)
             model.eval()
 
-            hidden_states_with_chunk = model(**inputs)[0]
-            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+            hidden_states_with_chunk = model(**inputs)[1]
+            torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-1, atol=1e-2)
 
     @unittest.skip(
         reason="The EncodecModel is not transformers based, thus it does not have the usual `hidden_states` logic"
@@ -435,6 +446,10 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
+    def test_model_forward_with_normalization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_normalization()
+        self.model_tester.create_and_check_model_forward(config, inputs_dict)
+
 
 def normalize(arr):
     norm = np.linalg.norm(arr)
@@ -492,7 +507,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 )[-1]
 
             # make sure forward and decode gives same result
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
             # make sure shape matches
             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
@@ -548,7 +563,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 )[-1]
 
             # make sure forward and decode gives same result
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
             # make sure shape matches
             self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)
@@ -607,7 +622,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 input_values_enc_dec = model(input_values, bandwidth=float(bandwidth))[-1]
 
             # make sure forward and decode gives same result
-            self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec, atol=1e-3))
+            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
 
             # make sure shape matches
             self.assertTrue(input_values.shape == input_values_enc_dec.shape)

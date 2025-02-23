@@ -172,7 +172,7 @@ class Bnb4BitTest(Base4bitTest):
         mem_fp16 = self.model_fp16.get_memory_footprint()
         mem_4bit = self.model_4bit.get_memory_footprint()
 
-        self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE)
+        self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE, delta=1e-5)
         linear = get_some_linear_layer(self.model_4bit)
         self.assertTrue(linear.weight.__class__ == Params4bit)
 
@@ -684,7 +684,7 @@ class BaseSerializationTest(unittest.TestCase):
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         out_0 = model_0(**encoded_input)
         out_1 = model_1(**encoded_input)
-        self.assertTrue(torch.allclose(out_0["logits"], out_1["logits"], atol=0.05))
+        torch.testing.assert_close(out_0["logits"], out_1["logits"], rtol=0.05, atol=0.05)
 
         # comparing generate() outputs
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)

@@ -51,6 +51,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     "Cohere2Config": ["cache_implementation"],
+    # Dropout with this value was declared but never used
+    "Phi3Config": ["embd_pdrop"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
@@ -159,6 +161,16 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
         "mask_loss_coefficient",
     ],
+    "DabDetrConfig": [
+        "dilation",
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "cls_loss_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
     "DetrConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
@@ -191,6 +203,20 @@ SPECIAL_CASES_TO_ALLOW = {
         "weight_loss_giou",
         "weight_loss_vfl",
     ],
+    "RTDetrV2Config": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+    ],
     "YolosConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
@@ -199,6 +225,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
+    "GPTNeoXConfig": ["rotary_emb_base"],
 }
 
 
@@ -264,6 +291,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 f"config.{attribute}" in modeling_source
                 or f'getattr(config, "{attribute}"' in modeling_source
                 or f'getattr(self.config, "{attribute}"' in modeling_source
+                or (
+                    "TextConfig" in config_class.__name__
+                    and f"config.get_text_config().{attribute}" in modeling_source
+                )
             ):
                 attribute_used = True
             # Deal with multi-line cases
@@ -299,6 +330,9 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "unk_index",
         "mask_index",
         "image_token_index",  # for VLMs
+        "video_token_index",
+        "image_seq_length",
+        "video_seq_length",
         "image_size",
         "use_cache",
         "out_features",

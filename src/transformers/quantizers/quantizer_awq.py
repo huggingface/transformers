@@ -59,7 +59,7 @@ class AwqQuantizer(HfQuantizer):
         if self.quantization_config.version == AWQLinearVersion.IPEX:
             if version.parse(importlib.metadata.version("autoawq")) < version.parse("0.2.6"):
                 raise RuntimeError(
-                    "To use IPEX backend, you need autoawq>0.6.2. Please install the latest version or from source."
+                    "To use IPEX backend, you need autoawq>0.2.6. Please install the latest version or from source."
                 )
             if device_map is None:
                 logger.warning_once(

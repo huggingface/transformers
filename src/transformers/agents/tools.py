@@ -479,7 +479,7 @@ class Tool:
                 if api_name is None:
                     api_name = list(space_description.keys())[0]
                     logger.warning(
-                        f"Since `api_name` was not defined, it was automatically set to the first avilable API: `{api_name}`."
+                        f"Since `api_name` was not defined, it was automatically set to the first available API: `{api_name}`."
                     )
                 self.api_name = api_name
 
@@ -609,7 +609,7 @@ def compile_jinja_template(template):
         raise ImportError("template requires jinja2 to be installed.")
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
-        raise ImportError("template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}.")
+        raise ImportError(f"template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}.")
 
     def raise_exception(message):
         raise TemplateError(message)

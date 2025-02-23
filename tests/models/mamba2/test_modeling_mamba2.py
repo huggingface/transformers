@@ -214,7 +214,6 @@ class Mamba2ModelTester:
 @require_torch
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (Mamba2ForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @molbap
     test_torchscript = False  # FIXME I think this should be doable @molbap @ArthurZucker
@@ -250,7 +249,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                 if "D" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
 
     @unittest.skip(reason="Mamba 2 weights are not tied")
     def test_tied_weights_keys(self):
@@ -439,4 +438,4 @@ class Mamba2IntegrationTest(unittest.TestCase):
                 mixer.eval()
                 out_eval = mixer(hidden_states)
 
-                self.assertTrue(torch.allclose(out_train, out_eval, atol=1e-3))
+                torch.testing.assert_close(out_train, out_eval, rtol=1e-3, atol=1e-3)

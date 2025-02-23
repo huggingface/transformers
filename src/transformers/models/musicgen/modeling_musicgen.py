@@ -1259,6 +1259,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length, num_codebooks)`, *optional*):
@@ -2750,3 +2751,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             guidance_scale=1.0,
         )
+
+
+__all__ = ["MusicgenForConditionalGeneration", "MusicgenForCausalLM", "MusicgenModel", "MusicgenPreTrainedModel"]

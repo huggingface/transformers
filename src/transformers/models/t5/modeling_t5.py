@@ -1250,7 +1250,7 @@ class T5Stack(T5PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1310,7 +1310,9 @@ class T5Stack(T5PreTrainedModel):
             if attention_mask is not None:
                 causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
+                    causal_mask.device
+                )
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                     padding_mask, min_dtype
@@ -2491,3 +2493,15 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "T5EncoderModel",
+    "T5ForConditionalGeneration",
+    "T5Model",
+    "T5PreTrainedModel",
+    "load_tf_weights_in_t5",
+    "T5ForQuestionAnswering",
+    "T5ForSequenceClassification",
+    "T5ForTokenClassification",
+]

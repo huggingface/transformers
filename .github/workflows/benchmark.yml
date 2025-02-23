@@ -18,7 +18,8 @@ jobs:
     name: Benchmark
     strategy:
       matrix:
-        group: [aws-g5-4xlarge-cache, aws-p4d-24xlarge-plus]
+        # group: [aws-g5-4xlarge-cache, aws-p4d-24xlarge-plus] (A100 runner is not enabled)
+        group: [aws-g5-4xlarge-cache]
     runs-on:
       group: ${{ matrix.group }}
     if: |

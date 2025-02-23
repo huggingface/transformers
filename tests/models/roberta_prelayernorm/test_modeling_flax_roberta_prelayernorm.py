@@ -37,7 +37,7 @@ if is_flax_available():
 
 
 # Copied from tests.models.roberta.test_modeling_flax_roberta.FlaxRobertaModelTester with Roberta->RobertaPreLayerNorm
-class FlaxRobertaPreLayerNormModelTester(unittest.TestCase):
+class FlaxRobertaPreLayerNormModelTester:
     def __init__(
         self,
         parent,
@@ -81,7 +81,6 @@ class FlaxRobertaPreLayerNormModelTester(unittest.TestCase):
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_choices = num_choices
-        super().__init__()
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)

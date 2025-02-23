@@ -730,16 +730,30 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
     while len(imported_modules) > 0:
         new_modules = []
         for module, imports in imported_modules:
+            if "models" in module.split("/") and module.split("/")[-1].startswith("convert_"):
+                continue
             # If we end up in an __init__ we are often not actually importing from this init (except in the case where
             # the object is fully defined in the __init__)
             if module.endswith("__init__.py"):
                 # So we get the imports from that init then try to find where our objects come from.
                 new_imported_modules = extract_imports(module, cache=cache)
+
+                # Add imports via `define_import_structure` after the #35167 as we remove explicit import in `__init__.py`
+                from transformers.utils.import_utils import define_import_structure
+
+                new_imported_modules_2 = define_import_structure(PATH_TO_REPO / module)
+
+                for mapping in new_imported_modules_2.values():
+                    for _module, _imports in mapping.items():
+                        _module = module.replace("__init__.py", f"{_module}.py")
+                        new_imported_modules.append((_module, list(_imports)))
+
                 for new_module, new_imports in new_imported_modules:
                     if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
                         imports = [i for i in imports if i not in new_imports]
+
                 if len(imports) > 0:
                     # If there are any objects lefts, they may be a submodule
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
@@ -759,6 +773,7 @@ def get_module_dependencies(module_fname: str, cache: Dict[str, List[str]] = Non
                 dependencies.append(module)
 
         imported_modules = new_modules
+
     return dependencies
 
 
@@ -767,7 +782,9 @@ def create_reverse_dependency_tree() -> List[Tuple[str, str]]:
     Create a list of all edges (a, b) which mean that modifying a impacts b with a going over all module and test files.
     """
     cache = {}
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py"))
+    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
+    all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
 
@@ -880,11 +897,14 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
         depending on it recursively. This way the tests impacted by a change in file A are the test files in the list
         corresponding to key A in this result.
     """
+
     cache = {}
     # Start from the example deps init.
     example_deps, examples = init_test_examples_dependencies()
     # Add all modules and all tests to all examples
-    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py")) + examples
+    all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py"))
+    all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
+    all_modules += list(PATH_TO_TESTS.glob("**/*.py")) + examples
     all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
@@ -1134,8 +1154,6 @@ def parse_commit_message(commit_message: str) -> Dict[str, bool]:
 
 
 JOB_TO_TEST_FILE = {
-    "tests_torch_and_tf": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
-    "tests_torch_and_flax": r"tests/models/.*/test_modeling_(?:flax|(?!tf)).*",
     "tests_tf": r"tests/models/.*/test_modeling_tf_.*",
     "tests_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_generate": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
