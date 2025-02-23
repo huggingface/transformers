@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from dataclasses import dataclass
+import copy
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -27,7 +28,7 @@ from transformers.models.blip.image_processing_blip import BlipImageProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
-from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin
+from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode
 from ...image_transforms import (
     resize,
 )
@@ -1090,14 +1091,33 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    # ToDo: How to restrict the image generation to only few generation startegies.
     @torch.no_grad
-    def generate(self, input_ids: torch.Tensor, **kwargs):
+    def generate(self, input_ids: torch.Tensor, generation_config = None, **kwargs):
         generation_config = kwargs.get("generation_config")
+        generation_mode = kwargs.pop("generation_mode", "text")
         # Perform usual auto-regressive text generation.
-        if kwargs.get("generation_mode", None) == "text":
-            kwargs.pop("generation_mode", None)
+        if generation_mode == "text":
             return super().generate(input_ids=input_ids, **kwargs)
+        if generation_config is None:
+            generation_config = self.generation_config
+
+        generation_config = copy.deepcopy(generation_config)
+        model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
+
+        # Fix me: Better way to pass generation config params rather than hardcoding.
+        generation_config.temperature=1
+        generation_config.pad_token_id=100002
+        generation_config.guidance_scale=5
+
+        generation_mode = generation_config.get_generation_mode()
+        if generation_mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
+            raise ValueError(
+                "Got incompatible mode for generation, should be one of greedy or sampling. "
+                "Ensure that beam search is de-activated by setting `num_beams=1` and `num_beam_groups=1`."
+            )
+
+        generation_config.validate()
+        self._validate_model_kwargs(model_kwargs.copy())
 
         # If image is passed then perform custom pre and post processing on generated tokens.
         batch_size, seq_len = input_ids.shape
@@ -1111,16 +1131,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id
 
         # Generate input_embeddings from the given prompt.
-        inputs_embeds = self.get_input_embeddings(input_tokens)
+        inputs_embeds = self.get_input_embeddings()(input_tokens)
 
         # Placeholder to store generated tokens
-        generated_tokens = torch.zeros((batch_size, generation_config.num_image_tokens), dtype=dtype)
+        generated_tokens = torch.zeros((batch_size, self.config.vision_config.num_image_tokens), dtype=dtype)
         outputs = None
 
         logit_processor = ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale)
 
         # Loop through the number of image tokens that need to be generated
-        for i in tqdm(range(generation_config.num_image_tokens)):
+        for i in tqdm(range(self.config.vision_config.num_image_tokens)):
             # Pass the input embeddings through the language model
             outputs = self.language_model.model(
                 inputs_embeds=inputs_embeds,
@@ -1136,7 +1156,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
             # Apply logit processor for controlled generation.
             logits = logit_processor(input_ids, scores)
-
             probs = torch.softmax(logits / generation_config.temperature, dim=-1)
 
             # Sample the next token from the probability distribution.
