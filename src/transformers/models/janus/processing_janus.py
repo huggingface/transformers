@@ -16,22 +16,16 @@
 Processor class for Janus.
 """
 
-from ...image_utils import is_valid_image
+from typing import List, Union
+
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType, logging
-from typing import TYPE_CHECKING, List, Optional, Union
-from ...processing_utils import (
-    ProcessorMixin,
-)
 from ...tokenization_utils_base import (
-    AddedToken,
+    PreTokenizedInput,
+    TextInput,
 )
 from ...utils import logging
-import torch
 
 
 logger = logging.get_logger(__name__)
@@ -39,10 +33,11 @@ logger = logging.get_logger(__name__)
 IMAGE_TOKEN = "<image_placeholder>"
 
 DEFAULT_SYSTEM_PROMPT = (
-        "You are a helpful language and vision assistant. "
-        "You are able to understand the visual content that the user provides, "
-        "and assist the user with a variety of tasks using natural language.\n\n"
-    )
+    "You are a helpful language and vision assistant. "
+    "You are able to understand the visual content that the user provides, "
+    "and assist the user with a variety of tasks using natural language.\n\n"
+)
+
 
 # Copied from transformers.models.idefics2.processing_idefics2.is_url
 def is_url(val) -> bool:
@@ -57,17 +52,14 @@ def is_image_or_image_url(elem):
 def _is_str_or_image(elem):
     return isinstance(elem, (str)) or is_image_or_image_url(elem)
 
+
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_tensors":"pt"
-        },
-        "common_kwargs": {
-            "return_tensors":"pt"
-        },
+        "text_kwargs": {"padding": False, "return_tensors": "pt"},
+        "common_kwargs": {"return_tensors": "pt"},
     }
+
 
 class JanusProcessor(ProcessorMixin):
     r"""
@@ -90,17 +82,17 @@ class JanusProcessor(ProcessorMixin):
     image_processor_class = "JanusImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
 
-    def __init__(self, image_processor, tokenizer, chat_template=None,use_default_system_prompt=True, **kwargs):
+    def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
         self.num_image_tokens = 576
-        self.image_start_token = "<begin_of_image>" # Can be Hardcoded as it won't change.
+        self.image_start_token = "<begin_of_image>"  # Can be Hardcoded as it won't change.
         self.image_end_token = "<end_of_image>"
         self.use_default_system_prompt = use_default_system_prompt
-        self.generation_mode = kwargs.get('generation_mode',None)
+        self.generation_mode = kwargs.get("generation_mode", None)
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -108,11 +100,13 @@ class JanusProcessor(ProcessorMixin):
         self,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         images: ImageInput = None,
-        **kwargs: Unpack[JanusProcessorKwargs]
+        **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
         """Construct a Janus processor with Janus Image procesor and Llama text tokenizer"""
 
-        output_kwargs = self._merge_kwargs(JanusProcessorKwargs,tokenizer_init_kwargs=self.tokenizer.init_kwargs,**kwargs)
+        output_kwargs = self._merge_kwargs(
+            JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
 
         if text is None and images is None:
             raise ValueError("You must specify either text or images.")
@@ -120,7 +114,6 @@ class JanusProcessor(ProcessorMixin):
         if not self.generation_mode:
             logger.info("Generation mode argument not provided. Defaulting to 'text' mode.")
             self.generation_mode = "text"
-
 
         if text is not None:
             if isinstance(text, str):
@@ -136,14 +129,16 @@ class JanusProcessor(ProcessorMixin):
             if self.use_default_system_prompt and self.generation_mode == "text":
                 prompt = DEFAULT_SYSTEM_PROMPT + prompt
             if self.generation_mode == "image":
-                prompt+=self.image_start_token
+                prompt += self.image_start_token
             prompt_strings.append(prompt)
 
-        data = self.tokenizer(prompt_strings,**output_kwargs['text_kwargs'])
+        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
         # Process images if pixel values are provided.
         if images is not None and self.generation_mode != "image":
-            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["common_kwargs"])["pixel_values"]
+            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["common_kwargs"])[
+                "pixel_values"
+            ]
 
         return BatchFeature(data=data)
 

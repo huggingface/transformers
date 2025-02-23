@@ -568,7 +568,6 @@ _import_structure = {
         "JanusVisionConfig",
         "JanusImageProcessor",
         "JanusProcessor",
-
     ],
     "models.llava_next": [
         "LlavaNextConfig",
@@ -5680,8 +5679,8 @@ if TYPE_CHECKING:
     from .models.janus import (
         JanusConfig,
         JanusProcessor,
-        JanusVQVAEConfig,
         JanusVisionConfig,
+        JanusVQVAEConfig,
     )
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
