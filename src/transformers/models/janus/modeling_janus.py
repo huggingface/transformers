@@ -29,9 +29,9 @@ from torch import nn
 from tqdm import tqdm
 
 from ...activations import ACT2FN
-from ...cache_utils import StaticCache
+from ...cache_utils import Cache, StaticCache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
@@ -41,6 +41,7 @@ from ...utils import (
     is_torch_available,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from ..auto import AutoModelForCausalLM
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
@@ -126,15 +127,59 @@ class JanusVisionEmbeddings(nn.Module):
         self.num_patches = self.patch_embeddings.num_patches
 
         num_prefix_tokens = config.num_register_tokens + 1
-        pos_embed_len = self.num_patches + num_prefix_tokens if self.use_special_tokens else self.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, pos_embed_len, config.hidden_size) * 0.02)
+        num_positions = self.num_patches + num_prefix_tokens if self.use_special_tokens else self.num_patches
+        self.position_embeddings = nn.Embedding(num_positions, config.hidden_size)
+        self.register_buffer("position_ids", torch.arange(num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embedding.weight.shape[0]
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
+        batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype), interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
-        # Add CLS and Register token embeddings
+        if interpolate_pos_encoding:
+            pos_embeds = self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            pos_embeds = self.position_embeddings(self.position_ids)
+
+        # Add CLS and Register token embeddings.
         special_token_embeddings = []
         if self.use_special_tokens:
             cls_token_embeddings = self.cls_token.expand((batch_size, -1, -1))
@@ -145,10 +190,10 @@ class JanusVisionEmbeddings(nn.Module):
                 special_token_embeddings.append(register_token_embeddings)
 
         if self.use_special_tokens:
-            embeddings = embeddings + self.position_embeddings
+            embeddings = embeddings + pos_embeds
             embeddings = torch.cat(special_token_embeddings + [embeddings], dim=1)
         else:
-            embeddings = embeddings + self.position_embeddings
+            embeddings = embeddings + pos_embeds
 
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -669,6 +714,9 @@ JANUS_VISION_INPUTS_DOCSTRING = r"""
 
 
 class JanusVisionTransformer(nn.Module):
+    config_class = JanusVisionConfig
+    _supports_sdpa = False
+
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
         self.config = config
@@ -1091,7 +1139,7 @@ class JanusPreTrainedModel(PreTrainedModel):
     _supports_param_buffer_assignment = False
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.vision_config.initializer_range
         if isinstance(module, JanusVQVAE):
             module.apply(module._init_weights)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
@@ -1154,7 +1202,9 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.eval()  # Janus's VQ model is frozen
         self.decoder = JanusVQVAEDecoder(config)
         self.gradient_checkpointing = False
-        # self.post_init()
+
+        # Initilaize the
+        self.post_init()
 
     def encode(self, pixel_values: torch.LongTensor):
         hidden_states = self.encoder(pixel_values)
@@ -1246,6 +1296,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
+        self.config = config
         self.vision_model = JanusVisionTransformer(config.vision_config)
         self.aligner = JanusVisionAlignerMLP(config.vision_config)
 
@@ -1257,10 +1308,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
 
         # Initialize weights and apply final processing
-        # self.post_init()
+        self.post_init()
 
-    def get_input_embeddings(self, input_ids):
-        return self.language_model.get_input_embeddings()(input_ids)
+    def get_input_embeddings(self):
+        return self.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.language_model.set_input_embeddings(value)
 
     def get_image_embeddings(self, pixel_values):
         image_embeds = self.vision_model(pixel_values)
@@ -1278,15 +1332,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values=None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1305,15 +1360,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             )
         # Generate input embeds which will be used while decoding
         if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
             image_embeds = self.get_image_embeddings(pixel_values)
             image_attention_mask = input_ids == 100581
 
-            # Flatten the image embeddings and mask.
-            image_embeds = image_embeds.reshape(-1, 2048)
-            image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, 2048)
+            # Flatten the image embeddings and mask. Refactor it to use input embeds info better
+            embed_dim = inputs_embeds.shape[-1]
+            image_embeds = image_embeds.reshape(-1, embed_dim)
+            image_attention_mask = image_attention_mask.unsqueeze(-1).expand(-1, -1, embed_dim)
 
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_embeds)
@@ -1330,9 +1386,25 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             labels=labels,
+            **kwargs,
         )
+        logits = outputs.logits
 
-        return outputs if return_dict else outputs.to_tuple()
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
     # ToDo: Make it compatible with super class (add contine gen using embeds)
     def prepare_inputs_for_generation(
@@ -1399,6 +1471,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
+    # ToDo: How to restrict the image generation to only few generation startegies.
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor, **kwargs):
         generation_config = kwargs.get("generation_config")

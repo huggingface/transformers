@@ -14,6 +14,7 @@
 """Janus model configuration"""
 
 from typing import List
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -44,19 +45,17 @@ class JanusVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         drop_path_rate=0.0,
         initializer_range=0.02,
-        initializer_factor=1.0,
-        logit_scale_init_value=None,
-        learnable_logit_scale=False,
         select_feature="same",
         select_layer=-1,
         num_register_tokens=0,
         hidden_dropout_rate=0.0,
         projection_dropout=0.0,
-        use_qk_norm = False,
+        use_qk_norm=False,
         layerscale_value=None,
-        use_vision_head = True,
-        aligner_projection_size = 2048,
+        use_vision_head=True,
+        aligner_projection_size=2048,
         depth=2,
+        num_image_tokens=576,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -79,13 +78,16 @@ class JanusVisionConfig(PretrainedConfig):
         self.hidden_dropout_rate = hidden_dropout_rate
         self.projection_dropout = projection_dropout
         self.use_qk_norm = use_qk_norm
+        self.initializer_range = initializer_range
         self.layerscale_value = layerscale_value
         self.select_layer = select_layer
         self.select_feature = select_feature
         self.use_vision_head = use_vision_head
-        self.use_special_tokens = kwargs.get('use_special_tokens',False)
+        self.use_special_tokens = kwargs.get("use_special_tokens", False)
         self.depth = depth
         self.aligner_projection_size = aligner_projection_size
+        self.num_image_tokens = num_image_tokens
+
 
 class JanusVQVAEConfig(PretrainedConfig):
     r"""
@@ -136,7 +138,7 @@ class JanusVQVAEConfig(PretrainedConfig):
         latent_channels: int = 256,
         num_patches: int = 32,
         in_channels: int = 3,
-        out_channels: int =3,
+        out_channels: int = 3,
         base_channels: int = 128,
         channel_multiplier: List[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
@@ -144,7 +146,7 @@ class JanusVQVAEConfig(PretrainedConfig):
         dropout: float = 0.0,
         attn_type: str = "vanilla",
         initializer_range=0.02,
-        aligner_projection_size = 2048,
+        aligner_projection_size=2048,
         depth=2,
         hidden_act="gelu",
         image_token_embed_size=2048,
@@ -234,14 +236,13 @@ class JanusConfig(PretrainedConfig):
     }
 
     def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
-        super().__init__(**kwargs)
-
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "llama"
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            text_config["model_type"] = text_config.get("model_type", "llama")
+            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+
         elif text_config is None:
             logger.info("`text_config` is None. Initializing with default JanusTextConfig values")
-            self.text_config = CONFIG_MAPPING["llama"](
+            text_config = CONFIG_MAPPING["llama"](
                 hidden_size=2048,
                 num_hidden_layers=24,
                 num_attention_heads=16,
@@ -251,19 +252,25 @@ class JanusConfig(PretrainedConfig):
                 vocab_size=102400,
             )
 
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`encodr_vision_config` is None. Initializing with default JanusVisionConfig values")
+        if isinstance(vision_config, dict):
+            vision_config = JanusVisionConfig(**vision_config)
+        elif vision_config is None:
+            logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
+            vision_config = JanusVisionConfig()
 
-        if vq_config is None:
-            vq_config = {}
-            logger.info("`text_config` is None. Initializing with default JanusVQVAEConfig values")
+        if isinstance(vq_config, dict):
+            vq_config = JanusVQVAEConfig(**vq_config)
+        elif vq_config is None:
+            logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
+            vq_config = JanusVQVAEConfig()
 
-        self.vision_config = JanusVisionConfig(**vision_config)
-        self.vq_config = JanusVQVAEConfig(**vq_config)
+        super().__init__(**kwargs)
 
-        # This dimension is required when decoding discrete image tokens to continous input.
-        self.vq_config.num_patches = self.vision_config.image_size//self.vision_config.patch_size
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.vq_config = vq_config
+
+        self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]
