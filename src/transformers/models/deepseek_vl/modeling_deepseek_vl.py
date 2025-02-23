@@ -185,6 +185,8 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        images_seq_mask: Optional[torch.Tensor] = None,
+        images_emb_mask: Optional[torch.Tensor] = None,
         image_encoder_embeddings: Optional[torch.FloatTensor] = None,
         perceiver_embeddings: Optional[torch.FloatTensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
@@ -197,9 +199,11 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
     ):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids)
-            show_tensor(inputs_embeds, name="inputs_embeds")
             images_embeds = self.vision_model(pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+            images_emb_mask = images_emb_mask.reshape(images_emb_mask.shape[0], -1)
+            inputs_embeds[images_seq_mask] = images_embeds[images_emb_mask]
 
+        show_tensor(inputs_embeds, name="inputs_embeds")
 
 class DeepseekVLForVisionText2Text(DeepseekVLPreTrainedModel, GenerationMixin):
 
@@ -217,6 +221,8 @@ class DeepseekVLForVisionText2Text(DeepseekVLPreTrainedModel, GenerationMixin):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
+        images_seq_mask: Optional[torch.Tensor] = None,
+        images_emb_mask: Optional[torch.Tensor] = None,
         image_encoder_embeddings: Optional[torch.FloatTensor] = None,
         perceiver_embeddings: Optional[torch.FloatTensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
@@ -235,6 +241,8 @@ class DeepseekVLForVisionText2Text(DeepseekVLPreTrainedModel, GenerationMixin):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
+            images_seq_mask=images_seq_mask,
+            images_emb_mask=images_emb_mask,
             image_encoder_embeddings=image_encoder_embeddings,
             perceiver_embeddings=perceiver_embeddings,
             image_attention_mask=image_attention_mask,
