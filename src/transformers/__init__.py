@@ -7621,6 +7621,10 @@ if TYPE_CHECKING:
         from .models.janus import (
             JanusForConditionalGeneration,
             JanusPreTrainedModel,
+            JanusConfig,
+            JanusVisionConfig,
+            JanusVQVAEConfig,
+            JanusProcessor
         )
         from .models.jetmoe import (
             JetMoeForCausalLM,

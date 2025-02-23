@@ -32,10 +32,8 @@ from huggingface_hub import snapshot_download
 
 from transformers import (
     AutoTokenizer,
-    JanusForConditionalGeneration, LlamaConfig,
-)
-# TODO: Temporary, was getting import errors if not importing like this
-from transformers.models.janus.configuration_janus import (
+    JanusForConditionalGeneration,
+    LlamaConfig,
     JanusConfig,
     JanusVisionConfig,
     JanusVQVAEConfig,
@@ -70,15 +68,15 @@ VQ_MAPPINGS = {
 }
 
 CHAT_TEMPLATE = (
-    "{%set seps=['\n\n','']%}"
+    "{%set seps=['\n\n','<\uFF5Cend▁of▁sentence\uFF5C>']%}"
     "{%set i=0%}"
     "{%for message in messages%}"
         "{%if message['role']=='user'%}"
             "<|User|>: "
         "{%elif message['role']=='assistant'%}"
-            "<|Assistant|>: "
+            "<|Assistant|>:{%if not (loop.last and not add_generation_prompt and message['content'][0]['type']=='text' and message['content'][0]['text']=='')%} {%endif%}"
         "{%else%}"
-            "{{message['role'].capitalize(): }}"
+            "{{message['role'].capitalize()}}: "
         "{%endif%}"
         "{%for content in message['content']%}"
             "{%if content['type']=='image'%}"
