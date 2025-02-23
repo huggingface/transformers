@@ -820,6 +820,7 @@ _import_structure = {
     ],
     "models.textnet": ["TextNetConfig"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
+    "models.timesfm": ["TimesFmConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.timm_wrapper": ["TimmWrapperConfig"],
@@ -3739,6 +3740,13 @@ else:
             "TimeSeriesTransformerPreTrainedModel",
         ]
     )
+    _import_structure["models.timesfm"].extend(
+        [
+            "TimesFmModel",
+            "TimesFmModelForPrediction",
+            "TimesFmPreTrainedModel",
+        ]
+    )
     _import_structure["models.timesformer"].extend(
         [
             "TimesformerForVideoClassification",
@@ -6011,6 +6019,7 @@ if TYPE_CHECKING:
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
+    from .models.timesfm import TimesFmConfig
     from .models.timesformer import (
         TimesformerConfig,
     )
@@ -8444,6 +8453,11 @@ if TYPE_CHECKING:
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
+        )
+        from .models.timesfm import (
+            TimesFmModel,
+            TimesFmModelForPrediction,
+            TimesFmPreTrainedModel,
         )
         from .models.timesformer import (
             TimesformerForVideoClassification,
