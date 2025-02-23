@@ -451,7 +451,7 @@ _import_structure = {
         "FastSpeech2ConformerTokenizer",
         "FastSpeech2ConformerWithHifiGanConfig",
     ],
-    "models.fast": ["FAST_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastConfig"],
+    "models.fast": ["FastConfig"],
     "models.flaubert": ["FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FlavaConfig",
@@ -5563,7 +5563,7 @@ if TYPE_CHECKING:
     from .models.esm import EsmConfig, EsmTokenizer
     from .models.falcon import FalconConfig
     from .models.falcon_mamba import FalconMambaConfig
-    from .models.fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig
+    from .models.fast import FastConfig
     from .models.fastspeech2_conformer import (
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,

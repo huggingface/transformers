@@ -20,11 +20,6 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-FAST_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "fast_base_tt_800_finetune_ic17mlt": ("https://huggingface.co/jadechoghari/fast-tiny/raw/main/config.json"),
-}
-
-
 class FastConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FastForSceneTextRecognition`]. It is used to
