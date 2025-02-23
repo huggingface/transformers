@@ -147,7 +147,7 @@ def spatial_expectation2d(input: torch.Tensor, normalized_coordinates: bool = Tr
     return output.view(batch_size, channels, 2)
 
 
-def mask_border(tensor: torch.Tensor, border_margin: int, value: bool | float | int) -> torch.Tensor:
+def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, float, int]) -> torch.Tensor:
     """
     Mask a tensor border with a given value
 
