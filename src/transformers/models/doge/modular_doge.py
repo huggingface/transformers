@@ -490,7 +490,7 @@ class DogeCDMoE(DogeMLP):
 
         # get routing weights with queries and keys
         queries = self.queries_proj(hidden_states).view(2, bsz * seq_len, -1)
-        routing_weights = torch.bmm(queries, self.keys).view(2, bsz * seq_len, self.num_keys)
+        routing_weights = torch.matmul(queries, self.keys)
 
         # get experts with the highest routing weights
         (scores_x, scores_y), (indices_x, indices_y) = routing_weights.topk(self.top_k, dim=-1)
@@ -504,9 +504,9 @@ class DogeCDMoE(DogeMLP):
         up_embed = self.up_embed(indices)
 
         # mix experts states with cross domain states
-        experts_weights = torch.bmm(hidden_states.view(bsz * seq_len, 1, -1), down_embed).view(bsz * seq_len, -1)
+        experts_weights = torch.matmul(hidden_states.view(bsz * seq_len, 1, -1), down_embed).view(bsz * seq_len, -1)
         experts_weights = self.act_fn(experts_weights) * scores.softmax(dim=-1)
-        experts_states = torch.bmm(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
+        experts_states = torch.matmul(experts_weights.view(bsz * seq_len, 1, -1), up_embed).view(bsz, seq_len, -1)
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         hidden_states = hidden_states + experts_states
         return hidden_states
