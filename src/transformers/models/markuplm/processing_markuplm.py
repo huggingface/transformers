@@ -20,7 +20,11 @@ from typing import Optional, Union
 
 from ...file_utils import TensorType
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
+from ...tokenization_utils_base import (
+    BatchEncoding,
+    PaddingStrategy,
+    TruncationStrategy,
+)
 
 
 class MarkupLMProcessor(ProcessorMixin):
@@ -82,7 +86,9 @@ class MarkupLMProcessor(ProcessorMixin):
         # first, create nodes and xpaths
         if self.parse_html:
             if html_strings is None:
-                raise ValueError("Make sure to pass HTML strings in case `parse_html` is set to `True`")
+                raise ValueError(
+                    "Make sure to pass HTML strings in case `parse_html` is set to `True`"
+                )
 
             if nodes is not None or xpaths is not None or node_labels is not None:
                 raise ValueError(
@@ -94,14 +100,20 @@ class MarkupLMProcessor(ProcessorMixin):
             xpaths = features["xpaths"]
         else:
             if html_strings is not None:
-                raise ValueError("You have passed HTML strings but `parse_html` is set to `False`.")
+                raise ValueError(
+                    "You have passed HTML strings but `parse_html` is set to `False`."
+                )
             if nodes is None or xpaths is None:
-                raise ValueError("Make sure to pass nodes and xpaths in case `parse_html` is set to `False`")
+                raise ValueError(
+                    "Make sure to pass nodes and xpaths in case `parse_html` is set to `False`"
+                )
 
         # # second, apply the tokenizer
         if questions is not None and self.parse_html:
             if isinstance(questions, str):
-                questions = [questions]  # add batch dimension (as the feature extractor always adds a batch dimension)
+                questions = [
+                    questions
+                ]  # add batch dimension (as the feature extractor always adds a batch dimension)
 
         encoded_inputs = self.tokenizer(
             text=questions if questions is not None else nodes,

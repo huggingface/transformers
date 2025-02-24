@@ -126,7 +126,9 @@ class ViTHybridConfig(PretrainedConfig):
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with a `BiT` backbone.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with a `BiT` backbone."
+            )
             backbone_config = {
                 "global_padding": "same",
                 "layer_type": "bottleneck",
@@ -135,8 +137,14 @@ class ViTHybridConfig(PretrainedConfig):
                 "embedding_dynamic_padding": True,
             }
 
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        if (
+            backbone_kwargs is not None
+            and backbone_kwargs
+            and backbone_config is not None
+        ):
+            raise ValueError(
+                "You can't specify both `backbone_kwargs` and `backbone_config`."
+            )
 
         if isinstance(backbone_config, dict):
             if "model_type" in backbone_config:

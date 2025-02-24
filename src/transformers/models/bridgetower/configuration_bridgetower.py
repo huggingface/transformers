@@ -257,7 +257,10 @@ class BridgeTowerConfig(PretrainedConfig):
     ```"""
 
     model_type = "bridgetower"
-    sub_configs = {"text_config": BridgeTowerTextConfig, "vision_config": BridgeTowerVisionConfig}
+    sub_configs = {
+        "text_config": BridgeTowerTextConfig,
+        "vision_config": BridgeTowerVisionConfig,
+    }
 
     def __init__(
         self,
@@ -295,25 +298,36 @@ class BridgeTowerConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `BridgeTowerTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `BridgeTowerTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BridgeTowerVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. Initializing the `BridgeTowerVisionConfig` with default values."
+            )
 
         self.text_config = BridgeTowerTextConfig(**text_config)
         self.vision_config = BridgeTowerVisionConfig(**vision_config)
 
     @classmethod
     def from_text_vision_configs(
-        cls, text_config: BridgeTowerTextConfig, vision_config: BridgeTowerVisionConfig, **kwargs
+        cls,
+        text_config: BridgeTowerTextConfig,
+        vision_config: BridgeTowerVisionConfig,
+        **kwargs,
     ):
         r"""
         Instantiate a [`BridgeTowerConfig`] (or a derived class) from BridgeTower text model configuration. Returns:
             [`BridgeTowerConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["BridgeTowerConfig", "BridgeTowerTextConfig", "BridgeTowerVisionConfig"]

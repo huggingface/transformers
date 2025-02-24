@@ -31,7 +31,10 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BackboneOutput
 from ...utils import logging, torch_int
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import (
+    BackboneConfigMixin,
+    get_aligned_output_features_output_indices,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -161,9 +164,15 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
         self.num_register_tokens = num_register_tokens
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        self.stage_names = ["stem"] + [
+            f"stage{idx}" for idx in range(1, num_hidden_layers + 1)
+        ]
+        self._out_features, self._out_indices = (
+            get_aligned_output_features_output_indices(
+                out_features=out_features,
+                out_indices=out_indices,
+                stage_names=self.stage_names,
+            )
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
@@ -183,15 +192,21 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
 
         self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
         self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.zeros(1, config.num_register_tokens, config.hidden_size))
+        self.register_tokens = nn.Parameter(
+            torch.zeros(1, config.num_register_tokens, config.hidden_size)
+        )
         self.patch_embeddings = Dinov2WithRegistersPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(
+            torch.randn(1, num_patches + 1, config.hidden_size)
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
         self.config = config
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
         resolution images. This implementation supports torch.jit tracing while maintaining backwards compatibility
@@ -205,7 +220,11 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         num_positions = self.position_embeddings.shape[1] - 1
 
         # Skip interpolation for matching dimensions (unless tracing)
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+        if (
+            not torch.jit.is_tracing()
+            and num_patches == num_positions
+            and height == width
+        ):
             return self.position_embeddings
 
         # Handle class token and patch embeddings separately
@@ -219,7 +238,9 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
 
         # Reshape for interpolation
         sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.reshape(
+            1, sqrt_num_positions, sqrt_num_positions, dim
+        )
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         # Store original dtype for restoration after interpolation
@@ -228,7 +249,10 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(dtype=torch.float32),
-            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
+            size=(
+                torch_int(height),
+                torch_int(width),
+            ),  # Explicit size instead of scale_factor
             mode="bicubic",
             align_corners=False,
             antialias=True,
@@ -236,8 +260,13 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
 
         # Validate output dimensions if not tracing
         if not torch.jit.is_tracing():
-            if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
-                raise ValueError("Width or height does not match with the interpolated position embeddings")
+            if (
+                int(height) != patch_pos_embed.shape[-2]
+                or int(width) != patch_pos_embed.shape[-1]
+            ):
+                raise ValueError(
+                    "Width or height does not match with the interpolated position embeddings"
+                )
 
         # Reshape back to original format
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
@@ -245,14 +274,18 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(
+        self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
 
         if bool_masked_pos is not None:
             embeddings = torch.where(
-                bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
+                bool_masked_pos.unsqueeze(-1),
+                self.mask_token.to(embeddings.dtype).unsqueeze(0),
+                embeddings,
             )
 
         # add the [CLS] token to the embedded patch tokens
@@ -260,11 +293,18 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        embeddings = embeddings + self.interpolate_pos_encoding(
+            embeddings, height, width
+        )
 
         # add register tokens
         embeddings = torch.cat(
-            (embeddings[:, :1], self.register_tokens.expand(embeddings.shape[0], -1, -1), embeddings[:, 1:]), dim=1
+            (
+                embeddings[:, :1],
+                self.register_tokens.expand(embeddings.shape[0], -1, -1),
+                embeddings[:, 1:],
+            ),
+            dim=1,
         )
 
         embeddings = self.dropout(embeddings)
@@ -294,7 +334,9 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         super()._init_backbone(config)
 
         self.num_register_tokens = config.num_register_tokens
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.num_features = [
+            config.hidden_size for _ in range(config.num_hidden_layers + 1)
+        ]
         self.embeddings = Dinov2WithRegistersEmbeddings(config)
         self.encoder = Dinov2WithRegistersEncoder(config)
 
@@ -339,16 +381,27 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
 
         embedding_output = self.embeddings(pixel_values)
 
         outputs = self.encoder(
-            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=return_dict
+            embedding_output,
+            output_hidden_states=True,
+            output_attentions=output_attentions,
+            return_dict=return_dict,
         )
 
         hidden_states = outputs.hidden_states if return_dict else outputs[1]
@@ -364,7 +417,9 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
-                    hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
+                    hidden_state = hidden_state.reshape(
+                        batch_size, height // patch_size, width // patch_size, -1
+                    )
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
                 feature_maps += (hidden_state,)
 

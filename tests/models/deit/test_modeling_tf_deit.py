@@ -97,7 +97,9 @@ class TFDeiTModelTester:
         self.seq_length = num_patches + 2
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -128,36 +130,51 @@ class TFDeiTModelTester:
     def create_and_check_model(self, config, pixel_values, labels):
         model = TFDeiTModel(config=config)
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
         model = TFDeiTForMaskedImageModeling(config=config)
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape,
+            (self.batch_size, self.num_channels, self.image_size, self.image_size),
         )
 
         # test greyscale images
         config.num_channels = 1
         model = TFDeiTForMaskedImageModeling(config)
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values)
-        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(
+            result.reconstruction.shape,
+            (self.batch_size, 1, self.image_size, self.image_size),
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = TFDeiTForImageClassification(config)
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
         model = TFDeiTForImageClassification(config)
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size, self.image_size]
+        )
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -186,7 +203,10 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     pipeline_model_mapping = (
         {
             "feature-extraction": TFDeiTModel,
-            "image-classification": (TFDeiTForImageClassification, TFDeiTForImageClassificationWithTeacher),
+            "image-classification": (
+                TFDeiTForImageClassification,
+                TFDeiTForImageClassificationWithTeacher,
+            ),
         }
         if is_tf_available()
         else {}
@@ -199,7 +219,9 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = TFDeiTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeiTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=DeiTConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -243,10 +265,15 @@ class TFDeiTModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     # special case for DeiTForImageClassificationWithTeacher model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
-            if "labels" in inputs_dict and "labels" not in inspect.signature(model_class.call).parameters:
+            if (
+                "labels" in inputs_dict
+                and "labels" not in inspect.signature(model_class.call).parameters
+            ):
                 del inputs_dict["labels"]
 
         return inputs_dict
@@ -270,14 +297,18 @@ class DeiTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+            DeiTImageProcessor.from_pretrained(
+                "facebook/deit-base-distilled-patch16-224"
+            )
             if is_vision_available()
             else None
         )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFDeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        model = TFDeiTForImageClassificationWithTeacher.from_pretrained(
+            "facebook/deit-base-distilled-patch16-224"
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -296,14 +327,18 @@ class DeiTModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
-        model = TFDeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        model = TFDeiTForImageClassificationWithTeacher.from_pretrained(
+            "facebook/deit-base-distilled-patch16-224"
+        )
 
         image_processor = self.default_image_processor
         # image size is {"height": 480, "width": 640}
         image = prepare_img()
         image_processor.size = {"height": 480, "width": 640}
         # center crop set to False so image is not center cropped to 224x224
-        inputs = image_processor(images=image, return_tensors="tf", do_center_crop=False)
+        inputs = image_processor(
+            images=image, return_tensors="tf", do_center_crop=False
+        )
         # forward pass
         outputs = model(**inputs, interpolate_pos_encoding=True)
 

@@ -21,9 +21,18 @@ import sys
 
 import torch
 
-from transformers import TransfoXLConfig, TransfoXLLMHeadModel, load_tf_weights_in_transfo_xl
-from transformers.models.deprecated.transfo_xl import tokenization_transfo_xl as data_utils
-from transformers.models.deprecated.transfo_xl.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
+from transformers import (
+    TransfoXLConfig,
+    TransfoXLLMHeadModel,
+    load_tf_weights_in_transfo_xl,
+)
+from transformers.models.deprecated.transfo_xl import (
+    tokenization_transfo_xl as data_utils,
+)
+from transformers.models.deprecated.transfo_xl.tokenization_transfo_xl import (
+    CORPUS_NAME,
+    VOCAB_FILES_NAMES,
+)
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
 
@@ -38,14 +47,19 @@ sys.modules["vocabulary"] = data_utils
 
 
 def convert_transfo_xl_checkpoint_to_pytorch(
-    tf_checkpoint_path, transfo_xl_config_file, pytorch_dump_folder_path, transfo_xl_dataset_file
+    tf_checkpoint_path,
+    transfo_xl_config_file,
+    pytorch_dump_folder_path,
+    transfo_xl_dataset_file,
 ):
     if transfo_xl_dataset_file:
         # Convert a pre-processed corpus (see original TensorFlow repo)
         with open(transfo_xl_dataset_file, "rb") as fp:
             corpus = pickle.load(fp, encoding="latin1")
         # Save vocabulary and dataset cache as Dictionaries (should be better than pickles for the long-term)
-        pytorch_vocab_dump_path = pytorch_dump_folder_path + "/" + VOCAB_FILES_NAMES["pretrained_vocab_file"]
+        pytorch_vocab_dump_path = (
+            pytorch_dump_folder_path + "/" + VOCAB_FILES_NAMES["pretrained_vocab_file"]
+        )
         print(f"Save vocabulary to {pytorch_vocab_dump_path}")
         corpus_vocab_dict = corpus.vocab.__dict__
         torch.save(corpus_vocab_dict, pytorch_vocab_dump_path)
@@ -61,7 +75,9 @@ def convert_transfo_xl_checkpoint_to_pytorch(
         config_path = os.path.abspath(transfo_xl_config_file)
         tf_path = os.path.abspath(tf_checkpoint_path)
 
-        print(f"Converting Transformer XL checkpoint from {tf_path} with config at {config_path}.")
+        print(
+            f"Converting Transformer XL checkpoint from {tf_path} with config at {config_path}."
+        )
         # Initialise PyTorch model
         if transfo_xl_config_file == "":
             config = TransfoXLConfig()

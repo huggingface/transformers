@@ -139,9 +139,15 @@ class RecurrentGemmaConfig(PretrainedConfig):
         self.block_types = list(block_types)
         self.hidden_activation = hidden_activation
         self.head_dim = self.hidden_size // self.num_attention_heads
-        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else num_attention_heads
+        self.num_key_value_heads = (
+            num_key_value_heads
+            if num_key_value_heads is not None
+            else num_attention_heads
+        )
         if self.num_key_value_heads > self.num_attention_heads:
-            raise ValueError("The number of `num_key_value_heads` must be smaller than `num_attention_heads`")
+            raise ValueError(
+                "The number of `num_key_value_heads` must be smaller than `num_attention_heads`"
+            )
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
         self.w_init_variance_scale = w_init_variance_scale

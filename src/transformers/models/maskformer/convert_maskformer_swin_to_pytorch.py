@@ -25,7 +25,12 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, SwinConfig
+from transformers import (
+    MaskFormerConfig,
+    MaskFormerForInstanceSegmentation,
+    MaskFormerImageProcessor,
+    SwinConfig,
+)
 from transformers.utils import logging
 
 
@@ -35,7 +40,8 @@ logger = logging.get_logger(__name__)
 
 def get_maskformer_config(model_name: str):
     backbone_config = SwinConfig.from_pretrained(
-        "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+        "microsoft/swin-tiny-patch4-window7-224",
+        out_features=["stage1", "stage2", "stage3", "stage4"],
     )
     config = MaskFormerConfig(backbone_config=backbone_config)
 
@@ -65,7 +71,9 @@ def get_maskformer_config(model_name: str):
         config.num_labels = 65
         filename = "mapillary-vistas-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
 
     return config
@@ -167,7 +175,10 @@ def rename_key(dct, old, new):
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_swin_q_k_v(state_dict, backbone_config):
-    num_features = [int(backbone_config.embed_dim * 2**i) for i in range(len(backbone_config.depths))]
+    num_features = [
+        int(backbone_config.embed_dim * 2**i)
+        for i in range(len(backbone_config.depths))
+    ]
     for i in range(len(backbone_config.depths)):
         dim = num_features[i]
         for j in range(backbone_config.depths[i]):
@@ -228,7 +239,10 @@ def prepare_img() -> torch.Tensor:
 
 @torch.no_grad()
 def convert_maskformer_checkpoint(
-    model_name: str, checkpoint_path: str, pytorch_dump_folder_path: str, push_to_hub: bool = False
+    model_name: str,
+    checkpoint_path: str,
+    pytorch_dump_folder_path: str,
+    push_to_hub: bool = False,
 ):
     """
     Copy/paste/tweak model's weights to our MaskFormer structure.
@@ -277,7 +291,9 @@ def convert_maskformer_checkpoint(
     else:
         ignore_index = 255
     do_reduce_labels = True if "ade" in model_name else False
-    image_processor = MaskFormerImageProcessor(ignore_index=ignore_index, do_reduce_labels=do_reduce_labels)
+    image_processor = MaskFormerImageProcessor(
+        ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
+    )
 
     inputs = image_processor(image, return_tensors="pt")
 
@@ -287,9 +303,15 @@ def convert_maskformer_checkpoint(
 
     if model_name == "maskformer-swin-tiny-ade":
         expected_logits = torch.tensor(
-            [[3.6353, -4.4770, -2.6065], [0.5081, -4.2394, -3.5343], [2.1909, -5.0353, -1.9323]]
+            [
+                [3.6353, -4.4770, -2.6065],
+                [0.5081, -4.2394, -3.5343],
+                [2.1909, -5.0353, -1.9323],
+            ]
         )
-    assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
+    assert torch.allclose(
+        outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4
+    )
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
@@ -321,13 +343,21 @@ if __name__ == "__main__":
         "Given the files are in the pickle format, please be wary of passing it files you trust.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
     convert_maskformer_checkpoint(
-        args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+        args.model_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
     )

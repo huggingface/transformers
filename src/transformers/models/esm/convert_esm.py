@@ -48,8 +48,14 @@ SAMPLE_DATA = [
         "MNGTEGPNFYVPFSNATGVVRSPFEYPQYYLAEPWQFSMLAAYMFLLIVLGFPINFLTLYVTVQHKKLRTPLNYILLNLAVADLFMVLGGFTSTLYTSLHGYFVFGPTGCNLEGFFATLGGEIALWSLVVLAIERYVVVCKPMSNFRFGENHAIMGVAFTWVMALACAAPPLAGWSRYIPEGLQCSCGIDYYTLKPEVNNESFVIYMFVVHFTIPMIIIFFCYGQLVFTVKEAAAQQQESATTQKAEKEVTRMVIIMVIAFLICWVPYASVAFYIFTHQGSNFGPIFMTIPAFFAKSAAIYNPVIYIMMNKQFRNCMLTTICCGKNPLGDDEASATVSKTETSQVAPA",
     ),
     ("protein2", "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLA"),
-    ("protein3", "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLAGG"),
-    ("protein4", "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLA"),
+    (
+        "protein3",
+        "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLAGG",
+    ),
+    (
+        "protein4",
+        "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLA",
+    ),
 ]
 
 MODEL_MAPPING = {
@@ -80,7 +86,9 @@ def get_esmfold_tokenizer():
         vocab_file = Path(tempdir) / "vocab.txt"
         vocab_file.write_text(vocab)
         hf_tokenizer = EsmTokenizer(vocab_file=str(vocab_file))
-    hf_tokenizer.pad_token_id = 0  # Overlaps with 'A' but that seems to be what they want
+    hf_tokenizer.pad_token_id = (
+        0  # Overlaps with 'A' but that seems to be what they want
+    )
     return hf_tokenizer
 
 
@@ -93,7 +101,11 @@ def transfer_and_check_weights(original_module, our_module):
 
 
 def convert_esm_checkpoint_to_pytorch(
-    model: str, pytorch_dump_folder_path: str, classification_head: bool, push_to_repo: str, auth_token: str
+    model: str,
+    pytorch_dump_folder_path: str,
+    classification_head: bool,
+    push_to_repo: str,
+    auth_token: str,
 ):
     """
     Copy/paste/tweak esm's weights to our BERT structure.
@@ -193,14 +205,24 @@ def convert_esm_checkpoint_to_pytorch(
     # Embeddings
     model.esm.embeddings.word_embeddings.weight = original_esm_model.embed_tokens.weight
     if position_embedding_type == "absolute":
-        model.esm.embeddings.position_embeddings.weight = original_esm_model.embed_positions.weight
+        model.esm.embeddings.position_embeddings.weight = (
+            original_esm_model.embed_positions.weight
+        )
 
     if config.emb_layer_norm_before:
-        model.esm.embeddings.layer_norm.weight = original_esm_model.emb_layer_norm_before.weight
-        model.esm.embeddings.layer_norm.bias = original_esm_model.emb_layer_norm_before.bias
+        model.esm.embeddings.layer_norm.weight = (
+            original_esm_model.emb_layer_norm_before.weight
+        )
+        model.esm.embeddings.layer_norm.bias = (
+            original_esm_model.emb_layer_norm_before.bias
+        )
 
-    model.esm.encoder.emb_layer_norm_after.weight = original_esm_model.emb_layer_norm_after.weight
-    model.esm.encoder.emb_layer_norm_after.bias = original_esm_model.emb_layer_norm_after.bias
+    model.esm.encoder.emb_layer_norm_after.weight = (
+        original_esm_model.emb_layer_norm_after.weight
+    )
+    model.esm.encoder.emb_layer_norm_after.bias = (
+        original_esm_model.emb_layer_norm_after.bias
+    )
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
@@ -231,7 +253,9 @@ def convert_esm_checkpoint_to_pytorch(
             # If we recompute inv_freq without this loss of precision then we will get subtly different rotary
             # embeddings, which are enough to cause significant discrepancies in model outputs. To avoid this,
             # we make sure the new model copies the data from the old inv_freq.
-            self_attn.rotary_embeddings.inv_freq.data = esm_layer.self_attn.rot_emb.inv_freq
+            self_attn.rotary_embeddings.inv_freq.data = (
+                esm_layer.self_attn.rot_emb.inv_freq
+            )
 
         # LayerNorm changes for pre-activation
         layer.attention.LayerNorm.weight = esm_layer.self_attn_layer_norm.weight
@@ -241,7 +265,9 @@ def convert_esm_checkpoint_to_pytorch(
 
         # self-attention output
         self_output: EsmSelfOutput = layer.attention.output
-        assert self_output.dense.weight.shape == esm_layer.self_attn.out_proj.weight.shape
+        assert (
+            self_output.dense.weight.shape == esm_layer.self_attn.out_proj.weight.shape
+        )
         self_output.dense.weight = esm_layer.self_attn.out_proj.weight
         self_output.dense.bias = esm_layer.self_attn.out_proj.bias
 
@@ -270,9 +296,13 @@ def convert_esm_checkpoint_to_pytorch(
         transfer_and_check_weights(esm.lddt_head, model.lddt_head)
 
     elif classification_head:
-        model.classifier.dense.weight = esm.esm.classification_heads["mnli"].dense.weight
+        model.classifier.dense.weight = esm.esm.classification_heads[
+            "mnli"
+        ].dense.weight
         model.classifier.dense.bias = esm.classification_heads["mnli"].dense.bias
-        model.classifier.out_proj.weight = esm.classification_heads["mnli"].out_proj.weight
+        model.classifier.out_proj.weight = esm.classification_heads[
+            "mnli"
+        ].out_proj.weight
         model.classifier.out_proj.bias = esm.classification_heads["mnli"].out_proj.bias
     else:
         # LM Head
@@ -296,9 +326,14 @@ def convert_esm_checkpoint_to_pytorch(
     if is_folding_model:
         hf_tokenizer = get_esmfold_tokenizer()
         hf_tokens = hf_tokenizer(
-            [row[1] for row in sample_data], return_tensors="pt", padding=True, add_special_tokens=False
+            [row[1] for row in sample_data],
+            return_tensors="pt",
+            padding=True,
+            add_special_tokens=False,
         )
-        esmfold_aas, esmfold_mask, _, _, _ = esmfold_encode_sequences([row[1] for row in sample_data])
+        esmfold_aas, esmfold_mask, _, _, _ = esmfold_encode_sequences(
+            [row[1] for row in sample_data]
+        )
         success = torch.all(hf_tokens["input_ids"] == esmfold_aas) and torch.all(
             hf_tokens["attention_mask"] == esmfold_mask
         )
@@ -313,10 +348,14 @@ def convert_esm_checkpoint_to_pytorch(
             vocab_file.write_text(vocab)
             hf_tokenizer = EsmTokenizer(vocab_file=str(vocab_file))
 
-        hf_tokens = hf_tokenizer([row[1] for row in sample_data], return_tensors="pt", padding=True)
+        hf_tokens = hf_tokenizer(
+            [row[1] for row in sample_data], return_tensors="pt", padding=True
+        )
         success = torch.all(hf_tokens["input_ids"] == batch_tokens)
 
-    print("Do both models tokenizers output the same tokens?", "🔥" if success else "💩")
+    print(
+        "Do both models tokenizers output the same tokens?", "🔥" if success else "💩"
+    )
     if not success:
         raise Exception("Tokenization does not match!")
 
@@ -329,20 +368,27 @@ def convert_esm_checkpoint_to_pytorch(
             # original and the converted model on the GPU at the same time.
             their_output = esm.cuda().infer([row[1] for row in sample_data])
             our_output = model.cuda()(
-                input_ids=hf_tokens["input_ids"].cuda(), attention_mask=hf_tokens["attention_mask"].cuda()
+                input_ids=hf_tokens["input_ids"].cuda(),
+                attention_mask=hf_tokens["attention_mask"].cuda(),
             )
         else:
             our_output = model(**hf_tokens, output_hidden_states=True)
             our_output = our_output["logits"]
             if classification_head:
-                their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
+                their_output = esm.model.classification_heads["mnli"](
+                    esm.extract_features(batch_tokens)
+                )
             else:
                 their_output = esm(hf_tokens["input_ids"], repr_layers=list(range(999)))
                 their_output = their_output["logits"]
 
         if is_folding_model:
-            max_absolute_diff = torch.max(torch.abs(our_output["positions"] - their_output["positions"])).item()
-            success = torch.allclose(our_output["positions"], their_output["positions"], atol=1e-5)
+            max_absolute_diff = torch.max(
+                torch.abs(our_output["positions"] - their_output["positions"])
+            ).item()
+            success = torch.allclose(
+                our_output["positions"], their_output["positions"], atol=1e-5
+            )
         else:
             max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
             success = torch.allclose(our_output, their_output, atol=1e-5)
@@ -355,7 +401,9 @@ def convert_esm_checkpoint_to_pytorch(
 
         if not is_folding_model:
             # Let's check contact prediction too
-            our_output = model.predict_contacts(hf_tokens["input_ids"], hf_tokens["attention_mask"])
+            our_output = model.predict_contacts(
+                hf_tokens["input_ids"], hf_tokens["attention_mask"]
+            )
             their_output = esm.predict_contacts(hf_tokens["input_ids"])
             max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
             success = torch.allclose(our_output, their_output, atol=1e-5)
@@ -385,15 +433,32 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     parser.add_argument(
-        "--classification_head", action="store_true", help="Whether to convert a final classification head."
+        "--classification_head",
+        action="store_true",
+        help="Whether to convert a final classification head.",
     )
-    parser.add_argument("--model", default=None, type=str, required=True, help="Name of model to convert.")
-    parser.add_argument("--push_to_repo", type=str, help="Repo to upload to (including username!).")
+    parser.add_argument(
+        "--model",
+        default=None,
+        type=str,
+        required=True,
+        help="Name of model to convert.",
+    )
+    parser.add_argument(
+        "--push_to_repo", type=str, help="Repo to upload to (including username!)."
+    )
     parser.add_argument("--auth_token", type=str, help="HuggingFace auth token.")
     args = parser.parse_args()
     convert_esm_checkpoint_to_pytorch(
-        args.model, args.pytorch_dump_folder_path, args.classification_head, args.push_to_repo, args.auth_token
+        args.model,
+        args.pytorch_dump_folder_path,
+        args.classification_head,
+        args.push_to_repo,
+        args.auth_token,
     )

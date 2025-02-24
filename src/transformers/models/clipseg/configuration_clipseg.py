@@ -101,7 +101,12 @@ class CLIPSegTextConfig(PretrainedConfig):
         eos_token_id=49407,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -269,7 +274,10 @@ class CLIPSegConfig(PretrainedConfig):
     ```"""
 
     model_type = "clipseg"
-    sub_configs = {"text_config": CLIPSegTextConfig, "vision_config": CLIPSegVisionConfig}
+    sub_configs = {
+        "text_config": CLIPSegTextConfig,
+        "vision_config": CLIPSegVisionConfig,
+    }
 
     def __init__(
         self,
@@ -307,7 +315,11 @@ class CLIPSegConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in text_config
+                    and value != text_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -334,12 +346,17 @@ class CLIPSegConfig(PretrainedConfig):
             # convert keys to string instead of integer
             if "id2label" in _vision_config_dict:
                 _vision_config_dict["id2label"] = {
-                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                    str(key): value
+                    for key, value in _vision_config_dict["id2label"].items()
                 }
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in vision_config
+                    and value != vision_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -359,11 +376,15 @@ class CLIPSegConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `CLIPSegTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `CLIPSegTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `CLIPSegVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. initializing the `CLIPSegVisionConfig` with default values."
+            )
 
         self.text_config = CLIPSegTextConfig(**text_config)
         self.vision_config = CLIPSegVisionConfig(**vision_config)
@@ -381,7 +402,12 @@ class CLIPSegConfig(PretrainedConfig):
         self.use_complex_transposed_convolution = use_complex_transposed_convolution
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: CLIPSegTextConfig, vision_config: CLIPSegVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls,
+        text_config: CLIPSegTextConfig,
+        vision_config: CLIPSegVisionConfig,
+        **kwargs,
+    ):
         r"""
         Instantiate a [`CLIPSegConfig`] (or a derived class) from clipseg text model configuration and clipseg vision
         model configuration.
@@ -390,7 +416,11 @@ class CLIPSegConfig(PretrainedConfig):
             [`CLIPSegConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["CLIPSegConfig", "CLIPSegTextConfig", "CLIPSegVisionConfig"]

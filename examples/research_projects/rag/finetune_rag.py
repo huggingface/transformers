@@ -42,7 +42,9 @@ from callbacks_rag import (  # noqa: E402 # isort:skipq
     Seq2SeqLoggingCallback,
 )
 
-from distributed_pytorch_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
+from distributed_pytorch_retriever import (
+    RagPyTorchDistributedRetriever,
+)  # noqa: E402 # isort:skip
 from utils_rag import (  # noqa: E402 # isort:skip
     calculate_exact_match,
     flatten_list,
@@ -76,13 +78,25 @@ class AttrDict(dict):
 class CustomDDP(DDPPlugin):
     def init_ddp_connection(self, global_rank=None, world_size=None) -> None:
         module = self.model
-        global_rank = global_rank if global_rank is not None else self.cluster_environment.global_rank()
-        world_size = world_size if world_size is not None else self.cluster_environment.world_size()
+        global_rank = (
+            global_rank
+            if global_rank is not None
+            else self.cluster_environment.global_rank()
+        )
+        world_size = (
+            world_size
+            if world_size is not None
+            else self.cluster_environment.world_size()
+        )
         os.environ["MASTER_ADDR"] = self.cluster_environment.master_address()
         os.environ["MASTER_PORT"] = str(self.cluster_environment.master_port())
         if not torch.distributed.is_initialized():
-            logger.info(f"initializing ddp: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}")
-            torch_distrib.init_process_group(self.torch_distributed_backend, rank=global_rank, world_size=world_size)
+            logger.info(
+                f"initializing ddp: GLOBAL_RANK: {global_rank}, MEMBER: {global_rank + 1}/{world_size}"
+            )
+            torch_distrib.init_process_group(
+                self.torch_distributed_backend, rank=global_rank, world_size=world_size
+            )
 
         if module.is_rag_model:
             self.distributed_port = module.hparams.distributed_port
@@ -124,26 +138,41 @@ class GenerativeQAModule(BaseTransformer):
         config.use_dummy_dataset = hparams.use_dummy_dataset
 
         # set extra_model_params for generator configs and load_model
-        extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
+        extra_model_params = (
+            "encoder_layerdrop",
+            "decoder_layerdrop",
+            "attention_dropout",
+            "dropout",
+        )
         if self.is_rag_model:
             if hparams.prefix is not None:
                 config.generator.prefix = hparams.prefix
             config.label_smoothing = hparams.label_smoothing
-            hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
+            hparams, config.generator = set_extra_model_params(
+                extra_model_params, hparams, config.generator
+            )
             if hparams.distributed_retriever == "pytorch":
-                retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path, config=config)
+                retriever = RagPyTorchDistributedRetriever.from_pretrained(
+                    hparams.model_name_or_path, config=config
+                )
             elif hparams.distributed_retriever == "ray":
                 # The Ray retriever needs the handles to the retriever actors.
                 retriever = RagRayDistributedRetriever.from_pretrained(
                     hparams.model_name_or_path, hparams.actor_handles, config=config
                 )
-            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
+            model = self.model_class.from_pretrained(
+                hparams.model_name_or_path, config=config, retriever=retriever
+            )
             prefix = config.question_encoder.prefix
         else:
             if hparams.prefix is not None:
                 config.prefix = hparams.prefix
-            hparams, config = set_extra_model_params(extra_model_params, hparams, config)
-            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config)
+            hparams, config = set_extra_model_params(
+                extra_model_params, hparams, config
+            )
+            model = self.model_class.from_pretrained(
+                hparams.model_name_or_path, config=config
+            )
             prefix = config.prefix
 
         tokenizer = (
@@ -172,15 +201,21 @@ class GenerativeQAModule(BaseTransformer):
             "val": self.hparams.n_val,
             "test": self.hparams.n_test,
         }
-        self.n_obs = {k: v if v >= 0 else None for k, v in n_observations_per_split.items()}
+        self.n_obs = {
+            k: v if v >= 0 else None for k, v in n_observations_per_split.items()
+        }
 
         self.target_lens = {
             "train": self.hparams.max_target_length,
             "val": self.hparams.val_max_target_length,
             "test": self.hparams.test_max_target_length,
         }
-        assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
-        assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
+        assert (
+            self.target_lens["train"] <= self.target_lens["val"]
+        ), f"target_lens: {self.target_lens}"
+        assert (
+            self.target_lens["train"] <= self.target_lens["test"]
+        ), f"target_lens: {self.target_lens}"
 
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
@@ -206,7 +241,11 @@ class GenerativeQAModule(BaseTransformer):
         return lmap(str.strip, gen_text)
 
     def _step(self, batch: dict) -> Tuple:
-        source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        source_ids, source_mask, target_ids = (
+            batch["input_ids"],
+            batch["attention_mask"],
+            batch["decoder_input_ids"],
+        )
 
         rag_kwargs = {}
         if isinstance(self.model, T5ForConditionalGeneration):
@@ -222,7 +261,12 @@ class GenerativeQAModule(BaseTransformer):
                 decoder_start_token_id = generator.config.decoder_start_token_id
                 decoder_input_ids = (
                     torch.cat(
-                        [torch.tensor([[decoder_start_token_id]] * target_ids.shape[0]).to(target_ids), target_ids],
+                        [
+                            torch.tensor(
+                                [[decoder_start_token_id]] * target_ids.shape[0]
+                            ).to(target_ids),
+                            target_ids,
+                        ],
                         dim=1,
                     )
                     if target_ids.shape[0] < self.target_lens["train"]
@@ -254,7 +298,9 @@ class GenerativeQAModule(BaseTransformer):
     def training_step(self, batch, batch_idx) -> Dict:
         loss_tensors = self._step(batch)
 
-        logs = {name: loss.detach() for name, loss in zip(self.loss_names, loss_tensors)}
+        logs = {
+            name: loss.detach() for name, loss in zip(self.loss_names, loss_tensors)
+        }
         # tokens per batch
         tgt_pad_token_id = (
             self.tokenizer.generator.pad_token_id
@@ -267,7 +313,8 @@ class GenerativeQAModule(BaseTransformer):
             else self.tokenizer.pad_token_id
         )
         logs["tpb"] = (
-            batch["input_ids"].ne(src_pad_token_id).sum() + batch["decoder_input_ids"].ne(tgt_pad_token_id).sum()
+            batch["input_ids"].ne(src_pad_token_id).sum()
+            + batch["decoder_input_ids"].ne(tgt_pad_token_id).sum()
         )
 
         return {"loss": loss_tensors[0], "log": logs}
@@ -277,12 +324,17 @@ class GenerativeQAModule(BaseTransformer):
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
         self.step_count += 1
-        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
+        losses = {
+            k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names
+        }
         loss = losses["loss"]
         gen_metrics = {
-            k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
+            k: np.array([x[k] for x in outputs]).mean()
+            for k in self.metric_names + ["gen_time", "gen_len"]
         }
-        metrics_tensor: torch.FloatTensor = torch.tensor(gen_metrics[self.val_metric]).type_as(loss)
+        metrics_tensor: torch.FloatTensor = torch.tensor(
+            gen_metrics[self.val_metric]
+        ).type_as(loss)
         gen_metrics.update({k: v.item() for k, v in losses.items()})
 
         # fix for https://github.com/PyTorchLightning/pytorch-lightning/issues/2424
@@ -296,7 +348,12 @@ class GenerativeQAModule(BaseTransformer):
         metrics["step_count"] = self.step_count
         self.save_metrics(metrics, prefix)  # writes to self.metrics_save_path
         preds = flatten_list([x["preds"] for x in outputs])
-        return {"log": metrics, "preds": preds, f"{prefix}_loss": loss, f"{prefix}_{self.val_metric}": metrics_tensor}
+        return {
+            "log": metrics,
+            "preds": preds,
+            f"{prefix}_loss": loss,
+            f"{prefix}_{self.val_metric}": metrics_tensor,
+        }
 
     def save_metrics(self, latest_metrics, type_path) -> None:
         self.metrics[type_path].append(latest_metrics)
@@ -325,7 +382,13 @@ class GenerativeQAModule(BaseTransformer):
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
 
         summ_len = np.mean(lmap(len, generated_ids))
-        base_metrics.update(gen_time=gen_time, gen_len=summ_len, preds=preds, target=target, **gen_metrics)
+        base_metrics.update(
+            gen_time=gen_time,
+            gen_len=summ_len,
+            preds=preds,
+            target=target,
+            **gen_metrics,
+        )
         return base_metrics
 
     def test_step(self, batch, batch_idx):
@@ -346,7 +409,9 @@ class GenerativeQAModule(BaseTransformer):
         )
         return dataset
 
-    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
+    def get_dataloader(
+        self, type_path: str, batch_size: int, shuffle: bool = False
+    ) -> DataLoader:
         dataset = self.get_dataset(type_path)
 
         dataloader = DataLoader(
@@ -359,7 +424,9 @@ class GenerativeQAModule(BaseTransformer):
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
-        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
+        dataloader = self.get_dataloader(
+            "train", batch_size=self.hparams.train_batch_size, shuffle=True
+        )
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
@@ -415,11 +482,36 @@ class GenerativeQAModule(BaseTransformer):
                 "than this will be truncated, sequences shorter will be padded."
             ),
         )
-        parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
-        parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--n_val", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
+        parser.add_argument(
+            "--logger_name",
+            type=str,
+            choices=["default", "wandb", "wandb_shared"],
+            default="default",
+        )
+        parser.add_argument(
+            "--n_train",
+            type=int,
+            default=-1,
+            required=False,
+            help="# examples. -1 means use all.",
+        )
+        parser.add_argument(
+            "--n_val",
+            type=int,
+            default=-1,
+            required=False,
+            help="# examples. -1 means use all.",
+        )
+        parser.add_argument(
+            "--n_test",
+            type=int,
+            default=-1,
+            required=False,
+            help="# examples. -1 means use all.",
+        )
+        parser.add_argument(
+            "--label_smoothing", type=float, default=0.0, required=False
+        )
         parser.add_argument(
             "--prefix",
             type=str,
@@ -437,7 +529,11 @@ class GenerativeQAModule(BaseTransformer):
             ),
         )
         parser.add_argument(
-            "--distributed-port", type=int, default=-1, required=False, help="Port number for distributed training."
+            "--distributed-port",
+            type=int,
+            default=-1,
+            required=False,
+            help="Port number for distributed training.",
         )
         parser.add_argument(
             "--model_type",
@@ -546,7 +642,9 @@ def main(args=None, model=None) -> GenerativeQAModule:
     named_actors = []
     if args.distributed_retriever == "ray" and args.gpus > 1:
         if not is_ray_available():
-            raise RuntimeError("Please install Ray to use the Ray distributed retriever.")
+            raise RuntimeError(
+                "Please install Ray to use the Ray distributed retriever."
+            )
         # Connect to an existing Ray cluster.
         try:
             ray.init(address=args.ray_address, namespace="rag")
@@ -578,7 +676,10 @@ def main(args=None, model=None) -> GenerativeQAModule:
                     os.environ["NODE_RANK"], os.environ["LOCAL_RANK"]
                 )
             )
-            named_actors = [ray.get_actor("retrieval_worker_{}".format(i)) for i in range(args.num_retrieval_workers)]
+            named_actors = [
+                ray.get_actor("retrieval_worker_{}".format(i))
+                for i in range(args.num_retrieval_workers)
+            ]
     args.actor_handles = named_actors
     assert args.actor_handles == named_actors
 
@@ -602,7 +703,9 @@ def main(args=None, model=None) -> GenerativeQAModule:
     elif args.logger_name == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        training_logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
+        training_logger = WandbLogger(
+            name=model.output_dir.name, project=f"hf_{dataset}"
+        )
 
     es_callback = (
         get_early_stopping_callback(model.val_metric, args.early_stopping_patience)

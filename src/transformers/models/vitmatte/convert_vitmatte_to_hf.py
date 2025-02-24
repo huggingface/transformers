@@ -24,7 +24,12 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import VitDetConfig, VitMatteConfig, VitMatteForImageMatting, VitMatteImageProcessor
+from transformers import (
+    VitDetConfig,
+    VitMatteConfig,
+    VitMatteForImageMatting,
+    VitMatteImageProcessor,
+)
 
 
 def get_config(model_name):
@@ -81,7 +86,9 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     }
 
     filename = model_name_to_filename[model_name]
-    filepath = hf_hub_download(repo_id="nielsr/vitmatte-checkpoints", filename=filename, repo_type="model")
+    filepath = hf_hub_download(
+        repo_id="nielsr/vitmatte-checkpoints", filename=filename, repo_type="model"
+    )
     state_dict = torch.load(filepath, map_location="cpu")
 
     # rename keys
@@ -116,25 +123,53 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_trimap.png?raw=true"
     trimap = Image.open(requests.get(url, stream=True).raw)
 
-    pixel_values = processor(images=image, trimaps=trimap.convert("L"), return_tensors="pt").pixel_values
+    pixel_values = processor(
+        images=image, trimaps=trimap.convert("L"), return_tensors="pt"
+    ).pixel_values
 
     with torch.no_grad():
         alphas = model(pixel_values).alphas
 
     if model_name == "vitmatte-small-composition-1k":
-        expected_slice = torch.tensor([[0.9977, 0.9987, 0.9990], [0.9980, 0.9998, 0.9998], [0.9983, 0.9998, 0.9998]])
+        expected_slice = torch.tensor(
+            [
+                [0.9977, 0.9987, 0.9990],
+                [0.9980, 0.9998, 0.9998],
+                [0.9983, 0.9998, 0.9998],
+            ]
+        )
     elif model_name == "vitmatte-base-composition-1k":
-        expected_slice = torch.tensor([[0.9972, 0.9971, 0.9981], [0.9948, 0.9987, 0.9994], [0.9963, 0.9992, 0.9995]])
+        expected_slice = torch.tensor(
+            [
+                [0.9972, 0.9971, 0.9981],
+                [0.9948, 0.9987, 0.9994],
+                [0.9963, 0.9992, 0.9995],
+            ]
+        )
     elif model_name == "vitmatte-small-distinctions-646":
-        expected_slice = torch.tensor([[0.9880, 0.9970, 0.9972], [0.9960, 0.9996, 0.9997], [0.9963, 0.9996, 0.9997]])
+        expected_slice = torch.tensor(
+            [
+                [0.9880, 0.9970, 0.9972],
+                [0.9960, 0.9996, 0.9997],
+                [0.9963, 0.9996, 0.9997],
+            ]
+        )
     elif model_name == "vitmatte-base-distinctions-646":
-        expected_slice = torch.tensor([[0.9963, 0.9998, 0.9999], [0.9995, 1.0000, 1.0000], [0.9992, 0.9999, 1.0000]])
+        expected_slice = torch.tensor(
+            [
+                [0.9963, 0.9998, 0.9999],
+                [0.9995, 1.0000, 1.0000],
+                [0.9992, 0.9999, 1.0000],
+            ]
+        )
 
     assert torch.allclose(alphas[0, 0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}")
+        print(
+            f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}"
+        )
         model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
@@ -160,11 +195,18 @@ if __name__ == "__main__":
         help="Name of the VitMatte model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_vitmatte_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_vitmatte_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

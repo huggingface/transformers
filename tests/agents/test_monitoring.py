@@ -129,7 +129,9 @@ final_answer('This is the final answer.')
 
     def test_streaming_agent_image_output(self):
         def dummy_llm_engine(prompt, **kwargs):
-            return 'Action:{"action": "final_answer", "action_input": {"answer": "image"}}'
+            return (
+                'Action:{"action": "final_answer", "action_input": {"answer": "image"}}'
+            )
 
         agent = ReactJsonAgent(
             tools=[],
@@ -138,7 +140,14 @@ final_answer('This is the final answer.')
         )
 
         # Use stream_to_gradio to capture the output
-        outputs = list(stream_to_gradio(agent, task="Test task", image=AgentImage(value="path.png"), test_mode=True))
+        outputs = list(
+            stream_to_gradio(
+                agent,
+                task="Test task",
+                image=AgentImage(value="path.png"),
+                test_mode=True,
+            )
+        )
 
         self.assertEqual(len(outputs), 2)
         final_message = outputs[-1]

@@ -68,7 +68,10 @@ class ModelArguments:
     )
     model_type: Optional[str] = field(
         default=None,
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
+        metadata={
+            "help": "If training from scratch, pass a model type from the list: "
+            + ", ".join(MODEL_TYPES)
+        },
     )
     config_overrides: Optional[str] = field(
         default=None,
@@ -80,22 +83,34 @@ class ModelArguments:
         },
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     use_auth_token: bool = field(
         default=False,
@@ -108,7 +123,9 @@ class ModelArguments:
     )
 
     def __post_init__(self):
-        if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
+        if self.config_overrides is not None and (
+            self.config_name is not None or self.model_name_or_path is not None
+        ):
             raise ValueError(
                 "--config_overrides can't be used in combination with --config_name or --model_name_or_path"
             )
@@ -121,26 +138,39 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a text file)."}
+    )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."
+        },
     )
     train_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
+        metadata={
+            "help": "An optional input train ref data file for whole word masking in Chinese."
+        },
     )
     validation_ref_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input validation ref data file for whole word masking in Chinese."},
+        metadata={
+            "help": "An optional input validation ref data file for whole word masking in Chinese."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     validation_split_percentage: Optional[int] = field(
         default=5,
@@ -162,7 +192,8 @@ class DataTrainingArguments:
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
     mlm_probability: float = field(
-        default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
+        default=0.15,
+        metadata={"help": "Ratio of tokens to mask for masked language modeling loss"},
     )
     pad_to_max_length: bool = field(
         default=False,
@@ -177,15 +208,27 @@ class DataTrainingArguments:
     def __post_init__(self):
         if self.train_file is not None:
             extension = self.train_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+            assert extension in [
+                "csv",
+                "json",
+                "txt",
+            ], "`train_file` should be a csv, a json or a txt file."
         if self.validation_file is not None:
             extension = self.validation_file.split(".")[-1]
-            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+            assert extension in [
+                "csv",
+                "json",
+                "txt",
+            ], "`validation_file` should be a csv, a json or a txt file."
 
 
 def add_chinese_references(dataset, ref_file):
     with open(ref_file, "r", encoding="utf-8") as f:
-        refs = [json.loads(line) for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
+        refs = [
+            json.loads(line)
+            for line in f.read().splitlines()
+            if (len(line) > 0 and not line.isspace())
+        ]
     assert len(dataset) == len(refs)
 
     dataset_dict = {c: dataset[c] for c in dataset.column_names}
@@ -198,17 +241,25 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
@@ -227,7 +278,9 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    logger.setLevel(
+        logging.INFO if is_main_process(training_args.local_rank) else logging.WARN
+    )
 
     # Log on each process the small summary:
     logger.warning(
@@ -294,7 +347,9 @@ def main():
     if model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path, **config_kwargs
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
@@ -310,9 +365,13 @@ def main():
         "use_auth_token": True if model_args.use_auth_token else None,
     }
     if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name, **tokenizer_kwargs
+        )
     elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, **tokenizer_kwargs
+        )
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
@@ -346,8 +405,15 @@ def main():
 
     def tokenize_function(examples):
         # Remove empty lines
-        examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-        return tokenizer(examples["text"], padding=padding, truncation=True, max_length=data_args.max_seq_length)
+        examples["text"] = [
+            line for line in examples["text"] if len(line) > 0 and not line.isspace()
+        ]
+        return tokenizer(
+            examples["text"],
+            padding=padding,
+            truncation=True,
+            max_length=data_args.max_seq_length,
+        )
 
     tokenized_datasets = datasets.map(
         tokenize_function,
@@ -359,7 +425,9 @@ def main():
 
     # Add the chinese references if provided
     if data_args.train_ref_file is not None:
-        tokenized_datasets["train"] = add_chinese_references(tokenized_datasets["train"], data_args.train_ref_file)
+        tokenized_datasets["train"] = add_chinese_references(
+            tokenized_datasets["train"], data_args.train_ref_file
+        )
     if data_args.validation_ref_file is not None:
         tokenized_datasets["validation"] = add_chinese_references(
             tokenized_datasets["validation"], data_args.validation_ref_file
@@ -371,14 +439,18 @@ def main():
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = DataCollatorForWholeWordMask(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
+    data_collator = DataCollatorForWholeWordMask(
+        tokenizer=tokenizer, mlm_probability=data_args.mlm_probability
+    )
 
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
-        eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
+        eval_dataset=(
+            tokenized_datasets["validation"] if training_args.do_eval else None
+        ),
         tokenizer=tokenizer,
         data_collator=data_collator,
     )
@@ -387,7 +459,9 @@ def main():
     if training_args.do_train:
         if last_checkpoint is not None:
             checkpoint = last_checkpoint
-        elif model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path):
+        elif model_args.model_name_or_path is not None and os.path.isdir(
+            model_args.model_name_or_path
+        ):
             checkpoint = model_args.model_name_or_path
         else:
             checkpoint = None
@@ -403,7 +477,9 @@ def main():
                     writer.write(f"{key} = {value}\n")
 
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+            trainer.state.save_to_json(
+                os.path.join(training_args.output_dir, "trainer_state.json")
+            )
 
     # Evaluation
     results = {}
@@ -415,7 +491,9 @@ def main():
         perplexity = math.exp(eval_output["eval_loss"])
         results["perplexity"] = perplexity
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results_mlm_wwm.txt")
+        output_eval_file = os.path.join(
+            training_args.output_dir, "eval_results_mlm_wwm.txt"
+        )
         if trainer.is_world_process_zero():
             with open(output_eval_file, "w") as writer:
                 logger.info("***** Eval results *****")

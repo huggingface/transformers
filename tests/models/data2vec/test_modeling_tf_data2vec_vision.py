@@ -23,7 +23,11 @@ import unittest
 import numpy as np
 
 from transformers import Data2VecVisionConfig
-from transformers.file_utils import cached_property, is_tf_available, is_vision_available
+from transformers.file_utils import (
+    cached_property,
+    is_tf_available,
+    is_vision_available,
+)
 from transformers.testing_utils import require_tf, require_vision, slow
 
 from ...test_configuration_common import ConfigTester
@@ -93,13 +97,17 @@ class TFData2VecVisionModelTester:
         self.num_labels = num_labels
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         pixel_labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            pixel_labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -137,26 +145,49 @@ class TFData2VecVisionModelTester:
             if isinstance(self.image_size, collections.abc.Iterable)
             else (self.patch_size, self.patch_size)
         )
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_classification(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.type_sequence_label_size
         model = TFData2VecVisionForImageClassification(config)
 
         result = model(pixel_values, labels=labels, training=False)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
-    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_segmentation(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.num_labels
         model = TFData2VecVisionForSemanticSegmentation(config)
         result = model(pixel_values, training=False)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size * 2,
+                self.image_size * 2,
+            ),
         )
         result = model(pixel_values, labels=pixel_labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size * 2,
+                self.image_size * 2,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -168,24 +199,36 @@ class TFData2VecVisionModelTester:
     def prepare_config_and_inputs_for_keras_fit(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, _, _ = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values, "labels": tf.zeros((self.batch_size))}
+        inputs_dict = {
+            "pixel_values": pixel_values,
+            "labels": tf.zeros((self.batch_size)),
+        }
         return config, inputs_dict
 
 
 @require_tf
-class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class TFData2VecVisionModelTest(
+    TFModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Data2VecVision does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
-        (TFData2VecVisionModel, TFData2VecVisionForImageClassification, TFData2VecVisionForSemanticSegmentation)
+        (
+            TFData2VecVisionModel,
+            TFData2VecVisionForImageClassification,
+            TFData2VecVisionForSemanticSegmentation,
+        )
         if is_tf_available()
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": TFData2VecVisionModel, "image-classification": TFData2VecVisionForImageClassification}
+        {
+            "feature-extraction": TFData2VecVisionModel,
+            "image-classification": TFData2VecVisionForImageClassification,
+        }
         if is_tf_available()
         else {}
     )
@@ -198,7 +241,10 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
     def setUp(self):
         self.model_tester = TFData2VecVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=Data2VecVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -253,10 +299,14 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
             if isinstance(self.model_tester.patch_size, collections.abc.Iterable)
             else (self.model_tester.patch_size, self.model_tester.patch_size)
         )
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        num_patches = (image_size[1] // patch_size[1]) * (
+            image_size[0] // patch_size[0]
+        )
         seq_len = num_patches + 1
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
         chunk_length = getattr(self.model_tester, "chunk_length", None)
         if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
             encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
@@ -266,21 +316,37 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
             model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            outputs = model(
+                **self._prepare_for_class(inputs_dict, model_class), training=False
+            )
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            outputs = model(
+                **self._prepare_for_class(inputs_dict, model_class), training=False
+            )
+            attentions = (
+                outputs.encoder_attentions
+                if config.is_encoder_decoder
+                else outputs.attentions
+            )
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -288,7 +354,9 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
             model = model_class(config)
-            outputs = model(**self._prepare_for_class(inputs_dict, model_class), training=False)
+            outputs = model(
+                **self._prepare_for_class(inputs_dict, model_class), training=False
+            )
 
             self.assertEqual(out_len + 1, len(outputs))
 
@@ -297,7 +365,11 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
 
     def test_hidden_states_output(self):
@@ -306,10 +378,16 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
 
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                self.model_tester.num_hidden_layers + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
@@ -324,7 +402,9 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
                 if isinstance(self.model_tester.patch_size, collections.abc.Iterable)
                 else (self.model_tester.patch_size, self.model_tester.patch_size)
             )
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+            num_patches = (image_size[1] // patch_size[1]) * (
+                image_size[0] // patch_size[0]
+            )
             seq_length = num_patches + 1
 
             self.assertListEqual(
@@ -354,13 +434,23 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
                 model = model_class(config)
                 if getattr(model, "hf_compute_loss", None):
                     # Test that model correctly compute the loss with kwargs
-                    _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
+                    _, prepared_for_class = (
+                        self.model_tester.prepare_config_and_inputs_for_keras_fit()
+                    )
 
                     label_names = {"labels"}
-                    self.assertGreater(len(label_names), 0, msg="No matching label names found!")
-                    labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
+                    self.assertGreater(
+                        len(label_names), 0, msg="No matching label names found!"
+                    )
+                    labels = {
+                        key: val
+                        for key, val in prepared_for_class.items()
+                        if key in label_names
+                    }
                     inputs_minus_labels = {
-                        key: val for key, val in prepared_for_class.items() if key not in label_names
+                        key: val
+                        for key, val in prepared_for_class.items()
+                        if key not in label_names
                     }
                     self.assertGreater(len(inputs_minus_labels), 0)
                     model.compile(optimizer=keras.optimizers.SGD(0.0), run_eagerly=True)
@@ -383,7 +473,9 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
                         shuffle=False,
                     )
                     val_loss2 = history2.history["val_loss"][0]
-                    self.assertTrue(np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3))
+                    self.assertTrue(
+                        np.allclose(val_loss1, val_loss2, atol=1e-2, rtol=1e-3)
+                    )
 
     # Overriding this method since the base method won't be compatible with Data2VecVision.
     def test_loss_computation(self):
@@ -395,22 +487,34 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, PipelineTesterMixin, unittes
                 model = model_class(config)
                 if getattr(model, "hf_compute_loss", None):
                     # The number of elements in the loss should be the same as the number of elements in the label
-                    _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
+                    _, prepared_for_class = (
+                        self.model_tester.prepare_config_and_inputs_for_keras_fit()
+                    )
                     added_label = prepared_for_class[
-                        sorted(prepared_for_class.keys() - inputs_dict.keys(), reverse=True)[0]
+                        sorted(
+                            prepared_for_class.keys() - inputs_dict.keys(), reverse=True
+                        )[0]
                     ]
                     loss_size = tf.size(added_label)
 
                     # Test that model correctly compute the loss with kwargs
-                    possible_input_names = {"input_ids", "pixel_values", "input_features"}
-                    input_name = possible_input_names.intersection(set(prepared_for_class)).pop()
+                    possible_input_names = {
+                        "input_ids",
+                        "pixel_values",
+                        "input_features",
+                    }
+                    input_name = possible_input_names.intersection(
+                        set(prepared_for_class)
+                    ).pop()
                     model_input = prepared_for_class.pop(input_name)
 
                     loss = model(model_input, **prepared_for_class)[0]
                     self.assertEqual(loss.shape, [loss_size])
 
                     # Test that model correctly compute the loss with a dict
-                    _, prepared_for_class = self.model_tester.prepare_config_and_inputs_for_keras_fit()
+                    _, prepared_for_class = (
+                        self.model_tester.prepare_config_and_inputs_for_keras_fit()
+                    )
                     loss = model(**prepared_for_class)[0]
                     self.assertEqual(loss.shape, [loss_size])
 
@@ -465,12 +569,16 @@ class TFData2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
+            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+            if is_vision_available()
+            else None
         )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = TFData2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k")
+        model = TFData2VecVisionForImageClassification.from_pretrained(
+            "facebook/data2vec-vision-base-ft1k"
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -488,5 +596,10 @@ class TFData2VecVisionModelIntegrationTest(unittest.TestCase):
 
         tf.debugging.assert_near(logits[0, :3], expected_slice, atol=1e-4)
 
-        expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
-        self.assertEqual(tf.nn.top_k(outputs.logits[0], 2).indices.numpy().tolist(), expected_top2)
+        expected_top2 = [
+            model.config.label2id[i]
+            for i in ["remote control, remote", "tabby, tabby cat"]
+        ]
+        self.assertEqual(
+            tf.nn.top_k(outputs.logits[0], 2).indices.numpy().tolist(), expected_top2
+        )

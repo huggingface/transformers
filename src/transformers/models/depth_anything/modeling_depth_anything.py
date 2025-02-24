@@ -68,16 +68,24 @@ DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
 class DepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
-        self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
+        self.projection = nn.Conv2d(
+            in_channels=config.reassemble_hidden_size,
+            out_channels=channels,
+            kernel_size=1,
+        )
 
         # up/down sampling depending on factor
         if factor > 1:
-            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
+            self.resize = nn.ConvTranspose2d(
+                channels, channels, kernel_size=factor, stride=factor, padding=0
+            )
         elif factor == 1:
             self.resize = nn.Identity()
         elif factor < 1:
             # so should downsample
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
+            self.resize = nn.Conv2d(
+                channels, channels, kernel_size=3, stride=int(1 / factor), padding=1
+            )
 
     # Copied from transformers.models.dpt.modeling_dpt.DPTReassembleLayer.forward
     def forward(self, hidden_state):
@@ -107,10 +115,16 @@ class DepthAnythingReassembleStage(nn.Module):
 
         self.config = config
         self.layers = nn.ModuleList()
-        for channels, factor in zip(config.neck_hidden_sizes, config.reassemble_factors):
-            self.layers.append(DepthAnythingReassembleLayer(config, channels=channels, factor=factor))
+        for channels, factor in zip(
+            config.neck_hidden_sizes, config.reassemble_factors
+        ):
+            self.layers.append(
+                DepthAnythingReassembleLayer(config, channels=channels, factor=factor)
+            )
 
-    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
+    def forward(
+        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None
+    ) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
@@ -122,7 +136,9 @@ class DepthAnythingReassembleStage(nn.Module):
             # reshape to (batch_size, num_channels, height, width)
             hidden_state = hidden_state[:, 1:]
             batch_size, _, num_channels = hidden_state.shape
-            hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
+            hidden_state = hidden_state.reshape(
+                batch_size, patch_height, patch_width, num_channels
+            )
             hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
             hidden_state = self.layers[i](hidden_state)
             out.append(hidden_state)
@@ -183,7 +199,12 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
+        self.projection = nn.Conv2d(
+            config.fusion_hidden_size,
+            config.fusion_hidden_size,
+            kernel_size=1,
+            bias=True,
+        )
 
         self.residual_layer1 = DepthAnythingPreActResidualLayer(config)
         self.residual_layer2 = DepthAnythingPreActResidualLayer(config)
@@ -192,7 +213,10 @@ class DepthAnythingFeatureFusionLayer(nn.Module):
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
-                    residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
+                    residual,
+                    size=(hidden_state.shape[2], hidden_state.shape[3]),
+                    mode="bilinear",
+                    align_corners=False,
                 )
             hidden_state = hidden_state + self.residual_layer1(residual)
 
@@ -227,7 +251,11 @@ class DepthAnythingFeatureFusionStage(nn.Module):
         fused_hidden_state = None
 
         for idx, (hidden_state, layer) in enumerate(zip(hidden_states, self.layers)):
-            size = hidden_states[idx + 1].shape[2:] if idx != (len(hidden_states) - 1) else None
+            size = (
+                hidden_states[idx + 1].shape[2:]
+                if idx != (len(hidden_states) - 1)
+                else None
+            )
 
             if fused_hidden_state is None:
                 # first layer only uses the last hidden_state
@@ -285,12 +313,22 @@ class DepthAnythingNeck(nn.Module):
 
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
-            self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
+            self.convs.append(
+                nn.Conv2d(
+                    channel,
+                    config.fusion_hidden_size,
+                    kernel_size=3,
+                    padding=1,
+                    bias=False,
+                )
+            )
 
         # fusion
         self.fusion_stage = DepthAnythingFeatureFusionStage(config)
 
-    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
+    def forward(
+        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None
+    ) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
@@ -300,7 +338,9 @@ class DepthAnythingNeck(nn.Module):
             raise TypeError("hidden_states should be a tuple or list of tensors")
 
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
-            raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
+            raise ValueError(
+                "The number of hidden states should be equal to the number of neck hidden sizes."
+            )
 
         # postprocess hidden states
         hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
@@ -328,19 +368,29 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         self.patch_size = config.patch_size
 
         features = config.fusion_hidden_size
-        self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1)
+        self.conv1 = nn.Conv2d(
+            features, features // 2, kernel_size=3, stride=1, padding=1
+        )
+        self.conv2 = nn.Conv2d(
+            features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1
+        )
         self.activation1 = nn.ReLU()
-        self.conv3 = nn.Conv2d(config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0)
+        self.conv3 = nn.Conv2d(
+            config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0
+        )
         if config.depth_estimation_type == "relative":
             self.activation2 = nn.ReLU()
         elif config.depth_estimation_type == "metric":
             self.activation2 = nn.Sigmoid()
         else:
-            raise ValueError(f"Unknown depth estimation type: {config.depth_estimation_type}")
+            raise ValueError(
+                f"Unknown depth estimation type: {config.depth_estimation_type}"
+            )
         self.max_depth = config.max_depth
 
-    def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
+    def forward(
+        self, hidden_states: List[torch.Tensor], patch_height, patch_width
+    ) -> torch.Tensor:
         hidden_states = hidden_states[self.head_in_index]
 
         predicted_depth = self.conv1(hidden_states)
@@ -354,7 +404,9 @@ class DepthAnythingDepthEstimationHead(nn.Module):
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
         predicted_depth = self.activation2(predicted_depth) * self.max_depth
-        predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
+        predicted_depth = predicted_depth.squeeze(
+            dim=1
+        )  # shape (batch_size, height, width)
 
         return predicted_depth
 
@@ -379,7 +431,9 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(DEPTH_ANYTHING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -430,14 +484,24 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
 
         outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            output_attentions=output_attentions,
         )
         hidden_states = outputs.feature_maps
 

@@ -281,10 +281,18 @@ class ChineseCLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "chinese_clip"
-    sub_configs = {"text_config": ChineseCLIPTextConfig, "vision_config": ChineseCLIPVisionConfig}
+    sub_configs = {
+        "text_config": ChineseCLIPTextConfig,
+        "vision_config": ChineseCLIPVisionConfig,
+    }
 
     def __init__(
-        self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
+        self,
+        text_config=None,
+        vision_config=None,
+        projection_dim=512,
+        logit_scale_init_value=2.6592,
+        **kwargs,
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 2 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
@@ -306,7 +314,11 @@ class ChineseCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in text_config
+                    and value != text_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -329,16 +341,23 @@ class ChineseCLIPConfig(PretrainedConfig):
                 vision_config = {}
 
             # This is the complete result when using `vision_config_dict`.
-            _vision_config_dict = ChineseCLIPVisionConfig(**vision_config_dict).to_dict()
+            _vision_config_dict = ChineseCLIPVisionConfig(
+                **vision_config_dict
+            ).to_dict()
             # convert keys to string instead of integer
             if "id2label" in _vision_config_dict:
                 _vision_config_dict["id2label"] = {
-                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                    str(key): value
+                    for key, value in _vision_config_dict["id2label"].items()
                 }
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in vision_config
+                    and value != vision_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -358,11 +377,15 @@ class ChineseCLIPConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `ChineseCLIPTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `ChineseCLIPTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `ChineseCLIPVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. initializing the `ChineseCLIPVisionConfig` with default values."
+            )
 
         self.text_config = ChineseCLIPTextConfig(**text_config)
         self.vision_config = ChineseCLIPVisionConfig(**vision_config)
@@ -374,7 +397,10 @@ class ChineseCLIPConfig(PretrainedConfig):
 
     @classmethod
     def from_text_vision_configs(
-        cls, text_config: ChineseCLIPTextConfig, vision_config: ChineseCLIPVisionConfig, **kwargs
+        cls,
+        text_config: ChineseCLIPTextConfig,
+        vision_config: ChineseCLIPVisionConfig,
+        **kwargs,
     ):
         r"""
         Instantiate a [`ChineseCLIPConfig`] (or a derived class) from Chinese-CLIP text model configuration and
@@ -382,7 +408,11 @@ class ChineseCLIPConfig(PretrainedConfig):
             [`ChineseCLIPConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 class ChineseCLIPOnnxConfig(OnnxConfig):
@@ -391,7 +421,10 @@ class ChineseCLIPOnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("input_ids", {0: "batch", 1: "sequence"}),
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                (
+                    "pixel_values",
+                    {0: "batch", 1: "num_channels", 2: "height", 3: "width"},
+                ),
                 ("attention_mask", {0: "batch", 1: "sequence"}),
             ]
         )
@@ -419,7 +452,10 @@ class ChineseCLIPOnnxConfig(OnnxConfig):
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         text_input_dict = super().generate_dummy_inputs(
-            processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
+            processor.tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            framework=framework,
         )
         image_input_dict = super().generate_dummy_inputs(
             processor.image_processor, batch_size=batch_size, framework=framework
@@ -431,4 +467,9 @@ class ChineseCLIPOnnxConfig(OnnxConfig):
         return 14
 
 
-__all__ = ["ChineseCLIPConfig", "ChineseCLIPOnnxConfig", "ChineseCLIPTextConfig", "ChineseCLIPVisionConfig"]
+__all__ = [
+    "ChineseCLIPConfig",
+    "ChineseCLIPOnnxConfig",
+    "ChineseCLIPTextConfig",
+    "ChineseCLIPVisionConfig",
+]

@@ -21,7 +21,10 @@ import warnings
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import (
     CONFIG_NAME,
     cached_file,
@@ -33,7 +36,11 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
+from .configuration_auto import (
+    AutoConfig,
+    model_type_to_module_name,
+    replace_list_option_in_docstrings,
+)
 
 
 if is_torch_available():
@@ -418,7 +425,9 @@ class _BaseAutoModelClass:
     @classmethod
     def from_config(cls, config, **kwargs):
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
+        has_remote_code = (
+            hasattr(config, "auto_map") and cls.__name__ in config.auto_map
+        )
         has_local_code = type(config) in cls._model_mapping.keys()
         trust_remote_code = resolve_trust_remote_code(
             trust_remote_code, config._name_or_path, has_local_code, has_remote_code
@@ -460,7 +469,9 @@ class _BaseAutoModelClass:
             "use_auth_token",
             "token",
         ]
-        hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
+        hub_kwargs = {
+            name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs
+        }
         code_revision = kwargs.pop("code_revision", None)
         commit_hash = kwargs.pop("_commit_hash", None)
         adapter_kwargs = kwargs.pop("adapter_kwargs", None)
@@ -503,15 +514,21 @@ class _BaseAutoModelClass:
                     adapter_kwargs["token"] = token
 
             maybe_adapter_path = find_adapter_config_file(
-                pretrained_model_name_or_path, _commit_hash=commit_hash, **adapter_kwargs
+                pretrained_model_name_or_path,
+                _commit_hash=commit_hash,
+                **adapter_kwargs,
             )
 
             if maybe_adapter_path is not None:
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
 
-                    adapter_kwargs["_adapter_model_path"] = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
+                    adapter_kwargs["_adapter_model_path"] = (
+                        pretrained_model_name_or_path
+                    )
+                    pretrained_model_name_or_path = adapter_config[
+                        "base_model_name_or_path"
+                    ]
 
         if not isinstance(config, PretrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
@@ -539,10 +556,15 @@ class _BaseAutoModelClass:
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
-        has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
+        has_remote_code = (
+            hasattr(config, "auto_map") and cls.__name__ in config.auto_map
+        )
         has_local_code = type(config) in cls._model_mapping.keys()
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code,
+            has_remote_code,
         )
 
         # Set the adapter kwargs
@@ -551,18 +573,30 @@ class _BaseAutoModelClass:
         if has_remote_code and trust_remote_code:
             class_ref = config.auto_map[cls.__name__]
             model_class = get_class_from_dynamic_module(
-                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
+                class_ref,
+                pretrained_model_name_or_path,
+                code_revision=code_revision,
+                **hub_kwargs,
+                **kwargs,
             )
             _ = hub_kwargs.pop("code_revision", None)
             cls.register(config.__class__, model_class, exist_ok=True)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
+                pretrained_model_name_or_path,
+                *model_args,
+                config=config,
+                **hub_kwargs,
+                **kwargs,
             )
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class.from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
+                pretrained_model_name_or_path,
+                *model_args,
+                config=config,
+                **hub_kwargs,
+                **kwargs,
             )
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
@@ -580,7 +614,10 @@ class _BaseAutoModelClass:
             model_class ([`PreTrainedModel`]):
                 The model to register.
         """
-        if hasattr(model_class, "config_class") and model_class.config_class.__name__ != config_class.__name__:
+        if (
+            hasattr(model_class, "config_class")
+            and model_class.config_class.__name__ != config_class.__name__
+        ):
             raise ValueError(
                 "The model class you are passing has a `config_class` attribute that is not consistent with the "
                 f"config class you passed (model has {model_class.config_class} and you passed {config_class}. Fix "
@@ -594,7 +631,9 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     _model_mapping = None
 
     @classmethod
-    def _load_timm_backbone_from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def _load_timm_backbone_from_pretrained(
+        cls, pretrained_model_name_or_path, *model_args, **kwargs
+    ):
         requires_backends(cls, ["vision", "timm"])
         from ...models.timm_backbone import TimmBackboneConfig
 
@@ -604,11 +643,15 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
             raise ValueError("Cannot specify `out_features` for timm backbones")
 
         if kwargs.get("output_loading_info", False):
-            raise ValueError("Cannot specify `output_loading_info=True` when loading from timm")
+            raise ValueError(
+                "Cannot specify `output_loading_info=True` when loading from timm"
+            )
 
         num_channels = kwargs.pop("num_channels", config.num_channels)
         features_only = kwargs.pop("features_only", config.features_only)
-        use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
+        use_pretrained_backbone = kwargs.pop(
+            "use_pretrained_backbone", config.use_pretrained_backbone
+        )
         out_indices = kwargs.pop("out_indices", config.out_indices)
         config = TimmBackboneConfig(
             backbone=pretrained_model_name_or_path,
@@ -623,9 +666,13 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         use_timm_backbone = kwargs.pop("use_timm_backbone", False)
         if use_timm_backbone:
-            return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+            return cls._load_timm_backbone_from_pretrained(
+                pretrained_model_name_or_path, *model_args, **kwargs
+            )
 
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        return super().from_pretrained(
+            pretrained_model_name_or_path, *model_args, **kwargs
+        )
 
 
 def insert_head_doc(docstring, head_doc=""):
@@ -635,11 +682,14 @@ def insert_head_doc(docstring, head_doc=""):
             f"one of the model classes of the library (with a {head_doc} head) ",
         )
     return docstring.replace(
-        "one of the model classes of the library ", "one of the base model classes of the library "
+        "one of the model classes of the library ",
+        "one of the base model classes of the library ",
     )
 
 
-def auto_class_update(cls, checkpoint_for_example="google-bert/bert-base-cased", head_doc=""):
+def auto_class_update(
+    cls, checkpoint_for_example="google-bert/bert-base-cased", head_doc=""
+):
     # Create a new class with the right name from the base class
     model_mapping = cls._model_mapping
     name = cls.__name__
@@ -651,9 +701,13 @@ def auto_class_update(cls, checkpoint_for_example="google-bert/bert-base-cased",
     from_config = copy_func(_BaseAutoModelClass.from_config)
     from_config_docstring = insert_head_doc(FROM_CONFIG_DOCSTRING, head_doc=head_doc)
     from_config_docstring = from_config_docstring.replace("BaseAutoModelClass", name)
-    from_config_docstring = from_config_docstring.replace("checkpoint_placeholder", checkpoint_for_example)
+    from_config_docstring = from_config_docstring.replace(
+        "checkpoint_placeholder", checkpoint_for_example
+    )
     from_config.__doc__ = from_config_docstring
-    from_config = replace_list_option_in_docstrings(model_mapping._model_mapping, use_model_types=False)(from_config)
+    from_config = replace_list_option_in_docstrings(
+        model_mapping._model_mapping, use_model_types=False
+    )(from_config)
     cls.from_config = classmethod(from_config)
 
     if name.startswith("TF"):
@@ -663,13 +717,23 @@ def auto_class_update(cls, checkpoint_for_example="google-bert/bert-base-cased",
     else:
         from_pretrained_docstring = FROM_PRETRAINED_TORCH_DOCSTRING
     from_pretrained = copy_func(_BaseAutoModelClass.from_pretrained)
-    from_pretrained_docstring = insert_head_doc(from_pretrained_docstring, head_doc=head_doc)
-    from_pretrained_docstring = from_pretrained_docstring.replace("BaseAutoModelClass", name)
-    from_pretrained_docstring = from_pretrained_docstring.replace("checkpoint_placeholder", checkpoint_for_example)
+    from_pretrained_docstring = insert_head_doc(
+        from_pretrained_docstring, head_doc=head_doc
+    )
+    from_pretrained_docstring = from_pretrained_docstring.replace(
+        "BaseAutoModelClass", name
+    )
+    from_pretrained_docstring = from_pretrained_docstring.replace(
+        "checkpoint_placeholder", checkpoint_for_example
+    )
     shortcut = checkpoint_for_example.split("/")[-1].split("-")[0]
-    from_pretrained_docstring = from_pretrained_docstring.replace("shortcut_placeholder", shortcut)
+    from_pretrained_docstring = from_pretrained_docstring.replace(
+        "shortcut_placeholder", shortcut
+    )
     from_pretrained.__doc__ = from_pretrained_docstring
-    from_pretrained = replace_list_option_in_docstrings(model_mapping._model_mapping)(from_pretrained)
+    from_pretrained = replace_list_option_in_docstrings(model_mapping._model_mapping)(
+        from_pretrained
+    )
     cls.from_pretrained = classmethod(from_pretrained)
     return cls
 
@@ -700,7 +764,9 @@ def getattribute_from_module(module, attr):
         try:
             return getattribute_from_module(transformers_module, attr)
         except ValueError:
-            raise ValueError(f"Could not find {attr} neither in {module} nor in {transformers_module}!")
+            raise ValueError(
+                f"Could not find {attr} neither in {module} nor in {transformers_module}!"
+            )
     else:
         raise ValueError(f"Could not find {attr} in {transformers_module}!")
 
@@ -724,10 +790,14 @@ def add_generation_mixin_to_remote_model(model_class):
     # 3. Prior to v4.45, we could detect whether a model was `generate`-compatible if it had its own `generate` and/or
     # `prepare_inputs_for_generation` method.
     has_custom_generate = "GenerationMixin" not in str(getattr(model_class, "generate"))
-    has_custom_prepare_inputs = "GenerationMixin" not in str(getattr(model_class, "prepare_inputs_for_generation"))
+    has_custom_prepare_inputs = "GenerationMixin" not in str(
+        getattr(model_class, "prepare_inputs_for_generation")
+    )
     if has_custom_generate or has_custom_prepare_inputs:
         model_class_with_generation_mixin = type(
-            model_class.__name__, (model_class, GenerationMixin), {**model_class.__dict__}
+            model_class.__name__,
+            (model_class, GenerationMixin),
+            {**model_class.__dict__},
         )
         return model_class_with_generation_mixin
     return model_class
@@ -751,7 +821,9 @@ class _LazyAutoMapping(OrderedDict):
         self._modules = {}
 
     def __len__(self):
-        common_keys = set(self._config_mapping.keys()).intersection(self._model_mapping.keys())
+        common_keys = set(self._config_mapping.keys()).intersection(
+            self._model_mapping.keys()
+        )
         return len(common_keys) + len(self._extra_content)
 
     def __getitem__(self, key):
@@ -773,7 +845,9 @@ class _LazyAutoMapping(OrderedDict):
     def _load_attr_from_module(self, model_type, attr):
         module_name = model_type_to_module_name(model_type)
         if module_name not in self._modules:
-            self._modules[module_name] = importlib.import_module(f".{module_name}", "transformers.models")
+            self._modules[module_name] = importlib.import_module(
+                f".{module_name}", "transformers.models"
+            )
         return getattribute_from_module(self._modules[module_name], attr)
 
     def keys(self):
@@ -818,7 +892,10 @@ class _LazyAutoMapping(OrderedDict):
     def __contains__(self, item):
         if item in self._extra_content:
             return True
-        if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
+        if (
+            not hasattr(item, "__name__")
+            or item.__name__ not in self._reverse_config_mapping
+        ):
             return False
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping

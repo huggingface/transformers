@@ -20,7 +20,12 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ....audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
+from ....audio_utils import (
+    mel_filter_bank,
+    optimal_fft_length,
+    spectrogram,
+    window_function,
+)
 from ....feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ....feature_extraction_utils import BatchFeature
 from ....file_utils import PaddingStrategy, TensorType
@@ -83,7 +88,12 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=False,
         **kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            **kwargs,
+        )
 
         self.feature_size = feature_size
         self.sampling_rate = sampling_rate
@@ -109,9 +119,13 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         Extracts MFSC Features for one waveform vector (unbatched). Adapted from Flashlight's C++ MFSC code.
         """
         if self.win_function == "hamming_window":
-            window = window_function(window_length=self.sample_size, name=self.win_function, periodic=False)
+            window = window_function(
+                window_length=self.sample_size, name=self.win_function, periodic=False
+            )
         else:
-            window = window_function(window_length=self.sample_size, name=self.win_function)
+            window = window_function(
+                window_length=self.sample_size, name=self.win_function
+            )
 
         fbanks = mel_filter_bank(
             num_frequency_bins=self.n_freqs,
@@ -153,10 +167,19 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(
-        self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
+        self,
+        input_features: List[np.ndarray],
+        attention_mask: Optional[np.ndarray] = None,
     ) -> List[np.ndarray]:
-        lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
-        return [self._normalize_one(x, n, self.padding_value) for x, n in zip(input_features, lengths)]
+        lengths = (
+            attention_mask.sum(-1)
+            if attention_mask is not None
+            else [x.shape[0] for x in input_features]
+        )
+        return [
+            self._normalize_one(x, n, self.padding_value)
+            for x, n in zip(input_features, lengths)
+        ]
 
     def __call__(
         self,
@@ -229,18 +252,25 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        is_batched_numpy = (
+            isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        )
         if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+            raise ValueError(
+                f"Only mono-channel audio is supported for input to {self}"
+            )
         is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
             raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(
+            np.float64
+        ):
             raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
@@ -248,7 +278,9 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [raw_speech]
 
         # extract fbank features
-        features = [self._extract_mfsc_features(one_waveform) for one_waveform in raw_speech]
+        features = [
+            self._extract_mfsc_features(one_waveform) for one_waveform in raw_speech
+        ]
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
@@ -265,16 +297,21 @@ class MCTCTFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features")
         if isinstance(input_features[0], list):
-            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+            padded_inputs["input_features"] = [
+                np.asarray(feature, dtype=np.float32) for feature in input_features
+            ]
 
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+            padded_inputs["attention_mask"] = [
+                np.asarray(array, dtype=np.int32) for array in attention_mask
+            ]
 
         if self.normalize_means or self.normalize_vars:
             attention_mask = (
                 np.array(attention_mask, dtype=np.int32)
-                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                if self._get_padding_strategies(padding, max_length=max_length)
+                is not PaddingStrategy.DO_NOT_PAD
                 and padding
                 else None
             )

@@ -14,7 +14,9 @@ class RayRetriever:
     def __init__(self):
         self.initialized = False
 
-    def create_rag_retriever(self, config, question_encoder_tokenizer, generator_tokenizer, index):
+    def create_rag_retriever(
+        self, config, question_encoder_tokenizer, generator_tokenizer, index
+    ):
         if not self.initialized:
             self.retriever = RagRetriever(
                 config,
@@ -34,7 +36,9 @@ class RayRetriever:
         self.initialized = False
 
     def retrieve(self, question_hidden_states, n_docs):
-        doc_ids, retrieved_doc_embeds = self.retriever._main_retrieve(question_hidden_states, n_docs)
+        doc_ids, retrieved_doc_embeds = self.retriever._main_retrieve(
+            question_hidden_states, n_docs
+        )
         doc_dicts = self.retriever.index.get_doc_dicts(doc_ids)
         return doc_ids, retrieved_doc_embeds, doc_dicts
 
@@ -67,7 +71,14 @@ class RagRayDistributedRetriever(RagRetriever):
             If specified, use this index instead of the one built using the configuration
     """
 
-    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, retrieval_workers, index=None):
+    def __init__(
+        self,
+        config,
+        question_encoder_tokenizer,
+        generator_tokenizer,
+        retrieval_workers,
+        index=None,
+    ):
         if index is not None and index.is_initialized() and len(retrieval_workers) > 0:
             raise ValueError(
                 "When using Ray for distributed fine-tuning, "
@@ -90,7 +101,9 @@ class RagRayDistributedRetriever(RagRetriever):
         if len(self.retrieval_workers) > 0:
             ray.get(
                 [
-                    worker.create_rag_retriever.remote(config, question_encoder_tokenizer, generator_tokenizer, index)
+                    worker.create_rag_retriever.remote(
+                        config, question_encoder_tokenizer, generator_tokenizer, index
+                    )
                     for worker in self.retrieval_workers
                 ]
             )
@@ -105,7 +118,9 @@ class RagRayDistributedRetriever(RagRetriever):
         logger.info("initializing retrieval")
 
         if len(self.retrieval_workers) > 0:
-            ray.get([worker.init_retrieval.remote() for worker in self.retrieval_workers])
+            ray.get(
+                [worker.init_retrieval.remote() for worker in self.retrieval_workers]
+            )
         else:
             # Non-distributed training. Load index into this same process.
             self.index.init_index()
@@ -132,23 +147,35 @@ class RagRayDistributedRetriever(RagRetriever):
         """
         if len(self.retrieval_workers) > 0:
             # Select a random retrieval actor.
-            random_worker = self.retrieval_workers[random.randint(0, len(self.retrieval_workers) - 1)]
+            random_worker = self.retrieval_workers[
+                random.randint(0, len(self.retrieval_workers) - 1)
+            ]
             doc_ids, retrieved_doc_embeds, doc_dicts = ray.get(
                 random_worker.retrieve.remote(question_hidden_states, n_docs)
             )
         else:
-            doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
+            doc_ids, retrieved_doc_embeds = self._main_retrieve(
+                question_hidden_states, n_docs
+            )
             doc_dicts = self.index.get_doc_dicts(doc_ids)
         return retrieved_doc_embeds, doc_ids, doc_dicts
 
     @classmethod
     def get_tokenizers(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        return super(RagRayDistributedRetriever, cls).get_tokenizers(retriever_name_or_path, indexed_dataset, **kwargs)
+        return super(RagRayDistributedRetriever, cls).get_tokenizers(
+            retriever_name_or_path, indexed_dataset, **kwargs
+        )
 
     @classmethod
-    def from_pretrained(cls, retriever_name_or_path, actor_handles, indexed_dataset=None, **kwargs):
-        config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
-        rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
+    def from_pretrained(
+        cls, retriever_name_or_path, actor_handles, indexed_dataset=None, **kwargs
+    ):
+        config = kwargs.pop("config", None) or RagConfig.from_pretrained(
+            retriever_name_or_path, **kwargs
+        )
+        rag_tokenizer = RagTokenizer.from_pretrained(
+            retriever_name_or_path, config=config
+        )
         question_encoder_tokenizer = rag_tokenizer.question_encoder
         generator_tokenizer = rag_tokenizer.generator
 
@@ -178,7 +205,10 @@ class RagRayDistributedRetriever(RagRetriever):
         ray.get(
             [
                 worker.create_rag_retriever.remote(
-                    self.config, self.question_encoder_tokenizer, self.generator_tokenizer, index
+                    self.config,
+                    self.question_encoder_tokenizer,
+                    self.generator_tokenizer,
+                    index,
                 )
                 for worker in self.retrieval_workers
             ]

@@ -30,10 +30,15 @@ def make_atom14_masks(protein: Dict[str, torch.Tensor]) -> Dict[str, torch.Tenso
 
     for rt in rc.restypes:
         atom_names = rc.restype_name_to_atom14_names[rc.restype_1to3[rt]]
-        restype_atom14_to_atom37_list.append([(rc.atom_order[name] if name else 0) for name in atom_names])
+        restype_atom14_to_atom37_list.append(
+            [(rc.atom_order[name] if name else 0) for name in atom_names]
+        )
         atom_name_to_idx14 = {name: i for i, name in enumerate(atom_names)}
         restype_atom37_to_atom14_list.append(
-            [(atom_name_to_idx14[name] if name in atom_name_to_idx14 else 0) for name in rc.atom_types]
+            [
+                (atom_name_to_idx14[name] if name in atom_name_to_idx14 else 0)
+                for name in rc.atom_types
+            ]
         )
 
         restype_atom14_mask_list.append([(1.0 if name else 0.0) for name in atom_names])
@@ -73,7 +78,9 @@ def make_atom14_masks(protein: Dict[str, torch.Tensor]) -> Dict[str, torch.Tenso
     protein["residx_atom37_to_atom14"] = residx_atom37_to_atom14.long()
 
     # create the corresponding mask
-    restype_atom37_mask = torch.zeros([21, 37], dtype=torch.float32, device=protein["aatype"].device)
+    restype_atom37_mask = torch.zeros(
+        [21, 37], dtype=torch.float32, device=protein["aatype"].device
+    )
     for restype, restype_letter in enumerate(rc.restypes):
         restype_name = rc.restype_1to3[restype_letter]
         atom_names = rc.residue_atoms[restype_name]
@@ -88,6 +95,8 @@ def make_atom14_masks(protein: Dict[str, torch.Tensor]) -> Dict[str, torch.Tenso
 
 
 def make_atom14_masks_np(batch: Dict[str, torch.Tensor]) -> Dict[str, np.ndarray]:
-    batch = tree_map(lambda n: torch.tensor(n, device=batch["aatype"].device), batch, np.ndarray)
+    batch = tree_map(
+        lambda n: torch.tensor(n, device=batch["aatype"].device), batch, np.ndarray
+    )
     out = tensor_tree_map(lambda t: np.array(t), make_atom14_masks(batch))
     return out

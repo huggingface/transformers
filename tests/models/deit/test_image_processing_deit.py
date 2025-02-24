@@ -19,7 +19,10 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_vision_available():
@@ -77,7 +80,9 @@ class DeiTImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.crop_size["height"], self.crop_size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -93,7 +98,9 @@ class DeiTImageProcessingTester:
 @require_vision
 class DeiTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DeiTImageProcessor if is_vision_available() else None
-    fast_image_processing_class = DeiTImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        DeiTImageProcessorFast if is_torchvision_available() else None
+    )
     test_cast_dtype = True
 
     def setUp(self):
@@ -117,10 +124,14 @@ class DeiTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_image_processor_from_dict_with_kwargs(self):
         for image_processing_class in self.image_processor_list:
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict
+            )
             self.assertEqual(image_processor.size, {"height": 20, "width": 20})
             self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, size=42, crop_size=84
+            )
             self.assertEqual(image_processor.size, {"height": 42, "width": 42})
             self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})

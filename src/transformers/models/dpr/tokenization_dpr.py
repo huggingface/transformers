@@ -54,10 +54,13 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
 
 
 DPRSpanPrediction = collections.namedtuple(
-    "DPRSpanPrediction", ["span_score", "relevance_score", "doc_id", "start_index", "end_index", "text"]
+    "DPRSpanPrediction",
+    ["span_score", "relevance_score", "doc_id", "start_index", "end_index", "text"],
 )
 
-DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "end_logits", "relevance_logits"])
+DPRReaderOutput = collections.namedtuple(
+    "DPRReaderOutput", ["start_logits", "end_logits", "relevance_logits"]
+)
 
 
 CUSTOM_DPR_READER_DOCSTRING = r"""
@@ -168,27 +171,44 @@ class CustomDPRReaderTokenizerMixin:
         titles = titles if not isinstance(titles, str) else [titles]
         texts = texts if not isinstance(texts, str) else [texts]
         n_passages = len(titles)
-        questions = questions if not isinstance(questions, str) else [questions] * n_passages
+        questions = (
+            questions if not isinstance(questions, str) else [questions] * n_passages
+        )
         if len(titles) != len(texts):
             raise ValueError(
                 f"There should be as many titles than texts but got {len(titles)} titles and {len(texts)} texts."
             )
-        encoded_question_and_titles = super().__call__(questions, titles, padding=False, truncation=False)["input_ids"]
-        encoded_texts = super().__call__(texts, add_special_tokens=False, padding=False, truncation=False)["input_ids"]
+        encoded_question_and_titles = super().__call__(
+            questions, titles, padding=False, truncation=False
+        )["input_ids"]
+        encoded_texts = super().__call__(
+            texts, add_special_tokens=False, padding=False, truncation=False
+        )["input_ids"]
         encoded_inputs = {
             "input_ids": [
-                (encoded_question_and_title + encoded_text)[:max_length]
-                if max_length is not None and truncation
-                else encoded_question_and_title + encoded_text
-                for encoded_question_and_title, encoded_text in zip(encoded_question_and_titles, encoded_texts)
+                (
+                    (encoded_question_and_title + encoded_text)[:max_length]
+                    if max_length is not None and truncation
+                    else encoded_question_and_title + encoded_text
+                )
+                for encoded_question_and_title, encoded_text in zip(
+                    encoded_question_and_titles, encoded_texts
+                )
             ]
         }
         if return_attention_mask is not False:
             attention_mask = []
             for input_ids in encoded_inputs["input_ids"]:
-                attention_mask.append([int(input_id != self.pad_token_id) for input_id in input_ids])
+                attention_mask.append(
+                    [int(input_id != self.pad_token_id) for input_id in input_ids]
+                )
             encoded_inputs["attention_mask"] = attention_mask
-        return self.pad(encoded_inputs, padding=padding, max_length=max_length, return_tensors=return_tensors)
+        return self.pad(
+            encoded_inputs,
+            padding=padding,
+            max_length=max_length,
+            return_tensors=return_tensors,
+        )
 
     def decode_best_spans(
         self,
@@ -232,12 +252,16 @@ class CustomDPRReaderTokenizerMixin:
         input_ids = reader_input["input_ids"]
         start_logits, end_logits, relevance_logits = reader_output[:3]
         n_passages = len(relevance_logits)
-        sorted_docs = sorted(range(n_passages), reverse=True, key=relevance_logits.__getitem__)
+        sorted_docs = sorted(
+            range(n_passages), reverse=True, key=relevance_logits.__getitem__
+        )
         nbest_spans_predictions: List[DPRReaderOutput] = []
         for doc_id in sorted_docs:
             sequence_ids = list(input_ids[doc_id])
             # assuming question & title information is at the beginning of the sequence
-            passage_offset = sequence_ids.index(self.sep_token_id, 2) + 1  # second sep id
+            passage_offset = (
+                sequence_ids.index(self.sep_token_id, 2) + 1
+            )  # second sep id
             if sequence_ids[-1] == self.pad_token_id:
                 sequence_len = sequence_ids.index(self.pad_token_id)
             else:
@@ -254,7 +278,8 @@ class CustomDPRReaderTokenizerMixin:
                 end_index += passage_offset
                 nbest_spans_predictions.append(
                     DPRSpanPrediction(
-                        span_score=start_logits[doc_id][start_index] + end_logits[doc_id][end_index],
+                        span_score=start_logits[doc_id][start_index]
+                        + end_logits[doc_id][end_index],
                         relevance_score=relevance_logits[doc_id],
                         doc_id=doc_id,
                         start_index=start_index,
@@ -279,8 +304,15 @@ class CustomDPRReaderTokenizerMixin:
         """
         scores = []
         for start_index, start_score in enumerate(start_logits):
-            for answer_length, end_score in enumerate(end_logits[start_index : start_index + max_answer_length]):
-                scores.append(((start_index, start_index + answer_length), start_score + end_score))
+            for answer_length, end_score in enumerate(
+                end_logits[start_index : start_index + max_answer_length]
+            ):
+                scores.append(
+                    (
+                        (start_index, start_index + answer_length),
+                        start_score + end_score,
+                    )
+                )
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         chosen_span_intervals = []
         for (start_index, end_index), score in scores:
@@ -318,4 +350,9 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
 
-__all__ = ["DPRContextEncoderTokenizer", "DPRQuestionEncoderTokenizer", "DPRReaderOutput", "DPRReaderTokenizer"]
+__all__ = [
+    "DPRContextEncoderTokenizer",
+    "DPRQuestionEncoderTokenizer",
+    "DPRReaderOutput",
+    "DPRReaderTokenizer",
+]

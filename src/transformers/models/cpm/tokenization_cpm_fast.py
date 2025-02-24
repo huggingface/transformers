@@ -109,7 +109,11 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
                 The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
         """
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             vocab_file=vocab_file,
@@ -203,10 +207,14 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 
         if token_ids_1 is None:
             return len(token_ids_0 + sep) * [0] + cls_segment_id
-        return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
+        return (
+            len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
+        )
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -217,7 +225,9 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
@@ -227,7 +237,12 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
 
     def _batch_encode_plus(self, batch_text_or_text_pairs, *args, **kwargs):
         batch_text_or_text_pairs = [
-            " ".join([x.translate(self.translator) for x in self.jieba.cut(text, cut_all=False)])
+            " ".join(
+                [
+                    x.translate(self.translator)
+                    for x in self.jieba.cut(text, cut_all=False)
+                ]
+            )
             for text in batch_text_or_text_pairs
         ]
         return super()._batch_encode_plus(batch_text_or_text_pairs, *args, **kwargs)

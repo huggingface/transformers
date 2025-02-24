@@ -27,7 +27,14 @@ from accelerate.utils import set_seed
 from datasets import load_dataset
 from huggingface_hub import HfApi
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, Lambda, Normalize, RandomHorizontalFlip, RandomResizedCrop, ToTensor
+from torchvision.transforms import (
+    Compose,
+    Lambda,
+    Normalize,
+    RandomHorizontalFlip,
+    RandomResizedCrop,
+    ToTensor,
+)
 from tqdm.auto import tqdm
 
 import transformers
@@ -55,7 +62,10 @@ logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.50.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt",
+)
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -145,7 +155,8 @@ def parse_args():
         "--model_type",
         type=str,
         default=None,
-        help="If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES),
+        help="If training from scratch, pass a model type from the list: "
+        + ", ".join(MODEL_TYPES),
     )
     parser.add_argument(
         "--config_name_or_path",
@@ -283,7 +294,14 @@ def parse_args():
         type=SchedulerType,
         default="linear",
         help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+        choices=[
+            "linear",
+            "cosine",
+            "cosine_with_restarts",
+            "polynomial",
+            "constant",
+            "constant_with_warmup",
+        ],
     )
     parser.add_argument(
         "--num_warmup_steps",
@@ -326,7 +344,9 @@ def parse_args():
     args.data_files = data_files if data_files else None
 
     if args.push_to_hub:
-        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+        assert (
+            args.output_dir is not None
+        ), "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
 
     return args
 
@@ -339,7 +359,9 @@ class MaskGenerator:
     where 1 indicates "masked".
     """
 
-    def __init__(self, input_size=192, mask_patch_size=32, model_patch_size=4, mask_ratio=0.6):
+    def __init__(
+        self, input_size=192, mask_patch_size=32, model_patch_size=4, mask_ratio=0.6
+    ):
         self.input_size = input_size
         self.mask_patch_size = mask_patch_size
         self.model_patch_size = model_patch_size
@@ -421,7 +443,9 @@ def main():
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
             api = HfApi()
-            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            repo_id = api.create_repo(
+                repo_name, exist_ok=True, token=args.hub_token
+            ).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -477,9 +501,17 @@ def main():
         config.decoder_type = "simmim"
 
     # adapt config
-    args.image_size = args.image_size if args.image_size is not None else config.image_size
-    args.patch_size = args.patch_size if args.patch_size is not None else config.patch_size
-    args.encoder_stride = args.encoder_stride if args.encoder_stride is not None else config.encoder_stride
+    args.image_size = (
+        args.image_size if args.image_size is not None else config.image_size
+    )
+    args.patch_size = (
+        args.patch_size if args.patch_size is not None else config.patch_size
+    )
+    args.encoder_stride = (
+        args.encoder_stride
+        if args.encoder_stride is not None
+        else config.encoder_stride
+    )
 
     config.update(
         {
@@ -491,12 +523,17 @@ def main():
 
     # create image processor
     if args.image_processor_name:
-        image_processor = AutoImageProcessor.from_pretrained(args.image_processor_name, **config_kwargs)
+        image_processor = AutoImageProcessor.from_pretrained(
+            args.image_processor_name, **config_kwargs
+        )
     elif args.model_name_or_path:
-        image_processor = AutoImageProcessor.from_pretrained(args.model_name_or_path, **config_kwargs)
+        image_processor = AutoImageProcessor.from_pretrained(
+            args.model_name_or_path, **config_kwargs
+        )
     else:
         IMAGE_PROCESSOR_TYPES = {
-            conf.model_type: image_processor_class for conf, image_processor_class in IMAGE_PROCESSOR_MAPPING.items()
+            conf.model_type: image_processor_class
+            for conf, image_processor_class in IMAGE_PROCESSOR_MAPPING.items()
         }
         image_processor = IMAGE_PROCESSOR_TYPES[args.model_type]()
 
@@ -535,7 +572,9 @@ def main():
     transforms = Compose(
         [
             Lambda(lambda img: img.convert("RGB")),
-            RandomResizedCrop(args.image_size, scale=(0.67, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)),
+            RandomResizedCrop(
+                args.image_size, scale=(0.67, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)
+            ),
             RandomHorizontalFlip(),
             ToTensor(),
             Normalize(mean=image_processor.image_mean, std=image_processor.image_std),
@@ -554,18 +593,28 @@ def main():
         """Preprocess a batch of images by applying transforms + creating a corresponding mask, indicating
         which patches to mask."""
 
-        examples["pixel_values"] = [transforms(image) for image in examples[image_column_name]]
-        examples["mask"] = [mask_generator() for i in range(len(examples[image_column_name]))]
+        examples["pixel_values"] = [
+            transforms(image) for image in examples[image_column_name]
+        ]
+        examples["mask"] = [
+            mask_generator() for i in range(len(examples[image_column_name]))
+        ]
 
         return examples
 
     if args.max_train_samples is not None:
-        ds["train"] = ds["train"].shuffle(seed=args.seed).select(range(args.max_train_samples))
+        ds["train"] = (
+            ds["train"].shuffle(seed=args.seed).select(range(args.max_train_samples))
+        )
     # Set the training transforms
     ds["train"].set_transform(preprocess_images)
 
     if args.max_eval_samples is not None:
-        ds["validation"] = ds["validation"].shuffle(seed=args.seed).select(range(args.max_eval_samples))
+        ds["validation"] = (
+            ds["validation"]
+            .shuffle(seed=args.seed)
+            .select(range(args.max_eval_samples))
+        )
     # Set the validation transforms
     ds["validation"].set_transform(preprocess_images)
 
@@ -587,11 +636,19 @@ def main():
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)
+            ],
             "weight_decay": args.weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
             "weight_decay": 0.0,
         },
     ]
@@ -602,7 +659,9 @@ def main():
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(
+        len(train_dataloader) / args.gradient_accumulation_steps
+    )
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
@@ -611,18 +670,22 @@ def main():
         name=args.lr_scheduler_type,
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
-        num_training_steps=args.max_train_steps
-        if overrode_max_train_steps
-        else args.max_train_steps * accelerator.num_processes,
+        num_training_steps=(
+            args.max_train_steps
+            if overrode_max_train_steps
+            else args.max_train_steps * accelerator.num_processes
+        ),
     )
 
     # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-        model,
-        optimizer,
-        train_dataloader,
-        eval_dataloader,
-        lr_scheduler,
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = (
+        accelerator.prepare(
+            model,
+            optimizer,
+            train_dataloader,
+            eval_dataloader,
+            lr_scheduler,
+        )
     )
 
     # On TPU, the tie weights in our model have been disconnected, so we need to restore the ties.
@@ -630,7 +693,9 @@ def main():
         model.tie_weights()
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(
+        len(train_dataloader) / args.gradient_accumulation_steps
+    )
     if overrode_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
@@ -646,21 +711,33 @@ def main():
     if args.with_tracking:
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        experiment_config["lr_scheduler_type"] = experiment_config[
+            "lr_scheduler_type"
+        ].value
         accelerator.init_trackers("mim_no_trainer", experiment_config)
 
     # Train!
-    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+    total_batch_size = (
+        args.per_device_train_batch_size
+        * accelerator.num_processes
+        * args.gradient_accumulation_steps
+    )
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(ds['train'])}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(
+        f"  Instantaneous batch size per device = {args.per_device_train_batch_size}"
+    )
+    logger.info(
+        f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}"
+    )
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(int(args.max_train_steps)), disable=not accelerator.is_local_main_process)
+    progress_bar = tqdm(
+        range(int(args.max_train_steps)), disable=not accelerator.is_local_main_process
+    )
     completed_steps = 0
     starting_epoch = 0
 
@@ -673,7 +750,9 @@ def main():
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
-            path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+            path = dirs[
+                -1
+            ]  # Sorts folders by date modified, most recent checkpoint is the last
             checkpoint_path = path
             path = os.path.basename(checkpoint_path)
 
@@ -688,7 +767,10 @@ def main():
             completed_steps = starting_epoch * num_update_steps_per_epoch
         else:
             # need to multiply `gradient_accumulation_steps` to reflect real steps
-            resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
+            resume_step = (
+                int(training_difference.replace("step_", ""))
+                * args.gradient_accumulation_steps
+            )
             starting_epoch = resume_step // len(train_dataloader)
             completed_steps = resume_step // args.gradient_accumulation_steps
             resume_step -= starting_epoch * len(train_dataloader)
@@ -700,9 +782,15 @@ def main():
         model.train()
         if args.with_tracking:
             total_loss = 0
-        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
+        if (
+            args.resume_from_checkpoint
+            and epoch == starting_epoch
+            and resume_step is not None
+        ):
             # We skip the first `n` batches in the dataloader when resuming from a checkpoint
-            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            active_dataloader = accelerator.skip_first_batches(
+                train_dataloader, resume_step
+            )
         else:
             active_dataloader = train_dataloader
         for step, batch in enumerate(active_dataloader):
@@ -723,7 +811,10 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
+                if (
+                    completed_steps % checkpointing_steps == 0
+                    and accelerator.sync_gradients
+                ):
                     output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
@@ -739,7 +830,11 @@ def main():
                 outputs = model(**batch)
 
             loss = outputs.loss
-            losses.append(accelerator.gather_for_metrics(loss.repeat(args.per_device_eval_batch_size)))
+            losses.append(
+                accelerator.gather_for_metrics(
+                    loss.repeat(args.per_device_eval_batch_size)
+                )
+            )
 
         losses = torch.cat(losses)
         eval_loss = torch.mean(losses)
@@ -761,7 +856,9 @@ def main():
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
             unwrapped_model.save_pretrained(
-                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+                args.output_dir,
+                is_main_process=accelerator.is_main_process,
+                save_function=accelerator.save,
             )
             if accelerator.is_main_process:
                 image_processor.save_pretrained(args.output_dir)
@@ -786,7 +883,9 @@ def main():
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(
-            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            args.output_dir,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save,
         )
         if accelerator.is_main_process:
             image_processor.save_pretrained(args.output_dir)

@@ -20,8 +20,17 @@ import os
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from ...utils import is_sentencepiece_available, is_sudachi_projection_available, logging
+from ...tokenization_utils import (
+    PreTrainedTokenizer,
+    _is_control,
+    _is_punctuation,
+    _is_whitespace,
+)
+from ...utils import (
+    is_sentencepiece_available,
+    is_sudachi_projection_available,
+    logging,
+)
 
 
 if is_sentencepiece_available():
@@ -125,7 +134,9 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
                     " pretrained model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
                 )
             self.vocab = load_vocab(vocab_file)
-            self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
+            self.ids_to_tokens = collections.OrderedDict(
+                [(ids, tok) for tok, ids in self.vocab.items()]
+            )
 
         self.do_word_tokenize = do_word_tokenize
         self.word_tokenizer_type = word_tokenizer_type
@@ -137,34 +148,52 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         if do_word_tokenize:
             if word_tokenizer_type == "basic":
                 self.word_tokenizer = BasicTokenizer(
-                    do_lower_case=do_lower_case, never_split=never_split, tokenize_chinese_chars=False
+                    do_lower_case=do_lower_case,
+                    never_split=never_split,
+                    tokenize_chinese_chars=False,
                 )
             elif word_tokenizer_type == "mecab":
                 self.word_tokenizer = MecabTokenizer(
-                    do_lower_case=do_lower_case, never_split=never_split, **(mecab_kwargs or {})
+                    do_lower_case=do_lower_case,
+                    never_split=never_split,
+                    **(mecab_kwargs or {}),
                 )
             elif word_tokenizer_type == "sudachi":
                 self.word_tokenizer = SudachiTokenizer(
-                    do_lower_case=do_lower_case, never_split=never_split, **(sudachi_kwargs or {})
+                    do_lower_case=do_lower_case,
+                    never_split=never_split,
+                    **(sudachi_kwargs or {}),
                 )
             elif word_tokenizer_type == "jumanpp":
                 self.word_tokenizer = JumanppTokenizer(
-                    do_lower_case=do_lower_case, never_split=never_split, **(jumanpp_kwargs or {})
+                    do_lower_case=do_lower_case,
+                    never_split=never_split,
+                    **(jumanpp_kwargs or {}),
                 )
             else:
-                raise ValueError(f"Invalid word_tokenizer_type '{word_tokenizer_type}' is specified.")
+                raise ValueError(
+                    f"Invalid word_tokenizer_type '{word_tokenizer_type}' is specified."
+                )
 
         self.do_subword_tokenize = do_subword_tokenize
         self.subword_tokenizer_type = subword_tokenizer_type
         if do_subword_tokenize:
             if subword_tokenizer_type == "wordpiece":
-                self.subword_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+                self.subword_tokenizer = WordpieceTokenizer(
+                    vocab=self.vocab, unk_token=str(unk_token)
+                )
             elif subword_tokenizer_type == "character":
-                self.subword_tokenizer = CharacterTokenizer(vocab=self.vocab, unk_token=str(unk_token))
+                self.subword_tokenizer = CharacterTokenizer(
+                    vocab=self.vocab, unk_token=str(unk_token)
+                )
             elif subword_tokenizer_type == "sentencepiece":
-                self.subword_tokenizer = SentencepieceTokenizer(vocab=self.spm_file, unk_token=str(unk_token))
+                self.subword_tokenizer = SentencepieceTokenizer(
+                    vocab=self.spm_file, unk_token=str(unk_token)
+                )
             else:
-                raise ValueError(f"Invalid subword_tokenizer_type '{subword_tokenizer_type}' is specified.")
+                raise ValueError(
+                    f"Invalid subword_tokenizer_type '{subword_tokenizer_type}' is specified."
+                )
         super().__init__(
             spm_file=spm_file,
             unk_token=unk_token,
@@ -198,25 +227,37 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         self.__dict__ = state
         if self.word_tokenizer_type == "mecab":
             self.word_tokenizer = MecabTokenizer(
-                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.mecab_kwargs or {})
+                do_lower_case=self.do_lower_case,
+                never_split=self.never_split,
+                **(self.mecab_kwargs or {}),
             )
         elif self.word_tokenizer_type == "sudachi":
             self.word_tokenizer = SudachiTokenizer(
-                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.sudachi_kwargs or {})
+                do_lower_case=self.do_lower_case,
+                never_split=self.never_split,
+                **(self.sudachi_kwargs or {}),
             )
         elif self.word_tokenizer_type == "jumanpp":
             self.word_tokenizer = JumanppTokenizer(
-                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.jumanpp_kwargs or {})
+                do_lower_case=self.do_lower_case,
+                never_split=self.never_split,
+                **(self.jumanpp_kwargs or {}),
             )
 
     def _tokenize(self, text):
         if self.do_word_tokenize:
-            tokens = self.word_tokenizer.tokenize(text, never_split=self.all_special_tokens)
+            tokens = self.word_tokenizer.tokenize(
+                text, never_split=self.all_special_tokens
+            )
         else:
             tokens = [text]
 
         if self.do_subword_tokenize:
-            split_tokens = [sub_token for token in tokens for sub_token in self.subword_tokenizer.tokenize(token)]
+            split_tokens = [
+                sub_token
+                for token in tokens
+                for sub_token in self.subword_tokenizer.tokenize(token)
+            ]
         else:
             split_tokens = tokens
 
@@ -282,7 +323,10 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -302,7 +346,9 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         if token_ids_1 is not None:
@@ -339,28 +385,39 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if os.path.isdir(save_directory):
             if self.subword_tokenizer_type == "sentencepiece":
                 vocab_file = os.path.join(
-                    save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["spm_file"]
+                    save_directory,
+                    (filename_prefix + "-" if filename_prefix else "")
+                    + VOCAB_FILES_NAMES["spm_file"],
                 )
             else:
                 vocab_file = os.path.join(
                     save_directory,
-                    (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"],
+                    (filename_prefix + "-" if filename_prefix else "")
+                    + VOCAB_FILES_NAMES["vocab_file"],
                 )
         else:
-            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+            vocab_file = (
+                filename_prefix + "-" if filename_prefix else ""
+            ) + save_directory
 
         if self.subword_tokenizer_type == "sentencepiece":
             with open(vocab_file, "wb") as writer:
-                content_spiece_model = self.subword_tokenizer.sp_model.serialized_model_proto()
+                content_spiece_model = (
+                    self.subword_tokenizer.sp_model.serialized_model_proto()
+                )
                 writer.write(content_spiece_model)
         else:
             with open(vocab_file, "w", encoding="utf-8") as writer:
                 index = 0
-                for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
+                for token, token_index in sorted(
+                    self.vocab.items(), key=lambda kv: kv[1]
+                ):
                     if index != token_index:
                         logger.warning(
                             f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
@@ -466,7 +523,9 @@ class MecabTokenizer:
         if self.normalize_text:
             text = unicodedata.normalize("NFKC", text)
 
-        never_split = self.never_split + (never_split if never_split is not None else [])
+        never_split = self.never_split + (
+            never_split if never_split is not None else []
+        )
         tokens = []
 
         for word in self.mecab(text):
@@ -543,12 +602,18 @@ class SudachiTokenizer:
         self.projection = sudachi_projection
 
         sudachi_dictionary = dictionary.Dictionary(
-            config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict=sudachi_dict_type
+            config_path=sudachi_config_path,
+            resource_dir=sudachi_resource_dir,
+            dict=sudachi_dict_type,
         )
         if is_sudachi_projection_available():
-            self.sudachi = sudachi_dictionary.create(self.split_mode, projection=self.projection)
+            self.sudachi = sudachi_dictionary.create(
+                self.split_mode, projection=self.projection
+            )
         elif self.projection is not None:
-            raise ImportError("You need to install sudachipy>=0.6.8 to specify `projection` field in sudachi_kwargs.")
+            raise ImportError(
+                "You need to install sudachipy>=0.6.8 to specify `projection` field in sudachi_kwargs."
+            )
         else:
             self.sudachi = sudachi_dictionary.create(self.split_mode)
 
@@ -557,7 +622,9 @@ class SudachiTokenizer:
         if self.normalize_text:
             text = unicodedata.normalize("NFKC", text)
 
-        never_split = self.never_split + (never_split if never_split is not None else [])
+        never_split = self.never_split + (
+            never_split if never_split is not None else []
+        )
         tokens = []
 
         for word in self.sudachi.tokenize(text):
@@ -624,7 +691,9 @@ class JumanppTokenizer:
 
         text = text.strip()
 
-        never_split = self.never_split + (never_split if never_split is not None else [])
+        never_split = self.never_split + (
+            never_split if never_split is not None else []
+        )
         tokens = []
 
         for mrph in self.juman.apply_to_sentence(text).morphemes:
@@ -740,7 +809,11 @@ class BasicTokenizer:
                 [`PreTrainedTokenizer.tokenize`]) List of token not to split.
         """
         # union() returns a new set by concatenating the two sets.
-        never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
+        never_split = (
+            self.never_split.union(set(never_split))
+            if never_split
+            else self.never_split
+        )
         text = self._clean_text(text)
 
         # This was added on November 1st, 2018 for the multilingual and Chinese
@@ -781,7 +854,9 @@ class BasicTokenizer:
 
     def _run_split_on_punc(self, text, never_split=None):
         """Splits punctuation on a piece of text."""
-        if not self.do_split_on_punc or (never_split is not None and text in never_split):
+        if not self.do_split_on_punc or (
+            never_split is not None and text in never_split
+        ):
             return [text]
         chars = list(text)
         i = 0
@@ -965,8 +1040,13 @@ class SentencepieceTokenizer:
         new_pieces = []
         for piece in pieces:
             if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
-                cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
-                if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
+                cur_pieces = self.sp_model.EncodeAsPieces(
+                    piece[:-1].replace(SPIECE_UNDERLINE, "")
+                )
+                if (
+                    piece[0] != SPIECE_UNDERLINE
+                    and cur_pieces[0][0] == SPIECE_UNDERLINE
+                ):
                     if len(cur_pieces[0]) == 1:
                         cur_pieces = cur_pieces[1:]
                     else:

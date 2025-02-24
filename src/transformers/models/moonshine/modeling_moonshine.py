@@ -95,7 +95,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -117,8 +119,12 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+        query.dtype
+    )
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -186,30 +192,49 @@ class MoonshineAttention(nn.Module):
         num_key_value_heads: int,
     ):
         super().__init__()
-        config.update({"num_attention_heads": num_attention_heads, "num_key_value_heads": num_key_value_heads})
+        config.update(
+            {
+                "num_attention_heads": num_attention_heads,
+                "num_key_value_heads": num_key_value_heads,
+            }
+        )
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.head_dim = getattr(
+            config, "head_dim", config.hidden_size // config.num_attention_heads
+        )
+        self.num_key_value_groups = (
+            config.num_attention_heads // config.num_key_value_heads
+        )
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = is_causal
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=False
+        )
 
         # Pad head dimension to the next specified multiple.
         if self.config.pad_head_dim_to_multiple_of is not None:
             target_multiple = self.config.pad_head_dim_to_multiple_of
-            target_head_dim = target_multiple * ((self.head_dim + target_multiple - 1) // target_multiple)
+            target_head_dim = target_multiple * (
+                (self.head_dim + target_multiple - 1) // target_multiple
+            )
             self.head_dim_padding = target_head_dim - self.head_dim
         else:
             self.head_dim_padding = 0
@@ -227,7 +252,9 @@ class MoonshineAttention(nn.Module):
         bsz, q_len = hidden_states.shape[:-1]
 
         query_states = (
-            self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+            self.q_proj(hidden_states)
+            .view(bsz, q_len, self.config.num_key_value_heads, self.head_dim)
+            .transpose(1, 2)
         )
 
         is_cross_attention = key_value_states is not None
@@ -241,7 +268,9 @@ class MoonshineAttention(nn.Module):
                 past_key_value = past_key_value.self_attention_cache
 
         # use key_value_states if cross attention
-        current_states = key_value_states if key_value_states is not None else hidden_states
+        current_states = (
+            key_value_states if key_value_states is not None else hidden_states
+        )
         if is_cross_attention and past_key_value and is_updated:
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
@@ -258,35 +287,54 @@ class MoonshineAttention(nn.Module):
             )
             if is_cross_attention and past_key_value is not None:
                 key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                    key_states,
+                    value_states,
+                    self.layer_idx,
+                    {"cache_position": cache_position},
                 )
 
         if not is_cross_attention:
             cos, sin = position_embeddings
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+            query_states, key_states = apply_rotary_pos_emb(
+                query_states, key_states, cos, sin
+            )
 
             if past_key_value is not None:
-                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+                cache_kwargs = {
+                    "sin": sin,
+                    "cos": cos,
+                    "cache_position": cache_position,
+                }
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
-        is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+        is_causal = (
+            True if self.is_causal and attention_mask is None and q_len > 1 else False
+        )
 
         if self.head_dim_padding > 0:
-            query_states = torch.nn.functional.pad(query_states, (0, self.head_dim_padding))
+            query_states = torch.nn.functional.pad(
+                query_states, (0, self.head_dim_padding)
+            )
             key_states = torch.nn.functional.pad(key_states, (0, self.head_dim_padding))
-            value_states = torch.nn.functional.pad(value_states, (0, self.head_dim_padding))
+            value_states = torch.nn.functional.pad(
+                value_states, (0, self.head_dim_padding)
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -313,7 +361,9 @@ class MoonshineRotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_type = config.rope_scaling.get(
+                "rope_type", config.rope_scaling.get("type")
+            )
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -334,11 +384,18 @@ class MoonshineRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
@@ -351,13 +408,21 @@ class MoonshineRotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -395,9 +460,13 @@ class MoonshineEncoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -466,10 +535,14 @@ class MoonshineDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # will become mandatory in v4.46
         encoder_position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -594,7 +667,10 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
         self.layers = nn.ModuleList(
-            [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
+            [
+                MoonshineEncoderLayer(config, idx)
+                for idx in range(config.encoder_num_hidden_layers)
+            ]
         )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
 
@@ -638,11 +714,19 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_values is None:
             raise ValueError("You must specify input_values.")
@@ -661,17 +745,25 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             downsample_stride = 64 * 3 * 2  # conv strides
             attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
             if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask if (attention_mask == 0.0).any() else None
+                attention_mask = (
+                    attention_mask if (attention_mask == 0.0).any() else None
+                )
 
             # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
             elif self.config._attn_implementation == "sdpa" and not output_attentions:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, hidden_states.dtype)
+                attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, hidden_states.dtype
+                )
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
+                attention_mask = _prepare_4d_attention_mask(
+                    attention_mask, hidden_states.dtype
+                )
 
-        position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
+        position_ids = torch.arange(
+            0, hidden_states.shape[1], device=hidden_states.device
+        ).unsqueeze(0)
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -819,9 +911,14 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, self.padding_idx
+        )
         self.layers = nn.ModuleList(
-            [MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)]
+            [
+                MoonshineDecoderLayer(config, idx)
+                for idx in range(config.decoder_num_hidden_layers)
+            ]
         )
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
@@ -864,15 +961,25 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
                 - 0 for tokens that are **masked**.
                 [What are attention masks?](../glossary#attention-mask)
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -886,19 +993,29 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         if use_cache and past_key_values is None:
             self_attention_cache = DynamicCache()
             cross_attention_cache = DynamicCache()
-            past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+            past_key_values = EncoderDecoderCache(
+                self_attention_cache, cross_attention_cache
+            )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         hidden_states = inputs_embeds
@@ -909,15 +1026,23 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attentions = (
+            () if (output_attentions and encoder_hidden_states is not None) else None
+        )
 
         # attention mask downsampling
         if encoder_attention_mask is not None:
             mask_len = encoder_hidden_states.shape[-2]
             downsample_stride = 64 * 3 * 2  # conv strides
-            encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
+            encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][
+                ..., :mask_len
+            ]
             if self.config._attn_implementation == "flash_attention_2":
-                encoder_attention_mask = encoder_attention_mask if (encoder_attention_mask == 0.0).any() else None
+                encoder_attention_mask = (
+                    encoder_attention_mask
+                    if (encoder_attention_mask == 0.0).any()
+                    else None
+                )
 
             # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
             elif self.config._attn_implementation == "sdpa" and not output_attentions:
@@ -1002,11 +1127,17 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1047,7 +1178,9 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -1090,22 +1223,29 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -1200,7 +1340,11 @@ def _compute_mask_indices(
             dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32)
+                * dummy_mask_idx,
+            ]
         )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
@@ -1210,18 +1354,22 @@ def _compute_mask_indices(
     spec_aug_mask_idxs = np.broadcast_to(
         spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
     )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(
+        batch_size, max_num_masked_span * mask_length
+    )
 
     # add offset to the starting indexes so that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
+    offsets = np.broadcast_to(
+        offsets, (batch_size, max_num_masked_span, mask_length)
+    ).reshape(batch_size, max_num_masked_span * mask_length)
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # ensure that we cannot have indices larger than sequence_length
     if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = (
+            sequence_length - 1
+        )
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -1377,7 +1525,9 @@ class MoonshineModel(MoonshinePreTrainedModel):
                 attention_mask=attention_mask,
                 min_masks=self.config.mask_time_min_masks,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=input_features.device, dtype=torch.bool)
+            mask_time_indices = torch.tensor(
+                mask_time_indices, device=input_features.device, dtype=torch.bool
+            )
             mask_time_indices = mask_time_indices[:, None].expand(-1, hidden_size, -1)
             input_features[mask_time_indices] = 0
 
@@ -1389,13 +1539,17 @@ class MoonshineModel(MoonshinePreTrainedModel):
                 mask_length=self.config.mask_feature_length,
                 min_masks=self.config.mask_feature_min_masks,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=input_features.device, dtype=torch.bool)
+            mask_feature_indices = torch.tensor(
+                mask_feature_indices, device=input_features.device, dtype=torch.bool
+            )
             input_features[mask_feature_indices] = 0
 
         return input_features
 
     @add_start_docstrings_to_model_forward(MOONSHINE_MODEL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
@@ -1403,7 +1557,9 @@ class MoonshineModel(MoonshinePreTrainedModel):
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[
+            Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]
+        ] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1432,12 +1588,20 @@ class MoonshineModel(MoonshinePreTrainedModel):
         >>> list(last_hidden_state.shape)
         [1, 2, 288]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1486,7 +1650,9 @@ class MoonshineModel(MoonshinePreTrainedModel):
         )
 
 
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+def shift_tokens_right(
+    input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int
+):
     """
     Shift input ids one token to the right.
     """
@@ -1533,7 +1699,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         return self.model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(MOONSHINE_MODEL_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
@@ -1541,7 +1709,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[
+            Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]
+        ] = None,
         decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
         decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1580,7 +1750,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         >>> transcription
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None:
             if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1607,7 +1779,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.vocab_size
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1626,4 +1800,8 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         )
 
 
-__all__ = ["MoonshineModel", "MoonshinePreTrainedModel", "MoonshineForConditionalGeneration"]
+__all__ = [
+    "MoonshineModel",
+    "MoonshinePreTrainedModel",
+    "MoonshineForConditionalGeneration",
+]

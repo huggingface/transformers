@@ -42,7 +42,11 @@ if is_torch_available():
 @lru_cache(maxsize=256)
 # Copied from transformers.models.siglip2.image_processing_siglip2.get_image_size_for_max_num_patches
 def get_image_size_for_max_num_patches(
-    image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
+    image_height: int,
+    image_width: int,
+    patch_size: int,
+    max_num_patches: int,
+    eps: float = 1e-5,
 ) -> Tuple[int, int]:
     """
     Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
@@ -65,7 +69,9 @@ def get_image_size_for_max_num_patches(
 
     def get_scaled_image_size(scale: float, size: int, patch_size: int) -> int:
         scaled_size = size * scale
-        scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
+        scaled_size = (
+            math.ceil(scaled_size / patch_size) * patch_size
+        )  # make divisible by patch_size
         scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
         return int(scaled_size)
 
@@ -96,7 +102,9 @@ def convert_image_to_patches(image: "torch.Tensor", patch_size: int) -> "torch.T
     num_channels, image_height, image_width = image.shape
     num_patches_height = image_height // patch_size
     num_patches_width = image_width // patch_size
-    patched_image = image.reshape(num_channels, num_patches_height, patch_size, num_patches_width, patch_size)
+    patched_image = image.reshape(
+        num_channels, num_patches_height, patch_size, num_patches_width, patch_size
+    )
     patched_image = patched_image.permute(1, 3, 2, 4, 0)
     patched_image = patched_image.reshape(num_patches_height * num_patches_width, -1)
     return patched_image
@@ -113,7 +121,9 @@ def pad_along_first_dim(
     mask = torch.ones((target_length,), dtype=torch.int32)
     if padding_length > 0:
         padding = [0, 0] * (tensor.ndim - 1) + [0, padding_length]
-        tensor = torch.nn.functional.pad(tensor, padding, mode="constant", value=pad_value)
+        tensor = torch.nn.functional.pad(
+            tensor, padding, mode="constant", value=pad_value
+        )
         mask[-padding_length:] = 0
     return tensor, mask
 
@@ -249,13 +259,19 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         patch_size = patch_size if patch_size is not None else self.patch_size
-        max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
+        max_num_patches = (
+            max_num_patches if max_num_patches is not None else self.max_num_patches
+        )
 
         image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
@@ -289,9 +305,13 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
                     max_num_patches=max_num_patches,
                 )
                 side_dict = SizeDict(height=height, width=width)
-                image = self.resize(image=image, size=side_dict, interpolation=interpolation)
+                image = self.resize(
+                    image=image, size=side_dict, interpolation=interpolation
+                )
 
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+            image = self.rescale_and_normalize(
+                image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
 
             # (num_channels, height, width) -> (num_patches, patch_size * patch_size * num_channels)
             patches = convert_image_to_patches(image, patch_size)

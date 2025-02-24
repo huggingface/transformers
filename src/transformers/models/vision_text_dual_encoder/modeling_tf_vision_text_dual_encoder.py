@@ -183,22 +183,32 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         text_model: Optional[TFPreTrainedModel] = None,
     ):
         if config is None and (vision_model is None or text_model is None):
-            raise ValueError("Either a configuration or an vision and a text model has to be provided")
+            raise ValueError(
+                "Either a configuration or an vision and a text model has to be provided"
+            )
 
         if config is None:
-            config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config)
+            config = VisionTextDualEncoderConfig.from_vision_text_configs(
+                vision_model.config, text_model.config
+            )
         else:
             if not isinstance(config, self.config_class):
-                raise ValueError(f"config: {config} has to be of type {self.config_class}")
+                raise ValueError(
+                    f"config: {config} has to be of type {self.config_class}"
+                )
 
         # initialize with config
         super().__init__(config)
 
         if vision_model is None:
             if isinstance(config.vision_config, CLIPVisionConfig):
-                vision_model = TFCLIPVisionModel.from_config(config.vision_config, name="vision_model")
+                vision_model = TFCLIPVisionModel.from_config(
+                    config.vision_config, name="vision_model"
+                )
             else:
-                vision_model = TFAutoModel.from_config(config.vision_config, name="vision_model")
+                vision_model = TFAutoModel.from_config(
+                    config.vision_config, name="vision_model"
+                )
 
         if text_model is None:
             text_model = TFAutoModel.from_config(config.text_config, name="text_model")
@@ -215,8 +225,12 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.text_embed_dim = config.text_config.hidden_size
         self.projection_dim = config.projection_dim
 
-        self.visual_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="visual_projection")
-        self.text_projection = keras.layers.Dense(self.projection_dim, use_bias=False, name="text_projection")
+        self.visual_projection = keras.layers.Dense(
+            self.projection_dim, use_bias=False, name="visual_projection"
+        )
+        self.text_projection = keras.layers.Dense(
+            self.projection_dim, use_bias=False, name="text_projection"
+        )
         self.logit_scale = None
         self.config = config
 
@@ -226,7 +240,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         self.built = True
         # Build in the build() method to make sure the names are right
         initializer = keras.initializers.Constant(self.config.logit_scale_init_value)
-        self.logit_scale = self.add_weight(shape=(1,), initializer=initializer, name="logit_scale")
+        self.logit_scale = self.add_weight(
+            shape=(1,), initializer=initializer, name="logit_scale"
+        )
 
         if getattr(self, "visual_projection", None) is not None:
             with tf.name_scope(self.visual_projection.name):
@@ -247,7 +263,13 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             if tf_weight.count("vision_model") == 1:
                 return (re.sub(r"vision_model\..*?\.", "vision_model.", tf_weight),)
             elif tf_weight.count("vision_model") == 2:
-                return (re.sub(r"vision_model\..*?\.vision_model", "vision_model.vision_model", tf_weight),)
+                return (
+                    re.sub(
+                        r"vision_model\..*?\.vision_model",
+                        "vision_model.vision_model",
+                        tf_weight,
+                    ),
+                )
             else:
                 raise ValueError(
                     f"Unexpected weight name {tf_weight}. Please file an issue on the"
@@ -258,7 +280,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         else:
             return (tf_weight,)
 
-    @add_start_docstrings_to_model_forward(VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(
+        VISION_TEXT_DUAL_ENCODER_TEXT_INPUTS_DOCSTRING
+    )
     def get_text_features(
         self,
         input_ids=None,
@@ -300,7 +324,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
         return text_features
 
-    @add_start_docstrings_to_model_forward(VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(
+        VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING
+    )
     def get_image_features(
         self,
         pixel_values=None,
@@ -406,7 +432,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
         >>> probs = tf.nn.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -439,7 +467,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
 
         # cosine similarity as logits
         logit_scale = tf.math.exp(self.logit_scale)
-        logits_per_text = tf.matmul(text_embeds, image_embeds, transpose_b=True) * logit_scale
+        logits_per_text = (
+            tf.matmul(text_embeds, image_embeds, transpose_b=True) * logit_scale
+        )
         logits_per_image = tf.transpose(logits_per_text)
 
         loss = None
@@ -449,7 +479,14 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                 loss = tf.expand_dims(loss, 0)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            output = (
+                logits_per_image,
+                logits_per_text,
+                text_embeds,
+                image_embeds,
+                text_outputs,
+                vision_outputs,
+            )
             return ((loss,) + output) if loss is not None else output
 
         return TFCLIPOutput(
@@ -518,11 +555,15 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         >>> model = TFVisionTextDualEncoderModel.from_pretrained("./vit-bert")
         ```"""
         kwargs_vision = {
-            argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
+            argument[len("vision_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("vision_")
         }
 
         kwargs_text = {
-            argument[len("text_") :]: value for argument, value in kwargs.items() if argument.startswith("text_")
+            argument[len("text_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("text_")
         }
 
         # remove vision, text kwargs from kwargs
@@ -541,7 +582,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             kwargs_vision["name"] = "vision_model"
             kwargs_vision["load_weight_prefix"] = cls.load_weight_prefix
 
-            vision_config_dict, unused_args = PretrainedConfig.get_config_dict(vision_model_name_or_path, **kwargs)
+            vision_config_dict, unused_args = PretrainedConfig.get_config_dict(
+                vision_model_name_or_path, **kwargs
+            )
             if vision_config_dict.get("model_type", None) == "clip_vision_model":
                 vision_config = CLIPVisionConfig.from_dict(vision_config_dict)
             else:
@@ -556,7 +599,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
             else:
                 kwargs_vision["config"] = vision_config
                 vision_class = TFAutoModel
-            vision_model = vision_class.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+            vision_model = vision_class.from_pretrained(
+                vision_model_name_or_path, *model_args, **kwargs_vision
+            )
 
         text_model = kwargs_text.pop("model", None)
         if text_model is None:
@@ -571,10 +616,14 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
                 text_config = AutoConfig.from_pretrained(text_model_name_or_path)
                 kwargs_text["config"] = text_config
 
-            text_model = TFAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
+            text_model = TFAutoModel.from_pretrained(
+                text_model_name_or_path, *model_args, **kwargs_text
+            )
 
         # instantiate config with corresponding kwargs
-        config = VisionTextDualEncoderConfig.from_vision_text_configs(vision_model.config, text_model.config, **kwargs)
+        config = VisionTextDualEncoderConfig.from_vision_text_configs(
+            vision_model.config, text_model.config, **kwargs
+        )
 
         # init model
         model = cls(config=config, vision_model=vision_model, text_model=text_model)
@@ -588,7 +637,9 @@ class TFVisionTextDualEncoderModel(TFPreTrainedModel):
         )
 
         if vision_model.name != "vision_model":
-            raise ValueError("vision model must be created with the name `vision_model`.")
+            raise ValueError(
+                "vision model must be created with the name `vision_model`."
+            )
         if text_model.name != "text_model":
             raise ValueError("text model must be created with the name `text_model`.")
 

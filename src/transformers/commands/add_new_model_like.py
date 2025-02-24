@@ -89,7 +89,9 @@ class ModelPatterns:
         if self.model_type is None:
             self.model_type = self.model_name.lower().replace(" ", "-")
         if self.model_lower_cased is None:
-            self.model_lower_cased = self.model_name.lower().replace(" ", "_").replace("-", "_")
+            self.model_lower_cased = (
+                self.model_name.lower().replace(" ", "_").replace("-", "_")
+            )
         if self.model_camel_cased is None:
             # Split the model name on - and space
             words = self.model_name.split(" ")
@@ -98,7 +100,9 @@ class ModelPatterns:
             words = [w[0].upper() + w[1:] for w in words]
             self.model_camel_cased = "".join(words)
         if self.model_upper_cased is None:
-            self.model_upper_cased = self.model_name.upper().replace(" ", "_").replace("-", "_")
+            self.model_upper_cased = (
+                self.model_name.upper().replace(" ", "_").replace("-", "_")
+            )
         if self.config_class is None:
             self.config_class = f"{self.model_camel_cased}Config"
 
@@ -196,7 +200,12 @@ def extract_block(content: str, indent_level: int = 0) -> str:
     end_markers = [")", "]", "}", '"""']
 
     for idx, line in enumerate(lines):
-        if idx == 0 and indent_level > 0 and not is_empty_line(line) and find_indent(line) != indent_level:
+        if (
+            idx == 0
+            and indent_level > 0
+            and not is_empty_line(line)
+            and find_indent(line) != indent_level
+        ):
             raise ValueError(
                 f"When `indent_level > 0`, the first line in `content` should have indent level {indent_level}. Got "
                 f"{find_indent(line)} instead."
@@ -314,7 +323,11 @@ def add_content_to_file(
         old_content = f.read()
 
     new_content = add_content_to_text(
-        old_content, content, add_after=add_after, add_before=add_before, exact_match=exact_match
+        old_content,
+        content,
+        add_after=add_after,
+        add_before=add_before,
+        exact_match=exact_match,
     )
 
     with open(file_name, "w", encoding="utf-8") as f:
@@ -339,12 +352,23 @@ def replace_model_patterns(
     # contains the camel-cased named, but will be treated before.
     attributes_to_check = ["config_class"]
     # Add relevant preprocessing classes
-    for attr in ["tokenizer_class", "image_processor_class", "feature_extractor_class", "processor_class"]:
-        if getattr(old_model_patterns, attr) is not None and getattr(new_model_patterns, attr) is not None:
+    for attr in [
+        "tokenizer_class",
+        "image_processor_class",
+        "feature_extractor_class",
+        "processor_class",
+    ]:
+        if (
+            getattr(old_model_patterns, attr) is not None
+            and getattr(new_model_patterns, attr) is not None
+        ):
             attributes_to_check.append(attr)
 
     # Special cases for checkpoint and model_type
-    if old_model_patterns.checkpoint not in [old_model_patterns.model_type, old_model_patterns.model_lower_cased]:
+    if old_model_patterns.checkpoint not in [
+        old_model_patterns.model_type,
+        old_model_patterns.model_lower_cased,
+    ]:
         attributes_to_check.append("checkpoint")
     if old_model_patterns.model_type != old_model_patterns.model_lower_cased:
         attributes_to_check.append("model_type")
@@ -360,7 +384,11 @@ def replace_model_patterns(
     if old_model_patterns.model_upper_cased == old_model_patterns.model_camel_cased:
         old_model_value = old_model_patterns.model_upper_cased
         if re.search(rf"{old_model_value}_[A-Z_]*[^A-Z_]", text) is not None:
-            text = re.sub(rf"{old_model_value}([A-Z_]*)([^a-zA-Z_])", r"[MODEL_UPPER_CASED]\1\2", text)
+            text = re.sub(
+                rf"{old_model_value}([A-Z_]*)([^a-zA-Z_])",
+                r"[MODEL_UPPER_CASED]\1\2",
+                text,
+            )
     else:
         attributes_to_check.append("model_upper_cased")
 
@@ -368,13 +396,17 @@ def replace_model_patterns(
 
     # Now let's replace every other attribute by their placeholder
     for attr in attributes_to_check:
-        text = text.replace(getattr(old_model_patterns, attr), ATTRIBUTE_TO_PLACEHOLDER[attr])
+        text = text.replace(
+            getattr(old_model_patterns, attr), ATTRIBUTE_TO_PLACEHOLDER[attr]
+        )
 
     # Finally we can replace the placeholder byt the new values.
     replacements = []
     for attr, placeholder in ATTRIBUTE_TO_PLACEHOLDER.items():
         if placeholder in text:
-            replacements.append((getattr(old_model_patterns, attr), getattr(new_model_patterns, attr)))
+            replacements.append(
+                (getattr(old_model_patterns, attr), getattr(new_model_patterns, attr))
+            )
             text = text.replace(placeholder, getattr(new_model_patterns, attr))
 
     # If we have two inconsistent replacements, we don't return anything (ex: GPT2->GPT_NEW and GPT2->GPTNew)
@@ -451,7 +483,9 @@ SPECIAL_PATTERNS = {
 }
 
 
-_re_class_func = re.compile(r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE)
+_re_class_func = re.compile(
+    r"^(?:class|def)\s+([^\s:\(]+)\s*(?:\(|\:)", flags=re.MULTILINE
+)
 
 
 def remove_attributes(obj, target_attr):
@@ -484,7 +518,9 @@ def remove_attributes(obj, target_attr):
     # backward pass to find comments or decorator
     for idx in range(target_idx - 1, -1, -1):
         line = lines[idx]
-        if (line.lstrip().startswith("#") or line.lstrip().startswith("@")) and find_indent(line) == indent_level:
+        if (
+            line.lstrip().startswith("#") or line.lstrip().startswith("@")
+        ) and find_indent(line) == indent_level:
             lines[idx] = None
         else:
             break
@@ -530,7 +566,9 @@ def duplicate_module(
         special_pattern = False
         for pattern, attr in SPECIAL_PATTERNS.items():
             if pattern in obj:
-                obj = obj.replace(getattr(old_model_patterns, attr), getattr(new_model_patterns, attr))
+                obj = obj.replace(
+                    getattr(old_model_patterns, attr), getattr(new_model_patterns, attr)
+                )
                 new_objects.append(obj)
                 special_pattern = True
                 break
@@ -540,15 +578,26 @@ def duplicate_module(
 
         # Regular classes functions
         old_obj = obj
-        obj, replacement = replace_model_patterns(obj, old_model_patterns, new_model_patterns)
-        has_copied_from = re.search(r"^#\s+Copied from", obj, flags=re.MULTILINE) is not None
-        if add_copied_from and not has_copied_from and _re_class_func.search(obj) is not None and len(replacement) > 0:
+        obj, replacement = replace_model_patterns(
+            obj, old_model_patterns, new_model_patterns
+        )
+        has_copied_from = (
+            re.search(r"^#\s+Copied from", obj, flags=re.MULTILINE) is not None
+        )
+        if (
+            add_copied_from
+            and not has_copied_from
+            and _re_class_func.search(obj) is not None
+            and len(replacement) > 0
+        ):
             # Copied from statement must be added just before the class/function definition, which may not be the
             # first line because of decorators.
             module_name = get_module_from_file(module_file)
             old_object_name = _re_class_func.search(old_obj).groups()[0]
             obj = add_content_to_text(
-                obj, f"# Copied from {module_name}.{old_object_name} with {replacement}", add_before=_re_class_func
+                obj,
+                f"# Copied from {module_name}.{old_object_name} with {replacement}",
+                add_before=_re_class_func,
             )
         # In all cases, we remove Copied from statement with indent on methods.
         obj = re.sub("\n[ ]+# Copied from [^\n]*\n", "\n", obj)
@@ -598,7 +647,9 @@ def filter_framework_files(
     return [framework_to_file[f] for f in frameworks if f in framework_to_file] + others
 
 
-def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, Union[Path, List[Path]]]:
+def get_model_files(
+    model_type: str, frameworks: Optional[List[str]] = None
+) -> Dict[str, Union[Path, List[Path]]]:
     """
     Retrieves all the files associated to a model.
 
@@ -637,10 +688,17 @@ def get_model_files(model_type: str, frameworks: Optional[List[str]] = None) -> 
     # Filter by existing files
     test_files = [f for f in test_files if f.exists()]
 
-    return {"doc_file": doc_file, "model_files": model_files, "module_name": module_name, "test_files": test_files}
+    return {
+        "doc_file": doc_file,
+        "model_files": model_files,
+        "module_name": module_name,
+        "test_files": test_files,
+    }
 
 
-_re_checkpoint_for_doc = re.compile(r"^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE)
+_re_checkpoint_for_doc = re.compile(
+    r"^_CHECKPOINT_FOR_DOC\s+=\s+(\S*)\s*$", flags=re.MULTILINE
+)
 
 
 def find_base_model_checkpoint(
@@ -694,7 +752,9 @@ def get_default_frameworks():
 _re_model_mapping = re.compile("MODEL_([A-Z_]*)MAPPING_NAMES")
 
 
-def retrieve_model_classes(model_type: str, frameworks: Optional[List[str]] = None) -> Dict[str, List[str]]:
+def retrieve_model_classes(
+    model_type: str, frameworks: Optional[List[str]] = None
+) -> Dict[str, List[str]]:
     """
     Retrieve the model classes associated to a given model.
 
@@ -721,8 +781,14 @@ def retrieve_model_classes(model_type: str, frameworks: Optional[List[str]] = No
     for framework in frameworks:
         new_model_classes = []
         if modules[framework] is None:
-            raise ValueError(f"You selected {framework} in the frameworks, but it is not installed.")
-        model_mappings = [attr for attr in dir(modules[framework]) if _re_model_mapping.search(attr) is not None]
+            raise ValueError(
+                f"You selected {framework} in the frameworks, but it is not installed."
+            )
+        model_mappings = [
+            attr
+            for attr in dir(modules[framework])
+            if _re_model_mapping.search(attr) is not None
+        ]
         for model_mapping_name in model_mappings:
             model_mapping = getattr(modules[framework], model_mapping_name)
             if model_type in model_mapping:
@@ -757,18 +823,36 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
     model_name = auto_module.MODEL_NAMES_MAPPING[model_type]
     config_class = auto_module.configuration_auto.CONFIG_MAPPING_NAMES[model_type]
     if model_type in auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES:
-        tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[model_type]
-        tokenizer_class = tokenizer_classes[0] if tokenizer_classes[0] is not None else tokenizer_classes[1]
+        tokenizer_classes = auto_module.tokenization_auto.TOKENIZER_MAPPING_NAMES[
+            model_type
+        ]
+        tokenizer_class = (
+            tokenizer_classes[0]
+            if tokenizer_classes[0] is not None
+            else tokenizer_classes[1]
+        )
     else:
         tokenizer_class = None
-    image_processor_classes = auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(model_type, None)
+    image_processor_classes = (
+        auto_module.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES.get(
+            model_type, None
+        )
+    )
     if isinstance(image_processor_classes, tuple):
-        image_processor_class = image_processor_classes[0]  # we take the slow image processor class.
+        image_processor_class = image_processor_classes[
+            0
+        ]  # we take the slow image processor class.
     else:
         image_processor_class = image_processor_classes
 
-    feature_extractor_class = auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(model_type, None)
-    processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(model_type, None)
+    feature_extractor_class = (
+        auto_module.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES.get(
+            model_type, None
+        )
+    )
+    processor_class = auto_module.processing_auto.PROCESSOR_MAPPING_NAMES.get(
+        model_type, None
+    )
 
     model_files = get_model_files(model_type, frameworks=frameworks)
     model_camel_cased = config_class.replace("Config", "")
@@ -813,7 +897,9 @@ def retrieve_info_for_model(model_type, frameworks: Optional[List[str]] = None):
 
 
 def clean_frameworks_in_init(
-    init_file: Union[str, os.PathLike], frameworks: Optional[List[str]] = None, keep_processing: bool = True
+    init_file: Union[str, os.PathLike],
+    frameworks: Optional[List[str]] = None,
+    keep_processing: bool = True,
 ):
     """
     Removes all the import lines that don't belong to a given list of frameworks or concern tokenizers/feature
@@ -840,7 +926,9 @@ def clean_frameworks_in_init(
         return
 
     remove_pattern = "|".join(to_remove)
-    re_conditional_imports = re.compile(rf"^\s*if not is_({remove_pattern})_available\(\):\s*$")
+    re_conditional_imports = re.compile(
+        rf"^\s*if not is_({remove_pattern})_available\(\):\s*$"
+    )
     re_try = re.compile(r"\s*try:")
     re_else = re.compile(r"\s*else:")
     re_is_xxx_available = re.compile(rf"is_({remove_pattern})_available")
@@ -853,7 +941,9 @@ def clean_frameworks_in_init(
     idx = 0
     while idx < len(lines):
         # Conditional imports in try-except-else blocks
-        if (re_conditional_imports.search(lines[idx]) is not None) and (re_try.search(lines[idx - 1]) is not None):
+        if (re_conditional_imports.search(lines[idx]) is not None) and (
+            re_try.search(lines[idx - 1]) is not None
+        ):
             # Remove the preceding `try:`
             new_lines.pop()
             idx += 1
@@ -878,8 +968,15 @@ def clean_frameworks_in_init(
             idx += 1
         # Otherwise we keep the line, except if it's a tokenizer import and we don't want to keep it.
         elif keep_processing or (
-            re.search(r'^\s*"(tokenization|processing|feature_extraction|image_processing)', lines[idx]) is None
-            and re.search(r"^\s*from .(tokenization|processing|feature_extraction|image_processing)", lines[idx])
+            re.search(
+                r'^\s*"(tokenization|processing|feature_extraction|image_processing)',
+                lines[idx],
+            )
+            is None
+            and re.search(
+                r"^\s*from .(tokenization|processing|feature_extraction|image_processing)",
+                lines[idx],
+            )
             is None
         ):
             new_lines.append(lines[idx])
@@ -936,10 +1033,19 @@ def add_model_to_main_init(
                 idx += 1
 
         # Skip if we are in a framework not wanted.
-        if framework is not None and frameworks is not None and framework not in frameworks:
+        if (
+            framework is not None
+            and frameworks is not None
+            and framework not in frameworks
+        ):
             new_lines.append(lines[idx])
             idx += 1
-        elif re.search(rf'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]) is not None:
+        elif (
+            re.search(
+                rf'models.{old_model_patterns.model_lower_cased}( |")', lines[idx]
+            )
+            is not None
+        ):
             block = [lines[idx]]
             indent = find_indent(lines[idx])
             idx += 1
@@ -971,7 +1077,11 @@ def add_model_to_main_init(
                     if processing_class in block:
                         add_block = False
             if add_block:
-                new_lines.append(replace_model_patterns(block, old_model_patterns, new_model_patterns)[0])
+                new_lines.append(
+                    replace_model_patterns(
+                        block, old_model_patterns, new_model_patterns
+                    )[0]
+                )
         else:
             new_lines.append(lines[idx])
             idx += 1
@@ -980,7 +1090,9 @@ def add_model_to_main_init(
         f.write("\n".join(new_lines))
 
 
-def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns):
+def insert_tokenizer_in_auto_module(
+    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns
+):
     """
     Add a tokenizer to the relevant mappings in the auto module.
 
@@ -988,10 +1100,17 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
         old_model_patterns (`ModelPatterns`): The patterns for the old model.
         new_model_patterns (`ModelPatterns`): The patterns for the new model.
     """
-    if old_model_patterns.tokenizer_class is None or new_model_patterns.tokenizer_class is None:
+    if (
+        old_model_patterns.tokenizer_class is None
+        or new_model_patterns.tokenizer_class is None
+    ):
         return
 
-    with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "r", encoding="utf-8") as f:
+    with open(
+        TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py",
+        "r",
+        encoding="utf-8",
+    ) as f:
         content = f.read()
 
     lines = content.split("\n")
@@ -1016,14 +1135,25 @@ def insert_tokenizer_in_auto_module(old_model_patterns: ModelPatterns, new_model
         idx += 1
 
         # If we find the model type and tokenizer class in that block, we have the old model tokenizer block
-        if f'"{old_model_patterns.model_type}"' in block and old_model_patterns.tokenizer_class in block:
+        if (
+            f'"{old_model_patterns.model_type}"' in block
+            and old_model_patterns.tokenizer_class in block
+        ):
             break
 
-    new_block = block.replace(old_model_patterns.model_type, new_model_patterns.model_type)
-    new_block = new_block.replace(old_model_patterns.tokenizer_class, new_model_patterns.tokenizer_class)
+    new_block = block.replace(
+        old_model_patterns.model_type, new_model_patterns.model_type
+    )
+    new_block = new_block.replace(
+        old_model_patterns.tokenizer_class, new_model_patterns.tokenizer_class
+    )
 
     new_lines = lines[:idx] + [new_block] + lines[idx:]
-    with open(TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py", "w", encoding="utf-8") as f:
+    with open(
+        TRANSFORMERS_PATH / "models" / "auto" / "tokenization_auto.py",
+        "w",
+        encoding="utf-8",
+    ) as f:
         f.write("\n".join(new_lines))
 
 
@@ -1033,8 +1163,12 @@ AUTO_CLASSES_PATTERNS = {
         '        ("{model_type}", "{config_class}"),',
         '        ("{model_type}", "{pretrained_archive_map}"),',
     ],
-    "feature_extraction_auto.py": ['        ("{model_type}", "{feature_extractor_class}"),'],
-    "image_processing_auto.py": ['        ("{model_type}", "{image_processor_class}"),'],
+    "feature_extraction_auto.py": [
+        '        ("{model_type}", "{feature_extractor_class}"),'
+    ],
+    "image_processing_auto.py": [
+        '        ("{model_type}", "{image_processor_class}"),'
+    ],
     "modeling_auto.py": ['        ("{model_type}", "{any_pt_class}"),'],
     "modeling_tf_auto.py": ['        ("{model_type}", "{any_tf_class}"),'],
     "modeling_flax_auto.py": ['        ("{model_type}", "{any_flax_class}"),'],
@@ -1043,7 +1177,9 @@ AUTO_CLASSES_PATTERNS = {
 
 
 def add_model_to_auto_classes(
-    old_model_patterns: ModelPatterns, new_model_patterns: ModelPatterns, model_classes: Dict[str, List[str]]
+    old_model_patterns: ModelPatterns,
+    new_model_patterns: ModelPatterns,
+    model_classes: Dict[str, List[str]],
 ):
     """
     Add a model to the relevant mappings in the auto module.
@@ -1067,14 +1203,19 @@ def add_model_to_auto_classes(
                         ]
                     )
             elif "{config_class}" in pattern:
-                new_patterns.append(pattern.replace("{config_class}", old_model_patterns.config_class))
+                new_patterns.append(
+                    pattern.replace("{config_class}", old_model_patterns.config_class)
+                )
             elif "{image_processor_class}" in pattern:
                 if (
                     old_model_patterns.image_processor_class is not None
                     and new_model_patterns.image_processor_class is not None
                 ):
                     new_patterns.append(
-                        pattern.replace("{image_processor_class}", old_model_patterns.image_processor_class)
+                        pattern.replace(
+                            "{image_processor_class}",
+                            old_model_patterns.image_processor_class,
+                        )
                     )
             elif "{feature_extractor_class}" in pattern:
                 if (
@@ -1082,11 +1223,21 @@ def add_model_to_auto_classes(
                     and new_model_patterns.feature_extractor_class is not None
                 ):
                     new_patterns.append(
-                        pattern.replace("{feature_extractor_class}", old_model_patterns.feature_extractor_class)
+                        pattern.replace(
+                            "{feature_extractor_class}",
+                            old_model_patterns.feature_extractor_class,
+                        )
                     )
             elif "{processor_class}" in pattern:
-                if old_model_patterns.processor_class is not None and new_model_patterns.processor_class is not None:
-                    new_patterns.append(pattern.replace("{processor_class}", old_model_patterns.processor_class))
+                if (
+                    old_model_patterns.processor_class is not None
+                    and new_model_patterns.processor_class is not None
+                ):
+                    new_patterns.append(
+                        pattern.replace(
+                            "{processor_class}", old_model_patterns.processor_class
+                        )
+                    )
             else:
                 new_patterns.append(pattern)
 
@@ -1096,10 +1247,15 @@ def add_model_to_auto_classes(
             old_model_line = pattern
             new_model_line = pattern
             for attr in ["model_type", "model_name"]:
-                old_model_line = old_model_line.replace("{" + attr + "}", getattr(old_model_patterns, attr))
-                new_model_line = new_model_line.replace("{" + attr + "}", getattr(new_model_patterns, attr))
+                old_model_line = old_model_line.replace(
+                    "{" + attr + "}", getattr(old_model_patterns, attr)
+                )
+                new_model_line = new_model_line.replace(
+                    "{" + attr + "}", getattr(new_model_patterns, attr)
+                )
             new_model_line = new_model_line.replace(
-                old_model_patterns.model_camel_cased, new_model_patterns.model_camel_cased
+                old_model_patterns.model_camel_cased,
+                new_model_patterns.model_camel_cased,
             )
 
             add_content_to_file(full_name, new_model_line, add_after=old_model_line)
@@ -1149,7 +1305,9 @@ def duplicate_doc_file(
     with open(doc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
-    content = re.sub(r"<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content)
+    content = re.sub(
+        r"<!--\s*Copyright (\d+)\s", f"<!--Copyright {CURRENT_YEAR} ", content
+    )
     if frameworks is None:
         frameworks = get_default_frameworks()
     if dest_file is None:
@@ -1180,31 +1338,49 @@ def duplicate_doc_file(
         # The config starts the part of the doc with the classes.
         elif not in_classes and old_model_patterns.config_class in block.split("\n")[0]:
             in_classes = True
-            new_blocks.append(DOC_OVERVIEW_TEMPLATE.format(model_name=new_model_patterns.model_name))
-            new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
+            new_blocks.append(
+                DOC_OVERVIEW_TEMPLATE.format(model_name=new_model_patterns.model_name)
+            )
+            new_block, _ = replace_model_patterns(
+                block, old_model_patterns, new_model_patterns
+            )
             new_blocks.append(new_block)
         # In classes
         elif in_classes:
             in_classes = True
             block_title = block.split("\n")[0]
             block_class = re.search(r"^#+\s+(\S.*)$", block_title).groups()[0]
-            new_block, _ = replace_model_patterns(block, old_model_patterns, new_model_patterns)
+            new_block, _ = replace_model_patterns(
+                block, old_model_patterns, new_model_patterns
+            )
 
             if "Tokenizer" in block_class:
                 # We only add the tokenizer if necessary
-                if old_model_patterns.tokenizer_class != new_model_patterns.tokenizer_class:
+                if (
+                    old_model_patterns.tokenizer_class
+                    != new_model_patterns.tokenizer_class
+                ):
                     new_blocks.append(new_block)
             elif "ImageProcessor" in block_class:
                 # We only add the image processor if necessary
-                if old_model_patterns.image_processor_class != new_model_patterns.image_processor_class:
+                if (
+                    old_model_patterns.image_processor_class
+                    != new_model_patterns.image_processor_class
+                ):
                     new_blocks.append(new_block)
             elif "FeatureExtractor" in block_class:
                 # We only add the feature extractor if necessary
-                if old_model_patterns.feature_extractor_class != new_model_patterns.feature_extractor_class:
+                if (
+                    old_model_patterns.feature_extractor_class
+                    != new_model_patterns.feature_extractor_class
+                ):
                     new_blocks.append(new_block)
             elif "Processor" in block_class:
                 # We only add the processor if necessary
-                if old_model_patterns.processor_class != new_model_patterns.processor_class:
+                if (
+                    old_model_patterns.processor_class
+                    != new_model_patterns.processor_class
+                ):
                     new_blocks.append(new_block)
             elif block_class.startswith("Flax"):
                 # We only add Flax models if in the selected frameworks
@@ -1261,13 +1437,20 @@ def insert_model_in_doc_toc(old_model_patterns, new_model_patterns):
     if section_idx == len(model_doc):
         old_model = old_model_patterns.model_name
         new_model = new_model_patterns.model_name
-        print(f"Did not find {old_model} in the table of content, so you will need to add {new_model} manually.")
+        print(
+            f"Did not find {old_model} in the table of content, so you will need to add {new_model} manually."
+        )
         return
 
     # Add the new model in the same toc
-    toc_entry = {"local": f"model_doc/{new_model_patterns.model_type}", "title": new_model_patterns.model_name}
+    toc_entry = {
+        "local": f"model_doc/{new_model_patterns.model_type}",
+        "title": new_model_patterns.model_name,
+    }
     model_doc[section_idx]["sections"].append(toc_entry)
-    model_doc[section_idx]["sections"] = sorted(model_doc[section_idx]["sections"], key=lambda s: s["title"].lower())
+    model_doc[section_idx]["sections"] = sorted(
+        model_doc[section_idx]["sections"], key=lambda s: s["title"].lower()
+    )
     api_doc[model_idx]["sections"] = model_doc
     content[api_idx]["sections"] = api_doc
 
@@ -1309,8 +1492,15 @@ def create_new_model_like(
         )
 
     keep_old_processing = True
-    for processing_attr in ["image_processor_class", "feature_extractor_class", "processor_class", "tokenizer_class"]:
-        if getattr(old_model_patterns, processing_attr) != getattr(new_model_patterns, processing_attr):
+    for processing_attr in [
+        "image_processor_class",
+        "feature_extractor_class",
+        "processor_class",
+        "tokenizer_class",
+    ]:
+        if getattr(old_model_patterns, processing_attr) != getattr(
+            new_model_patterns, processing_attr
+        ):
             keep_old_processing = False
 
     model_classes = model_info["model_classes"]
@@ -1346,7 +1536,9 @@ def create_new_model_like(
         )
 
     clean_frameworks_in_init(
-        module_folder / "__init__.py", frameworks=frameworks, keep_processing=not keep_old_processing
+        module_folder / "__init__.py",
+        frameworks=frameworks,
+        keep_processing=not keep_old_processing,
     )
 
     # 2. We add our new model to the models init and the main init
@@ -1357,7 +1549,10 @@ def create_new_model_like(
         exact_match=True,
     )
     add_model_to_main_init(
-        old_model_patterns, new_model_patterns, frameworks=frameworks, with_processing=not keep_old_processing
+        old_model_patterns,
+        new_model_patterns,
+        frameworks=frameworks,
+        with_processing=not keep_old_processing,
     )
 
     # 3. Add test files
@@ -1375,7 +1570,9 @@ def create_new_model_like(
     def disable_fx_test(filename: Path) -> bool:
         with open(filename) as fp:
             content = fp.read()
-        new_content = re.sub(r"fx_compatible\s*=\s*True", "fx_compatible = False", content)
+        new_content = re.sub(
+            r"fx_compatible\s*=\s*True", "fx_compatible = False", content
+        )
         with open(filename, "w") as fp:
             fp.write(new_content)
         return content != new_content
@@ -1391,7 +1588,11 @@ def create_new_model_like(
         new_test_file_name = test_file.name.replace(
             old_model_patterns.model_lower_cased, new_model_patterns.model_lower_cased
         )
-        dest_file = test_file.parent.parent / new_model_patterns.model_lower_cased / new_test_file_name
+        dest_file = (
+            test_file.parent.parent
+            / new_model_patterns.model_lower_cased
+            / new_test_file_name
+        )
         duplicate_module(
             test_file,
             old_model_patterns,
@@ -1412,8 +1613,17 @@ def create_new_model_like(
     add_model_to_auto_classes(old_model_patterns, new_model_patterns, model_classes)
 
     # 5. Add doc file
-    doc_file = REPO_PATH / "docs" / "source" / "en" / "model_doc" / f"{old_model_patterns.model_type}.md"
-    duplicate_doc_file(doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks)
+    doc_file = (
+        REPO_PATH
+        / "docs"
+        / "source"
+        / "en"
+        / "model_doc"
+        / f"{old_model_patterns.model_type}.md"
+    )
+    duplicate_doc_file(
+        doc_file, old_model_patterns, new_model_patterns, frameworks=frameworks
+    )
     insert_model_in_doc_toc(old_model_patterns, new_model_patterns)
 
     # 6. Warn the user for duplicate patterns
@@ -1453,7 +1663,9 @@ def create_new_model_like(
 
 
 def add_new_model_like_command_factory(args: Namespace):
-    return AddNewModelLikeCommand(config_file=args.config_file, path_to_repo=args.path_to_repo)
+    return AddNewModelLikeCommand(
+        config_file=args.config_file, path_to_repo=args.path_to_repo
+    )
 
 
 class AddNewModelLikeCommand(BaseTransformersCLICommand):
@@ -1461,10 +1673,14 @@ class AddNewModelLikeCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         add_new_model_like_parser = parser.add_parser("add-new-model-like")
         add_new_model_like_parser.add_argument(
-            "--config_file", type=str, help="A file with all the information for this model creation."
+            "--config_file",
+            type=str,
+            help="A file with all the information for this model creation.",
         )
         add_new_model_like_parser.add_argument(
-            "--path_to_repo", type=str, help="When not using an editable install, the path to the Transformers repo."
+            "--path_to_repo",
+            type=str,
+            help="When not using an editable install, the path to the Transformers repo.",
         )
         add_new_model_like_parser.set_defaults(func=add_new_model_like_command_factory)
 
@@ -1594,7 +1810,9 @@ def get_user_input():
     old_model_info = retrieve_info_for_model(old_model_type)
     old_tokenizer_class = old_model_info["model_patterns"].tokenizer_class
     old_image_processor_class = old_model_info["model_patterns"].image_processor_class
-    old_feature_extractor_class = old_model_info["model_patterns"].feature_extractor_class
+    old_feature_extractor_class = old_model_info[
+        "model_patterns"
+    ].feature_extractor_class
     old_processor_class = old_model_info["model_patterns"].processor_class
     old_frameworks = old_model_info["frameworks"]
 
@@ -1626,7 +1844,8 @@ def get_user_input():
         default_value=default_patterns.model_upper_cased,
     )
     config_class = get_user_field(
-        "What will be the name of the config class for this model? ", default_value=f"{model_camel_cased}Config"
+        "What will be the name of the config class for this model? ",
+        default_value=f"{model_camel_cased}Config",
     )
     checkpoint = get_user_field(
         "Please give a checkpoint identifier (on the model Hub) for this new model (e.g. facebook/FacebookAI/roberta-base): "
@@ -1634,7 +1853,12 @@ def get_user_input():
 
     old_processing_classes = [
         c if not isinstance(c, tuple) else c[0]
-        for c in [old_image_processor_class, old_feature_extractor_class, old_tokenizer_class, old_processor_class]
+        for c in [
+            old_image_processor_class,
+            old_feature_extractor_class,
+            old_tokenizer_class,
+            old_processor_class,
+        ]
         if c is not None
     ]
     old_processing_classes = ", ".join(old_processing_classes)
@@ -1711,7 +1935,9 @@ def get_user_input():
     else:
         frameworks = get_user_field(
             "Please enter the list of framworks you want (pt, tf, flax) separated by spaces",
-            is_valid_answer=lambda x: all(p in ["pt", "tf", "flax"] for p in x.split(" ")),
+            is_valid_answer=lambda x: all(
+                p in ["pt", "tf", "flax"] for p in x.split(" ")
+            ),
         )
         frameworks = list(set(frameworks.split(" ")))
 

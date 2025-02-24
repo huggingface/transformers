@@ -28,7 +28,11 @@ from .tokenization_led import LEDTokenizer
 logger = logging.get_logger(__name__)
 
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer.json",
+}
 
 
 class LEDTokenizerFast(PreTrainedTokenizerFast):
@@ -159,7 +163,9 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
 
         # the pre_tokenizer is already updated in the GPT2TokenizerFast `__init__`
         tokenizer_component = "post_processor"
-        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
+        tokenizer_component_instance = getattr(
+            self.backend_tokenizer, tokenizer_component, None
+        )
         if tokenizer_component_instance:
             state = json.loads(tokenizer_component_instance.__getstate__())
 
@@ -209,7 +215,11 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         """
         # Mask token behave like a normal word, i.e. include the space before it
         # So we set lstrip to True
-        value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
+        value = (
+            AddedToken(value, lstrip=True, rstrip=False)
+            if isinstance(value, str)
+            else value
+        )
         self._mask_token = value
 
     # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast._batch_encode_plus
@@ -237,7 +247,9 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
@@ -299,10 +311,14 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         if return_attention_mask and "global_attention_mask" in encoded_inputs:
             required_input = encoded_inputs[self.model_input_names[0]]
             # `global_attention_mask` need to have the same length as other (sequential) inputs.
-            needs_to_be_padded = len(encoded_inputs["global_attention_mask"]) != len(required_input)
+            needs_to_be_padded = len(encoded_inputs["global_attention_mask"]) != len(
+                required_input
+            )
 
             if needs_to_be_padded:
-                difference = len(required_input) - len(encoded_inputs["global_attention_mask"])
+                difference = len(required_input) - len(
+                    encoded_inputs["global_attention_mask"]
+                )
 
                 if self.padding_side == "right":
                     # Use `-1` since `0` in `global_attention_mask` means `local attention` instead of `not to attend`
@@ -310,11 +326,13 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
                         encoded_inputs["global_attention_mask"] + [-1] * difference
                     )
                 elif self.padding_side == "left":
-                    encoded_inputs["global_attention_mask"] = [-1] * difference + encoded_inputs[
-                        "global_attention_mask"
-                    ]
+                    encoded_inputs["global_attention_mask"] = [
+                        -1
+                    ] * difference + encoded_inputs["global_attention_mask"]
                 else:
-                    raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+                    raise ValueError(
+                        "Invalid padding strategy:" + str(self.padding_side)
+                    )
 
         return encoded_inputs
 

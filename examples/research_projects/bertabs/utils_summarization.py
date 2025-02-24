@@ -68,7 +68,9 @@ def process_story(raw_story):
     Raises:
         IndexError: If the story is empty or contains no highlights.
     """
-    nonempty_lines = list(filter(lambda x: len(x) != 0, [line.strip() for line in raw_story.split("\n")]))
+    nonempty_lines = list(
+        filter(lambda x: len(x) != 0, [line.strip() for line in raw_story.split("\n")])
+    )
 
     # for some unknown reason some lines miss a period, add it
     nonempty_lines = [_add_missing_period(line) for line in nonempty_lines]
@@ -133,9 +135,13 @@ def encode_for_summarization(story_lines, summary_lines, tokenizer):
     sentences.
     """
     story_lines_token_ids = [tokenizer.encode(line) for line in story_lines]
-    story_token_ids = [token for sentence in story_lines_token_ids for token in sentence]
+    story_token_ids = [
+        token for sentence in story_lines_token_ids for token in sentence
+    ]
     summary_lines_token_ids = [tokenizer.encode(line) for line in summary_lines]
-    summary_token_ids = [token for sentence in summary_lines_token_ids for token in sentence]
+    summary_token_ids = [
+        token for sentence in summary_lines_token_ids for token in sentence
+    ]
 
     return story_token_ids, summary_token_ids
 

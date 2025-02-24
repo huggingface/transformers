@@ -43,11 +43,15 @@ class STModelArguments:
     """Arguments pertaining to which config/tokenizer/model we are going to fine-tune from."""
 
     model_name_or_path: str = dataclasses.field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models."}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models."
+        }
     )
     cache_dir: Optional[str] = dataclasses.field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co."},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co."
+        },
     )
 
 
@@ -55,10 +59,15 @@ class STModelArguments:
 class STDataArguments:
     """Arguments pertaining to what data we are going to input our model for training and evaluation."""
 
-    train_file: str = dataclasses.field(metadata={"help": "A csv or a json file containing the training data."})
-    infer_file: str = dataclasses.field(metadata={"help": "A csv or a json file containing the data to predict on."})
+    train_file: str = dataclasses.field(
+        metadata={"help": "A csv or a json file containing the training data."}
+    )
+    infer_file: str = dataclasses.field(
+        metadata={"help": "A csv or a json file containing the data to predict on."}
+    )
     eval_file: Optional[str] = dataclasses.field(
-        default=None, metadata={"help": "A csv or a json file containing the validation data."}
+        default=None,
+        metadata={"help": "A csv or a json file containing the validation data."},
     )
     task_name: Optional[str] = dataclasses.field(
         default=None,
@@ -74,10 +83,13 @@ class STTrainingArguments:
     """Training arguments pertaining to the training loop itself."""
 
     output_dir: str = dataclasses.field(
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written."}
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written."
+        }
     )
     eval_metric: Optional[str] = dataclasses.field(
-        default="accuracy", metadata={"help": "The evaluation metric used for the task."}
+        default="accuracy",
+        metadata={"help": "The evaluation metric used for the task."},
     )
     eval_strategy: Optional[str] = dataclasses.field(
         default="no",
@@ -87,7 +99,9 @@ class STTrainingArguments:
     )
     early_stopping_patience: Optional[int] = dataclasses.field(
         default=10,
-        metadata={"help": "Number of evaluation calls with no improvement after which training will be stopped."},
+        metadata={
+            "help": "Number of evaluation calls with no improvement after which training will be stopped."
+        },
     )
     early_stopping_threshold: Optional[float] = dataclasses.field(
         default=0.0,
@@ -97,15 +111,21 @@ class STTrainingArguments:
     )
     do_filter_by_confidence: Optional[bool] = dataclasses.field(
         default=False,
-        metadata={"help": "Whether to filter the pseudo-labeled data based on the confidence score."},
+        metadata={
+            "help": "Whether to filter the pseudo-labeled data based on the confidence score."
+        },
     )
     do_filter_by_val_performance: Optional[bool] = dataclasses.field(
         default=False,
-        metadata={"help": "Whether to filter the pseudo-labeled data based on the validation performance."},
+        metadata={
+            "help": "Whether to filter the pseudo-labeled data based on the validation performance."
+        },
     )
     finetune_on_labeled_data: Optional[bool] = dataclasses.field(
         default=False,
-        metadata={"help": "Whether to fine-tune on labeled data after pseudo training."},
+        metadata={
+            "help": "Whether to fine-tune on labeled data after pseudo training."
+        },
     )
     confidence_threshold: Optional[float] = dataclasses.field(
         default=0.0,
@@ -113,7 +133,9 @@ class STTrainingArguments:
     )
     max_selftrain_iterations: Optional[int] = dataclasses.field(
         default=100,
-        metadata={"help": "Number of evaluation calls with no improvement after which training will be stopped."},
+        metadata={
+            "help": "Number of evaluation calls with no improvement after which training will be stopped."
+        },
     )
     seed: Optional[int] = dataclasses.field(
         default=None,
@@ -121,13 +143,17 @@ class STTrainingArguments:
     )
 
 
-def create_pseudo_labeled_data(args, infer_input, infer_output, eval_result, id2label, next_data_dir):
+def create_pseudo_labeled_data(
+    args, infer_input, infer_output, eval_result, id2label, next_data_dir
+):
     """Create pseudeo labeled data for the next self-training iteration."""
 
     dataset = datasets.concatenate_datasets([infer_input, infer_output], axis=1)
 
     if args.do_filter_by_confidence:
-        dataset = dataset.filter(lambda example: example["probability"] > args.confidence_threshold)
+        dataset = dataset.filter(
+            lambda example: example["probability"] > args.confidence_threshold
+        )
 
     if args.do_filter_by_val_performance:
         assert eval_result >= 0.0 and eval_result <= 1.0
@@ -141,7 +167,9 @@ def create_pseudo_labeled_data(args, infer_input, infer_output, eval_result, id2
     dataset = dataset.map(lambda example: {"label": id2label[example["label"]]})
     dataset = dataset.shuffle(seed=args.seed)
 
-    pseudo_labeled_data_file = os.path.join(next_data_dir, f"train_pseudo.{args.data_file_extension}")
+    pseudo_labeled_data_file = os.path.join(
+        next_data_dir, f"train_pseudo.{args.data_file_extension}"
+    )
     if args.data_file_extension == "csv":
         dataset.to_csv(pseudo_labeled_data_file, index=False)
     else:
@@ -176,7 +204,9 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
     # Setup logging, we only want one process per machine to log things on the
     # screen. accelerator.is_local_main_process is only True for one process per
     # machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.setLevel(
+        logging.INFO if accelerator.is_local_main_process else logging.ERROR
+    )
 
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
@@ -214,11 +244,16 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
 
     for key in data_files:
         extension = data_files[key].split(".")[-1]
-        assert extension in ["csv", "json"], f"`{key}_file` should be a csv or a json file."
+        assert extension in [
+            "csv",
+            "json",
+        ], f"`{key}_file` should be a csv or a json file."
         if args.data_file_extension is None:
             args.data_file_extension = extension
         else:
-            assert extension == args.data_file_extension, f"`{key}_file` should be a {args.data_file_extension} file`."
+            assert (
+                extension == args.data_file_extension
+            ), f"`{key}_file` should be a {args.data_file_extension} file`."
 
     assert (
         args.eval_metric in datasets.list_metrics()
@@ -243,7 +278,10 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
     early_stopping_patience_counter = 0
     should_training_stop = False
     # Show the progress bar
-    progress_bar = tqdm(range(args.max_selftrain_iterations), disable=not accelerator.is_local_main_process)
+    progress_bar = tqdm(
+        range(args.max_selftrain_iterations),
+        disable=not accelerator.is_local_main_process,
+    )
 
     # Self-train
     for iteration in range(0, int(args.max_selftrain_iterations)):
@@ -258,7 +296,9 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
             "model_name_or_path": args.model_name_or_path,
             "cache_dir": args.cache_dir,
             "do_train": True,
-            "train_file": data_files["train"] if iteration == 0 else data_files["train_pseudo"],
+            "train_file": (
+                data_files["train"] if iteration == 0 else data_files["train_pseudo"]
+            ),
             "do_eval": True if args.eval_file is not None else False,
             "eval_file": data_files["eval"],
             "do_predict": True,
@@ -277,7 +317,9 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
             if key not in arguments_dict and not hasattr(training_args, key):
                 arguments_dict.update({key: value})
 
-        model_bin_file_path = os.path.join(current_output_dir, "best-checkpoint", MODEL_BIN_FILE)
+        model_bin_file_path = os.path.join(
+            current_output_dir, "best-checkpoint", MODEL_BIN_FILE
+        )
         if os.path.exists(model_bin_file_path):
             logger.info(
                 "Found existing model checkpoint at %s. Skipping self-training: iteration: %d, stage: 1.",
@@ -285,11 +327,15 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
                 iteration,
             )
         else:
-            logger.info("***** Running self-training: iteration: %d, stage: 1 *****", iteration)
+            logger.info(
+                "***** Running self-training: iteration: %d, stage: 1 *****", iteration
+            )
             finetune(**arguments_dict)
             accelerator.wait_for_everyone()
             assert os.path.exists(model_bin_file_path)
-            logger.info("Self-training job completed: iteration: %d, stage: 1.", iteration)
+            logger.info(
+                "Self-training job completed: iteration: %d, stage: 1.", iteration
+            )
 
         if iteration > 0 and args.finetune_on_labeled_data:
             # Stage 2 (optional): fine-tuning on the original labeled data
@@ -300,7 +346,9 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
             arguments_dict["train_file"] = data_files["train"]
             arguments_dict["output_dir"] = current_output_dir
 
-            model_bin_file_path = os.path.join(current_output_dir, "best-checkpoint", MODEL_BIN_FILE)
+            model_bin_file_path = os.path.join(
+                current_output_dir, "best-checkpoint", MODEL_BIN_FILE
+            )
             if os.path.exists(model_bin_file_path):
                 logger.info(
                     "Found existing model checkpoint at %s. Skipping self-training: iteration: %d, stage: 2.",
@@ -308,38 +356,65 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
                     iteration,
                 )
             else:
-                logger.info("***** Running self-training: iteration: %d, stage: 2 *****", iteration)
+                logger.info(
+                    "***** Running self-training: iteration: %d, stage: 2 *****",
+                    iteration,
+                )
                 finetune(**arguments_dict)
                 accelerator.wait_for_everyone()
                 assert os.path.exists(model_bin_file_path)
-                logger.info("Self-training job completed: iteration: %d, stage: 2.", iteration)
+                logger.info(
+                    "Self-training job completed: iteration: %d, stage: 2.", iteration
+                )
 
         new_iteration = iteration
         next_data_dir = data_dir_format(iteration + 1)
 
-        config = AutoConfig.from_pretrained(os.path.join(current_output_dir, "best-checkpoint"))
+        config = AutoConfig.from_pretrained(
+            os.path.join(current_output_dir, "best-checkpoint")
+        )
         id2label = config.id2label
-        eval_results_file = os.path.join(current_output_dir, "eval_results_best-checkpoint.json")
-        test_results_file = os.path.join(current_output_dir, "test_results_best-checkpoint.json")
+        eval_results_file = os.path.join(
+            current_output_dir, "eval_results_best-checkpoint.json"
+        )
+        test_results_file = os.path.join(
+            current_output_dir, "test_results_best-checkpoint.json"
+        )
         assert os.path.exists(eval_results_file)
 
         with open(eval_results_file, "r") as f:
             eval_result = float(json.load(f)[args.eval_metric])
-        infer_output_file = os.path.join(current_output_dir, "infer_output_best-checkpoint.csv")
+        infer_output_file = os.path.join(
+            current_output_dir, "infer_output_best-checkpoint.csv"
+        )
         assert os.path.exists(infer_output_file)
         # Loading the dataset from local csv or json files.
-        infer_input = load_dataset(args.data_file_extension, data_files={"data": data_files["infer"]})["data"]
-        infer_output = load_dataset("csv", data_files={"data": infer_output_file})["data"]
+        infer_input = load_dataset(
+            args.data_file_extension, data_files={"data": data_files["infer"]}
+        )["data"]
+        infer_output = load_dataset("csv", data_files={"data": infer_output_file})[
+            "data"
+        ]
 
         if accelerator.is_main_process:
             os.makedirs(next_data_dir, exist_ok=True)
-            shutil.copy(eval_results_file, os.path.join(output_dir, f"eval_results_iter-{iteration}.json"))
+            shutil.copy(
+                eval_results_file,
+                os.path.join(output_dir, f"eval_results_iter-{iteration}.json"),
+            )
             if os.path.exists(test_results_file):
-                shutil.copy(eval_results_file, os.path.join(output_dir, f"test_results_iter-{iteration}.json"))
-            create_pseudo_labeled_data(args, infer_input, infer_output, eval_result, id2label, next_data_dir)
+                shutil.copy(
+                    eval_results_file,
+                    os.path.join(output_dir, f"test_results_iter-{iteration}.json"),
+                )
+            create_pseudo_labeled_data(
+                args, infer_input, infer_output, eval_result, id2label, next_data_dir
+            )
         accelerator.wait_for_everyone()
 
-        data_files["train_pseudo"] = os.path.join(next_data_dir, f"train_pseudo.{args.data_file_extension}")
+        data_files["train_pseudo"] = os.path.join(
+            next_data_dir, f"train_pseudo.{args.data_file_extension}"
+        )
 
         if args.eval_strategy != IntervalStrategy.NO.value:
             new_eval_result = eval_result
@@ -369,7 +444,9 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
     if best_iteration is not None:
         # Save the best iteration
         logger.info("Best iteration: %d", best_iteration)
-        logger.info("Best evaluation result: %s = %f", args.eval_metric, best_eval_result)
+        logger.info(
+            "Best evaluation result: %s = %f", args.eval_metric, best_eval_result
+        )
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
             shutil.copy(
@@ -383,6 +460,9 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
         accelerator.wait_for_everyone()
         if accelerator.is_main_process:
             shutil.copy(
-                os.path.join(output_dir, f"eval_results_iter-{args.max_selftrain_iterations - 1}.json"),
+                os.path.join(
+                    output_dir,
+                    f"eval_results_iter-{args.max_selftrain_iterations - 1}.json",
+                ),
                 os.path.join(output_dir, "eval_results_best-iteration.json"),
             )

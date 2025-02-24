@@ -165,7 +165,10 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
 
     model_type = "fastspeech2_conformer"
     base_config_key = "model_config"
-    attribute_map = {"num_hidden_layers": "encoder_layers", "num_attention_heads": "encoder_num_attention_heads"}
+    attribute_map = {
+        "num_hidden_layers": "encoder_layers",
+        "num_attention_heads": "encoder_num_attention_heads",
+    }
 
     def __init__(
         self,
@@ -231,9 +234,13 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
                 f"positionwise_conv_kernel_size must be odd, but got {positionwise_conv_kernel_size} instead."
             )
         if encoder_kernel_size % 2 == 0:
-            raise ValueError(f"encoder_kernel_size must be odd, but got {encoder_kernel_size} instead.")
+            raise ValueError(
+                f"encoder_kernel_size must be odd, but got {encoder_kernel_size} instead."
+            )
         if decoder_kernel_size % 2 == 0:
-            raise ValueError(f"decoder_kernel_size must be odd, but got {decoder_kernel_size} instead.")
+            raise ValueError(
+                f"decoder_kernel_size must be odd, but got {decoder_kernel_size} instead."
+            )
         if duration_predictor_kernel_size % 2 == 0:
             raise ValueError(
                 f"duration_predictor_kernel_size must be odd, but got {duration_predictor_kernel_size} instead."
@@ -243,19 +250,29 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
                 f"energy_predictor_kernel_size must be odd, but got {energy_predictor_kernel_size} instead."
             )
         if energy_embed_kernel_size % 2 == 0:
-            raise ValueError(f"energy_embed_kernel_size must be odd, but got {energy_embed_kernel_size} instead.")
+            raise ValueError(
+                f"energy_embed_kernel_size must be odd, but got {energy_embed_kernel_size} instead."
+            )
         if pitch_predictor_kernel_size % 2 == 0:
             raise ValueError(
                 f"pitch_predictor_kernel_size must be odd, but got {pitch_predictor_kernel_size} instead."
             )
         if pitch_embed_kernel_size % 2 == 0:
-            raise ValueError(f"pitch_embed_kernel_size must be odd, but got {pitch_embed_kernel_size} instead.")
+            raise ValueError(
+                f"pitch_embed_kernel_size must be odd, but got {pitch_embed_kernel_size} instead."
+            )
         if hidden_size % encoder_num_attention_heads != 0:
-            raise ValueError("The hidden_size must be evenly divisible by encoder_num_attention_heads.")
+            raise ValueError(
+                "The hidden_size must be evenly divisible by encoder_num_attention_heads."
+            )
         if hidden_size % decoder_num_attention_heads != 0:
-            raise ValueError("The hidden_size must be evenly divisible by decoder_num_attention_heads.")
+            raise ValueError(
+                "The hidden_size must be evenly divisible by decoder_num_attention_heads."
+            )
         if use_masking and use_weighted_masking:
-            raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
+            raise ValueError(
+                "Either use_masking or use_weighted_masking can be True, but not both."
+            )
 
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
@@ -455,7 +472,10 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     """
 
     model_type = "fastspeech2_conformer_with_hifigan"
-    sub_configs = {"model_config": FastSpeech2ConformerConfig, "vocoder_config": FastSpeech2ConformerHifiGanConfig}
+    sub_configs = {
+        "model_config": FastSpeech2ConformerConfig,
+        "vocoder_config": FastSpeech2ConformerHifiGanConfig,
+    }
 
     def __init__(
         self,
@@ -465,11 +485,15 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
     ):
         if model_config is None:
             model_config = {}
-            logger.info("model_config is None. initializing the model with default values.")
+            logger.info(
+                "model_config is None. initializing the model with default values."
+            )
 
         if vocoder_config is None:
             vocoder_config = {}
-            logger.info("vocoder_config is None. initializing the coarse model with default values.")
+            logger.info(
+                "vocoder_config is None. initializing the coarse model with default values."
+            )
 
         self.model_config = FastSpeech2ConformerConfig(**model_config)
         self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**vocoder_config)
@@ -477,4 +501,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["FastSpeech2ConformerConfig", "FastSpeech2ConformerHifiGanConfig", "FastSpeech2ConformerWithHifiGanConfig"]
+__all__ = [
+    "FastSpeech2ConformerConfig",
+    "FastSpeech2ConformerHifiGanConfig",
+    "FastSpeech2ConformerWithHifiGanConfig",
+]

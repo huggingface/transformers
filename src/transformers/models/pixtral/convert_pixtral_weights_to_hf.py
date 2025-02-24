@@ -101,7 +101,11 @@ def convert_mistral_tokenizer(model_file):
 def permute_for_rope(value, n_heads, config):
     dim1 = value.shape[0]
     dim2 = config.hidden_size
-    return value.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+    return (
+        value.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+        .transpose(1, 2)
+        .reshape(dim1, dim2)
+    )
 
 
 def convert_dictionary(original_state_dict, vision_config, text_config):
@@ -196,9 +200,13 @@ def convert_mistral_model(input_dir, output_dir):
     config.architectures = ["LlavaForConditionalGeneration"]
     config.save_pretrained(output_dir)
     full_original_state_dict = {}
-    safetensors_files = sorted([file for file in os.listdir(input_dir) if file.endswith(".safetensors")])
+    safetensors_files = sorted(
+        [file for file in os.listdir(input_dir) if file.endswith(".safetensors")]
+    )
     if len(safetensors_files) == 1:
-        full_original_state_dict = safe_load_file(f"{input_dir}/consolidated.safetensors")
+        full_original_state_dict = safe_load_file(
+            f"{input_dir}/consolidated.safetensors"
+        )
     else:
         for file in safetensors_files:
             loaded_dict = safe_load_file(f"{input_dir}/{file}")
@@ -224,7 +232,9 @@ def main():
         required=True,
     )
     parser.add_argument(
-        "--tokenizer_file", help="Location of the specific tokenizer model file to use.", required=True
+        "--tokenizer_file",
+        help="Location of the specific tokenizer model file to use.",
+        required=True,
     )
     parser.add_argument(
         "--chat_template_file",
@@ -236,7 +246,9 @@ def main():
     convert_mistral_model(args.input_dir, args.output_dir)
     tokenizer = convert_mistral_tokenizer(args.tokenizer_file)
     image_processor = PixtralImageProcessor()
-    processor = PixtralProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
+    processor = PixtralProcessor(
+        tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]"
+    )
     if args.chat_template_file:
         processor.chat_template = open(args.chat_template_file).read()
     processor.save_pretrained(args.output_dir)

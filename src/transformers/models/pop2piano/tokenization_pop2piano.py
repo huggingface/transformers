@@ -21,8 +21,20 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
-from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
-from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
+from ...tokenization_utils import (
+    AddedToken,
+    BatchEncoding,
+    PaddingStrategy,
+    PreTrainedTokenizer,
+    TruncationStrategy,
+)
+from ...utils import (
+    TensorType,
+    is_pretty_midi_available,
+    logging,
+    requires_backends,
+    to_numpy,
+)
 
 
 if is_pretty_midi_available():
@@ -44,7 +56,9 @@ def token_time_to_note(number, cutoff_time_idx, current_idx):
     return current_idx
 
 
-def token_note_to_note(number, current_velocity, default_velocity, note_onsets_ready, current_idx, notes):
+def token_note_to_note(
+    number, current_velocity, default_velocity, note_onsets_ready, current_idx, notes
+):
     if note_onsets_ready[number] is not None:
         # offset with onset
         onset_idx = note_onsets_ready[number]
@@ -99,10 +113,26 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         bos_token="2",
         **kwargs,
     ):
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
 
         self.default_velocity = default_velocity
         self.num_bars = num_bars
@@ -245,7 +275,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     # Taken from the original code
     # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L257
-    def relative_tokens_ids_to_notes(self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float = None):
+    def relative_tokens_ids_to_notes(
+        self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float = None
+    ):
         """
         Converts relative tokens to notes which will then be used to create Pretty Midi objects.
 
@@ -261,7 +293,10 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder.keys()]) + 1)]
+        note_onsets_ready = [
+            None
+            for i in range(sum([k.endswith("NOTE") for k in self.encoder.keys()]) + 1)
+        ]
         notes = []
         for token_type, number in words:
             if token_type == "TOKEN_SPECIAL":
@@ -269,7 +304,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                     break
             elif token_type == "TOKEN_TIME":
                 current_idx = token_time_to_note(
-                    number=number, cutoff_time_idx=cutoff_time_idx, current_idx=current_idx
+                    number=number,
+                    cutoff_time_idx=cutoff_time_idx,
+                    current_idx=current_idx,
                 )
             elif token_type == "TOKEN_VELOCITY":
                 current_velocity = number
@@ -305,7 +342,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             notes = notes[note_order.argsort()]
             return notes
 
-    def notes_to_midi(self, notes: np.ndarray, beatstep: np.ndarray, offset_sec: int = 0.0):
+    def notes_to_midi(
+        self, notes: np.ndarray, beatstep: np.ndarray, offset_sec: int = 0.0
+    ):
         """
         Converts notes to Midi.
 
@@ -337,7 +376,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         new_pm.remove_invalid_notes()
         return new_pm
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         """
         Saves the tokenizer's vocabulary dictionary to the provided save_directory.
 
@@ -353,7 +394,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         # Save the encoder.
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab"],
         )
         with open(out_vocab_file, "w") as file:
             file.write(json.dumps(self.encoder))
@@ -393,7 +436,15 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         # array.
         if isinstance(notes[0], pretty_midi.Note):
             notes = np.array(
-                [[each_note.start, each_note.end, each_note.pitch, each_note.velocity] for each_note in notes]
+                [
+                    [
+                        each_note.start,
+                        each_note.end,
+                        each_note.pitch,
+                        each_note.velocity,
+                    ]
+                    for each_note in notes
+                ]
             ).reshape(-1, 4)
 
         # to round up all the values to the closest int values.
@@ -421,7 +472,11 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         total_len = len(tokens)
 
         # truncation
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+        if (
+            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+            and max_length
+            and total_len > max_length
+        ):
             tokens, _, _ = self.truncate_sequences(
                 ids=tokens,
                 num_tokens_to_remove=total_len - max_length,
@@ -552,21 +607,29 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         # it is batched if its a list containing a list of `pretty_midi.Notes` where the outer list contains all the
         # batches and the inner list contains all Notes for a single batch. Otherwise if np.ndarray is passed it will be
         # considered batched if it has shape of `[batch_size, seqence_length, 4]` or ndim=3.
-        is_batched = notes.ndim == 3 if isinstance(notes, np.ndarray) else isinstance(notes[0], list)
+        is_batched = (
+            notes.ndim == 3
+            if isinstance(notes, np.ndarray)
+            else isinstance(notes[0], list)
+        )
 
         # get the truncation and padding strategy
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         if is_batched:
             # If the user has not explicitly mentioned `return_attention_mask` as False, we change it to True
-            return_attention_mask = True if return_attention_mask is None else return_attention_mask
+            return_attention_mask = (
+                True if return_attention_mask is None else return_attention_mask
+            )
             token_ids = self.batch_encode_plus(
                 notes=notes,
                 truncation_strategy=truncation_strategy,
@@ -625,11 +688,16 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         attention_masks_present = bool(
             hasattr(feature_extractor_output, "attention_mask")
             and hasattr(feature_extractor_output, "attention_mask_beatsteps")
-            and hasattr(feature_extractor_output, "attention_mask_extrapolated_beatstep")
+            and hasattr(
+                feature_extractor_output, "attention_mask_extrapolated_beatstep"
+            )
         )
 
         # if we are processing batched inputs then we must need attention_masks
-        if not attention_masks_present and feature_extractor_output["beatsteps"].shape[0] > 1:
+        if (
+            not attention_masks_present
+            and feature_extractor_output["beatsteps"].shape[0] > 1
+        ):
             raise ValueError(
                 "attention_mask, attention_mask_beatsteps and attention_mask_extrapolated_beatstep must be present "
                 "for batched inputs! But one of them were not present."
@@ -649,7 +717,10 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                     f"token_ids length - {token_ids.shape[0]}, beatsteps shape - {feature_extractor_output['beatsteps'].shape[0]} "
                     f"and extrapolated_beatsteps shape - {feature_extractor_output['extrapolated_beatstep'].shape[0]}"
                 )
-            if feature_extractor_output["attention_mask"].shape[0] != token_ids.shape[0]:
+            if (
+                feature_extractor_output["attention_mask"].shape[0]
+                != token_ids.shape[0]
+            ):
                 raise ValueError(
                     f"Found attention_mask of length - {feature_extractor_output['attention_mask'].shape[0]} but token_ids of length - {token_ids.shape[0]}"
                 )
@@ -666,7 +737,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         if attention_masks_present:
             # check for zeros(since token_ids are seperated by zero arrays)
-            batch_idx = np.where(feature_extractor_output["attention_mask"][:, 0] == 0)[0]
+            batch_idx = np.where(feature_extractor_output["attention_mask"][:, 0] == 0)[
+                0
+            ]
         else:
             batch_idx = [token_ids.shape[0]]
 
@@ -676,17 +749,25 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         for index, end_idx in enumerate(batch_idx):
             each_tokens_ids = token_ids[start_idx:end_idx]
             # check where the whole example ended by searching for eos_token_id and getting the upper bound
-            each_tokens_ids = each_tokens_ids[:, : np.max(np.where(each_tokens_ids == int(self.eos_token))[1]) + 1]
+            each_tokens_ids = each_tokens_ids[
+                :, : np.max(np.where(each_tokens_ids == int(self.eos_token))[1]) + 1
+            ]
             beatsteps = feature_extractor_output["beatsteps"][index]
-            extrapolated_beatstep = feature_extractor_output["extrapolated_beatstep"][index]
+            extrapolated_beatstep = feature_extractor_output["extrapolated_beatstep"][
+                index
+            ]
 
             # if attention mask is present then mask out real array/tensor
             if attention_masks_present:
-                attention_mask_beatsteps = feature_extractor_output["attention_mask_beatsteps"][index]
+                attention_mask_beatsteps = feature_extractor_output[
+                    "attention_mask_beatsteps"
+                ][index]
                 attention_mask_extrapolated_beatstep = feature_extractor_output[
                     "attention_mask_extrapolated_beatstep"
                 ][index]
-                beatsteps = beatsteps[: np.max(np.where(attention_mask_beatsteps == 1)[0]) + 1]
+                beatsteps = beatsteps[
+                    : np.max(np.where(attention_mask_beatsteps == 1)[0]) + 1
+                ]
                 extrapolated_beatstep = extrapolated_beatstep[
                     : np.max(np.where(attention_mask_extrapolated_beatstep == 1)[0]) + 1
                 ]
@@ -711,7 +792,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             start_idx += end_idx + 1  # 1 represents the zero array
 
         if return_midi:
-            return BatchEncoding({"notes": notes_list, "pretty_midi_objects": pretty_midi_objects_list})
+            return BatchEncoding(
+                {"notes": notes_list, "pretty_midi_objects": pretty_midi_objects_list}
+            )
 
         return BatchEncoding({"notes": notes_list})
 

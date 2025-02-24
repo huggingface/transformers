@@ -39,11 +39,15 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 IMAGE_TOKEN = "<image>"
-EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
+EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [
+    f"<seg{i:0>3}>" for i in range(128)
+]
 
 
 class PaliGemmaTextKwargs(TextKwargs):
-    suffix: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]]
+    suffix: Optional[
+        Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+    ]
 
 
 class PaliGemmaImagesKwargs(ImagesKwargs):
@@ -132,7 +136,9 @@ class PaliGemmaProcessor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
         if not hasattr(image_processor, "image_seq_length"):
-            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
+            raise ValueError(
+                "Image processor is missing an `image_seq_length` attribute."
+            )
 
         self.image_seq_length = image_processor.image_seq_length
 
@@ -153,7 +159,9 @@ class PaliGemmaProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[PaliGemmaProcessorKwargs],
@@ -228,7 +236,9 @@ class PaliGemmaProcessor(ProcessorMixin):
         return_token_type_ids = True if suffix is not None else False
 
         if images is None:
-            raise ValueError("`images` are expected as arguments to a `PaliGemmaProcessor` instance.")
+            raise ValueError(
+                "`images` are expected as arguments to a `PaliGemmaProcessor` instance."
+            )
         if text is None:
             logger.warning_once(
                 "You are using PaliGemma without a text prefix. It will perform as a picture-captioning model."
@@ -265,7 +275,9 @@ class PaliGemmaProcessor(ProcessorMixin):
                     and isinstance(images[0], (list, tuple))
                     and is_valid_image(images[0][0])
                 ):
-                    raise ValueError("images must be an image, list of images or list of list of images")
+                    raise ValueError(
+                        "images must be an image, list of images or list of list of images"
+                    )
 
                 input_strings = [
                     build_string_from_input(
@@ -273,7 +285,9 @@ class PaliGemmaProcessor(ProcessorMixin):
                         bos_token=self.tokenizer.bos_token,
                         image_seq_len=self.image_seq_length,
                         image_token=IMAGE_TOKEN,
-                        num_images=len(image_list) if isinstance(image_list, list) else 1,
+                        num_images=(
+                            len(image_list) if isinstance(image_list, list) else 1
+                        ),
                     )
                     for prompt, image_list in zip(text, images)
                 ]
@@ -281,11 +295,19 @@ class PaliGemmaProcessor(ProcessorMixin):
             else:
                 expanded_samples = []
                 for sample in text:
-                    expanded_sample = sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length)
+                    expanded_sample = sample.replace(
+                        IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length
+                    )
                     bos_rfind_index = expanded_sample.rfind(IMAGE_TOKEN)
-                    bos_index = bos_rfind_index + len(IMAGE_TOKEN) if bos_rfind_index != -1 else 0
+                    bos_index = (
+                        bos_rfind_index + len(IMAGE_TOKEN)
+                        if bos_rfind_index != -1
+                        else 0
+                    )
                     expanded_sample = (
-                        expanded_sample[:bos_index] + self.tokenizer.bos_token + expanded_sample[bos_index:]
+                        expanded_sample[:bos_index]
+                        + self.tokenizer.bos_token
+                        + expanded_sample[bos_index:]
                     )
                     expanded_samples.append(expanded_sample)
                 input_strings = [f"{sample}\n" for sample in expanded_samples]
@@ -294,7 +316,9 @@ class PaliGemmaProcessor(ProcessorMixin):
             suffix = [suffix]
         if suffix is not None:
             suffix = [sfx + self.tokenizer.eos_token for sfx in suffix]
-        pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
+        pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])[
+            "pixel_values"
+        ]
 
         # max_length has to account for the image tokens
         if output_kwargs["text_kwargs"].get("max_length", None) is not None:
@@ -310,7 +334,9 @@ class PaliGemmaProcessor(ProcessorMixin):
         return_data = {**inputs, "pixel_values": pixel_values}
 
         if return_token_type_ids:
-            labels = inputs["input_ids"].masked_fill(inputs["token_type_ids"] == 0, -100)
+            labels = inputs["input_ids"].masked_fill(
+                inputs["token_type_ids"] == 0, -100
+            )
             return_data.update({"labels": labels})
         return BatchFeature(data=return_data)
 

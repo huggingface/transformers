@@ -82,16 +82,30 @@ class PipelineIterator(IterableDataset):
                     # Convert ModelOutput to tuple first
                     element = element.to_tuple()
                     if isinstance(element[0], torch.Tensor):
-                        loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                        loader_batched[k] = tuple(
+                            el[self._loader_batch_index].unsqueeze(0) for el in element
+                        )
                     elif isinstance(element[0], np.ndarray):
-                        loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
+                        loader_batched[k] = tuple(
+                            np.expand_dims(el[self._loader_batch_index], 0)
+                            for el in element
+                        )
                     continue
-                if k in {"hidden_states", "past_key_values", "attentions"} and isinstance(element, tuple):
+                if k in {
+                    "hidden_states",
+                    "past_key_values",
+                    "attentions",
+                } and isinstance(element, tuple):
                     # Those are stored as lists of tensors so need specific unbatching.
                     if isinstance(element[0], torch.Tensor):
-                        loader_batched[k] = tuple(el[self._loader_batch_index].unsqueeze(0) for el in element)
+                        loader_batched[k] = tuple(
+                            el[self._loader_batch_index].unsqueeze(0) for el in element
+                        )
                     elif isinstance(element[0], np.ndarray):
-                        loader_batched[k] = tuple(np.expand_dims(el[self._loader_batch_index], 0) for el in element)
+                        loader_batched[k] = tuple(
+                            np.expand_dims(el[self._loader_batch_index], 0)
+                            for el in element
+                        )
                     continue
                 if element is None:
                     # This can happen for optional data that get passed around
@@ -104,7 +118,9 @@ class PipelineIterator(IterableDataset):
                 elif isinstance(element[self._loader_batch_index], np.ndarray):
                     # Take correct batch data, but make it looked like batch_size=1
                     # For compatibility with other methods within transformers
-                    loader_batched[k] = np.expand_dims(element[self._loader_batch_index], 0)
+                    loader_batched[k] = np.expand_dims(
+                        element[self._loader_batch_index], 0
+                    )
                 else:
                     # This is typically a list, so no need to `unsqueeze`.
                     loader_batched[k] = element[self._loader_batch_index]
@@ -115,7 +131,10 @@ class PipelineIterator(IterableDataset):
         return result
 
     def __next__(self):
-        if self._loader_batch_index is not None and self._loader_batch_index < self.loader_batch_size:
+        if (
+            self._loader_batch_index is not None
+            and self._loader_batch_index < self.loader_batch_size
+        ):
             # We are currently unrolling a batch so we just need to return
             # the current item within a batch
             return self.loader_batch_item()
@@ -143,7 +162,9 @@ class PipelineIterator(IterableDataset):
                 # elements.
                 self.loader_batch_size = observed_batch_size
             # Setting internal index to unwrap the batch
-            self._loader_batch_data = processed[0] if isinstance(processed, tuple) else processed
+            self._loader_batch_data = (
+                processed[0] if isinstance(processed, tuple) else processed
+            )
             self._loader_batch_index = 0
             return self.loader_batch_item()
         else:
@@ -257,7 +278,10 @@ class PipelinePackIterator(PipelineIterator):
         # its a `is_last` and then just passes it on to the caller.
         is_last = False
         accumulator = []
-        if self._loader_batch_index is not None and self._loader_batch_index < self.loader_batch_size:
+        if (
+            self._loader_batch_index is not None
+            and self._loader_batch_index < self.loader_batch_size
+        ):
             while self._loader_batch_index < self.loader_batch_size:
                 item = self.loader_batch_item()
                 is_last = item.pop("is_last")
@@ -318,4 +342,7 @@ class KeyPairDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, i):
-        return {"text": self.dataset[i][self.key1], "text_pair": self.dataset[i][self.key2]}
+        return {
+            "text": self.dataset[i][self.key1],
+            "text_pair": self.dataset[i][self.key2],
+        }

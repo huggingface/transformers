@@ -24,10 +24,25 @@ from ..utils import (
 
 
 _import_structure = {
-    "agents": ["Agent", "CodeAgent", "ManagedAgent", "ReactAgent", "ReactCodeAgent", "ReactJsonAgent", "Toolbox"],
+    "agents": [
+        "Agent",
+        "CodeAgent",
+        "ManagedAgent",
+        "ReactAgent",
+        "ReactCodeAgent",
+        "ReactJsonAgent",
+        "Toolbox",
+    ],
     "llm_engine": ["HfApiEngine", "TransformersEngine"],
     "monitoring": ["stream_to_gradio"],
-    "tools": ["PipelineTool", "Tool", "ToolCollection", "launch_gradio_demo", "load_tool", "tool"],
+    "tools": [
+        "PipelineTool",
+        "Tool",
+        "ToolCollection",
+        "launch_gradio_demo",
+        "load_tool",
+        "tool",
+    ],
 }
 
 try:
@@ -45,10 +60,25 @@ else:
     _import_structure["translation"] = ["TranslationTool"]
 
 if TYPE_CHECKING:
-    from .agents import Agent, CodeAgent, ManagedAgent, ReactAgent, ReactCodeAgent, ReactJsonAgent, Toolbox
+    from .agents import (
+        Agent,
+        CodeAgent,
+        ManagedAgent,
+        ReactAgent,
+        ReactCodeAgent,
+        ReactJsonAgent,
+        Toolbox,
+    )
     from .llm_engine import HfApiEngine, TransformersEngine
     from .monitoring import stream_to_gradio
-    from .tools import PipelineTool, Tool, ToolCollection, launch_gradio_demo, load_tool, tool
+    from .tools import (
+        PipelineTool,
+        Tool,
+        ToolCollection,
+        launch_gradio_demo,
+        load_tool,
+        tool,
+    )
 
     try:
         if not is_torch_available():
@@ -66,4 +96,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

@@ -84,7 +84,9 @@ class VitMatteImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.do_pad = do_pad
         self.rescale_factor = rescale_factor
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.size_divisibility = size_divisibility
 
@@ -118,11 +120,24 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         height, width = get_image_size(image, input_data_format)
 
-        pad_height = 0 if height % size_divisibility == 0 else size_divisibility - height % size_divisibility
-        pad_width = 0 if width % size_divisibility == 0 else size_divisibility - width % size_divisibility
+        pad_height = (
+            0
+            if height % size_divisibility == 0
+            else size_divisibility - height % size_divisibility
+        )
+        pad_width = (
+            0
+            if width % size_divisibility == 0
+            else size_divisibility - width % size_divisibility
+        )
         if pad_width + pad_height > 0:
             padding = ((0, pad_height), (0, pad_width))
-            image = pad(image, padding=padding, data_format=data_format, input_data_format=input_data_format)
+            image = pad(
+                image,
+                padding=padding,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
 
         if data_format is not None:
             image = to_channel_dimension_format(image, data_format, input_data_format)
@@ -190,10 +205,16 @@ class VitMatteImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_pad = do_pad if do_pad is not None else self.do_pad
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        size_divisibility = size_divisibility if size_divisibility is not None else self.size_divisibility
+        size_divisibility = (
+            size_divisibility
+            if size_divisibility is not None
+            else self.size_divisibility
+        )
 
         images = make_list_of_images(images)
         trimaps = make_list_of_images(trimaps, expected_ndims=2)
@@ -235,33 +256,55 @@ class VitMatteImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
             trimaps = [
-                self.rescale(image=trimap, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=trimap,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for trimap in trimaps
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         # concatenate images and trimaps
         images = [
-            np.concatenate([image, np.expand_dims(trimap, axis=-1)], axis=-1) for image, trimap in zip(images, trimaps)
+            np.concatenate([image, np.expand_dims(trimap, axis=-1)], axis=-1)
+            for image, trimap in zip(images, trimaps)
         ]
 
         if do_pad:
             images = [
-                self.pad_image(image, size_divisibility=size_divisibility, input_data_format=input_data_format)
+                self.pad_image(
+                    image,
+                    size_divisibility=size_divisibility,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image=image, channel_dim=data_format, input_channel_dim=input_data_format)
+            to_channel_dimension_format(
+                image=image,
+                channel_dim=data_format,
+                input_channel_dim=input_data_format,
+            )
             for image in images
         ]
 

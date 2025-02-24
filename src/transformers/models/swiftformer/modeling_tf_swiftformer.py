@@ -24,7 +24,12 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithNoAttention,
     TFImageClassifierOutputWithNoAttention,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, keras, keras_serializable, unpack_inputs
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    keras,
+    keras_serializable,
+    unpack_inputs,
+)
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -61,10 +66,18 @@ class TFSwiftFormerPatchEmbeddingSequential(keras.layers.Layer):
         self.out_chs = config.embed_dims[0]
 
         self.zero_padding = keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.conv1 = keras.layers.Conv2D(self.out_chs // 2, kernel_size=3, strides=2, name="0")
-        self.batch_norm1 = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="1")
-        self.conv2 = keras.layers.Conv2D(self.out_chs, kernel_size=3, strides=2, name="3")
-        self.batch_norm2 = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="4")
+        self.conv1 = keras.layers.Conv2D(
+            self.out_chs // 2, kernel_size=3, strides=2, name="0"
+        )
+        self.batch_norm1 = keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="1"
+        )
+        self.conv2 = keras.layers.Conv2D(
+            self.out_chs, kernel_size=3, strides=2, name="3"
+        )
+        self.batch_norm2 = keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="4"
+        )
         self.config = config
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -107,7 +120,9 @@ class TFSwiftFormerPatchEmbedding(keras.layers.Layer):
 
     def __init__(self, config: SwiftFormerConfig, **kwargs):
         super().__init__(**kwargs)
-        self.patch_embedding = TFSwiftFormerPatchEmbeddingSequential(config, name="patch_embedding")
+        self.patch_embedding = TFSwiftFormerPatchEmbeddingSequential(
+            config, name="patch_embedding"
+        )
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.patch_embedding(x, training=training)
@@ -152,13 +167,27 @@ class TFSwiftFormerEmbeddings(keras.layers.Layer):
         self.in_chans = embed_dims[index]
         self.embed_dim = embed_dims[index + 1]
 
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
-        padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        stride = (
+            stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
+        )
+        padding = (
+            padding
+            if isinstance(padding, collections.abc.Iterable)
+            else (padding, padding)
+        )
 
         self.pad = keras.layers.ZeroPadding2D(padding=padding)
-        self.proj = keras.layers.Conv2D(self.embed_dim, kernel_size=patch_size, strides=stride, name="proj")
-        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
+        self.proj = keras.layers.Conv2D(
+            self.embed_dim, kernel_size=patch_size, strides=stride, name="proj"
+        )
+        self.norm = keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
+        )
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = self.pad(x)
@@ -193,12 +222,22 @@ class TFSwiftFormerConvEncoder(keras.layers.Layer):
 
         self.dim = dim
         self.pad = keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.depth_wise_conv = keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
-        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
-        self.point_wise_conv1 = keras.layers.Conv2D(hidden_dim, kernel_size=1, name="point_wise_conv1")
+        self.depth_wise_conv = keras.layers.Conv2D(
+            dim, kernel_size=3, groups=dim, name="depth_wise_conv"
+        )
+        self.norm = keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
+        )
+        self.point_wise_conv1 = keras.layers.Conv2D(
+            hidden_dim, kernel_size=1, name="point_wise_conv1"
+        )
         self.act = get_tf_activation("gelu")
-        self.point_wise_conv2 = keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
-        self.drop_path = keras.layers.Dropout(name="drop_path", rate=config.drop_conv_encoder_rate)
+        self.point_wise_conv2 = keras.layers.Conv2D(
+            dim, kernel_size=1, name="point_wise_conv2"
+        )
+        self.drop_path = keras.layers.Dropout(
+            name="drop_path", rate=config.drop_conv_encoder_rate
+        )
         self.hidden_dim = int(config.mlp_ratio * self.dim)
 
     def build(self, input_shape=None):
@@ -253,7 +292,9 @@ class TFSwiftFormerMlp(keras.layers.Layer):
         super().__init__(**kwargs)
 
         hidden_features = int(in_features * config.mlp_ratio)
-        self.norm1 = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm1")
+        self.norm1 = keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="norm1"
+        )
         self.fc1 = keras.layers.Conv2D(hidden_features, 1, name="fc1")
         act_layer = get_tf_activation(config.hidden_act)
         self.act = act_layer
@@ -343,7 +384,9 @@ class TFSwiftFormerEfficientAdditiveAttention(keras.layers.Layer):
         scaled_query_weight = tf.nn.softmax(scaled_query_weight, axis=-1)
 
         global_queries = tf.math.reduce_sum(scaled_query_weight * query, axis=1)
-        global_queries = tf.tile(tf.expand_dims(global_queries, 1), (1, key.shape[1], 1))
+        global_queries = tf.tile(
+            tf.expand_dims(global_queries, 1), (1, key.shape[1], 1)
+        )
 
         out = self.proj(global_queries * key) + query
         out = self.final(out)
@@ -366,11 +409,19 @@ class TFSwiftFormerLocalRepresentation(keras.layers.Layer):
         self.dim = dim
 
         self.pad = keras.layers.ZeroPadding2D(padding=(1, 1))
-        self.depth_wise_conv = keras.layers.Conv2D(dim, kernel_size=3, groups=dim, name="depth_wise_conv")
-        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
-        self.point_wise_conv1 = keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv1")
+        self.depth_wise_conv = keras.layers.Conv2D(
+            dim, kernel_size=3, groups=dim, name="depth_wise_conv"
+        )
+        self.norm = keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
+        )
+        self.point_wise_conv1 = keras.layers.Conv2D(
+            dim, kernel_size=1, name="point_wise_conv1"
+        )
         self.act = get_tf_activation("gelu")
-        self.point_wise_conv2 = keras.layers.Conv2D(dim, kernel_size=1, name="point_wise_conv2")
+        self.point_wise_conv2 = keras.layers.Conv2D(
+            dim, kernel_size=1, name="point_wise_conv2"
+        )
         self.drop_path = keras.layers.Identity(name="drop_path")
 
     def build(self, input_shape=None):
@@ -421,16 +472,26 @@ class TFSwiftFormerEncoderBlock(keras.layers.Layer):
     Output: tensor of shape `[batch_size, channels,height, width]`
     """
 
-    def __init__(self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0, **kwargs):
+    def __init__(
+        self, config: SwiftFormerConfig, dim: int, drop_path: float = 0.0, **kwargs
+    ):
         super().__init__(**kwargs)
 
         layer_scale_init_value = config.layer_scale_init_value
         use_layer_scale = config.use_layer_scale
 
-        self.local_representation = TFSwiftFormerLocalRepresentation(config, dim=dim, name="local_representation")
-        self.attn = TFSwiftFormerEfficientAdditiveAttention(config, dim=dim, name="attn")
+        self.local_representation = TFSwiftFormerLocalRepresentation(
+            config, dim=dim, name="local_representation"
+        )
+        self.attn = TFSwiftFormerEfficientAdditiveAttention(
+            config, dim=dim, name="attn"
+        )
         self.linear = TFSwiftFormerMlp(config, in_features=dim, name="linear")
-        self.drop_path = TFSwiftFormerDropPath(config) if drop_path > 0.0 else keras.layers.Identity()
+        self.drop_path = (
+            TFSwiftFormerDropPath(config)
+            if drop_path > 0.0
+            else keras.layers.Identity()
+        )
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.dim = dim
@@ -472,7 +533,9 @@ class TFSwiftFormerEncoderBlock(keras.layers.Layer):
         res = tf.reshape(res, [-1, height, width, channels])
         if self.use_layer_scale:
             x = x + self.drop_path(self.layer_scale_1 * res, training=training)
-            x = x + self.drop_path(self.layer_scale_2 * self.linear(x), training=training)
+            x = x + self.drop_path(
+                self.layer_scale_2 * self.linear(x), training=training
+            )
         else:
             x = x + self.drop_path(res, training=training)
             x = x + self.drop_path(self.linear(x), training=training)
@@ -498,14 +561,27 @@ class TFSwiftFormerStage(keras.layers.Layer):
 
         self.blocks = []
         for block_idx in range(depth):
-            block_dpr = config.drop_path_rate * (block_idx + sum(layer_depths[:index])) / (sum(layer_depths) - 1)
+            block_dpr = (
+                config.drop_path_rate
+                * (block_idx + sum(layer_depths[:index]))
+                / (sum(layer_depths) - 1)
+            )
 
             if depth - block_idx <= 1:
                 self.blocks.append(
-                    TFSwiftFormerEncoderBlock(config, dim=dim, drop_path=block_dpr, name=f"blocks_._{block_idx}")
+                    TFSwiftFormerEncoderBlock(
+                        config,
+                        dim=dim,
+                        drop_path=block_dpr,
+                        name=f"blocks_._{block_idx}",
+                    )
                 )
             else:
-                self.blocks.append(TFSwiftFormerConvEncoder(config, dim=dim, name=f"blocks_._{block_idx}"))
+                self.blocks.append(
+                    TFSwiftFormerConvEncoder(
+                        config, dim=dim, name=f"blocks_._{block_idx}"
+                    )
+                )
 
     def call(self, input: tf.Tensor, training: bool = False) -> tf.Tensor:
         for i, block in enumerate(self.blocks):
@@ -538,7 +614,9 @@ class TFSwiftFormerEncoder(keras.layers.Layer):
                 break
             if downsamples[i] or embed_dims[i] != embed_dims[i + 1]:
                 # downsampling between two stages
-                self.network.append(TFSwiftFormerEmbeddings(config, index=i, name=f"network_._{name_i}"))
+                self.network.append(
+                    TFSwiftFormerEmbeddings(config, index=i, name=f"network_._{name_i}")
+                )
                 name_i += 1
 
         self.gradient_checkpointing = False
@@ -551,9 +629,13 @@ class TFSwiftFormerEncoder(keras.layers.Layer):
         training: bool = False,
     ) -> Union[tuple, TFBaseModelOutputWithNoAttention]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
@@ -564,7 +646,9 @@ class TFSwiftFormerEncoder(keras.layers.Layer):
 
         hidden_states = tf.transpose(hidden_states, perm=[0, 3, 1, 2])
         if all_hidden_states:
-            all_hidden_states = tuple(tf.transpose(s, perm=[0, 3, 1, 2]) for s in all_hidden_states)
+            all_hidden_states = tuple(
+                tf.transpose(s, perm=[0, 3, 1, 2]) for s in all_hidden_states
+            )
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
@@ -660,9 +744,13 @@ class TFSwiftFormerMainLayer(keras.layers.Layer):
         r""" """
 
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # TF 2.0 image layers can't use NCHW format when running on CPU.
         # We transpose to NHWC format and then transpose back after the full forward pass.
@@ -750,7 +838,9 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
         # Classifier head
-        self.norm = keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9, name="norm")
+        self.norm = keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="norm"
+        )
         self.head = (
             keras.layers.Dense(self.num_labels, name="head")
             if self.num_labels > 0
@@ -766,7 +856,9 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         if self.config.problem_type is None:
             if self.num_labels == 1:
                 self.config.problem_type = "regression"
-            elif self.num_labels > 1 and (labels.dtype == tf.int64 or labels.dtype == tf.int32):
+            elif self.num_labels > 1 and (
+                labels.dtype == tf.int64 or labels.dtype == tf.int32
+            ):
                 self.config.problem_type = "single_label_classification"
             else:
                 self.config.problem_type = "multi_label_classification"
@@ -809,7 +901,9 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # run base model
         outputs = self.swiftformer(
@@ -826,14 +920,20 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         sequence_output = self.norm(sequence_output, training=training)
         sequence_output = tf.transpose(sequence_output, perm=[0, 3, 1, 2])
         _, num_channels, height, width = sequence_output.shape
-        sequence_output = tf.reshape(sequence_output, [-1, num_channels, height * width])
+        sequence_output = tf.reshape(
+            sequence_output, [-1, num_channels, height * width]
+        )
         sequence_output = tf.reduce_mean(sequence_output, axis=-1)
         cls_out = self.head(sequence_output)
         distillation_out = self.dist_head(sequence_output)
         logits = (cls_out + distillation_out) / 2
 
         # calculate loss
-        loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
+        loss = (
+            None
+            if labels is None
+            else self.hf_compute_loss(labels=labels, logits=logits)
+        )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -863,4 +963,8 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         self.built = True
 
 
-__all__ = ["TFSwiftFormerForImageClassification", "TFSwiftFormerModel", "TFSwiftFormerPreTrainedModel"]
+__all__ = [
+    "TFSwiftFormerForImageClassification",
+    "TFSwiftFormerModel",
+    "TFSwiftFormerPreTrainedModel",
+]

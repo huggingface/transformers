@@ -16,7 +16,10 @@
 import os
 import unittest
 
-from transformers.models.cpmant.tokenization_cpmant import VOCAB_FILES_NAMES, CpmAntTokenizer
+from transformers.models.cpmant.tokenization_cpmant import (
+    VOCAB_FILES_NAMES,
+    CpmAntTokenizer,
+)
 from transformers.testing_utils import require_jieba, tooslow
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -64,7 +67,9 @@ class CPMAntTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_tokens = [tokenizer.bos_token] + tokens
 
         input_jieba_tokens = [6, 9802, 14962, 2082, 831, 244]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_jieba_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_jieba_tokens
+        )
 
         reconstructed_text = tokenizer.decode(input_jieba_tokens)
         self.assertEqual(reconstructed_text, normalized_text)

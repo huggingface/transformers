@@ -112,7 +112,9 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.num_hidden_layers = encoder_layers
         self.init_std = init_std
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = (
+            scale_embedding  # scale factor will be sqrt(d_model) if True
+        )
         self.max_source_positions = max_source_positions
 
 
@@ -170,7 +172,9 @@ class Qwen2AudioConfig(PretrainedConfig):
 
         if isinstance(audio_config, dict):
             audio_config["model_type"] = (
-                audio_config["model_type"] if "model_type" in audio_config else "qwen2_audio_encoder"
+                audio_config["model_type"]
+                if "model_type" in audio_config
+                else "qwen2_audio_encoder"
             )
             audio_config = CONFIG_MAPPING[audio_config["model_type"]](**audio_config)
         elif audio_config is None:
@@ -189,7 +193,9 @@ class Qwen2AudioConfig(PretrainedConfig):
         self.audio_config = audio_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = (
+                text_config["model_type"] if "model_type" in text_config else "qwen2"
+            )
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"]()

@@ -17,7 +17,13 @@
 import os
 import sys
 
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, get_gpu_count, require_torch_gpu, slow
+from transformers.testing_utils import (
+    TestCasePlus,
+    execute_subprocess_async,
+    get_gpu_count,
+    require_torch_gpu,
+    slow,
+)
 
 from .utils import load_json
 

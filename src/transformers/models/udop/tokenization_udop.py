@@ -258,10 +258,26 @@ class UdopTokenizer(PreTrainedTokenizer):
         add_prefix_space=True,
         **kwargs,
     ) -> None:
-        eos_token = AddedToken(eos_token, special=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, special=True) if isinstance(unk_token, str) else unk_token
-        sep_token = AddedToken(sep_token, special=True) if isinstance(sep_token, str) else sep_token
-        pad_token = AddedToken(pad_token, special=True) if isinstance(pad_token, str) else pad_token
+        eos_token = (
+            AddedToken(eos_token, special=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, special=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        sep_token = (
+            AddedToken(sep_token, special=True)
+            if isinstance(sep_token, str)
+            else sep_token
+        )
+        pad_token = (
+            AddedToken(pad_token, special=True)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
 
         self.legacy = legacy
         self.add_prefix_space = add_prefix_space
@@ -306,7 +322,10 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -325,7 +344,9 @@ class UdopTokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         # normal case: some special tokens
@@ -336,12 +357,19 @@ class UdopTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_sentinel_tokens
     def get_sentinel_tokens(self):
         return list(
-            set(filter(lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
+            set(
+                filter(
+                    lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None,
+                    self.additional_special_tokens,
+                )
+            )
         )
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_sentinel_token_ids
     def get_sentinel_token_ids(self):
-        return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
+        return [
+            self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()
+        ]
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._add_eos_if_not_present
     def _add_eos_if_not_present(self, token_ids: List[int]) -> List[int]:
@@ -431,7 +459,11 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         tokens = super().tokenize(text, **kwargs)
 
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+        if (
+            len(tokens) > 1
+            and tokens[0] == SPIECE_UNDERLINE
+            and tokens[1] in self.all_special_tokens
+        ):
             tokens = tokens[1:]
         return tokens
 
@@ -452,7 +484,11 @@ class UdopTokenizer(PreTrainedTokenizer):
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+        return (
+            tokens[self.unk_token_length :]
+            if len(tokens) >= self.unk_token_length
+            else tokens
+        )
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -487,15 +523,21 @@ class UdopTokenizer(PreTrainedTokenizer):
         return out_string.strip()
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(
+            out_vocab_file
+        ) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:
@@ -507,13 +549,19 @@ class UdopTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(UDOP_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
-        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_target: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
         ] = None,
         **kwargs,
     ) -> BatchEncoding:
@@ -524,10 +572,18 @@ class UdopTokenizer(PreTrainedTokenizer):
             # input mode in this case.
             if not self._in_target_context_manager:
                 self._switch_to_input_mode()
-            encodings = self.call_boxes(text=text, text_pair=text_pair, boxes=boxes, word_labels=word_labels, **kwargs)
+            encodings = self.call_boxes(
+                text=text,
+                text_pair=text_pair,
+                boxes=boxes,
+                word_labels=word_labels,
+                **kwargs,
+            )
         if text_target is not None:
             self._switch_to_target_mode()
-            target_encodings = self._call_one(text=text_target, text_pair=text_pair_target, **kwargs)
+            target_encodings = self._call_one(
+                text=text_target, text_pair=text_pair_target, **kwargs
+            )
         # Leave back tokenizer in input mode
         self._switch_to_input_mode()
 
@@ -541,7 +597,9 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     def call_boxes(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -604,7 +662,9 @@ class UdopTokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError(
+                    "text input must of type `str` (single example) or `List[str]` (batch of examples). "
+                )
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
                     "words must of type `List[str]` (single pretokenized example), "
@@ -621,20 +681,30 @@ class UdopTokenizer(PreTrainedTokenizer):
         if text_pair is not None:
             is_batched = isinstance(text, (list, tuple))
         else:
-            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            is_batched = (
+                isinstance(text, (list, tuple))
+                and text
+                and isinstance(text[0], (list, tuple))
+            )
 
         words = text if text_pair is None else text_pair
         if boxes is None:
             raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
             if len(words) != len(boxes):
-                raise ValueError("You must provide words and boxes for an equal amount of examples")
+                raise ValueError(
+                    "You must provide words and boxes for an equal amount of examples"
+                )
             for words_example, boxes_example in zip(words, boxes):
                 if len(words_example) != len(boxes_example):
-                    raise ValueError("You must provide as many words as there are bounding boxes")
+                    raise ValueError(
+                        "You must provide as many words as there are bounding boxes"
+                    )
         else:
             if len(words) != len(boxes):
-                raise ValueError("You must provide as many words as there are bounding boxes")
+                raise ValueError(
+                    "You must provide as many words as there are bounding boxes"
+                )
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
@@ -642,7 +712,9 @@ class UdopTokenizer(PreTrainedTokenizer):
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
                     f" {len(text_pair)}."
                 )
-            batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            batch_text_or_text_pairs = (
+                list(zip(text, text_pair)) if text_pair is not None else text
+            )
             is_pair = bool(text_pair is not None)
             return self.batch_encode_plus_boxes(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
@@ -729,13 +801,15 @@ class UdopTokenizer(PreTrainedTokenizer):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         return self._batch_encode_plus_boxes(
@@ -850,13 +924,15 @@ class UdopTokenizer(PreTrainedTokenizer):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         return self._encode_plus_boxes(
@@ -1111,13 +1187,15 @@ class UdopTokenizer(PreTrainedTokenizer):
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
+        padding_strategy, truncation_strategy, max_length, kwargs = (
+            self._get_padding_truncation_strategies(
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
+            )
         )
 
         tokens = []
@@ -1145,7 +1223,9 @@ class UdopTokenizer(PreTrainedTokenizer):
                     token_boxes.extend([box] * len(word_tokens))
                     if self.only_label_first_subword:
                         # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                        labels.extend([label] + [self.pad_token_label] * (len(word_tokens) - 1))
+                        labels.extend(
+                            [label] + [self.pad_token_label] * (len(word_tokens) - 1)
+                        )
                     else:
                         labels.extend([label] * len(word_tokens))
         else:
@@ -1170,13 +1250,21 @@ class UdopTokenizer(PreTrainedTokenizer):
         pair = bool(pair_ids is not None)
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
-        total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        total_len = (
+            len_ids
+            + len_pair_ids
+            + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
+        )
 
         # Truncation: Handle max sequence length
         overflowing_tokens = []
         overflowing_token_boxes = []
         overflowing_labels = []
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
+        if (
+            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+            and max_length
+            and total_len > max_length
+        ):
             (
                 ids,
                 token_boxes,
@@ -1238,7 +1326,9 @@ class UdopTokenizer(PreTrainedTokenizer):
             encoded_inputs["token_type_ids"] = token_type_ids
         if return_special_tokens_mask:
             if add_special_tokens:
-                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(ids, pair_ids)
+                encoded_inputs["special_tokens_mask"] = self.get_special_tokens_mask(
+                    ids, pair_ids
+                )
             else:
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
@@ -1246,7 +1336,9 @@ class UdopTokenizer(PreTrainedTokenizer):
             encoded_inputs["labels"] = labels
 
         # Check lengths
-        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(
+            encoded_inputs["input_ids"], max_length, verbose
+        )
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -1263,7 +1355,9 @@ class UdopTokenizer(PreTrainedTokenizer):
             encoded_inputs["length"] = len(encoded_inputs["input_ids"])
 
         batch_outputs = BatchEncoding(
-            encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
+            encoded_inputs,
+            tensor_type=return_tensors,
+            prepend_batch_axis=prepend_batch_axis,
         )
 
         return batch_outputs
@@ -1368,7 +1462,10 @@ class UdopTokenizer(PreTrainedTokenizer):
                     f"Please select another truncation strategy than {truncation_strategy}, "
                     "for instance 'longest_first' or 'only_second'."
                 )
-        elif truncation_strategy == TruncationStrategy.ONLY_SECOND and pair_ids is not None:
+        elif (
+            truncation_strategy == TruncationStrategy.ONLY_SECOND
+            and pair_ids is not None
+        ):
             if len(pair_ids) > num_tokens_to_remove:
                 window_len = min(len(pair_ids), stride + num_tokens_to_remove)
                 overflowing_tokens = pair_ids[-window_len:]
@@ -1439,10 +1536,17 @@ class UdopTokenizer(PreTrainedTokenizer):
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        needs_to_be_padded = (
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(required_input) != max_length
+        )
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
@@ -1450,35 +1554,58 @@ class UdopTokenizer(PreTrainedTokenizer):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                        encoded_inputs["token_type_ids"]
+                        + [self.pad_token_type_id] * difference
                     )
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    encoded_inputs["bbox"] = (
+                        encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    )
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    encoded_inputs["labels"] = (
+                        encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
+                encoded_inputs[self.model_input_names[0]] = (
+                    required_input + [self.pad_token_id] * difference
+                )
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    encoded_inputs["token_type_ids"] = [
+                        self.pad_token_type_id
+                    ] * difference + encoded_inputs["token_type_ids"]
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = [self.pad_token_box] * difference + encoded_inputs["bbox"]
+                    encoded_inputs["bbox"] = [
+                        self.pad_token_box
+                    ] * difference + encoded_inputs["bbox"]
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
+                    encoded_inputs["labels"] = [
+                        self.pad_token_label
+                    ] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs[self.model_input_names[0]] = [
+                    self.pad_token_id
+                ] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 

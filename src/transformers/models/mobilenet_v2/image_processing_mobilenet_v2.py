@@ -37,7 +37,13 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_torch_available, is_torch_tensor, logging
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_torch_available,
+    is_torch_tensor,
+    logging,
+)
 
 
 if is_torch_available():
@@ -105,7 +111,9 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 256}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 224, "width": 224}
+        )
         crop_size = get_size_dict(crop_size, param_name="crop_size")
         self.do_resize = do_resize
         self.size = size
@@ -115,7 +123,9 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize
@@ -151,7 +161,9 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "Size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -238,11 +250,15 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -282,22 +298,38 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
 
             if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+                image = self.center_crop(
+                    image=image, size=crop_size, input_data_format=input_data_format
+                )
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
             all_images.append(image)
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
             for image in all_images
         ]
 
@@ -305,7 +337,9 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileNetV2
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: List[Tuple] = None
+    ):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -338,13 +372,18 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
 
             for idx in range(len(logits)):
                 resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                    logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
         else:
             semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
+            ]
 
         return semantic_segmentation
 

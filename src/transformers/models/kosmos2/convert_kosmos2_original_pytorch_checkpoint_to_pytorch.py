@@ -68,10 +68,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--kosmos2_checkpoint_path", default=None, type=str, required=True, help="Path the official PyTorch dump."
+        "--kosmos2_checkpoint_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path the official PyTorch dump.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
-    convert_kosmos2_checkpoint_to_pytorch(args.kosmos2_checkpoint_path, args.pytorch_dump_folder_path)
+    convert_kosmos2_checkpoint_to_pytorch(
+        args.kosmos2_checkpoint_path, args.pytorch_dump_folder_path
+    )

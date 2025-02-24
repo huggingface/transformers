@@ -19,7 +19,10 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_vision_available():
@@ -73,7 +76,9 @@ class GotOcr2ImageProcessingTester(unittest.TestCase):
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -109,7 +114,11 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_crop_to_patches(self):
         image_processor = self.image_processing_class(**self.image_processor_dict)
-        image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)[0]
-        processed_images = image_processor.crop_image_to_patches(image, 1, 6, use_thumbnail=True)
+        image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True)[
+            0
+        ]
+        processed_images = image_processor.crop_image_to_patches(
+            image, 1, 6, use_thumbnail=True
+        )
         self.assertEqual(len(processed_images), 5)
         self.assertEqual(processed_images[0].size, (20, 20))

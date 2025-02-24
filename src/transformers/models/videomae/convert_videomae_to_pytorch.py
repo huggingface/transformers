@@ -47,8 +47,12 @@ def get_videomae_config(model_name):
             config.num_labels = 174
             filename = "something-something-v2-id2label.json"
         else:
-            raise ValueError("Model name should either contain 'kinetics' or 'ssv2' in case it's fine-tuned.")
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+            raise ValueError(
+                "Model name should either contain 'kinetics' or 'ssv2' in case it's fine-tuned."
+            )
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -85,7 +89,9 @@ def set_architecture_configs(model_name, config):
         config.decoder_hidden_size = 640
         config.decoder_intermediate_size = 2560
     elif "base" not in model_name:
-        raise ValueError('Model name should include either "small", "base", "large", or "huge"')
+        raise ValueError(
+            'Model name should include either "small", "base", "large", or "huge"'
+        )
 
 
 def rename_key(name):
@@ -98,7 +104,9 @@ def rename_key(name):
     if "pos_embed" in name and "decoder" not in name:
         name = name.replace("pos_embed", "videomae.embeddings.position_embeddings")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "videomae.embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "videomae.embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "videomae.embeddings.norm")
     if "decoder.blocks" in name:
@@ -149,17 +157,29 @@ def convert_state_dict(orig_state_dict, config):
                 layer_num = int(key_split[2])
                 prefix = "decoder.decoder_layers."
                 if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.query.weight"
+                    ] = val[:dim, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.key.weight"
+                    ] = val[dim : dim * 2, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.value.weight"
+                    ] = val[-dim:, :]
             else:
                 dim = config.hidden_size
                 layer_num = int(key_split[1])
                 prefix = "videomae.encoder.layer."
                 if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.query.weight"
+                    ] = val[:dim, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.key.weight"
+                    ] = val[dim : dim * 2, :]
+                    orig_state_dict[
+                        f"{prefix}{layer_num}.attention.attention.value.weight"
+                    ] = val[-dim:, :]
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -170,13 +190,17 @@ def convert_state_dict(orig_state_dict, config):
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
     file = hf_hub_download(
-        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
+        repo_id="hf-internal-testing/spaghetti-video",
+        filename="eating_spaghetti.npy",
+        repo_type="dataset",
     )
     video = np.load(file)
     return list(video)
 
 
-def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub):
+def convert_videomae_checkpoint(
+    checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub
+):
     config = get_videomae_config(model_name)
 
     if "finetuned" in model_name:
@@ -198,12 +222,16 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
     model.eval()
 
     # verify model on basic input
-    image_processor = VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+    image_processor = VideoMAEImageProcessor(
+        image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5]
+    )
     video = prepare_video()
     inputs = image_processor(video, return_tensors="pt")
 
     if "finetuned" not in model_name:
-        local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
+        local_path = hf_hub_download(
+            repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt"
+        )
         inputs["bool_masked_pos"] = torch.load(local_path)
 
     outputs = model(**inputs)
@@ -236,15 +264,35 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
         expected_slice = torch.tensor([0.2671, -0.4689, -0.8235])
     elif model_name == "videomae-base":
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor([[0.7739, 0.7968, 0.7089], [0.6701, 0.7487, 0.6209], [0.4287, 0.5158, 0.4773]])
+        expected_slice = torch.tensor(
+            [
+                [0.7739, 0.7968, 0.7089],
+                [0.6701, 0.7487, 0.6209],
+                [0.4287, 0.5158, 0.4773],
+            ]
+        )
     elif model_name == "videomae-base-short":
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
+        expected_slice = torch.tensor(
+            [
+                [0.7994, 0.9612, 0.8508],
+                [0.7401, 0.8958, 0.8302],
+                [0.5862, 0.7468, 0.7325],
+            ]
+        )
         # we verified the loss both for normalized and unnormalized targets for this one
-        expected_loss = torch.tensor([0.5142]) if config.norm_pix_loss else torch.tensor([0.6469])
+        expected_loss = (
+            torch.tensor([0.5142]) if config.norm_pix_loss else torch.tensor([0.6469])
+        )
     elif model_name == "videomae-large":
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor([[0.7149, 0.7997, 0.6966], [0.6768, 0.7869, 0.6948], [0.5139, 0.6221, 0.5605]])
+        expected_slice = torch.tensor(
+            [
+                [0.7149, 0.7997, 0.6966],
+                [0.6768, 0.7869, 0.6948],
+                [0.5139, 0.6221, 0.5605],
+            ]
+        )
     elif model_name == "videomae-large-finetuned-kinetics":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.0771, 0.0011, -0.3625])
@@ -259,13 +307,25 @@ def convert_videomae_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_
         expected_slice = torch.tensor([0.3669, -0.0688, -0.2421])
     elif model_name == "videomae-base-short-ssv2":
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor([[0.4712, 0.5296, 0.5786], [0.2278, 0.2729, 0.4026], [0.0352, 0.0730, 0.2506]])
+        expected_slice = torch.tensor(
+            [
+                [0.4712, 0.5296, 0.5786],
+                [0.2278, 0.2729, 0.4026],
+                [0.0352, 0.0730, 0.2506],
+            ]
+        )
     elif model_name == "videomae-base-short-finetuned-ssv2":
         expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([-0.0537, -0.1539, -0.3266])
     elif model_name == "videomae-base-ssv2":
         expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor([[0.8131, 0.8727, 0.8546], [0.7366, 0.9377, 0.8870], [0.5935, 0.8874, 0.8564]])
+        expected_slice = torch.tensor(
+            [
+                [0.8131, 0.8727, 0.8546],
+                [0.7366, 0.9377, 0.8870],
+                [0.5935, 0.8874, 0.8564],
+            ]
+        )
     elif model_name == "videomae-base-finetuned-ssv2":
         expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([0.1961, -0.8337, -0.6389])
@@ -315,10 +375,19 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--model_name", default="videomae-base", type=str, help="Name of the model.")
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--model_name", default="videomae-base", type=str, help="Name of the model."
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_videomae_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_videomae_checkpoint(
+        args.checkpoint_url,
+        args.pytorch_dump_folder_path,
+        args.model_name,
+        args.push_to_hub,
+    )

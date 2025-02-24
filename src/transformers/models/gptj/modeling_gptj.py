@@ -60,7 +60,9 @@ _CONFIG_FOR_DOC = "GPTJConfig"
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    sinusoid_inp = torch.einsum(
+        "i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq
+    ).float()
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -76,7 +78,9 @@ def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
 
 
-def apply_rotary_pos_emb(tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
+def apply_rotary_pos_emb(
+    tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor
+) -> torch.Tensor:
     sin = torch.repeat_interleave(sin[:, :, None, :], 2, 3)
     cos = torch.repeat_interleave(cos[:, :, None, :], 2, 3)
     return (tensor * cos) + (rotate_every_two(tensor) * sin)
@@ -108,7 +112,9 @@ class GPTJAttention(nn.Module):
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
                 f" `num_attention_heads`: {self.num_attention_heads})."
             )
-        self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
+        self.scale_attn = torch.sqrt(
+            torch.tensor(self.head_dim, dtype=torch.float32)
+        ).to(torch.get_default_dtype())
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -127,11 +133,17 @@ class GPTJAttention(nn.Module):
         if rotary:
             return tensor
         if len(tensor.shape) == 5:
-            return tensor.permute(0, 1, 3, 2, 4)  # (batch, blocks, head, block_length, head_features)
+            return tensor.permute(
+                0, 1, 3, 2, 4
+            )  # (batch, blocks, head, block_length, head_features)
         elif len(tensor.shape) == 4:
-            return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+            return tensor.permute(
+                0, 2, 1, 3
+            )  # (batch, head, seq_length, head_features)
         else:
-            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
+            raise ValueError(
+                f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}"
+            )
 
     def _merge_heads(self, tensor, num_attention_heads, attn_head_size):
         """
@@ -142,7 +154,9 @@ class GPTJAttention(nn.Module):
         elif len(tensor.shape) == 4:
             tensor = tensor.permute(0, 2, 1, 3).contiguous()
         else:
-            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
+            raise ValueError(
+                f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}"
+            )
         new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
         return tensor.view(new_shape)
 
@@ -213,7 +227,9 @@ class GPTJAttention(nn.Module):
         else:
             embed_positions = self._get_embed_positions(position_ids)
 
-        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
+        repeated_position_ids = position_ids.unsqueeze(-1).repeat(
+            1, 1, embed_positions.shape[-1]
+        )
         sincos = torch.gather(embed_positions, 1, repeated_position_ids)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
@@ -246,9 +262,13 @@ class GPTJAttention(nn.Module):
             key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
 
         # compute self-attention: V x Softmax(QK^T)
-        attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+        attn_output, attn_weights = self._attn(
+            query, key, value, attention_mask, head_mask
+        )
 
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
+        attn_output = self._merge_heads(
+            attn_output, self.num_attention_heads, self.head_dim
+        )
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
@@ -303,7 +323,9 @@ class GPTJFlashAttention2(GPTJAttention):
         else:
             embed_positions = self._get_embed_positions(position_ids)
 
-        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
+        repeated_position_ids = position_ids.unsqueeze(-1).repeat(
+            1, 1, embed_positions.shape[-1]
+        )
         sincos = torch.gather(embed_positions, 1, repeated_position_ids)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
 
@@ -373,7 +395,9 @@ class GPTJFlashAttention2(GPTJAttention):
             key = key.to(target_dtype)
             value = value.to(target_dtype)
 
-        attention_dropout = self.config.attn_pdrop if self.training else 0.0  # attn_pdrop in gptj
+        attention_dropout = (
+            self.config.attn_pdrop if self.training else 0.0
+        )  # attn_pdrop in gptj
 
         query_length = query.shape[1]
 
@@ -391,7 +415,9 @@ class GPTJFlashAttention2(GPTJAttention):
 
         # Reshape outputs
         attn_output = attn_weights.reshape(
-            attn_weights.shape[0], attn_weights.shape[1], attn_weights.shape[2] * attn_weights.shape[3]
+            attn_weights.shape[0],
+            attn_weights.shape[1],
+            attn_weights.shape[2] * attn_weights.shape[3],
         )
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
@@ -410,7 +436,9 @@ GPTJ_ATTENTION_CLASSES = {
 
 
 class GPTJMLP(nn.Module):
-    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * embed_dim
+    def __init__(
+        self, intermediate_size, config
+    ):  # in MLP: intermediate_size= 4 * embed_dim
         super().__init__()
         embed_dim = config.n_embd
 
@@ -433,7 +461,9 @@ class GPTJBlock(nn.Module):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = GPTJ_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.attn = GPTJ_ATTENTION_CLASSES[config._attn_implementation](
+            config, layer_idx
+        )
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
@@ -446,7 +476,10 @@ class GPTJBlock(nn.Module):
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Tuple[torch.Tensor], Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]]]:
+    ) -> Union[
+        Tuple[torch.Tensor],
+        Optional[Tuple[torch.Tensor, Tuple[torch.FloatTensor, ...]]],
+    ]:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
         attn_outputs = self.attn(
@@ -654,7 +687,9 @@ class GPTJModel(GPTJPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPTJBlock(config, layer_idx=i) for i in range(config.n_layer)])
+        self.h = nn.ModuleList(
+            [GPTJBlock(config, layer_idx=i) for i in range(config.n_layer)]
+        )
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Model parallel
@@ -678,11 +713,17 @@ class GPTJModel(GPTJPreTrainedModel):
         )
         # Check validity of device_map
         self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
+            get_device_map(len(self.h), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
         )
         assert_device_map(self.device_map, len(self.h))
         self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.first_device = (
+            "cpu"
+            if "cpu" in self.device_map.keys()
+            else "cuda:" + str(min(self.device_map.keys()))
+        )
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
         self.wte = self.wte.to(self.first_device)
         # Load onto devices
@@ -715,7 +756,9 @@ class GPTJModel(GPTJPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
@@ -737,15 +780,25 @@ class GPTJModel(GPTJPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -773,16 +826,24 @@ class GPTJModel(GPTJPreTrainedModel):
 
         seq_length = inputs_embeds.shape[1]
         if cache_position is None:
-            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_key_values_length = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
+                past_key_values_length,
+                past_key_values_length + seq_length,
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # Prepare head mask if needed
@@ -810,8 +871,12 @@ class GPTJModel(GPTJPreTrainedModel):
 
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if past_key_values is not None:
-                    past_key_values.key_cache = past_key_values.key_cache.to(hidden_states.device)
-                    past_key_values.value_cache = past_key_values.value_cache.to(hidden_states.device)
+                    past_key_values.key_cache = past_key_values.key_cache.to(
+                        hidden_states.device
+                    )
+                    past_key_values.value_cache = past_key_values.value_cache.to(
+                        hidden_states.device
+                    )
 
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if causal_mask is not None:
@@ -850,7 +915,9 @@ class GPTJModel(GPTJPreTrainedModel):
                 next_decoder_cache = outputs[1]
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (
+                    outputs[2 if use_cache else 1],
+                )
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
@@ -871,7 +938,14 @@ class GPTJModel(GPTJPreTrainedModel):
 
         if not return_dict:
             return tuple(
-                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions] if v is not None
+                v
+                for v in [
+                    hidden_states,
+                    next_cache,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
             )
 
         return BaseModelOutputWithPast(
@@ -898,11 +972,17 @@ class GPTJModel(GPTJPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -943,7 +1023,9 @@ class GPTJModel(GPTJPreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -987,22 +1069,29 @@ class GPTJModel(GPTJPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -1065,7 +1154,9 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
@@ -1095,7 +1186,9 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1159,7 +1252,10 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         beam_idx at every generation step.
         """
         return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            tuple(
+                past_state.index_select(0, beam_idx.to(past_state.device))
+                for past_state in layer_past
+            )
             for layer_past in past_key_values
         )
 
@@ -1193,7 +1289,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="ydshieh/tiny-random-gptj-for-sequence-classification",
         output_type=SequenceClassifierOutputWithPast,
@@ -1221,7 +1319,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1245,12 +1345,16 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             batch_size = inputs_embeds.shape[0]
 
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+            raise ValueError(
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
         if self.config.pad_token_id is None:
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(
+                logits.device, torch.int32
+            )
             token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
@@ -1260,7 +1364,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
                 "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
             )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+        pooled_logits = logits[
+            torch.arange(batch_size, device=logits.device), last_non_pad_token
+        ]
 
         loss = None
         if labels is not None:
@@ -1268,7 +1374,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1281,7 +1389,9 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(
+                    pooled_logits.view(-1, self.num_labels), labels.view(-1)
+                )
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
@@ -1319,7 +1429,9 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        GPTJ_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
@@ -1350,7 +1462,9 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.transformer(
             input_ids,

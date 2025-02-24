@@ -64,8 +64,16 @@ class MaskedLinear(nn.Linear):
                 Choices: ["topK", "threshold", "sigmoied_threshold", "magnitude", "l0"]
                 Default: ``topK``
         """
-        super(MaskedLinear, self).__init__(in_features=in_features, out_features=out_features, bias=bias)
-        assert pruning_method in ["topK", "threshold", "sigmoied_threshold", "magnitude", "l0"]
+        super(MaskedLinear, self).__init__(
+            in_features=in_features, out_features=out_features, bias=bias
+        )
+        assert pruning_method in [
+            "topK",
+            "threshold",
+            "sigmoied_threshold",
+            "magnitude",
+            "l0",
+        ]
         self.pruning_method = pruning_method
 
         if self.pruning_method in ["topK", "threshold", "sigmoied_threshold", "l0"]:

@@ -22,7 +22,10 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_vision_available():
@@ -42,8 +45,16 @@ class BridgeTowerImageProcessingTester:
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         do_center_crop: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = [0.48145466, 0.4578275, 0.40821073],
-        image_std: Optional[Union[float, List[float]]] = [0.26862954, 0.26130258, 0.27577711],
+        image_mean: Optional[Union[float, List[float]]] = [
+            0.48145466,
+            0.4578275,
+            0.40821073,
+        ],
+        image_std: Optional[Union[float, List[float]]] = [
+            0.26862954,
+            0.26130258,
+            0.27577711,
+        ],
         do_pad: bool = True,
         batch_size=7,
         min_resolution=30,
@@ -122,7 +133,9 @@ class BridgeTowerImageProcessingTester:
         height, width = self.get_expected_values(images, batched=True)
         return self.num_channels, height, width
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -137,7 +150,9 @@ class BridgeTowerImageProcessingTester:
 @require_torch
 @require_vision
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = BridgeTowerImageProcessor if is_vision_available() else None
+    image_processing_class = (
+        BridgeTowerImageProcessor if is_vision_available() else None
+    )
 
     def setUp(self):
         super().setUp()

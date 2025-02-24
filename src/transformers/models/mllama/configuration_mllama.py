@@ -110,8 +110,19 @@ class MllamaVisionConfig(PretrainedConfig):
     ):
         if supported_aspect_ratios is None:
             if max_num_tiles != 4:
-                raise ValueError("max_num_tiles must be 4 for default supported aspect ratios")
-            supported_aspect_ratios = [[1, 1], [1, 2], [1, 3], [1, 4], [2, 1], [2, 2], [3, 1], [4, 1]]
+                raise ValueError(
+                    "max_num_tiles must be 4 for default supported aspect ratios"
+                )
+            supported_aspect_ratios = [
+                [1, 1],
+                [1, 2],
+                [1, 3],
+                [1, 4],
+                [2, 1],
+                [2, 2],
+                [3, 1],
+                [4, 1],
+            ]
 
         if intermediate_layers_indices is None:
             intermediate_layers_indices = [3, 7, 15, 23, 30]

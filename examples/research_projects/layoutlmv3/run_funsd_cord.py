@@ -48,7 +48,10 @@ from transformers.utils.versions import require_version
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.19.0.dev0")
 
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/pytorch/token-classification/requirements.txt",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,21 +64,33 @@ class ModelArguments:
 
     model_name_or_path: str = field(
         default="microsoft/layoutlmv3-base",
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     processor_name: Optional[str] = field(
-        default=None, metadata={"help": "Name or path to the processor files if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Name or path to the processor files if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     use_auth_token: bool = field(
         default=False,
@@ -94,33 +109,50 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
+    task_name: Optional[str] = field(
+        default="ner", metadata={"help": "The name of the task (ner, pos...)."}
+    )
     dataset_name: Optional[str] = field(
         default="nielsr/funsd-layoutlmv3",
         metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
+        default=None,
+        metadata={"help": "The input training data file (a csv or JSON file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."
+        },
     )
     test_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+        metadata={
+            "help": "An optional input test data file to predict on (a csv or JSON file)."
+        },
     )
     text_column_name: Optional[str] = field(
-        default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
+        default=None,
+        metadata={
+            "help": "The column name of text to input in the file (a csv or JSON file)."
+        },
     )
     label_column_name: Optional[str] = field(
-        default=None, metadata={"help": "The column name of label to input in the file (a csv or JSON file)."}
+        default=None,
+        metadata={
+            "help": "The column name of label to input in the file (a csv or JSON file)."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -173,19 +205,33 @@ class DataTrainingArguments:
     )
     return_entity_level_metrics: bool = field(
         default=False,
-        metadata={"help": "Whether to return all the entity levels during evaluation or just the overall ones."},
+        metadata={
+            "help": "Whether to return all the entity levels during evaluation or just the overall ones."
+        },
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
         self.task_name = self.task_name.lower()
 
 
@@ -194,11 +240,15 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -225,14 +275,20 @@ def main():
 
     # Detecting last checkpoint.
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         last_checkpoint = get_last_checkpoint(training_args.output_dir)
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -261,7 +317,9 @@ def main():
             token=True if model_args.use_auth_token else None,
         )
     else:
-        raise ValueError("This script only supports either FUNSD or CORD out-of-the-box.")
+        raise ValueError(
+            "This script only supports either FUNSD or CORD out-of-the-box."
+        )
 
     if training_args.do_train:
         column_names = dataset["train"].column_names
@@ -274,7 +332,9 @@ def main():
     text_column_name = "words" if "words" in column_names else "tokens"
     boxes_column_name = "bboxes"
     label_column_name = (
-        f"{data_args.task_name}_tags" if f"{data_args.task_name}_tags" in column_names else column_names[1]
+        f"{data_args.task_name}_tags"
+        if f"{data_args.task_name}_tags" in column_names
+        else column_names[1]
     )
 
     remove_columns = column_names
@@ -308,7 +368,11 @@ def main():
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        (
+            model_args.config_name
+            if model_args.config_name
+            else model_args.model_name_or_path
+        ),
         num_labels=num_labels,
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
@@ -317,7 +381,11 @@ def main():
     )
 
     processor = AutoProcessor.from_pretrained(
-        model_args.processor_name if model_args.processor_name else model_args.model_name_or_path,
+        (
+            model_args.processor_name
+            if model_args.processor_name
+            else model_args.model_name_or_path
+        ),
         cache_dir=model_args.cache_dir,
         use_fast=True,
         revision=model_args.model_revision,
@@ -382,7 +450,9 @@ def main():
         eval_dataset = dataset[validation_name]
         if data_args.max_eval_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_eval_samples))
-        with training_args.main_process_first(desc="validation dataset map pre-processing"):
+        with training_args.main_process_first(
+            desc="validation dataset map pre-processing"
+        ):
             eval_dataset = eval_dataset.map(
                 prepare_examples,
                 batched=True,
@@ -396,9 +466,13 @@ def main():
             raise ValueError("--do_predict requires a test dataset")
         predict_dataset = datasets["test"]
         if data_args.max_predict_samples is not None:
-            max_predict_samples = min(len(predict_dataset), data_args.max_predict_samples)
+            max_predict_samples = min(
+                len(predict_dataset), data_args.max_predict_samples
+            )
             predict_dataset = predict_dataset.select(range(max_predict_samples))
-        with training_args.main_process_first(desc="prediction dataset map pre-processing"):
+        with training_args.main_process_first(
+            desc="prediction dataset map pre-processing"
+        ):
             predict_dataset = predict_dataset.map(
                 prepare_examples,
                 batched=True,
@@ -466,7 +540,9 @@ def main():
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+            data_args.max_train_samples
+            if data_args.max_train_samples is not None
+            else len(train_dataset)
         )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
@@ -480,7 +556,11 @@ def main():
 
         metrics = trainer.evaluate()
 
-        max_eval_samples = data_args.max_eval_samples if data_args.max_eval_samples is not None else len(eval_dataset)
+        max_eval_samples = (
+            data_args.max_eval_samples
+            if data_args.max_eval_samples is not None
+            else len(eval_dataset)
+        )
         metrics["eval_samples"] = min(max_eval_samples, len(eval_dataset))
 
         trainer.log_metrics("eval", metrics)
@@ -490,7 +570,9 @@ def main():
     if training_args.do_predict:
         logger.info("*** Predict ***")
 
-        predictions, labels, metrics = trainer.predict(predict_dataset, metric_key_prefix="predict")
+        predictions, labels, metrics = trainer.predict(
+            predict_dataset, metric_key_prefix="predict"
+        )
         predictions = np.argmax(predictions, axis=2)
 
         # Remove ignored index (special tokens)
@@ -503,18 +585,25 @@ def main():
         trainer.save_metrics("predict", metrics)
 
         # Save predictions
-        output_predictions_file = os.path.join(training_args.output_dir, "predictions.txt")
+        output_predictions_file = os.path.join(
+            training_args.output_dir, "predictions.txt"
+        )
         if trainer.is_world_process_zero():
             with open(output_predictions_file, "w") as writer:
                 for prediction in true_predictions:
                     writer.write(" ".join(prediction) + "\n")
 
-    kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "token-classification"}
+    kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "token-classification",
+    }
     if data_args.dataset_name is not None:
         kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:
             kwargs["dataset_args"] = data_args.dataset_config_name
-            kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            kwargs["dataset"] = (
+                f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            )
         else:
             kwargs["dataset"] = data_args.dataset_name
 

@@ -476,7 +476,9 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             run_speech_recognition_ctc_adapter.main()
             result = get_results(tmp_dir)
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "./adapter.tur.safetensors")))
+            self.assertTrue(
+                os.path.isfile(os.path.join(tmp_dir, "./adapter.tur.safetensors"))
+            )
             self.assertLess(result["eval_loss"], result["train_loss"])
 
     def test_run_speech_recognition_seq2seq(self):

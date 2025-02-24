@@ -42,7 +42,12 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_t5 import T5Config
 
 
@@ -55,7 +60,9 @@ remat = nn_partitioning.remat
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+def shift_tokens_right(
+    input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int
+) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
@@ -63,7 +70,9 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     shifted_input_ids = shifted_input_ids.at[:, 1:].set(input_ids[:, :-1])
     shifted_input_ids = shifted_input_ids.at[:, 0].set(decoder_start_token_id)
 
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = jnp.where(
+        shifted_input_ids == -100, pad_token_id, shifted_input_ids
+    )
     return shifted_input_ids
 
 
@@ -162,17 +171,25 @@ class FlaxT5LayerFF(nn.Module):
 
     def setup(self):
         if self.config.is_gated_act:
-            self.DenseReluDense = FlaxT5DenseGatedActDense(self.config, dtype=self.dtype)
+            self.DenseReluDense = FlaxT5DenseGatedActDense(
+                self.config, dtype=self.dtype
+            )
         else:
             self.DenseReluDense = FlaxT5DenseActDense(self.config, dtype=self.dtype)
 
-        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(self, hidden_states, deterministic=True):
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states, deterministic=deterministic)
-        hidden_states = hidden_states + self.dropout(forwarded_states, deterministic=deterministic)
+        forwarded_states = self.DenseReluDense(
+            forwarded_states, deterministic=deterministic
+        )
+        hidden_states = hidden_states + self.dropout(
+            forwarded_states, deterministic=deterministic
+        )
         return hidden_states
 
 
@@ -184,14 +201,18 @@ class FlaxT5Attention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
-        self.relative_attention_max_distance = self.config.relative_attention_max_distance
+        self.relative_attention_max_distance = (
+            self.config.relative_attention_max_distance
+        )
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
         self.dropout = self.config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
+        q_init_std = self.config.initializer_factor * (
+            (self.inner_dim * self.key_value_proj_dim) ** -0.5
+        )
         kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
         o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
@@ -229,7 +250,9 @@ class FlaxT5Attention(nn.Module):
             )
 
     @staticmethod
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+    def _relative_position_bucket(
+        relative_position, bidirectional=True, num_buckets=32, max_distance=128
+    ):
         """
         Adapted from Mesh Tensorflow:
         https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
@@ -256,11 +279,17 @@ class FlaxT5Attention(nn.Module):
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         relative_position_if_large = max_exact + (
-            jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
+            jnp.log(relative_position / max_exact)
+            / jnp.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(
+            relative_position_if_large, a_max=num_buckets - 1
+        )
 
-        relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
+        relative_buckets += jnp.where(
+            is_small, relative_position, relative_position_if_large
+        )
 
         return relative_buckets.astype("i4")
 
@@ -282,7 +311,9 @@ class FlaxT5Attention(nn.Module):
         return values
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim)
+        )
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.inner_dim,))
@@ -296,9 +327,15 @@ class FlaxT5Attention(nn.Module):
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
-        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
-        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
-        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+        cached_key = self.variable(
+            "cache", "cached_key", jnp.zeros, key.shape, key.dtype
+        )
+        cached_value = self.variable(
+            "cache", "cached_value", jnp.zeros, value.shape, value.dtype
+        )
+        cache_index = self.variable(
+            "cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32)
+        )
 
         if is_initialized:
             *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
@@ -321,9 +358,19 @@ class FlaxT5Attention(nn.Module):
         return key, value, attention_mask
 
     def _create_position_bias(
-        self, key_states, query_states, attention_mask, init_cache, seq_length, causal_attention_mask_shift
+        self,
+        key_states,
+        query_states,
+        attention_mask,
+        init_cache,
+        seq_length,
+        causal_attention_mask_shift,
     ):
-        cache_is_filled = self.causal and self.has_variable("cache", "cached_key") and (not init_cache)
+        cache_is_filled = (
+            self.causal
+            and self.has_variable("cache", "cached_key")
+            and (not init_cache)
+        )
         key_length = key_states.shape[1]
         query_length = key_length if cache_is_filled else query_states.shape[1]
 
@@ -332,7 +379,9 @@ class FlaxT5Attention(nn.Module):
         elif attention_mask is not None:
             position_bias = jnp.zeros_like(attention_mask)
         else:
-            position_bias = jnp.zeros((1, self.n_heads, query_length, key_length), dtype=self.dtype)
+            position_bias = jnp.zeros(
+                (1, self.n_heads, query_length, key_length), dtype=self.dtype
+            )
 
         # if key and values are already calculated, only the last query position bias should be taken
         if cache_is_filled:
@@ -361,9 +410,19 @@ class FlaxT5Attention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:2]
 
         # q, k, v projections
-        query_states = self.q(hidden_states)  # (batch_size, n_heads, seq_length, dim_per_head)
-        key_states = self.k(hidden_states) if key_value_states is None else self.k(key_value_states)
-        value_states = self.v(hidden_states) if key_value_states is None else self.v(key_value_states)
+        query_states = self.q(
+            hidden_states
+        )  # (batch_size, n_heads, seq_length, dim_per_head)
+        key_states = (
+            self.k(hidden_states)
+            if key_value_states is None
+            else self.k(key_value_states)
+        )
+        value_states = (
+            self.v(hidden_states)
+            if key_value_states is None
+            else self.v(key_value_states)
+        )
 
         # reshape to (batch_size, seq_length, n_heads, head_dim)
         query_states = self._split_heads(query_states)
@@ -375,7 +434,9 @@ class FlaxT5Attention(nn.Module):
 
         # for fast decoding causal attention mask should be shifted
         causal_attention_mask_shift = (
-            self.variables["cache"]["cache_index"] if (self.has_variable("cache", "cached_key") and self.causal) else 0
+            self.variables["cache"]["cache_index"]
+            if (self.has_variable("cache", "cached_key") and self.causal)
+            else 0
         )
         # create causal attention_mask; attention_mask has to be defined when model is causal
         if self.causal:
@@ -395,7 +456,8 @@ class FlaxT5Attention(nn.Module):
                 causal_attention_mask, (batch_size,) + causal_attention_mask.shape[1:]
             )
             attention_mask = jnp.broadcast_to(
-                jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_attention_mask.shape
+                jnp.expand_dims(attention_mask, axis=(-3, -2)),
+                causal_attention_mask.shape,
             )
             attention_mask = combine_masks(attention_mask, causal_attention_mask)
         elif attention_mask is not None:
@@ -420,7 +482,12 @@ class FlaxT5Attention(nn.Module):
         if position_bias is None:
             # compute position bias (only for first layer)
             position_bias = self._create_position_bias(
-                key_states, query_states, attention_mask, init_cache, seq_length, causal_attention_mask_shift
+                key_states,
+                query_states,
+                attention_mask,
+                init_cache,
+                seq_length,
+                causal_attention_mask_shift,
             )
 
             if attention_mask is not None:
@@ -472,7 +539,9 @@ class FlaxT5LayerSelfAttention(nn.Module):
             causal=self.config.causal,
             dtype=self.dtype,
         )
-        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(
@@ -493,8 +562,12 @@ class FlaxT5LayerSelfAttention(nn.Module):
             deterministic=deterministic,
             init_cache=init_cache,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(
+            attention_output[0], deterministic=deterministic
+        )
+        outputs = (hidden_states,) + attention_output[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -504,9 +577,14 @@ class FlaxT5LayerCrossAttention(nn.Module):
 
     def setup(self):
         self.EncDecAttention = FlaxT5Attention(
-            self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
+            self.config,
+            has_relative_attention_bias=False,
+            causal=False,
+            dtype=self.dtype,
         )
-        self.layer_norm = FlaxT5LayerNorm(self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype)
+        self.layer_norm = FlaxT5LayerNorm(
+            self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
+        )
         self.dropout = nn.Dropout(self.config.dropout_rate)
 
     def __call__(
@@ -526,8 +604,12 @@ class FlaxT5LayerCrossAttention(nn.Module):
             position_bias=position_bias,
             output_attentions=output_attentions,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(
+            attention_output[0], deterministic=deterministic
+        )
+        outputs = (hidden_states,) + attention_output[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -548,10 +630,14 @@ class FlaxT5Block(nn.Module):
         )
         feed_forward_index = 1
         if self.causal:
-            self.layer += (FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype),)
+            self.layer += (
+                FlaxT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype),
+            )
             feed_forward_index += 1
 
-        self.layer += (FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),)
+        self.layer += (
+            FlaxT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),
+        )
 
     def __call__(
         self,
@@ -575,7 +661,9 @@ class FlaxT5Block(nn.Module):
             init_cache=init_cache,
         )
         hidden_states = self_attention_outputs[0]
-        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
+        attention_outputs = self_attention_outputs[
+            1:
+        ]  # Keep self-attention outputs and relative position weights
 
         do_cross_attention = self.causal and encoder_hidden_states is not None
         if do_cross_attention:
@@ -611,7 +699,9 @@ class FlaxT5LayerCollection(nn.Module):
 
     def setup(self):
         self.layer = FlaxT5Block(
-            self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype
+            self.config,
+            has_relative_attention_bias=self.has_relative_attention_bias,
+            dtype=self.dtype,
         )
 
     def __call__(
@@ -647,7 +737,9 @@ class FlaxT5BlockCollection(nn.Module):
     def setup(self):
         self.causal = self.config.causal
         if self.gradient_checkpointing:
-            FlaxT5CheckpointLayer = remat(FlaxT5LayerCollection, static_argnums=(6, 7, 8))
+            FlaxT5CheckpointLayer = remat(
+                FlaxT5LayerCollection, static_argnums=(6, 7, 8)
+            )
             self.blocks = [
                 FlaxT5CheckpointLayer(
                     self.config,
@@ -710,7 +802,9 @@ class FlaxT5BlockCollection(nn.Module):
             position_bias = layer_outputs[1]
 
             if self.causal and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
+                encoder_decoder_position_bias = layer_outputs[
+                    3 if output_attentions else 2
+                ]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)
@@ -735,7 +829,9 @@ class FlaxT5Stack(nn.Module):
         self.causal = self.config.causal
 
         self.block = FlaxT5BlockCollection(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.final_layer_norm = FlaxT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
@@ -943,8 +1039,20 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         gradient_checkpointing: bool = False,
         **kwargs,
     ):
-        module = self.module_class(config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        module = self.module_class(
+            config=config,
+            dtype=dtype,
+            gradient_checkpointing=gradient_checkpointing,
+            **kwargs,
+        )
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
     def enable_gradient_checkpointing(self):
         self._module = self.module_class(
@@ -953,7 +1061,9 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
@@ -996,11 +1106,19 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if decoder_input_ids is None:
             raise ValueError(
@@ -1050,7 +1168,9 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         decoder_attention_mask = jnp.ones_like(decoder_input_ids)
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
+        def _decoder_forward(
+            module, decoder_input_ids, decoder_attention_mask, **kwargs
+        ):
             decoder_module = module._get_decoder_module()
             return decoder_module(
                 decoder_input_ids,
@@ -1096,11 +1216,19 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         >>> inputs = tokenizer(text, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -1127,7 +1255,9 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         )
 
     @add_start_docstrings(T5_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=T5Config)
+    @replace_return_docstrings(
+        output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=T5Config
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -1164,11 +1294,19 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         encoder_hidden_states = encoder_outputs[0]
         if encoder_attention_mask is None:
@@ -1195,7 +1333,9 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         else:
             mutable = False
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
+        def _decoder_forward(
+            module, decoder_input_ids, decoder_attention_mask, **kwargs
+        ):
             decoder_module = module._get_decoder_module()
             return decoder_module(
                 decoder_input_ids,
@@ -1289,7 +1429,9 @@ class FlaxT5Module(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            embedding_init=jax.nn.initializers.normal(
+                self.config.initializer_factor * 1.0
+            ),
             dtype=self.dtype,
         )
 
@@ -1324,7 +1466,9 @@ class FlaxT5Module(nn.Module):
         return_dict=None,
         deterministic: bool = True,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
@@ -1367,7 +1511,9 @@ class FlaxT5Model(FlaxT5PreTrainedModel):
     module_class = FlaxT5Module
 
 
-append_call_sample_docstring(FlaxT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
+)
 
 FLAX_T5_MODEL_DOCSTRING = """
     Returns:
@@ -1397,7 +1543,9 @@ FLAX_T5_MODEL_DOCSTRING = """
 
 
 overwrite_call_docstring(FlaxT5Model, T5_INPUTS_DOCSTRING + FLAX_T5_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+append_replace_return_docstrings(
+    FlaxT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+)
 
 
 @add_start_docstrings(
@@ -1413,7 +1561,9 @@ class FlaxT5EncoderModule(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            embedding_init=jax.nn.initializers.normal(
+                self.config.initializer_factor * 1.0
+            ),
             dtype=self.dtype,
         )
 
@@ -1465,11 +1615,19 @@ class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         # prepare encoder inputs
         if attention_mask is None:
@@ -1490,7 +1648,9 @@ class FlaxT5EncoderModel(FlaxT5PreTrainedModel):
         )
 
 
-@add_start_docstrings("""T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING)
+@add_start_docstrings(
+    """T5 Model with a `language modeling` head on top.""", T5_START_DOCSTRING
+)
 class FlaxT5ForConditionalGenerationModule(nn.Module):
     config: T5Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -1517,7 +1677,10 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = FlaxT5Stack(
-            encoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            encoder_config,
+            self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
         decoder_config = copy.deepcopy(self.config)
@@ -1525,7 +1688,10 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
         self.decoder = FlaxT5Stack(
-            decoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            decoder_config,
+            self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
         self.lm_head = nn.Dense(
@@ -1547,7 +1713,9 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         return_dict=None,
         deterministic: bool = True,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # Encode
         encoder_outputs = self.encoder(
@@ -1582,7 +1750,9 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
 
         if self.config.tie_word_embeddings:
             shared_embedding = self.shared.variables["params"]["embedding"]
-            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, sequence_output)
+            lm_logits = self.lm_head.apply(
+                {"params": {"kernel": shared_embedding.T}}, sequence_output
+            )
         else:
             lm_logits = self.lm_head(sequence_output)
 
@@ -1605,7 +1775,9 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
     module_class = FlaxT5ForConditionalGenerationModule
 
     @add_start_docstrings(T5_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=T5Config)
+    @replace_return_docstrings(
+        output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=T5Config
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -1642,11 +1814,19 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         encoder_hidden_states = encoder_outputs[0]
         if encoder_attention_mask is None:
@@ -1673,7 +1853,9 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
         else:
             mutable = False
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
+        def _decoder_forward(
+            module, decoder_input_ids, decoder_attention_mask, **kwargs
+        ):
             decoder_module = module._get_decoder_module()
             decoder_outputs = decoder_module(
                 decoder_input_ids,
@@ -1690,7 +1872,9 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
 
             if self.config.tie_word_embeddings:
                 shared_embedding = module.shared.variables["params"]["embedding"]
-                lm_logits = module.lm_head.apply({"params": {"kernel": shared_embedding.T}}, sequence_output)
+                lm_logits = module.lm_head.apply(
+                    {"params": {"kernel": shared_embedding.T}}, sequence_output
+                )
             else:
                 lm_logits = module.lm_head(sequence_output)
 
@@ -1791,11 +1975,19 @@ FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING = """
 
 
 overwrite_call_docstring(
-    FlaxT5ForConditionalGeneration, T5_INPUTS_DOCSTRING + FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING
+    FlaxT5ForConditionalGeneration,
+    T5_INPUTS_DOCSTRING + FLAX_T5_CONDITIONAL_GENERATION_DOCSTRING,
 )
 append_replace_return_docstrings(
-    FlaxT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+    FlaxT5ForConditionalGeneration,
+    output_type=FlaxSeq2SeqLMOutput,
+    config_class=_CONFIG_FOR_DOC,
 )
 
 
-__all__ = ["FlaxT5EncoderModel", "FlaxT5ForConditionalGeneration", "FlaxT5Model", "FlaxT5PreTrainedModel"]
+__all__ = [
+    "FlaxT5EncoderModel",
+    "FlaxT5ForConditionalGeneration",
+    "FlaxT5Model",
+    "FlaxT5PreTrainedModel",
+]

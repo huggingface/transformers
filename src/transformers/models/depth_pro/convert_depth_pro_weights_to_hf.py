@@ -119,9 +119,13 @@ def get_qkv_state_dict(key, parameter):
     """
     qkv_state_dict = {}
     placeholder = re.search(r"(\(.*?\))", key).group(1)  # finds   "(query|key|value)"
-    replacements_keys = placeholder[1:-1].split("|")  # creates ['query', 'key', 'value']
+    replacements_keys = placeholder[1:-1].split(
+        "|"
+    )  # creates ['query', 'key', 'value']
     replacements_vals = torch.split(
-        parameter, split_size_or_sections=parameter.size(0) // len(replacements_keys), dim=0
+        parameter,
+        split_size_or_sections=parameter.size(0) // len(replacements_keys),
+        dim=0,
     )
     for replacement_key, replacement_val in zip(replacements_keys, replacements_vals):
         qkv_state_dict[key.replace(placeholder, replacement_key)] = replacement_val
@@ -220,7 +224,10 @@ def main():
         help="Location to write the converted model and processor",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
+        "--safe_serialization",
+        default=True,
+        type=bool,
+        help="Whether or not to save using `safetensors`.",
     )
     parser.add_argument(
         "--push_to_hub",

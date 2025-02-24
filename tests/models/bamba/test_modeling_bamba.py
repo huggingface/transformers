@@ -115,7 +115,9 @@ class BambaModelTester:
 
         token_labels = None
         if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -137,11 +139,19 @@ class BambaModelTester:
         if self.num_hidden_layers < 4:
             self.num_hidden_layers = 4
         if self.attn_layer_indices is None:
-            d = [x for x in range(2, self.num_hidden_layers) if self.num_hidden_layers % x == 0]
+            d = [
+                x
+                for x in range(2, self.num_hidden_layers)
+                if self.num_hidden_layers % x == 0
+            ]
             if len(d) == 0:
-                raise ValueError("num_hidden_layers is prime, cannot automatically set attn_layer_indices.")
+                raise ValueError(
+                    "num_hidden_layers is prime, cannot automatically set attn_layer_indices."
+                )
             d = d[-1]  # get the largest divisor
-            self.attn_layer_indices = [x + 1 for x in range(0, self.num_hidden_layers, d)]
+            self.attn_layer_indices = [
+                x + 1 for x in range(0, self.num_hidden_layers, d)
+            ]
 
         return BambaConfig(
             vocab_size=self.vocab_size,
@@ -177,7 +187,10 @@ class BambaModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -193,7 +206,9 @@ class BambaModelTester:
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids, labels=token_labels)
         result = model(input_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -240,23 +255,31 @@ class BambaModelTester:
             past_key_values=past_key_values,
             output_hidden_states=True,
             cache_position=torch.arange(
-                input_ids.shape[1], input_ids.shape[1] + next_tokens.shape[1], device=model.device
+                input_ids.shape[1],
+                input_ids.shape[1] + next_tokens.shape[1],
+                device=model.device,
             ),
         )["hidden_states"][0]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
 
 @require_torch
-class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BambaModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (BambaModel, BambaForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -276,7 +299,9 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = BambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=64)
+        self.config_tester = ConfigTester(
+            self, config_class=BambaConfig, hidden_size=64
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -291,7 +316,9 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_initialization(self):
         r"""
@@ -305,8 +332,12 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     if "A_log" in name:
-                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
-                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
+                        A = torch.arange(
+                            1, config.mamba_n_heads + 1, dtype=torch.float32
+                        )
+                        torch.testing.assert_close(
+                            param.data, torch.log(A), rtol=1e-5, atol=1e-5
+                        )
                     elif "D" in name:
                         D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
                         torch.testing.assert_close(param.data, D, rtol=1e-5, atol=1e-5)
@@ -333,9 +364,13 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        encoder_key_length = getattr(
+            self.model_tester, "key_length", encoder_seq_length
+        )
 
-        expected_num_attentions = self.model_tester.num_hidden_layers - len(self.model_tester.attn_layer_indices)
+        expected_num_attentions = self.model_tester.num_hidden_layers - len(
+            self.model_tester.attn_layer_indices
+        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -363,7 +398,11 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
             out_len = len(outputs)
 
@@ -384,7 +423,11 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             self.assertEqual(len(self_attentions), expected_num_attentions)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [
+                    self.model_tester.num_attention_heads,
+                    encoder_seq_length,
+                    encoder_key_length,
+                ],
             )
 
     def test_batching_equivalence(self):
@@ -418,14 +461,17 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             else:
                 decoder_only_classes.append(model_class)
         if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only architecture available for this model.")
+            self.skipTest(
+                reason="No decoder-only architecture available for this model."
+            )
 
         # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
         #   added support for it yet. We skip these models for now.
         has_encoder_attributes = any(
             attr_name
             for attr_name in config.to_dict().keys()
-            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
+            if attr_name.startswith("encoder")
+            and attr_name != "encoder_no_repeat_ngram_size"
         )
         if has_encoder_attributes:
             self.skipTest(
@@ -465,17 +511,28 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             # With left-padding (length 32)
             # can hardcode pad_token to be 0 as we'll do attn masking anyway
             pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
+                config.get_text_config().pad_token_id
+                if config.get_text_config().pad_token_id is not None
+                else 0
             )
             pad_size = (input_ids.shape[0], 32)
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
+            padding = (
+                torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device)
+                * pad_token_id
+            )
             padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat((torch.zeros_like(padding), attention_mask), dim=1)
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
+            padded_attention_mask = torch.cat(
+                (torch.zeros_like(padding), attention_mask), dim=1
+            )
+            model_kwargs = _prepare_model_kwargs(
+                padded_input_ids, padded_attention_mask, signature
+            )
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5
+            )
 
 
 @slow
@@ -491,7 +548,9 @@ class BambaModelIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         model_id = "ibm-fms/Bamba-9B"
-        cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        cls.model = BambaForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
         # feels a bit forced to have to do this for the generation test
@@ -500,7 +559,9 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = (
+                torch.cuda.get_device_capability()[0]
+            )
 
     def test_simple_generate(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -515,12 +576,14 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
         self.model.to(torch_device)
 
-        input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
-            "input_ids"
-        ].to(torch_device)
+        input_ids = self.tokenizer(
+            "Hey how are you doing on this lovely evening?", return_tensors="pt"
+        )["input_ids"].to(torch_device)
         out = self.model.generate(input_ids, do_sample=False, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(out[0, :])
-        self.assertEqual(output_sentence, EXPECTED_TEXTS[self.cuda_compute_capability_major_version])
+        self.assertEqual(
+            output_sentence, EXPECTED_TEXTS[self.cuda_compute_capability_major_version]
+        )
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.cuda_compute_capability_major_version == 8:
@@ -536,7 +599,9 @@ class BambaModelIntegrationTest(unittest.TestCase):
                     148., 147., 147., 147., 146., 146., 148., 148.
                 ], dtype=torch.bfloat16)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1)
+            torch.testing.assert_close(
+                logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1
+            )
 
     def test_simple_batched_generate_with_padding(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -561,8 +626,14 @@ class BambaModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
-        self.assertEqual(output_sentences[0], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][0])
-        self.assertEqual(output_sentences[1], EXPECTED_TEXTS[self.cuda_compute_capability_major_version][1])
+        self.assertEqual(
+            output_sentences[0],
+            EXPECTED_TEXTS[self.cuda_compute_capability_major_version][0],
+        )
+        self.assertEqual(
+            output_sentences[1],
+            EXPECTED_TEXTS[self.cuda_compute_capability_major_version][1],
+        )
 
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.cuda_compute_capability_major_version == 8:
@@ -587,5 +658,9 @@ class BambaModelIntegrationTest(unittest.TestCase):
                     178., 177., 177., 175., 176., 177., 175., 177.
                 ], dtype=torch.bfloat16)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1)
-            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1)
+            torch.testing.assert_close(
+                logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1
+            )
+            torch.testing.assert_close(
+                logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1
+            )

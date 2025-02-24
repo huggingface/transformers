@@ -24,12 +24,23 @@ from typing import Callable, Dict, List, Tuple
 import timm
 import torch
 import torch.nn as nn
-from classy_vision.models.regnet import RegNet, RegNetParams, RegNetY32gf, RegNetY64gf, RegNetY128gf
+from classy_vision.models.regnet import (
+    RegNet,
+    RegNetParams,
+    RegNetY32gf,
+    RegNetY64gf,
+    RegNetY128gf,
+)
 from huggingface_hub import hf_hub_download
 from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
 
-from transformers import AutoImageProcessor, RegNetConfig, RegNetForImageClassification, RegNetModel
+from transformers import (
+    AutoImageProcessor,
+    RegNetConfig,
+    RegNetForImageClassification,
+    RegNetModel,
+)
 from transformers.utils import logging
 
 
@@ -44,7 +55,11 @@ class Tracker:
     handles: list = field(default_factory=list)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        has_not_submodules = (
+            len(list(m.modules())) == 1
+            or isinstance(m, nn.Conv2d)
+            or isinstance(m, nn.BatchNorm2d)
+        )
         if has_not_submodules:
             self.traced.append(m)
 
@@ -154,7 +169,9 @@ class NameToOurModelFuncMap(dict):
         return val
 
 
-def manually_copy_vissl_head(from_state_dict, to_state_dict, keys: List[Tuple[str, str]]):
+def manually_copy_vissl_head(
+    from_state_dict, to_state_dict, keys: List[Tuple[str, str]]
+):
     for from_key, to_key in keys:
         to_state_dict[to_key] = from_state_dict[from_key].clone()
         print(f"Copied key={from_key} to={to_key}")
@@ -173,7 +190,9 @@ def convert_weight_and_push(
     with torch.no_grad():
         from_model, from_state_dict = from_model_func()
         our_model = our_model_func(config).eval()
-        module_transfer = ModuleTransfer(src=from_model, dest=our_model, raise_if_mismatch=False)
+        module_transfer = ModuleTransfer(
+            src=from_model, dest=our_model, raise_if_mismatch=False
+        )
         x = torch.randn((1, 3, 224, 224))
         module_transfer(x)
 
@@ -181,13 +200,20 @@ def convert_weight_and_push(
         keys = []
         # for seer - in1k finetuned we have to manually copy the head
         if "seer" in name and "in1k" in name:
-            keys = [("0.clf.0.weight", "classifier.1.weight"), ("0.clf.0.bias", "classifier.1.bias")]
-        to_state_dict = manually_copy_vissl_head(from_state_dict, our_model.state_dict(), keys)
+            keys = [
+                ("0.clf.0.weight", "classifier.1.weight"),
+                ("0.clf.0.bias", "classifier.1.bias"),
+            ]
+        to_state_dict = manually_copy_vissl_head(
+            from_state_dict, our_model.state_dict(), keys
+        )
         our_model.load_state_dict(to_state_dict)
 
     our_outputs = our_model(x, output_hidden_states=True)
     our_output = (
-        our_outputs.logits if isinstance(our_model, RegNetForImageClassification) else our_outputs.last_hidden_state
+        our_outputs.logits
+        if isinstance(our_model, RegNetForImageClassification)
+        else our_outputs.last_hidden_state
     )
 
     from_output = from_model(x)
@@ -197,7 +223,9 @@ def convert_weight_and_push(
     if "seer" in name and "in1k" in name:
         our_output = our_outputs.hidden_states[-1]
 
-    assert torch.allclose(from_output, our_output), "The model logits don't match the original one."
+    assert torch.allclose(
+        from_output, our_output
+    ), "The model logits don't match the original one."
 
     if push_to_hub:
         our_model.push_to_hub(
@@ -208,7 +236,9 @@ def convert_weight_and_push(
 
         size = 224 if "seer" not in name else 384
         # we can use the convnext one
-        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
+        image_processor = AutoImageProcessor.from_pretrained(
+            "facebook/convnext-base-224-22k-1k", size=size
+        )
         image_processor.push_to_hub(
             repo_path_or_name=save_directory / name,
             commit_message="Add image processor",
@@ -218,60 +248,104 @@ def convert_weight_and_push(
         print(f"Pushed {name}")
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(
+    save_directory: Path, model_name: str = None, push_to_hub: bool = True
+):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
     expected_shape = (1, num_labels)
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(
+        Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text()
+    )
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
-    ImageNetPreTrainedConfig = partial(RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
+    ImageNetPreTrainedConfig = partial(
+        RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id
+    )
 
     names_to_config = {
         "regnet-x-002": ImageNetPreTrainedConfig(
-            depths=[1, 1, 4, 7], hidden_sizes=[24, 56, 152, 368], groups_width=8, layer_type="x"
+            depths=[1, 1, 4, 7],
+            hidden_sizes=[24, 56, 152, 368],
+            groups_width=8,
+            layer_type="x",
         ),
         "regnet-x-004": ImageNetPreTrainedConfig(
-            depths=[1, 2, 7, 12], hidden_sizes=[32, 64, 160, 384], groups_width=16, layer_type="x"
+            depths=[1, 2, 7, 12],
+            hidden_sizes=[32, 64, 160, 384],
+            groups_width=16,
+            layer_type="x",
         ),
         "regnet-x-006": ImageNetPreTrainedConfig(
-            depths=[1, 3, 5, 7], hidden_sizes=[48, 96, 240, 528], groups_width=24, layer_type="x"
+            depths=[1, 3, 5, 7],
+            hidden_sizes=[48, 96, 240, 528],
+            groups_width=24,
+            layer_type="x",
         ),
         "regnet-x-008": ImageNetPreTrainedConfig(
-            depths=[1, 3, 7, 5], hidden_sizes=[64, 128, 288, 672], groups_width=16, layer_type="x"
+            depths=[1, 3, 7, 5],
+            hidden_sizes=[64, 128, 288, 672],
+            groups_width=16,
+            layer_type="x",
         ),
         "regnet-x-016": ImageNetPreTrainedConfig(
-            depths=[2, 4, 10, 2], hidden_sizes=[72, 168, 408, 912], groups_width=24, layer_type="x"
+            depths=[2, 4, 10, 2],
+            hidden_sizes=[72, 168, 408, 912],
+            groups_width=24,
+            layer_type="x",
         ),
         "regnet-x-032": ImageNetPreTrainedConfig(
-            depths=[2, 6, 15, 2], hidden_sizes=[96, 192, 432, 1008], groups_width=48, layer_type="x"
+            depths=[2, 6, 15, 2],
+            hidden_sizes=[96, 192, 432, 1008],
+            groups_width=48,
+            layer_type="x",
         ),
         "regnet-x-040": ImageNetPreTrainedConfig(
-            depths=[2, 5, 14, 2], hidden_sizes=[80, 240, 560, 1360], groups_width=40, layer_type="x"
+            depths=[2, 5, 14, 2],
+            hidden_sizes=[80, 240, 560, 1360],
+            groups_width=40,
+            layer_type="x",
         ),
         "regnet-x-064": ImageNetPreTrainedConfig(
-            depths=[2, 4, 10, 1], hidden_sizes=[168, 392, 784, 1624], groups_width=56, layer_type="x"
+            depths=[2, 4, 10, 1],
+            hidden_sizes=[168, 392, 784, 1624],
+            groups_width=56,
+            layer_type="x",
         ),
         "regnet-x-080": ImageNetPreTrainedConfig(
-            depths=[2, 5, 15, 1], hidden_sizes=[80, 240, 720, 1920], groups_width=120, layer_type="x"
+            depths=[2, 5, 15, 1],
+            hidden_sizes=[80, 240, 720, 1920],
+            groups_width=120,
+            layer_type="x",
         ),
         "regnet-x-120": ImageNetPreTrainedConfig(
-            depths=[2, 5, 11, 1], hidden_sizes=[224, 448, 896, 2240], groups_width=112, layer_type="x"
+            depths=[2, 5, 11, 1],
+            hidden_sizes=[224, 448, 896, 2240],
+            groups_width=112,
+            layer_type="x",
         ),
         "regnet-x-160": ImageNetPreTrainedConfig(
-            depths=[2, 6, 13, 1], hidden_sizes=[256, 512, 896, 2048], groups_width=128, layer_type="x"
+            depths=[2, 6, 13, 1],
+            hidden_sizes=[256, 512, 896, 2048],
+            groups_width=128,
+            layer_type="x",
         ),
         "regnet-x-320": ImageNetPreTrainedConfig(
-            depths=[2, 7, 13, 1], hidden_sizes=[336, 672, 1344, 2520], groups_width=168, layer_type="x"
+            depths=[2, 7, 13, 1],
+            hidden_sizes=[336, 672, 1344, 2520],
+            groups_width=168,
+            layer_type="x",
         ),
         # y variant
-        "regnet-y-002": ImageNetPreTrainedConfig(depths=[1, 1, 4, 7], hidden_sizes=[24, 56, 152, 368], groups_width=8),
+        "regnet-y-002": ImageNetPreTrainedConfig(
+            depths=[1, 1, 4, 7], hidden_sizes=[24, 56, 152, 368], groups_width=8
+        ),
         "regnet-y-004": ImageNetPreTrainedConfig(
             depths=[1, 3, 6, 6], hidden_sizes=[48, 104, 208, 440], groups_width=8
         ),
@@ -306,8 +380,12 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
         ),
         # models created by SEER -> https://arxiv.org/abs/2202.08360
-        "regnet-y-320-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232),
-        "regnet-y-640-seer": RegNetConfig(depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328),
+        "regnet-y-320-seer": RegNetConfig(
+            depths=[2, 5, 12, 1], hidden_sizes=[232, 696, 1392, 3712], groups_width=232
+        ),
+        "regnet-y-640-seer": RegNetConfig(
+            depths=[2, 5, 12, 1], hidden_sizes=[328, 984, 1968, 4920], groups_width=328
+        ),
         "regnet-y-1280-seer": RegNetConfig(
             depths=[2, 7, 17, 1], hidden_sizes=[528, 1056, 2904, 7392], groups_width=264
         ),
@@ -315,7 +393,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
         ),
         "regnet-y-10b-seer": ImageNetPreTrainedConfig(
-            depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
+            depths=[2, 7, 17, 1],
+            hidden_sizes=[2020, 4040, 11110, 28280],
+            groups_width=1010,
         ),
         # finetuned on imagenet
         "regnet-y-320-seer-in1k": ImageNetPreTrainedConfig(
@@ -331,7 +411,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             depths=[3, 7, 16, 1], hidden_sizes=[640, 1696, 2544, 5088], groups_width=640
         ),
         "regnet-y-10b-seer-in1k": ImageNetPreTrainedConfig(
-            depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
+            depths=[2, 7, 17, 1],
+            hidden_sizes=[2020, 4040, 11110, 28280],
+            groups_width=1010,
         ),
     }
 
@@ -339,8 +421,12 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
     names_to_from_model_map = NameToFromModelFuncMap()
     # add seer weights logic
 
-    def load_using_classy_vision(checkpoint_url: str, model_func: Callable[[], nn.Module]) -> Tuple[nn.Module, Dict]:
-        files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
+    def load_using_classy_vision(
+        checkpoint_url: str, model_func: Callable[[], nn.Module]
+    ) -> Tuple[nn.Module, Dict]:
+        files = torch.hub.load_state_dict_from_url(
+            checkpoint_url, model_dir=str(save_directory), map_location="cpu"
+        )
         model = model_func()
         # check if we have a head, if yes add it
         model_state_dict = files["classy_state_dict"]["base_model"]["model"]
@@ -371,7 +457,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         load_using_classy_vision,
         "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_regnet10B/model_iteration124500_conso.torch",
         lambda: FakeRegNetVisslWrapper(
-            RegNet(RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
+            RegNet(
+                RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52)
+            )
         ),
     )
 
@@ -398,7 +486,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         load_using_classy_vision,
         "https://dl.fbaipublicfiles.com/vissl/model_zoo/seer_finetuned/seer_10b_finetuned_in1k_model_phase28_conso.torch",
         lambda: FakeRegNetVisslWrapper(
-            RegNet(RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
+            RegNet(
+                RegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52)
+            )
         ),
     )
 
@@ -455,4 +545,6 @@ if __name__ == "__main__":
 
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
     pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
-    convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_weights_and_push(
+        pytorch_dump_folder_path, args.model_name, args.push_to_hub
+    )

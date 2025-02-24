@@ -17,7 +17,12 @@ from typing import Union
 import numpy as np
 import requests
 
-from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, logging
+from ..utils import (
+    add_end_docstrings,
+    is_torch_available,
+    is_torchaudio_available,
+    logging,
+)
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -51,9 +56,13 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
     ]
 
     try:
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        ffmpeg_process = subprocess.Popen(
+            ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE
+        )
     except FileNotFoundError:
-        raise ValueError("ffmpeg was not found but is required to load audio files from filename")
+        raise ValueError(
+            "ffmpeg was not found but is required to load audio files from filename"
+        )
     output_stream = ffmpeg_process.communicate(bpayload)
     out_bytes = output_stream[0]
 
@@ -179,10 +188,14 @@ class AudioClassificationPipeline(Pipeline):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
         if isinstance(inputs, dict):
-            inputs = inputs.copy()  # So we don't mutate the original dictionary outside the pipeline
+            inputs = (
+                inputs.copy()
+            )  # So we don't mutate the original dictionary outside the pipeline
             # Accepting `"array"` which is the key defined in `datasets` for
             # better integration
-            if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
+            if not (
+                "sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)
+            ):
                 raise ValueError(
                     "When passing a dictionary to AudioClassificationPipeline, the dict needs to contain a "
                     '"raw" key containing the numpy array representing the audio and a "sampling_rate" key, '
@@ -208,16 +221,22 @@ class AudioClassificationPipeline(Pipeline):
                     )
 
                 inputs = F.resample(
-                    torch.from_numpy(inputs), in_sampling_rate, self.feature_extractor.sampling_rate
+                    torch.from_numpy(inputs),
+                    in_sampling_rate,
+                    self.feature_extractor.sampling_rate,
                 ).numpy()
 
         if not isinstance(inputs, np.ndarray):
             raise TypeError("We expect a numpy ndarray as input")
         if len(inputs.shape) != 1:
-            raise ValueError("We expect a single channel audio input for AudioClassificationPipeline")
+            raise ValueError(
+                "We expect a single channel audio input for AudioClassificationPipeline"
+            )
 
         processed = self.feature_extractor(
-            inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
+            inputs,
+            sampling_rate=self.feature_extractor.sampling_rate,
+            return_tensors="pt",
         )
         if self.torch_dtype is not None:
             processed = processed.to(dtype=self.torch_dtype)
@@ -239,6 +258,9 @@ class AudioClassificationPipeline(Pipeline):
         scores = scores.tolist()
         ids = ids.tolist()
 
-        labels = [{"score": score, "label": self.model.config.id2label[_id]} for score, _id in zip(scores, ids)]
+        labels = [
+            {"score": score, "label": self.model.config.id2label[_id]}
+            for score, _id in zip(scores, ids)
+        ]
 
         return labels

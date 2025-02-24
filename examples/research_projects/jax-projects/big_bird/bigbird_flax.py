@@ -17,7 +17,9 @@ from flax.training.common_utils import shard
 from tqdm.auto import tqdm
 
 from transformers import BigBirdConfig, FlaxBigBirdForQuestionAnswering
-from transformers.models.big_bird.modeling_flax_big_bird import FlaxBigBirdForQuestionAnsweringModule
+from transformers.models.big_bird.modeling_flax_big_bird import (
+    FlaxBigBirdForQuestionAnsweringModule,
+)
 
 
 class FlaxBigBirdForNaturalQuestionsModule(FlaxBigBirdForQuestionAnsweringModule):
@@ -45,7 +47,9 @@ class FlaxBigBirdForNaturalQuestions(FlaxBigBirdForQuestionAnswering):
     module_class = FlaxBigBirdForNaturalQuestionsModule
 
 
-def calculate_loss_for_nq(start_logits, start_labels, end_logits, end_labels, pooled_logits, pooler_labels):
+def calculate_loss_for_nq(
+    start_logits, start_labels, end_logits, end_labels, pooled_logits, pooler_labels
+):
     def cross_entropy(logits, labels, reduction=None):
         """
         Args:
@@ -144,7 +148,9 @@ def train_step(state, drp_rng, **model_inputs):
         end_labels = model_inputs.pop("end_labels")
         pooled_labels = model_inputs.pop("pooled_labels")
 
-        outputs = state.apply_fn(**model_inputs, params=params, dropout_rng=drp_rng, train=True)
+        outputs = state.apply_fn(
+            **model_inputs, params=params, dropout_rng=drp_rng, train=True
+        )
         start_logits, end_logits, pooled_logits = outputs
 
         return state.loss_fn(
@@ -175,7 +181,9 @@ def val_step(state, **model_inputs):
     outputs = state.apply_fn(**model_inputs, params=state.params, train=False)
     start_logits, end_logits, pooled_logits = outputs
 
-    loss = state.loss_fn(start_logits, start_labels, end_logits, end_labels, pooled_logits, pooled_labels)
+    loss = state.loss_fn(
+        start_logits, start_labels, end_logits, end_labels, pooled_logits, pooled_labels
+    )
     metrics = jax.lax.pmean({"loss": loss}, axis_name="batch")
     return metrics
 
@@ -203,7 +211,9 @@ class Trainer:
             loss_fn=calculate_loss_for_nq,
         )
         if ckpt_dir is not None:
-            params, opt_state, step, args, data_collator = restore_checkpoint(ckpt_dir, state)
+            params, opt_state, step, args, data_collator = restore_checkpoint(
+                ckpt_dir, state
+            )
             tx_args = {
                 "lr": args.lr,
                 "init_lr": args.init_lr,
@@ -236,7 +246,9 @@ class Trainer:
             running_loss = jnp.array(0, dtype=jnp.float32)
             tr_dataloader = get_batched_dataset(tr_dataset, args.batch_size, seed=epoch)
             i = 0
-            for batch in tqdm(tr_dataloader, total=total, desc=f"Running EPOCH-{epoch}"):
+            for batch in tqdm(
+                tr_dataloader, total=total, desc=f"Running EPOCH-{epoch}"
+            ):
                 batch = self.data_collator(batch)
                 state, metrics, drp_rng = self.train_step_fn(state, drp_rng, **batch)
                 running_loss += jax_utils.unreplicate(metrics["loss"])
@@ -305,19 +317,30 @@ def restore_checkpoint(save_dir, state):
 
 def scheduler_fn(lr, init_lr, warmup_steps, num_train_steps):
     decay_steps = num_train_steps - warmup_steps
-    warmup_fn = optax.linear_schedule(init_value=init_lr, end_value=lr, transition_steps=warmup_steps)
-    decay_fn = optax.linear_schedule(init_value=lr, end_value=1e-7, transition_steps=decay_steps)
-    lr = optax.join_schedules(schedules=[warmup_fn, decay_fn], boundaries=[warmup_steps])
+    warmup_fn = optax.linear_schedule(
+        init_value=init_lr, end_value=lr, transition_steps=warmup_steps
+    )
+    decay_fn = optax.linear_schedule(
+        init_value=lr, end_value=1e-7, transition_steps=decay_steps
+    )
+    lr = optax.join_schedules(
+        schedules=[warmup_fn, decay_fn], boundaries=[warmup_steps]
+    )
     return lr
 
 
 def build_tx(lr, init_lr, warmup_steps, num_train_steps, weight_decay):
     def weight_decay_mask(params):
         params = traverse_util.flatten_dict(params)
-        mask = {k: (v[-1] != "bias" and v[-2:] != ("LayerNorm", "scale")) for k, v in params.items()}
+        mask = {
+            k: (v[-1] != "bias" and v[-2:] != ("LayerNorm", "scale"))
+            for k, v in params.items()
+        }
         return traverse_util.unflatten_dict(mask)
 
     lr = scheduler_fn(lr, init_lr, warmup_steps, num_train_steps)
 
-    tx = optax.adamw(learning_rate=lr, weight_decay=weight_decay, mask=weight_decay_mask)
+    tx = optax.adamw(
+        learning_rate=lr, weight_decay=weight_decay, mask=weight_decay_mask
+    )
     return tx, lr

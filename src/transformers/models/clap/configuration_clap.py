@@ -116,7 +116,12 @@ class ClapTextConfig(PretrainedConfig):
         projection_hidden_act="relu",
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -356,11 +361,15 @@ class ClapConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the ClapTextConfig with default values.")
+            logger.info(
+                "text_config is None. Initializing the ClapTextConfig with default values."
+            )
 
         if audio_config is None:
             audio_config = {}
-            logger.info("audio_config is None. initializing the ClapAudioConfig with default values.")
+            logger.info(
+                "audio_config is None. initializing the ClapAudioConfig with default values."
+            )
 
         self.text_config = ClapTextConfig(**text_config)
         self.audio_config = ClapAudioConfig(**audio_config)
@@ -376,10 +385,14 @@ class ClapConfig(PretrainedConfig):
 
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = initializer_factor
-        self.num_hidden_layers = self.text_config.num_hidden_layers + len(self.audio_config.depths)
+        self.num_hidden_layers = self.text_config.num_hidden_layers + len(
+            self.audio_config.depths
+        )
 
     @classmethod
-    def from_text_audio_configs(cls, text_config: ClapTextConfig, audio_config: ClapAudioConfig, **kwargs):
+    def from_text_audio_configs(
+        cls, text_config: ClapTextConfig, audio_config: ClapAudioConfig, **kwargs
+    ):
         r"""
         Instantiate a [`ClapConfig`] (or a derived class) from clap text model configuration and clap audio model
         configuration.
@@ -388,7 +401,11 @@ class ClapConfig(PretrainedConfig):
             [`ClapConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), audio_config=audio_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            audio_config=audio_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["ClapAudioConfig", "ClapConfig", "ClapTextConfig"]

@@ -53,7 +53,9 @@ AUTO = tf.data.AUTOTUNE
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train a masked language model on TPU.")
+    parser = argparse.ArgumentParser(
+        description="Train a masked language model on TPU."
+    )
     parser.add_argument(
         "--pretrained_model_config",
         type=str,
@@ -94,7 +96,9 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--gcp_project", type=str, help="Google cloud project name. Only used for non-Colab TPU nodes."
+        "--gcp_project",
+        type=str,
+        help="Google cloud project name. Only used for non-Colab TPU nodes.",
     )
 
     parser.add_argument(
@@ -159,8 +163,17 @@ def parse_args():
         help="Fraction of tokens to mask during training.",
     )
 
-    parser.add_argument("--output_dir", type=str, required=True, help="Path to save model checkpoints to.")
-    parser.add_argument("--hub_model_id", type=str, help="Model ID to upload to on the Hugging Face Hub.")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        required=True,
+        help="Path to save model checkpoints to.",
+    )
+    parser.add_argument(
+        "--hub_model_id",
+        type=str,
+        help="Model ID to upload to on the Hugging Face Hub.",
+    )
 
     args = parser.parse_args()
     return args
@@ -197,7 +210,9 @@ def count_samples(file_list):
     return num_samples
 
 
-def prepare_dataset(records, decode_fn, mask_fn, batch_size, shuffle, shuffle_buffer_size=None):
+def prepare_dataset(
+    records, decode_fn, mask_fn, batch_size, shuffle, shuffle_buffer_size=None
+):
     num_samples = count_samples(records)
     dataset = tf.data.Dataset.from_tensor_slices(records)
     if shuffle:
@@ -238,12 +253,16 @@ def main(args):
 
     num_train_samples = count_samples(training_records)
 
-    steps_per_epoch = num_train_samples // (args.per_replica_batch_size * strategy.num_replicas_in_sync)
+    steps_per_epoch = num_train_samples // (
+        args.per_replica_batch_size * strategy.num_replicas_in_sync
+    )
     total_train_steps = steps_per_epoch * args.num_epochs
 
     with strategy.scope():
         model = TFAutoModelForMaskedLM.from_config(config)
-        model(model.dummy_inputs)  # Pass some dummy inputs through the model to ensure all the weights are built
+        model(
+            model.dummy_inputs
+        )  # Pass some dummy inputs through the model to ensure all the weights are built
         optimizer, schedule = create_optimizer(
             num_train_steps=total_train_steps,
             num_warmup_steps=total_train_steps // 20,
@@ -257,15 +276,22 @@ def main(args):
 
     def decode_fn(example):
         features = {
-            "input_ids": tf.io.FixedLenFeature(dtype=tf.int64, shape=(args.max_length,)),
-            "attention_mask": tf.io.FixedLenFeature(dtype=tf.int64, shape=(args.max_length,)),
+            "input_ids": tf.io.FixedLenFeature(
+                dtype=tf.int64, shape=(args.max_length,)
+            ),
+            "attention_mask": tf.io.FixedLenFeature(
+                dtype=tf.int64, shape=(args.max_length,)
+            ),
         }
         return tf.io.parse_single_example(example, features)
 
     # Many of the data collators in Transformers are TF-compilable when return_tensors == "tf", so we can
     # use their methods in our data pipeline.
     data_collator = DataCollatorForLanguageModeling(
-        tokenizer=tokenizer, mlm_probability=args.mlm_probability, mlm=True, return_tensors="tf"
+        tokenizer=tokenizer,
+        mlm_probability=args.mlm_probability,
+        mlm=True,
+        return_tensors="tf",
     )
 
     def mask_with_collator(batch):
@@ -305,7 +331,11 @@ def main(args):
     callbacks = []
     if args.hub_model_id:
         callbacks.append(
-            PushToHubCallback(output_dir=args.output_dir, hub_model_id=args.hub_model_id, tokenizer=tokenizer)
+            PushToHubCallback(
+                output_dir=args.output_dir,
+                hub_model_id=args.hub_model_id,
+                tokenizer=tokenizer,
+            )
         )
 
     model.fit(

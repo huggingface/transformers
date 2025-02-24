@@ -122,25 +122,35 @@ class InstructBlipVideoConfig(PretrainedConfig):
 
         if vision_config is None:
             vision_config = {}
-            logger.info("vision_config is None. initializing the InstructBlipVideoVisionConfig with default values.")
+            logger.info(
+                "vision_config is None. initializing the InstructBlipVideoVisionConfig with default values."
+            )
 
         if qformer_config is None:
             qformer_config = {}
-            logger.info("qformer_config is None. Initializing the InstructBlipVideoQFormerConfig with default values.")
+            logger.info(
+                "qformer_config is None. Initializing the InstructBlipVideoQFormerConfig with default values."
+            )
 
         if text_config is None:
             text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
+            logger.info(
+                "text_config is None. Initializing the text config with default values (`OPTConfig`)."
+            )
 
         self.vision_config = InstructBlipVideoVisionConfig(**vision_config)
         self.qformer_config = InstructBlipVideoQFormerConfig(**qformer_config)
-        text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
+        text_model_type = (
+            text_config["model_type"] if "model_type" in text_config else "opt"
+        )
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
         self.num_query_tokens = num_query_tokens
         self.video_token_index = video_token_index
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
-        self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+        self.use_decoder_only_language_model = (
+            self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+        )
         self.initializer_factor = 1.0
         self.initializer_range = 0.02
 
@@ -169,7 +179,9 @@ class InstructBlipVideoConfig(PretrainedConfig):
 
 
 @dataclass
-class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForConditionalGenerationModelOutput):
+class InstructBlipVideoForConditionalGenerationModelOutput(
+    InstructBlipForConditionalGenerationModelOutput
+):
     pass
 
 
@@ -246,7 +258,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> print(generated_text)
         "A person is eating a bowl of pasta, and they are using a fork to eat it. The person is sitting at a table, and the plate of pasta is on the table in front"
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # step 1: forward the images through the vision encoder,
         # we process in a batched way, later unbatch it back (video has frames=4 always)
@@ -263,18 +277,24 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         image_embeds = vision_outputs[0]
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
-        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+        image_attention_mask = torch.ones(
+            image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device
+        )
 
         # difference with BLIP-2 here: we also feed the instruction prompt to the Q-Former
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+        query_attention_mask = torch.ones(
+            query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device
+        )
 
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
-        qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+        qformer_attention_mask = torch.cat(
+            [query_attention_mask, qformer_attention_mask], dim=1
+        )
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
             attention_mask=qformer_attention_mask,
@@ -291,9 +311,13 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         language_model_inputs = self.language_projection(query_output)
 
         # unbatch inputs back, each video-frame gets `num_query_tokens` seq length
-        language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
+        language_model_inputs = language_model_inputs.reshape(
+            batch_size, self.config.num_query_tokens * frames, -1
+        )
         language_model_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
+            language_model_inputs.size()[:-1],
+            dtype=torch.long,
+            device=language_model_inputs.device,
         )
 
         inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
@@ -303,17 +327,30 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         # if the model already has "video_token_index" then the input is expanded to account for image embeds
         # otherwise we expand manually by concatenating
         if getattr(self.config, "video_token_index", None) is not None:
-            special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds[special_image_mask] = language_model_inputs.flatten().to(inputs_embeds.device)
+            special_image_mask = (
+                (input_ids == self.config.video_token_index)
+                .unsqueeze(-1)
+                .expand_as(inputs_embeds)
+            )
+            inputs_embeds[special_image_mask] = language_model_inputs.flatten().to(
+                inputs_embeds.device
+            )
         else:
             logger.warning_once(
                 "Expanding inputs for video tokens in InstructBLIPVideo should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/65f22892b054dc0d68228af56fbeaac2) to update your InstructBLIPVideo model. "
                 "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
             )
-            inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
+            inputs_embeds = torch.cat(
+                [language_model_inputs, inputs_embeds.to(language_model_inputs.device)],
+                dim=1,
+            )
             attention_mask = torch.cat(
-                [language_model_attention_mask, attention_mask.to(language_model_attention_mask.device)], dim=1
+                [
+                    language_model_attention_mask,
+                    attention_mask.to(language_model_attention_mask.device),
+                ],
+                dim=1,
             )
 
         if self.config.use_decoder_only_language_model:
@@ -338,7 +375,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
                 # Flatten the tokens
                 loss_fct = CrossEntropyLoss(reduction="mean")
 
-                loss = loss_fct(shift_logits.view(-1, self.config.text_config.vocab_size), shift_labels.view(-1))
+                loss = loss_fct(
+                    shift_logits.view(-1, self.config.text_config.vocab_size),
+                    shift_labels.view(-1),
+                )
         else:
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
@@ -410,16 +450,22 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             return_dict=True,
             interpolate_pos_encoding=interpolate_pos_encoding,
         ).last_hidden_state
-        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+        image_attention_mask = torch.ones(
+            image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device
+        )
 
         query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
-        query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device)
+        query_attention_mask = torch.ones(
+            query_tokens.size()[:-1], dtype=torch.long, device=image_embeds.device
+        )
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
-        qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
+        qformer_attention_mask = torch.cat(
+            [query_attention_mask, qformer_attention_mask], dim=1
+        )
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
             attention_mask=qformer_attention_mask,
@@ -433,16 +479,24 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         language_model_inputs = self.language_projection(query_output)
 
         # unbatch the embeddings back by moving frames to seq-len
-        language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
+        language_model_inputs = language_model_inputs.reshape(
+            batch_size, self.config.num_query_tokens * frames, -1
+        )
         language_attention_mask = torch.ones(
-            language_model_inputs.size()[:-1], dtype=torch.long, device=language_model_inputs.device
+            language_model_inputs.size()[:-1],
+            dtype=torch.long,
+            device=language_model_inputs.device,
         )
 
         if input_ids is None:
             start_tokens = [self.config.text_config.bos_token_id]
             if getattr(self.config, "video_token_index", None) is not None:
-                start_tokens = [self.config.video_token_index] * self.config.num_query_tokens * 4 + start_tokens
-            input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
+                start_tokens = [
+                    self.config.video_token_index
+                ] * self.config.num_query_tokens * 4 + start_tokens
+            input_ids = torch.tensor(
+                [start_tokens], dtype=torch.long, device=image_embeds.device
+            )
             input_ids = input_ids.repeat(batch_size, 1)
 
         if attention_mask is None:
@@ -453,26 +507,44 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         # if the model already has "video_token_index" then the input is expanded to account for image embeds
         # otherwise we expand manually by concatenating
         if getattr(self.config, "video_token_index", None) is not None:
-            special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(-1).expand_as(inputs_embeds)
-            inputs_embeds[special_image_mask] = language_model_inputs.flatten().to(inputs_embeds.device)
+            special_image_mask = (
+                (input_ids == self.config.video_token_index)
+                .unsqueeze(-1)
+                .expand_as(inputs_embeds)
+            )
+            inputs_embeds[special_image_mask] = language_model_inputs.flatten().to(
+                inputs_embeds.device
+            )
         else:
             logger.warning_once(
                 "Expanding inputs for video tokens in InstructBLIPVideo should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/65f22892b054dc0d68228af56fbeaac2) to update your InstructBLIPVideo model. "
                 "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
             )
-            inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
+            inputs_embeds = torch.cat(
+                [language_model_inputs, inputs_embeds.to(language_model_inputs.device)],
+                dim=1,
+            )
             attention_mask = torch.cat(
-                [language_attention_mask, attention_mask.to(language_attention_mask.device)], dim=1
+                [
+                    language_attention_mask,
+                    attention_mask.to(language_attention_mask.device),
+                ],
+                dim=1,
             )
 
             # add image_embeds length to max_length, so that the final max_length in counted only on token embeds
             # -1 is to account for the prepended BOS after `generate.`
             if not self.language_model.config.is_encoder_decoder:
                 generate_kwargs["max_length"] = (
-                    generate_kwargs.get("max_length", 20) + language_model_inputs.shape[1] - 1
+                    generate_kwargs.get("max_length", 20)
+                    + language_model_inputs.shape[1]
+                    - 1
                 )
-                generate_kwargs["min_length"] = generate_kwargs.get("min_length", 0) + language_model_inputs.shape[1]
+                generate_kwargs["min_length"] = (
+                    generate_kwargs.get("min_length", 0)
+                    + language_model_inputs.shape[1]
+                )
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
         if not self.language_model.config.is_encoder_decoder:

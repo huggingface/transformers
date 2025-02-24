@@ -53,7 +53,9 @@ def get_mobilenet_v1_config(model_name):
     config.num_labels = 1001
     filename = "imagenet-1k-id2label.json"
     repo_id = "huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k) + 1: v for k, v in id2label.items()}
     id2label[0] = "background"
     config.id2label = id2label
@@ -70,7 +72,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_movilevit_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False):
+def convert_movilevit_checkpoint(
+    model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to our MobileNetV1 structure.
     """
@@ -126,16 +130,27 @@ if __name__ == "__main__":
         help="Name of the MobileNetV1 model you'd like to convert. Should in the form 'mobilenet_v1_<depth>_<size>'.",
     )
     parser.add_argument(
-        "--checkpoint_path", required=True, type=str, help="Path to the original TensorFlow checkpoint (.ckpt file)."
+        "--checkpoint_path",
+        required=True,
+        type=str,
+        help="Path to the original TensorFlow checkpoint (.ckpt file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        required=True,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
     convert_movilevit_checkpoint(
-        args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub
+        args.model_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
     )

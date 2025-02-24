@@ -22,7 +22,11 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -30,7 +34,11 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import (
+    PreTrainedModel,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import logging
 from .configuration_esm import EsmConfig
 
@@ -87,7 +95,9 @@ class RotaryEmbedding(torch.nn.Module):
     def __init__(self, dim: int):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+        inv_freq = 1.0 / (
+            10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim)
+        )
         inv_freq = inv_freq
         self.register_buffer("inv_freq", inv_freq)
 
@@ -102,7 +112,9 @@ class RotaryEmbedding(torch.nn.Module):
         # or if we're on a new device (possibly due to tracing for instance)
         if seq_len != self._seq_len_cached or self._cos_cached.device != x.device:
             self._seq_len_cached = seq_len
-            t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(self.inv_freq)
+            t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(
+                self.inv_freq
+            )
             freqs = torch.outer(t, self.inv_freq)
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
 
@@ -111,8 +123,12 @@ class RotaryEmbedding(torch.nn.Module):
 
         return self._cos_cached, self._sin_cached
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
+    def forward(
+        self, q: torch.Tensor, k: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(
+            k, seq_dimension=-2
+        )
 
         return (
             apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
@@ -162,35 +178,54 @@ class EsmEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
 
         if config.emb_layer_norm_before:
-            self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.layer_norm = nn.LayerNorm(
+                config.hidden_size, eps=config.layer_norm_eps
+            )
         else:
             self.layer_norm = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)),
+            persistent=False,
         )
 
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+            config.max_position_embeddings,
+            config.hidden_size,
+            padding_idx=self.padding_idx,
         )
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
 
     def forward(
-        self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        inputs_embeds=None,
+        past_key_values_length=0,
     ):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length)
+                position_ids = create_position_ids_from_input_ids(
+                    input_ids, self.padding_idx, past_key_values_length
+                )
             else:
-                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+                position_ids = self.create_position_ids_from_inputs_embeds(
+                    inputs_embeds
+                )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -207,13 +242,21 @@ class EsmEmbeddings(nn.Module):
         # This is analogous to the way that dropout layers scale down outputs during evaluation when not
         # actually dropping out values (or, equivalently, scale up their un-dropped outputs in training).
         if self.token_dropout:
-            embeddings = embeddings.masked_fill((input_ids == self.mask_token_id).unsqueeze(-1), 0.0)
-            mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all ESM model training runs
-            src_lengths = attention_mask.sum(-1)
-            mask_ratio_observed = (input_ids == self.mask_token_id).sum(-1).float() / src_lengths
-            embeddings = (embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]).to(
-                embeddings.dtype
+            embeddings = embeddings.masked_fill(
+                (input_ids == self.mask_token_id).unsqueeze(-1), 0.0
             )
+            mask_ratio_train = (
+                0.15 * 0.8
+            )  # Hardcoded as the ratio used in all ESM model training runs
+            src_lengths = attention_mask.sum(-1)
+            mask_ratio_observed = (input_ids == self.mask_token_id).sum(
+                -1
+            ).float() / src_lengths
+            embeddings = (
+                embeddings
+                * (1 - mask_ratio_train)
+                / (1 - mask_ratio_observed)[:, None, None]
+            ).to(embeddings.dtype)
 
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
@@ -222,7 +265,9 @@ class EsmEmbeddings(nn.Module):
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
         if attention_mask is not None:
-            embeddings = (embeddings * attention_mask.unsqueeze(-1)).to(embeddings.dtype)
+            embeddings = (embeddings * attention_mask.unsqueeze(-1)).to(
+                embeddings.dtype
+            )
         # Matt: I think this line was copied incorrectly from BERT, disabling it for now.
         # embeddings = self.dropout(embeddings)
         return embeddings
@@ -240,7 +285,10 @@ class EsmEmbeddings(nn.Module):
         sequence_length = input_shape[1]
 
         position_ids = torch.arange(
-            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+            self.padding_idx + 1,
+            sequence_length + self.padding_idx + 1,
+            dtype=torch.long,
+            device=inputs_embeds.device,
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
@@ -248,7 +296,9 @@ class EsmEmbeddings(nn.Module):
 class EsmSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -267,16 +317,24 @@ class EsmSelfAttention(nn.Module):
             config, "position_embedding_type", "absolute"
         )
         self.rotary_embeddings = None
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = nn.Embedding(
+                2 * config.max_position_embeddings - 1, self.attention_head_size
+            )
         elif self.position_embedding_type == "rotary":
             self.rotary_embeddings = RotaryEmbedding(dim=self.attention_head_size)
 
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -339,21 +397,42 @@ class EsmSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            position_ids_l = torch.arange(
+                seq_length, dtype=torch.long, device=hidden_states.device
+            ).view(-1, 1)
+            position_ids_r = torch.arange(
+                seq_length, dtype=torch.long, device=hidden_states.device
+            ).view(1, -1)
             distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            positional_embedding = self.distance_embedding(
+                distance + self.max_position_embeddings - 1
+            )
+            positional_embedding = positional_embedding.to(
+                dtype=query_layer.dtype
+            )  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+                relative_position_scores_query = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
+                relative_position_scores_key = torch.einsum(
+                    "bhrd,lrd->bhlr", key_layer, positional_embedding
+                )
+                attention_scores = (
+                    attention_scores
+                    + relative_position_scores_query
+                    + relative_position_scores_key
+                )
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in EsmModel forward() function)
@@ -376,7 +455,9 @@ class EsmSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
@@ -408,7 +489,10 @@ class EsmAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -419,7 +503,9 @@ class EsmAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -443,7 +529,9 @@ class EsmAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -481,7 +569,9 @@ class EsmLayer(nn.Module):
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
-                raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
+                raise RuntimeError(
+                    f"{self} should be used as a decoder model if cross attention is added"
+                )
             self.crossattention = EsmAttention(config)
         self.intermediate = EsmIntermediate(config)
         self.output = EsmOutput(config)
@@ -498,7 +588,9 @@ class EsmLayer(nn.Module):
         output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = (
+            past_key_value[:2] if past_key_value is not None else None
+        )
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -513,7 +605,9 @@ class EsmLayer(nn.Module):
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
         else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+            outputs = self_attention_outputs[
+                1:
+            ]  # add self attentions if we output attention weights
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -524,7 +618,9 @@ class EsmLayer(nn.Module):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attn_past_key_value = (
+                past_key_value[-2:] if past_key_value is not None else None
+            )
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -535,7 +631,9 @@ class EsmLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            outputs = (
+                outputs + cross_attention_outputs[1:-1]
+            )  # add cross attentions if we output attention weights
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
@@ -561,8 +659,12 @@ class EsmEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([EsmLayer(config) for _ in range(config.num_hidden_layers)])
-        self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer = nn.ModuleList(
+            [EsmLayer(config) for _ in range(config.num_hidden_layers)]
+        )
+        self.emb_layer_norm_after = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -587,7 +689,9 @@ class EsmEncoder(nn.Module):
                 use_cache = False
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.add_cross_attention else None
+        )
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -679,7 +783,11 @@ class EsmPreTrainedModel(PreTrainedModel):
     config_class = EsmConfig
     base_model_prefix = "esm"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
+    _no_split_modules = [
+        "EsmLayer",
+        "EsmFoldTriangularSelfAttentionBlock",
+        "EsmEmbeddings",
+    ]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -804,7 +912,9 @@ class EsmModel(EsmPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(
+        ESM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
@@ -845,11 +955,19 @@ class EsmModel(EsmPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -857,7 +975,9 @@ class EsmModel(EsmPreTrainedModel):
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -870,23 +990,33 @@ class EsmModel(EsmPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = (
+            past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        )
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(
+                ((batch_size, seq_length + past_key_values_length)), device=device
+            )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape
+        )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_batch_size, encoder_sequence_length, _ = (
+                encoder_hidden_states.size()
+            )
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            encoder_extended_attention_mask = self.invert_attention_mask(
+                encoder_attention_mask
+            )
         else:
             encoder_extended_attention_mask = None
 
@@ -917,7 +1047,9 @@ class EsmModel(EsmPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = (
+            self.pooler(sequence_output) if self.pooler is not None else None
+        )
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -932,7 +1064,12 @@ class EsmModel(EsmPreTrainedModel):
         )
 
     def predict_contacts(self, tokens, attention_mask):
-        attns = self(tokens, attention_mask=attention_mask, return_dict=True, output_attentions=True).attentions
+        attns = self(
+            tokens,
+            attention_mask=attention_mask,
+            return_dict=True,
+            output_attentions=True,
+        ).attentions
         attns = torch.stack(attns, dim=1)  # Matches the original model layout
         # In the original model, attentions for padding tokens are completely zeroed out.
         # This makes no difference most of the time because the other tokens won't attend to them,
@@ -943,7 +1080,9 @@ class EsmModel(EsmPreTrainedModel):
         return self.contact_head(tokens, attns)
 
 
-@add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
+@add_start_docstrings(
+    """ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING
+)
 class EsmForMaskedLM(EsmPreTrainedModel):
     _tied_weights_keys = ["lm_head.decoder.weight"]
 
@@ -967,7 +1106,9 @@ class EsmForMaskedLM(EsmPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -996,7 +1137,9 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.esm(
             input_ids,
@@ -1018,11 +1161,15 @@ class EsmForMaskedLM(EsmPreTrainedModel):
             loss_fct = CrossEntropyLoss()
 
             labels = labels.to(prediction_scores.device)
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return (
+                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            )
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -1074,7 +1221,9 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -1098,7 +1247,9 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.esm(
             input_ids,
@@ -1120,7 +1271,9 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1168,7 +1321,9 @@ class EsmForTokenClassification(EsmPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
@@ -1190,7 +1345,9 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.esm(
             input_ids,
@@ -1246,7 +1403,9 @@ class EsmClassificationHead(nn.Module):
         return x
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+def create_position_ids_from_input_ids(
+    input_ids, padding_idx, past_key_values_length=0
+):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's `utils.make_positions`.
@@ -1258,7 +1417,9 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+    incremental_indices = (
+        torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length
+    ) * mask
     return incremental_indices.long() + padding_idx
 
 

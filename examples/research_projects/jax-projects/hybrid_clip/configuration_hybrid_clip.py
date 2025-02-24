@@ -74,19 +74,25 @@ class HybridCLIPConfig(PretrainedConfig):
         self.text_config = AutoConfig.for_model(text_model_type, **text_config)
 
         if vision_model_type == "clip":
-            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config).vision_config
+            self.vision_config = AutoConfig.for_model(
+                vision_model_type, **vision_config
+            ).vision_config
         elif vision_model_type == "clip_vision_model":
             from transformers import CLIPVisionConfig
 
             self.vision_config = CLIPVisionConfig(**vision_config)
         else:
-            self.vision_config = AutoConfig.for_model(vision_model_type, **vision_config)
+            self.vision_config = AutoConfig.for_model(
+                vision_model_type, **vision_config
+            )
 
         self.projection_dim = projection_dim
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: PretrainedConfig, vision_config: PretrainedConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: PretrainedConfig, vision_config: PretrainedConfig, **kwargs
+    ):
         r"""
         Instantiate a :class:`HybridCLIPConfig` (or a derived class) from text model configuration and
         vision model configuration.
@@ -95,7 +101,11 @@ class HybridCLIPConfig(PretrainedConfig):
             :class:`HybridCLIPConfig`: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs
+        )
 
     def to_dict(self):
         """

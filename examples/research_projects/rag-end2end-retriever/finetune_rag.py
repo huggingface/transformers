@@ -45,10 +45,19 @@ if is_ray_available():
 
 from glob import glob
 
-from callbacks_rag import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
+from callbacks_rag import (
+    Seq2SeqLoggingCallback,
+    get_checkpoint_callback,
+    get_early_stopping_callback,
+)
 from kb_encode_utils import add_index, embed_update
 from lightning_base import BaseTransformer, add_generic_args, generic_train
-from pynvml import nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlInit
+from pynvml import (
+    nvmlDeviceGetCount,
+    nvmlDeviceGetHandleByIndex,
+    nvmlDeviceGetMemoryInfo,
+    nvmlInit,
+)
 from utils_rag import (
     Seq2SeqDataset,
     calculate_exact_match,
@@ -111,12 +120,19 @@ class GenerativeQAModule(BaseTransformer):
         config.use_dummy_dataset = hparams.use_dummy_dataset
 
         # set extra_model_params for generator configs and load_model
-        extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
+        extra_model_params = (
+            "encoder_layerdrop",
+            "decoder_layerdrop",
+            "attention_dropout",
+            "dropout",
+        )
         if self.is_rag_model:
             if hparams.prefix is not None:
                 config.generator.prefix = hparams.prefix
             config.label_smoothing = hparams.label_smoothing
-            hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
+            hparams, config.generator = set_extra_model_params(
+                extra_model_params, hparams, config.generator
+            )
             if hparams.distributed_retriever == "ray":
                 # The Ray retriever needs the handles to the retriever actors.
                 retriever = RagRayDistributedRetriever.from_pretrained(
@@ -124,23 +140,33 @@ class GenerativeQAModule(BaseTransformer):
                 )
 
                 if hparams.end2end:
-                    ctx_encoder_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(
-                        "facebook/dpr-ctx_encoder-multiset-base"
+                    ctx_encoder_tokenizer = (
+                        DPRContextEncoderTokenizerFast.from_pretrained(
+                            "facebook/dpr-ctx_encoder-multiset-base"
+                        )
                     )
                     retriever.set_ctx_encoder_tokenizer(ctx_encoder_tokenizer)
             else:
                 logger.info("please use RAY as the distributed retrieval method")
 
-            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
+            model = self.model_class.from_pretrained(
+                hparams.model_name_or_path, config=config, retriever=retriever
+            )
             if hparams.end2end:
-                ctx_encoder = DPRContextEncoder.from_pretrained(hparams.context_encoder_name)
+                ctx_encoder = DPRContextEncoder.from_pretrained(
+                    hparams.context_encoder_name
+                )
                 model.set_context_encoder_for_training(ctx_encoder)
             prefix = config.question_encoder.prefix
         else:
             if hparams.prefix is not None:
                 config.prefix = hparams.prefix
-            hparams, config = set_extra_model_params(extra_model_params, hparams, config)
-            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config)
+            hparams, config = set_extra_model_params(
+                extra_model_params, hparams, config
+            )
+            model = self.model_class.from_pretrained(
+                hparams.model_name_or_path, config=config
+            )
             prefix = config.prefix
 
         tokenizer = (
@@ -151,13 +177,17 @@ class GenerativeQAModule(BaseTransformer):
 
         self.config_dpr = DPRConfig.from_pretrained(hparams.context_encoder_name)
         self.custom_config = hparams
-        self.context_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(hparams.context_encoder_name)
+        self.context_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(
+            hparams.context_encoder_name
+        )
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
 
         save_git_info(self.hparams.output_dir)
         self.output_dir = Path(self.hparams.output_dir)
-        self.dpr_ctx_check_dir = str(Path(self.hparams.output_dir)) + "/dpr_ctx_checkpoint"
+        self.dpr_ctx_check_dir = (
+            str(Path(self.hparams.output_dir)) + "/dpr_ctx_checkpoint"
+        )
         self.metrics_save_path = Path(self.output_dir) / "metrics.json"
         self.hparams_save_path = Path(self.output_dir) / "hparams.pkl"
         pickle_save(self.hparams, self.hparams_save_path)
@@ -174,14 +204,20 @@ class GenerativeQAModule(BaseTransformer):
             "val": self.hparams.n_val,
             "test": self.hparams.n_test,
         }
-        self.n_obs = {k: v if v >= 0 else None for k, v in n_observations_per_split.items()}
+        self.n_obs = {
+            k: v if v >= 0 else None for k, v in n_observations_per_split.items()
+        }
         self.target_lens = {
             "train": self.hparams.max_target_length,
             "val": self.hparams.val_max_target_length,
             "test": self.hparams.test_max_target_length,
         }
-        assert self.target_lens["train"] <= self.target_lens["val"], f"target_lens: {self.target_lens}"
-        assert self.target_lens["train"] <= self.target_lens["test"], f"target_lens: {self.target_lens}"
+        assert (
+            self.target_lens["train"] <= self.target_lens["val"]
+        ), f"target_lens: {self.target_lens}"
+        assert (
+            self.target_lens["train"] <= self.target_lens["test"]
+        ), f"target_lens: {self.target_lens}"
 
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
@@ -207,7 +243,11 @@ class GenerativeQAModule(BaseTransformer):
         return lmap(str.strip, gen_text)
 
     def _step(self, batch: dict) -> Tuple:
-        source_ids, source_mask, target_ids = batch["input_ids"], batch["attention_mask"], batch["decoder_input_ids"]
+        source_ids, source_mask, target_ids = (
+            batch["input_ids"],
+            batch["attention_mask"],
+            batch["decoder_input_ids"],
+        )
 
         rag_kwargs = {}
         if isinstance(self.model, T5ForConditionalGeneration):
@@ -223,7 +263,12 @@ class GenerativeQAModule(BaseTransformer):
                 decoder_start_token_id = generator.config.decoder_start_token_id
                 decoder_input_ids = (
                     torch.cat(
-                        [torch.tensor([[decoder_start_token_id]] * target_ids.shape[0]).to(target_ids), target_ids],
+                        [
+                            torch.tensor(
+                                [[decoder_start_token_id]] * target_ids.shape[0]
+                            ).to(target_ids),
+                            target_ids,
+                        ],
                         dim=1,
                     )
                     if target_ids.shape[0] < self.target_lens["train"]
@@ -258,7 +303,9 @@ class GenerativeQAModule(BaseTransformer):
         global threadHandle_index  # use to keep thread in embedding indexing processes
 
         if (self.trainer.global_rank == 0) and (self.custom_config.end2end):
-            if (not batch_idx == 0) and (batch_idx % self.custom_config.indexing_freq == 0):
+            if (not batch_idx == 0) and (
+                batch_idx % self.custom_config.indexing_freq == 0
+            ):
                 free_gpu_list = []
                 nvmlInit()
                 deviceCount = nvmlDeviceGetCount()
@@ -283,19 +330,27 @@ class GenerativeQAModule(BaseTransformer):
                     model_copy = type(self.model.rag.ctx_encoder)(
                         self.config_dpr
                     )  # get a new instance  #this will be load in the CPU
-                    model_copy.load_state_dict(self.model.rag.ctx_encoder.state_dict())  # copy weights
+                    model_copy.load_state_dict(
+                        self.model.rag.ctx_encoder.state_dict()
+                    )  # copy weights
 
                     processes = []
 
                     if len(free_gpu_list) > self.custom_config.index_gpus:
-                        cuda_devices = random.sample(free_gpu_list, self.custom_config.index_gpus)
+                        cuda_devices = random.sample(
+                            free_gpu_list, self.custom_config.index_gpus
+                        )
                     else:
                         cuda_devices = free_gpu_list
 
                     num_processes = len(cuda_devices)
 
                     for rank in range(num_processes):
-                        logger.info("Iniitializing  embedding calculation process rank{}".format(rank))
+                        logger.info(
+                            "Iniitializing  embedding calculation process rank{}".format(
+                                rank
+                            )
+                        )
                         device = cuda_devices[rank]
                         p = multiprocessing.Process(
                             target=embed_update,
@@ -316,7 +371,10 @@ class GenerativeQAModule(BaseTransformer):
                     isEmUpdateBusy = True
 
             if isEmUpdateBusy and (not isAddIndexBusy):
-                index_process_list = [processes[k].is_alive() for k in range(self.custom_config.index_gpus)]
+                index_process_list = [
+                    processes[k].is_alive()
+                    for k in range(self.custom_config.index_gpus)
+                ]
                 if (
                     sum(index_process_list) == 0
                 ):  # If entire list is false, we can say all embedding calculation process has finished
@@ -342,7 +400,9 @@ class GenerativeQAModule(BaseTransformer):
                         saved_dataset_shards.append(load_from_disk(address))
 
                     concat = concatenate_datasets(saved_dataset_shards)
-                    concat.save_to_disk(self.config.passages_path)  # here we update the main passage file on the disk
+                    concat.save_to_disk(
+                        self.config.passages_path
+                    )  # here we update the main passage file on the disk
                     logger.info("done updating the dataset")
 
                     # To Do (@Aaron) : Useful in the future dynamic memory implementation.
@@ -373,7 +433,8 @@ class GenerativeQAModule(BaseTransformer):
             else self.tokenizer.pad_token_id
         )
         logs["tpb"] = (
-            batch["input_ids"].ne(src_pad_token_id).sum() + batch["decoder_input_ids"].ne(tgt_pad_token_id).sum()
+            batch["input_ids"].ne(src_pad_token_id).sum()
+            + batch["decoder_input_ids"].ne(tgt_pad_token_id).sum()
         )
         self.log("loss", loss_tensors[0])
         return loss_tensors[0]
@@ -383,12 +444,17 @@ class GenerativeQAModule(BaseTransformer):
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
         self.step_count += 1
-        losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
+        losses = {
+            k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names
+        }
         loss = losses["loss"]
         gen_metrics = {
-            k: np.array([x[k] for x in outputs]).mean() for k in self.metric_names + ["gen_time", "gen_len"]
+            k: np.array([x[k] for x in outputs]).mean()
+            for k in self.metric_names + ["gen_time", "gen_len"]
         }
-        metrics_tensor: torch.FloatTensor = torch.tensor(gen_metrics[self.val_metric]).type_as(loss)
+        metrics_tensor: torch.FloatTensor = torch.tensor(
+            gen_metrics[self.val_metric]
+        ).type_as(loss)
         gen_metrics.update({k: v.item() for k, v in losses.items()})
 
         # fix for https://github.com/PyTorchLightning/pytorch-lightning/issues/2424
@@ -438,7 +504,13 @@ class GenerativeQAModule(BaseTransformer):
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
 
         summ_len = np.mean(lmap(len, generated_ids))
-        base_metrics.update(gen_time=gen_time, gen_len=summ_len, preds=preds, target=target, **gen_metrics)
+        base_metrics.update(
+            gen_time=gen_time,
+            gen_len=summ_len,
+            preds=preds,
+            target=target,
+            **gen_metrics,
+        )
         return base_metrics
 
     def test_step(self, batch, batch_idx):
@@ -459,7 +531,9 @@ class GenerativeQAModule(BaseTransformer):
         )
         return dataset
 
-    def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
+    def get_dataloader(
+        self, type_path: str, batch_size: int, shuffle: bool = False
+    ) -> DataLoader:
         dataset = self.get_dataset(type_path)
 
         dataloader = DataLoader(
@@ -472,7 +546,9 @@ class GenerativeQAModule(BaseTransformer):
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
-        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
+        dataloader = self.get_dataloader(
+            "train", batch_size=self.hparams.train_batch_size, shuffle=True
+        )
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
@@ -493,9 +569,13 @@ class GenerativeQAModule(BaseTransformer):
             for key in self.model.state_dict().keys():
                 if key.split(".")[1] == "ctx_encoder":
                     del modified_state_dict[key]
-            self.model.save_pretrained(save_directory=save_path, state_dict=modified_state_dict)
+            self.model.save_pretrained(
+                save_directory=save_path, state_dict=modified_state_dict
+            )
 
-            save_path_dpr = os.path.join(self.dpr_ctx_check_dir, "checkpoint{}".format(self.step_count))
+            save_path_dpr = os.path.join(
+                self.dpr_ctx_check_dir, "checkpoint{}".format(self.step_count)
+            )
             self.model.rag.ctx_encoder.save_pretrained(save_path_dpr)
             self.context_tokenizer.save_pretrained(save_path_dpr)
 
@@ -539,11 +619,36 @@ class GenerativeQAModule(BaseTransformer):
                 "than this will be truncated, sequences shorter will be padded."
             ),
         )
-        parser.add_argument("--logger_name", type=str, choices=["default", "wandb", "wandb_shared"], default="default")
-        parser.add_argument("--n_train", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--n_val", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--n_test", type=int, default=-1, required=False, help="# examples. -1 means use all.")
-        parser.add_argument("--label_smoothing", type=float, default=0.0, required=False)
+        parser.add_argument(
+            "--logger_name",
+            type=str,
+            choices=["default", "wandb", "wandb_shared"],
+            default="default",
+        )
+        parser.add_argument(
+            "--n_train",
+            type=int,
+            default=-1,
+            required=False,
+            help="# examples. -1 means use all.",
+        )
+        parser.add_argument(
+            "--n_val",
+            type=int,
+            default=-1,
+            required=False,
+            help="# examples. -1 means use all.",
+        )
+        parser.add_argument(
+            "--n_test",
+            type=int,
+            default=-1,
+            required=False,
+            help="# examples. -1 means use all.",
+        )
+        parser.add_argument(
+            "--label_smoothing", type=float, default=0.0, required=False
+        )
         parser.add_argument(
             "--prefix",
             type=str,
@@ -561,7 +666,11 @@ class GenerativeQAModule(BaseTransformer):
             ),
         )
         parser.add_argument(
-            "--distributed-port", type=int, default=-1, required=False, help="Port number for distributed training."
+            "--distributed-port",
+            type=int,
+            default=-1,
+            required=False,
+            help="Port number for distributed training.",
         )
         parser.add_argument(
             "--model_type",
@@ -580,12 +689,23 @@ class GenerativeQAModule(BaseTransformer):
         )
         parser.add_argument(
             "--csv_path",
-            default=str(Path(__file__).parent / "test_run" / "dummy-kb" / "my_knowledge_dataset.csv"),
+            default=str(
+                Path(__file__).parent
+                / "test_run"
+                / "dummy-kb"
+                / "my_knowledge_dataset.csv"
+            ),
             type=str,
             help="path of the raw KB csv",
         )
-        parser.add_argument("--end2end", action="store_true", help="whether to train the system end2end or not")
-        parser.add_argument("--index_gpus", type=int, help="how many GPUs used in re-encoding process")
+        parser.add_argument(
+            "--end2end",
+            action="store_true",
+            help="whether to train the system end2end or not",
+        )
+        parser.add_argument(
+            "--index_gpus", type=int, help="how many GPUs used in re-encoding process"
+        )
         parser.add_argument(
             "--shard_dir",
             type=str,
@@ -602,7 +722,9 @@ class GenerativeQAModule(BaseTransformer):
             ),
         )
 
-        parser.add_argument("--indexing_freq", type=int, help="frequency of re-encode process")
+        parser.add_argument(
+            "--indexing_freq", type=int, help="frequency of re-encode process"
+        )
         return parser
 
     @staticmethod
@@ -619,7 +741,9 @@ class GenerativeQAModule(BaseTransformer):
         parser.add_argument(
             "--passages_path",
             type=str,
-            default=str(Path(__file__).parent / "test_run" / "dummy-kb" / "my_knowledge_dataset"),
+            default=str(
+                Path(__file__).parent / "test_run" / "dummy-kb" / "my_knowledge_dataset"
+            ),
             help=(
                 "Path to the dataset of passages for custom index. More info about custom indexes in the RagRetriever"
                 " documentation as well as in `examples/rag/use_own_knowledge_dataset.py`"
@@ -628,7 +752,12 @@ class GenerativeQAModule(BaseTransformer):
         parser.add_argument(
             "--index_path",
             type=str,
-            default=str(Path(__file__).parent / "test_run" / "dummy-kb" / "my_knowledge_dataset_hnsw_index.faiss"),
+            default=str(
+                Path(__file__).parent
+                / "test_run"
+                / "dummy-kb"
+                / "my_knowledge_dataset_hnsw_index.faiss"
+            ),
             help=(
                 "Path to the faiss index for custom index. More info about custom indexes in the RagRetriever"
                 " documentation as well as in `examples/rag/use_own_knowledge_dataset.py`"
@@ -700,7 +829,9 @@ def main(args=None, model=None) -> GenerativeQAModule:
         exist_ok=True
     )  # save dpr_context encoder seprately for the future use
     print(args.shard_dir)
-    if os.path.exists(args.shard_dir):  # we do not need previous kb shards used in dataset re-conding and re-indexing
+    if os.path.exists(
+        args.shard_dir
+    ):  # we do not need previous kb shards used in dataset re-conding and re-indexing
         shutil.rmtree(args.shard_dir)
     Path(args.shard_dir).mkdir(exist_ok=True)
 
@@ -713,7 +844,9 @@ def main(args=None, model=None) -> GenerativeQAModule:
     named_actors = []
     if args.distributed_retriever == "ray" and args.gpus > 1:
         if not is_ray_available():
-            raise RuntimeError("Please install Ray to use the Ray distributed retriever.")
+            raise RuntimeError(
+                "Please install Ray to use the Ray distributed retriever."
+            )
         # Connect to an existing Ray cluster.
         try:
             ray.init(address=args.ray_address, namespace="rag")
@@ -745,7 +878,10 @@ def main(args=None, model=None) -> GenerativeQAModule:
                     os.environ["NODE_RANK"], os.environ["LOCAL_RANK"]
                 )
             )
-            named_actors = [ray.get_actor("retrieval_worker_{}".format(i)) for i in range(args.num_retrieval_workers)]
+            named_actors = [
+                ray.get_actor("retrieval_worker_{}".format(i))
+                for i in range(args.num_retrieval_workers)
+            ]
     args.actor_handles = named_actors
     assert args.actor_handles == named_actors
 
@@ -769,7 +905,9 @@ def main(args=None, model=None) -> GenerativeQAModule:
     elif args.logger_name == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        training_logger = WandbLogger(name=model.output_dir.name, project=f"hf_{dataset}")
+        training_logger = WandbLogger(
+            name=model.output_dir.name, project=f"hf_{dataset}"
+        )
 
     es_callback = (
         get_early_stopping_callback(model.val_metric, args.early_stopping_patience)

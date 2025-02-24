@@ -66,7 +66,9 @@ def token_bytes_to_string(b):
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def bpe(mergeable_ranks: Dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
+def bpe(
+    mergeable_ranks: Dict[bytes, int], token: bytes, max_rank: Optional[int] = None
+):
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -79,7 +81,11 @@ def bpe(mergeable_ranks: Dict[bytes, int], token: bytes, max_rank: Optional[int]
         if min_rank is None or (max_rank is not None and min_rank >= max_rank):
             break
         assert min_idx is not None
-        parts = parts[:min_idx] + [parts[min_idx] + parts[min_idx + 1]] + parts[min_idx + 2 :]
+        parts = (
+            parts[:min_idx]
+            + [parts[min_idx] + parts[min_idx + 1]]
+            + parts[min_idx + 2 :]
+        )
     return parts
 
 
@@ -128,7 +134,9 @@ def convert_tiktoken(tokenizer, output_dir):
         "pad_token": "<|endoftext|>",
     }
     tokenizer_config_template.update({"tokenizer_class": "GPT2Tokenizer"})
-    tokenizer_config_template = dict(sorted(tokenizer_config_template.items(), key=lambda x: x[0]))
+    tokenizer_config_template = dict(
+        sorted(tokenizer_config_template.items(), key=lambda x: x[0])
+    )
 
     # add placeholder image token by taking one of the reserved tokens
     reserved_token_id = vocab["<|extra_0|>"]
@@ -190,10 +198,14 @@ def convert_tiktoken(tokenizer, output_dir):
     with open(os.path.join(output_dir, "tokenizer.json"), "w", encoding="utf-8") as fp:
         json.dump(tokenizer_template, fp, indent=2, ensure_ascii=False)
 
-    with open(os.path.join(output_dir, "tokenizer_config.json"), "w", encoding="utf-8") as fp:
+    with open(
+        os.path.join(output_dir, "tokenizer_config.json"), "w", encoding="utf-8"
+    ) as fp:
         json.dump(tokenizer_config_template, fp, indent=2, ensure_ascii=False)
 
-    with open(os.path.join(output_dir, "special_tokens_map.json"), "w", encoding="utf-8") as fp:
+    with open(
+        os.path.join(output_dir, "special_tokens_map.json"), "w", encoding="utf-8"
+    ) as fp:
         json.dump(
             {
                 "bos_token": "<|extra_203|>",
@@ -241,7 +253,10 @@ def convert_state_dict_to_hf(old_state_dict, new_state_dict):
     for key, value in old_state_dict.items():
         # convert conv layers in attn to linear
         if (
-            any(key.endswith(name) for name in ["q.weight", "k.weight", "v.weight", "proj_out.weight"])
+            any(
+                key.endswith(name)
+                for name in ["q.weight", "k.weight", "v.weight", "proj_out.weight"]
+            )
             and value.ndim == 4
         ):
             value = value.squeeze()
@@ -253,11 +268,15 @@ def convert_state_dict_to_hf(old_state_dict, new_state_dict):
     return new_state_dict
 
 
-def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test_inference=False):
+def convert_model(
+    vq_model_id, llm_model_id, output_dir, hub_model_id=None, test_inference=False
+):
     os.makedirs(output_dir, exist_ok=True)
 
     # Convert and save processor
-    tokenizer_tiktoken = AutoTokenizer.from_pretrained(llm_model_id, trust_remote_code=True)
+    tokenizer_tiktoken = AutoTokenizer.from_pretrained(
+        llm_model_id, trust_remote_code=True
+    )
     convert_tiktoken(tokenizer_tiktoken, output_dir)
     extra_special_tokens = extra_special_tokens = {
         "image_token": "<image>",
@@ -266,11 +285,15 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         "image_wrapper_token": "<|image token|>",
         "eof_token": "<|extra_201|>",
     }
-    tokenizer_converted = AutoTokenizer.from_pretrained(output_dir, extra_special_tokens=extra_special_tokens)
+    tokenizer_converted = AutoTokenizer.from_pretrained(
+        output_dir, extra_special_tokens=extra_special_tokens
+    )
     tokenizer_converted.padding_side = "left"
 
     image_processor = Emu3ImageProcessor.from_pretrained(vq_model_id)
-    processor = Emu3Processor(image_processor, tokenizer_converted, chat_template=CHAT_TEMPLATE)
+    processor = Emu3Processor(
+        image_processor, tokenizer_converted, chat_template=CHAT_TEMPLATE
+    )
     processor.save_pretrained(output_dir)
 
     # load models
@@ -314,7 +337,9 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         # Short inference on a few examples to check if generation makes sense
         print("Loading the checkpoint in a Emu3 model...")
         print("*" * 100)
-        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            output_dir, torch_dtype=torch.bfloat16, device_map="auto"
+        )
         processor = Emu3Processor.from_pretrained(output_dir)
 
         conversation = [
@@ -327,7 +352,10 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
             {
                 "role": "user",
                 "content": [
-                    {"type": "text", "text": "Please tell me about this art work and its artist."},
+                    {
+                        "type": "text",
+                        "text": "Please tell me about this art work and its artist.",
+                    },
                     {"type": "image"},
                 ],
             },
@@ -336,20 +364,27 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
 
         image = Image.open(
             requests.get(
-                "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg", stream=True
+                "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg",
+                stream=True,
             ).raw
         )
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(
+            model.device, torch.bfloat16
+        )
         length = inputs.input_ids.shape[1]
 
         out = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-        generated_text = processor.batch_decode(out[:, length:], skip_special_tokens=True)[0]
+        generated_text = processor.batch_decode(
+            out[:, length:], skip_special_tokens=True
+        )[0]
 
         print(f"Generation for single-image: {generated_text}")
         print("*" * 100)
     elif test_inference and llm_model_id.endswith("Gen"):
         processor = Emu3Processor.from_pretrained(output_dir)
-        model = Emu3ForConditionalGeneration.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+        model = Emu3ForConditionalGeneration.from_pretrained(
+            output_dir, torch_dtype=torch.bfloat16, device_map="auto"
+        )
 
         inputs = processor(
             text=[
@@ -363,7 +398,9 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         inputs = inputs.to(device="cuda:0", dtype=torch.bfloat16)
 
         neg_prompt = "lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry."
-        neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(device="cuda:0")
+        neg_inputs = processor(text=[neg_prompt] * 2, return_tensors="pt").to(
+            device="cuda:0"
+        )
 
         image_sizes = inputs.pop("image_sizes")
         HEIGHT, WIDTH = image_sizes[0]
@@ -372,12 +409,24 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         def prefix_allowed_tokens_fn(batch_id, input_ids):
             height, width = HEIGHT, WIDTH
             visual_tokens = VISUAL_TOKENS
-            image_token_id = processor.tokenizer.encode("<|image token|>", return_tensors="pt")[0].to(model.device)
-            eoi_token_id = processor.tokenizer.encode("<|image end|>", return_tensors="pt")[0]
-            eos_token_id = processor.tokenizer.encode("<|extra_204|>", return_tensors="pt")[0]
-            pad_token_id = processor.tokenizer.encode("<|endoftext|>", return_tensors="pt")[0]
-            eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
-            eof_token_id = processor.tokenizer.encode("<|extra_201|>", return_tensors="pt")[0]
+            image_token_id = processor.tokenizer.encode(
+                "<|image token|>", return_tensors="pt"
+            )[0].to(model.device)
+            eoi_token_id = processor.tokenizer.encode(
+                "<|image end|>", return_tensors="pt"
+            )[0]
+            eos_token_id = processor.tokenizer.encode(
+                "<|extra_204|>", return_tensors="pt"
+            )[0]
+            pad_token_id = processor.tokenizer.encode(
+                "<|endoftext|>", return_tensors="pt"
+            )[0]
+            eol_token_id = processor.tokenizer.encode(
+                "<|extra_200|>", return_tensors="pt"
+            )[0]
+            eof_token_id = processor.tokenizer.encode(
+                "<|extra_201|>", return_tensors="pt"
+            )[0]
 
             position = torch.nonzero(input_ids == image_token_id, as_tuple=True)[0][0]
             offset = input_ids.shape[0] - position
@@ -401,7 +450,9 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
             negative_prompt_attention_mask=neg_inputs.attention_mask,
         )
 
-        image = model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
+        image = model.decode_image_tokens(
+            out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH
+        )
         images = processor.postprocess(
             list(image.float()), return_tensors="PIL.Image.Image"
         )  # internally we convert to np but it's not supported in bf16 precision

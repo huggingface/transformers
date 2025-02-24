@@ -14,7 +14,12 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ....utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_torch_available
+from ....utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_sentencepiece_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -77,4 +82,6 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

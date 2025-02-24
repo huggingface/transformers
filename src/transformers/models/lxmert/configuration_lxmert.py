@@ -162,7 +162,11 @@ class LxmertConfig(PretrainedConfig):
         self.visual_obj_loss = visual_obj_loss
         self.visual_attr_loss = visual_attr_loss
         self.visual_feat_loss = visual_feat_loss
-        self.num_hidden_layers = {"vision": r_layers, "cross_encoder": x_layers, "language": l_layers}
+        self.num_hidden_layers = {
+            "vision": r_layers,
+            "cross_encoder": x_layers,
+            "language": l_layers,
+        }
         super().__init__(**kwargs)
 
 

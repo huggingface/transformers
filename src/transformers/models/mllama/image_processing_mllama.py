@@ -278,7 +278,9 @@ def get_optimal_tiled_canvas(
     return optimal_canvas
 
 
-def split_to_tiles(image: np.ndarray, num_tiles_height: int, num_tiles_width: int) -> np.ndarray:
+def split_to_tiles(
+    image: np.ndarray, num_tiles_height: int, num_tiles_width: int
+) -> np.ndarray:
     """
     Split an image into a specified number of tiles along its width and height dimensions.
 
@@ -298,18 +300,24 @@ def split_to_tiles(image: np.ndarray, num_tiles_height: int, num_tiles_width: in
     tile_height = height // num_tiles_height
     tile_width = width // num_tiles_width
 
-    image = image.reshape(num_channels, num_tiles_height, tile_height, num_tiles_width, tile_width)
+    image = image.reshape(
+        num_channels, num_tiles_height, tile_height, num_tiles_width, tile_width
+    )
 
     # Permute to (num_tiles_height, num_tiles_width, num_channels, tile_height, tile_width)
     image = image.transpose(1, 3, 0, 2, 4)
 
     # Reshape into the desired output shape (num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
-    image = image.reshape(num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width)
+    image = image.reshape(
+        num_tiles_width * num_tiles_height, num_channels, tile_height, tile_width
+    )
 
     return np.ascontiguousarray(image)
 
 
-def build_aspect_ratio_mask(aspect_ratios: List[List[Tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
+def build_aspect_ratio_mask(
+    aspect_ratios: List[List[Tuple[int, int]]], max_image_tiles: int
+) -> np.ndarray:
     """
     Builds a mask for the aspect ratios of the images.
 
@@ -327,7 +335,9 @@ def build_aspect_ratio_mask(aspect_ratios: List[List[Tuple[int, int]]], max_imag
     batch_size = len(aspect_ratios)
     max_num_images = max([len(row) for row in aspect_ratios])
 
-    aspect_ratio_mask = np.zeros((batch_size, max_num_images, max_image_tiles), dtype=np.int64)
+    aspect_ratio_mask = np.zeros(
+        (batch_size, max_num_images, max_image_tiles), dtype=np.int64
+    )
 
     # Set the first tile to 1 for all aspect ratios
     # because in original implementation aspect ratios are padded with (1, 1),
@@ -378,7 +388,14 @@ def pack_images(
 
     # Initialize the stacked images array with zeros
     stacked_images = np.zeros(
-        (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width),
+        (
+            batch_size,
+            max_num_images,
+            max_image_tiles,
+            channels,
+            tile_height,
+            tile_width,
+        ),
         dtype=np.float32,
     )
 
@@ -395,7 +412,9 @@ def pack_images(
     return stacked_images, all_num_tiles
 
 
-def pack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: int = 1) -> np.ndarray:
+def pack_aspect_ratios(
+    aspect_ratios: List[List[Tuple[int, int]]], pad_value: int = 1
+) -> np.ndarray:
     """
     Stack a list of aspect ratios into a numpy array.
 
@@ -412,14 +431,18 @@ def pack_aspect_ratios(aspect_ratios: List[List[Tuple[int, int]]], pad_value: in
     batch_size = len(aspect_ratios)
     max_num_images = max([len(row) for row in aspect_ratios])
 
-    aspect_ratios_stacked = np.full((batch_size, max_num_images, 2), pad_value, dtype=np.int64)
+    aspect_ratios_stacked = np.full(
+        (batch_size, max_num_images, 2), pad_value, dtype=np.int64
+    )
     for i, row in enumerate(aspect_ratios):
         if len(row) > 0:
             aspect_ratios_stacked[i, : len(row)] = np.array(row)
     return aspect_ratios_stacked
 
 
-def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
+def convert_aspect_ratios_to_ids(
+    aspect_ratios: List[List[Tuple[int, int]]], max_image_tiles: int
+) -> np.ndarray:
     """
     Convert aspect ratio tuples to unique ids.
 
@@ -446,7 +469,9 @@ def convert_aspect_ratios_to_ids(aspect_ratios: List[List[Tuple[int, int]]], max
     aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
     for i, sample_aspect_ratios in enumerate(aspect_ratios):
         for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
-            aspect_ratios_ids[i, j] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
+            aspect_ratios_ids[i, j] = (
+                supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
+            )
     return aspect_ratios_ids
 
 
@@ -516,9 +541,13 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
 
 def _validate_size(size: Dict[str, int]) -> None:
     if not ("height" in size and "width" in size):
-        raise ValueError(f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}")
+        raise ValueError(
+            f"Argument `size` must be a dictionary with keys 'height' and 'width'. Got: {size}"
+        )
     if size["height"] != size["width"]:
-        raise ValueError(f"Argument `size` must have the same height and width, got {size}")
+        raise ValueError(
+            f"Argument `size` must have the same height and width, got {size}"
+        )
 
 
 def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_tiles):
@@ -527,7 +556,9 @@ def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_til
     if not do_resize:
         raise ValueError("MllamaImageProcessor doesn't support `do_resize=False` mode.")
     if max_image_tiles is None or max_image_tiles <= 0:
-        raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
+        raise ValueError(
+            f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}."
+        )
     _validate_size(size)
 
 
@@ -564,7 +595,12 @@ class MllamaImageProcessor(BaseImageProcessor):
             The maximum number of tiles to split the image into.
     """
 
-    model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
+    model_input_names = [
+        "pixel_values",
+        "num_tiles",
+        "aspect_ratio_ids",
+        "aspect_ratio_mask",
+    ]
 
     def __init__(
         self,
@@ -589,12 +625,16 @@ class MllamaImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
         self.max_image_tiles = max_image_tiles
 
-        _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+        _validate_mllama_preprocess_arguments(
+            self.do_resize, self.size, self.do_pad, self.max_image_tiles
+        )
 
     def preprocess(
         self,
@@ -664,17 +704,23 @@ class MllamaImageProcessor(BaseImageProcessor):
                 - **aspect_ratio_ids** (`TensorType`): The aspect ratio ids of the images.
                 - **num_tiles** (`List[List[int]]`): The number of tiles for each image in the batch.
         """
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-        max_image_tiles = max_image_tiles if max_image_tiles is not None else self.max_image_tiles
+        max_image_tiles = (
+            max_image_tiles if max_image_tiles is not None else self.max_image_tiles
+        )
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -693,9 +739,13 @@ class MllamaImageProcessor(BaseImageProcessor):
         images_list = make_nested_list_of_images(images)
 
         if self.do_convert_rgb:
-            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+            images_list = [
+                [convert_to_rgb(image) for image in images] for images in images_list
+            ]
 
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        images_list = [
+            [to_numpy_array(image) for image in images] for images in images_list
+        ]
 
         batch_images = []
         batch_aspect_ratios = []
@@ -710,7 +760,9 @@ class MllamaImageProcessor(BaseImageProcessor):
                 # convert images to channels first format for faster processing
                 # LAST is slower for `pad` and not supported by `split_to_tiles`
                 data_format = ChannelDimension.FIRST
-                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                image = to_channel_dimension_format(
+                    image, data_format, input_channel_dim=input_data_format
+                )
 
                 # do_resize=False is not supported, validated
                 image, aspect_ratio = self.resize(
@@ -759,8 +811,12 @@ class MllamaImageProcessor(BaseImageProcessor):
 
         images, num_tiles = pack_images(batch_images, max_image_tiles)
 
-        aspect_ratio_ids = convert_aspect_ratios_to_ids(batch_aspect_ratios, max_image_tiles=max_image_tiles)
-        aspect_ratio_mask = build_aspect_ratio_mask(batch_aspect_ratios, max_image_tiles=max_image_tiles)
+        aspect_ratio_ids = convert_aspect_ratios_to_ids(
+            batch_aspect_ratios, max_image_tiles=max_image_tiles
+        )
+        aspect_ratio_mask = build_aspect_ratio_mask(
+            batch_aspect_ratios, max_image_tiles=max_image_tiles
+        )
 
         # images (np.ndarray) with shape (batch_size, max_num_images, max_image_tiles, channels, tile_height, tile_width)
         # aspect_ratio_ids (np.ndarray) with shape (batch_size, max_num_images) - aspect ratio ids for each image, padded to max_num_images with 0

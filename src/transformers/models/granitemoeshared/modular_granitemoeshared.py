@@ -58,7 +58,9 @@ class GraniteMoeSharedMLP(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.input_linear(hidden_states)
         chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        hidden_states = (
+            self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        )
         hidden_states = self.output_linear(hidden_states)
         return hidden_states
 
@@ -66,7 +68,11 @@ class GraniteMoeSharedMLP(nn.Module):
 class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
     def __init__(self, config: GraniteMoeSharedConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
+        self.shared_mlp = (
+            None
+            if config.shared_intermediate_size == 0
+            else GraniteMoeSharedMLP(config)
+        )
 
     def forward(
         self,
@@ -78,9 +84,13 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -268,7 +278,10 @@ class GraniteMoeSharedModel(GraniteMoeModel):
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [GraniteMoeSharedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                GraniteMoeSharedDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
 
 
@@ -282,4 +295,8 @@ class GraniteMoeSharedForCausalLM(GraniteMoeForCausalLM):
         self.post_init()
 
 
-__all__ = ["GraniteMoeSharedForCausalLM", "GraniteMoeSharedModel", "GraniteMoeSharedPreTrainedModel"]
+__all__ = [
+    "GraniteMoeSharedForCausalLM",
+    "GraniteMoeSharedModel",
+    "GraniteMoeSharedPreTrainedModel",
+]

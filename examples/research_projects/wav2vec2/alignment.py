@@ -42,7 +42,9 @@ class Wav2Vec2Aligner:
             print(item["wav_path"], "not found in wavs directory")
 
         speech_array = self.speech_file_to_array_fn(item["wav_path"])
-        inputs = self.processor(speech_array, sampling_rate=16_000, return_tensors="pt", padding=True)
+        inputs = self.processor(
+            speech_array, sampling_rate=16_000, return_tensors="pt", padding=True
+        )
         if self.cuda:
             inputs = inputs.to(device="cuda")
 
@@ -119,7 +121,11 @@ class Wav2Vec2Aligner:
                 changed = trellis[t - 1, j - 1] + emission[t - 1, tokens[j - 1]]
 
                 # 2. Store the path with frame-wise probability.
-                prob = emission[t - 1, tokens[j - 1] if changed > stayed else 0].exp().item()
+                prob = (
+                    emission[t - 1, tokens[j - 1] if changed > stayed else 0]
+                    .exp()
+                    .item()
+                )
                 # Return token index and time index in non-trellis coordinate.
                 path.append(Point(j - 1, t - 1, prob))
 
@@ -203,13 +209,25 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--model_name", type=str, default="arijitx/wav2vec2-xls-r-300m-bengali", help="wav2vec model name"
+        "--model_name",
+        type=str,
+        default="arijitx/wav2vec2-xls-r-300m-bengali",
+        help="wav2vec model name",
     )
-    parser.add_argument("--wav_dir", type=str, default="./wavs", help="directory containing wavs")
-    parser.add_argument("--text_file", type=str, default="script.txt", help="file containing text")
-    parser.add_argument("--input_wavs_sr", type=int, default=16000, help="sampling rate of input audios")
     parser.add_argument(
-        "--output_dir", type=str, default="./out_alignment", help="output directory containing the alignment files"
+        "--wav_dir", type=str, default="./wavs", help="directory containing wavs"
+    )
+    parser.add_argument(
+        "--text_file", type=str, default="script.txt", help="file containing text"
+    )
+    parser.add_argument(
+        "--input_wavs_sr", type=int, default=16000, help="sampling rate of input audios"
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="./out_alignment",
+        help="output directory containing the alignment files",
     )
     parser.add_argument("--cuda", action="store_true")
 

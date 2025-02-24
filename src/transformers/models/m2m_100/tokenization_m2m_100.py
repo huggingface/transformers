@@ -129,12 +129,17 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
         self.language_codes = language_codes
         fairseq_language_code = FAIRSEQ_LANGUAGE_CODES[language_codes]
-        self.lang_code_to_token = {lang_code: f"__{lang_code}__" for lang_code in fairseq_language_code}
+        self.lang_code_to_token = {
+            lang_code: f"__{lang_code}__" for lang_code in fairseq_language_code
+        }
 
         additional_special_tokens = kwargs.pop("additional_special_tokens", [])
         for lang_code in fairseq_language_code:
             token = self.get_lang_token(lang_code)
-            if token not in additional_special_tokens and lang_code not in str(token) not in self.added_tokens_encoder:
+            if (
+                token not in additional_special_tokens
+                and lang_code not in str(token) not in self.added_tokens_encoder
+            ):
                 additional_special_tokens.append(token)
 
         self.vocab_file = vocab_file
@@ -146,9 +151,13 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.encoder_size = len(self.encoder)
 
         self.lang_token_to_id = {
-            self.get_lang_token(lang_code): self.encoder_size + i for i, lang_code in enumerate(fairseq_language_code)
+            self.get_lang_token(lang_code): self.encoder_size + i
+            for i, lang_code in enumerate(fairseq_language_code)
         }
-        self.lang_code_to_id = {lang_code: self.encoder_size + i for i, lang_code in enumerate(fairseq_language_code)}
+        self.lang_code_to_id = {
+            lang_code: self.encoder_size + i
+            for i, lang_code in enumerate(fairseq_language_code)
+        }
         self.id_to_lang_token = {v: k for k, v in self.lang_token_to_id.items()}
 
         self._src_lang = src_lang if src_lang is not None else "en"
@@ -220,7 +229,10 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         return out_string.strip()
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -240,14 +252,21 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         prefix_ones = [1] * len(self.prefix_tokens)
         suffix_ones = [1] * len(self.suffix_tokens)
         if token_ids_1 is None:
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+        return (
+            prefix_ones
+            + ([0] * len(token_ids_0))
+            + ([0] * len(token_ids_1))
+            + suffix_ones
+        )
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -290,20 +309,26 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
         self.sp_model = load_spm(self.spm_file, self.sp_model_kwargs)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         save_dir = Path(save_directory)
         if not save_dir.is_dir():
             raise OSError(f"{save_directory} should be a directory")
         vocab_save_path = save_dir / (
-            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
+            (filename_prefix + "-" if filename_prefix else "")
+            + self.vocab_files_names["vocab_file"]
         )
         spm_save_path = save_dir / (
-            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["spm_file"]
+            (filename_prefix + "-" if filename_prefix else "")
+            + self.vocab_files_names["spm_file"]
         )
 
         save_json(self.encoder, vocab_save_path)
 
-        if os.path.abspath(self.spm_file) != os.path.abspath(spm_save_path) and os.path.isfile(self.spm_file):
+        if os.path.abspath(self.spm_file) != os.path.abspath(
+            spm_save_path
+        ) and os.path.isfile(self.spm_file):
             copyfile(self.spm_file, spm_save_path)
         elif not os.path.isfile(self.spm_file):
             with open(spm_save_path, "wb") as fi:
@@ -325,10 +350,18 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.set_src_lang_special_tokens(self.src_lang)
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-    def _build_translation_inputs(self, raw_inputs, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs):
+    def _build_translation_inputs(
+        self,
+        raw_inputs,
+        src_lang: Optional[str],
+        tgt_lang: Optional[str],
+        **extra_kwargs,
+    ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
-            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+            raise ValueError(
+                "Translation requires a `src_lang` and a `tgt_lang` for this model"
+            )
         self.src_lang = src_lang
         inputs = self(raw_inputs, add_special_tokens=True, **extra_kwargs)
         tgt_lang_id = self.get_lang_id(tgt_lang)
@@ -363,7 +396,9 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         return self.lang_token_to_id[lang_token]
 
 
-def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
+def load_spm(
+    path: str, sp_model_kwargs: Dict[str, Any]
+) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
     spm.Load(str(path))
     return spm

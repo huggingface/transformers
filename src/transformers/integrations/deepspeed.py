@@ -22,7 +22,12 @@ import weakref
 from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
-from ..utils import is_accelerate_available, is_torch_available, is_torch_mlu_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_torch_available,
+    is_torch_mlu_available,
+    logging,
+)
 
 
 if is_torch_available():
@@ -128,7 +133,9 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         ds_val = config.get(ds_key)
         if ds_val is not None and ds_val != hf_val:
-            self.mismatches.append(f"- ds {ds_key_long}={ds_val} vs hf {hf_key}={hf_val}")
+            self.mismatches.append(
+                f"- ds {ds_key_long}={ds_val} vs hf {hf_key}={hf_val}"
+            )
 
     fill_only = partialmethod(fill_match, must_match=False)
 
@@ -139,7 +146,11 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         """
         # DeepSpeed does:
         # train_batch_size = world_size * train_micro_batch_size_per_gpu * gradient_accumulation_steps
-        train_batch_size = args.world_size * args.per_device_train_batch_size * args.gradient_accumulation_steps
+        train_batch_size = (
+            args.world_size
+            * args.per_device_train_batch_size
+            * args.gradient_accumulation_steps
+        )
         self.fill_match(
             "train_micro_batch_size_per_gpu",
             args.per_device_train_batch_size,
@@ -166,10 +177,14 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             "adam_beta1+adam_beta2",
         )
         self.fill_match("optimizer.params.eps", args.adam_epsilon, "adam_epsilon")
-        self.fill_match("optimizer.params.weight_decay", args.weight_decay, "weight_decay")
+        self.fill_match(
+            "optimizer.params.weight_decay", args.weight_decay, "weight_decay"
+        )
 
         self.fill_only("scheduler.params.warmup_min_lr", 0)  # not a trainer arg
-        self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
+        self.fill_match(
+            "scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate"
+        )
         # total_num_steps - will get set in trainer_config_finalize
 
         # fp16
@@ -193,10 +208,14 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
 
         # apex: delegates amp work to apex (which needs to be available), but it cannot be used with any
         # ZeRO features
-        self.fill_match("amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)")
+        self.fill_match(
+            "amp.enabled", fp16_backend == "apex", "fp16+fp16_backend(apex)"
+        )
         self.fill_match("amp.opt_level", args.fp16_opt_level, "fp16_opt_level")
 
-        self.fill_match("bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval")
+        self.fill_match(
+            "bf16.enabled", (args.bf16 or args.bf16_full_eval), "bf16|bf16_full_eval"
+        )
 
         # deepspeed's default mode is fp16 unless there is a config that says differently
         if self.is_true("bf16.enabled"):
@@ -228,9 +247,13 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
             elif hasattr(model.config, "hidden_sizes"):
                 # if there are many hidden sizes pick the largest one
                 hidden_size = max(model.config.hidden_sizes)
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_size"):
+            elif hasattr(model.config, "text_config") and hasattr(
+                model.config.text_config, "hidden_size"
+            ):
                 hidden_size = model.config.text_config.hidden_size
-            elif hasattr(model.config, "text_config") and hasattr(model.config.text_config, "hidden_sizes"):
+            elif hasattr(model.config, "text_config") and hasattr(
+                model.config.text_config, "hidden_sizes"
+            ):
                 # if there are many hidden sizes pick the largest one
                 hidden_size = max(model.config.text_config.hidden_sizes)
             else:
@@ -241,7 +264,9 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
                     "`auto` values for these keys with an integer value of your choice."
                 )
 
-            self.fill_only("zero_optimization.reduce_bucket_size", hidden_size * hidden_size)
+            self.fill_only(
+                "zero_optimization.reduce_bucket_size", hidden_size * hidden_size
+            )
             if self.is_zero3():
                 # automatically assign the optimal config values based on model config
                 self.fill_only(
@@ -292,20 +317,28 @@ def unset_hf_deepspeed_config():
 
 
 def is_deepspeed_zero3_enabled():
-    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+    if (
+        _hf_deepspeed_config_weak_ref is not None
+        and _hf_deepspeed_config_weak_ref() is not None
+    ):
         return _hf_deepspeed_config_weak_ref().is_zero3()
     else:
         return False
 
 
 def deepspeed_config():
-    if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
+    if (
+        _hf_deepspeed_config_weak_ref is not None
+        and _hf_deepspeed_config_weak_ref() is not None
+    ):
         return _hf_deepspeed_config_weak_ref().config
     else:
         return None
 
 
-def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
+def deepspeed_optim_sched(
+    trainer, hf_deepspeed_config, args, num_training_steps, model_parameters
+):
     """
     A convenience wrapper that deals with optimizer and lr scheduler configuration.
     """
@@ -359,9 +392,13 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
                 )
                 return lr_scheduler
 
-            lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
+            lr_scheduler = DummyScheduler(
+                optimizer, lr_scheduler_callable=_lr_scheduler_callable
+            )
         else:
-            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+            lr_scheduler = trainer.create_scheduler(
+                num_training_steps=num_training_steps, optimizer=optimizer
+            )
 
     return optimizer, lr_scheduler
 
@@ -403,7 +440,9 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     if inference:
         # only Z3 makes sense for the inference
         if not hf_deepspeed_config.is_zero3():
-            raise ValueError("ZeRO inference only makes sense with ZeRO Stage 3 - please adjust your config")
+            raise ValueError(
+                "ZeRO inference only makes sense with ZeRO Stage 3 - please adjust your config"
+            )
 
         # in case the training config is re-used for inference
         hf_deepspeed_config.del_config_sub_tree("optimizer")
@@ -423,7 +462,9 @@ def deepspeed_init(trainer, num_training_steps, inference=False):
     return optimizer, lr_scheduler
 
 
-def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_strict=True):
+def deepspeed_load_checkpoint(
+    deepspeed_engine, checkpoint_path, load_module_strict=True
+):
     # it's possible that the user is trying to resume from model_path, which doesn't necessarily
     # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
     # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
@@ -442,6 +483,8 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
             load_lr_scheduler_states=True,
         )
         if load_path is None:
-            raise ValueError(f"[deepspeed] failed to resume from checkpoint {checkpoint_path}")
+            raise ValueError(
+                f"[deepspeed] failed to resume from checkpoint {checkpoint_path}"
+            )
     else:
         raise ValueError(f"Can't find a valid checkpoint at {checkpoint_path}")

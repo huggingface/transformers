@@ -125,7 +125,10 @@ class NllbMoeConfig(PretrainedConfig):
 
     model_type = "nllb-moe"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+    }
 
     def __init__(
         self,
@@ -187,7 +190,9 @@ class NllbMoeConfig(PretrainedConfig):
         self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = (
+            scale_embedding  # scale factor will be sqrt(d_model) if True
+        )
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
         self.decoder_sparse_step = decoder_sparse_step
@@ -196,13 +201,17 @@ class NllbMoeConfig(PretrainedConfig):
         self.expert_capacity = expert_capacity
         self.router_bias = router_bias
         if router_dtype not in ["float32", "float16", "bfloat16"]:
-            raise ValueError(f"`router_dtype` must be one of 'float32', 'float16' or 'bfloat16', got {router_dtype}")
+            raise ValueError(
+                f"`router_dtype` must be one of 'float32', 'float16' or 'bfloat16', got {router_dtype}"
+            )
         self.router_dtype = router_dtype
 
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.batch_prioritized_routing = batch_prioritized_routing
         self.second_expert_policy = second_expert_policy
-        self.normalize_router_prob_before_dropping = normalize_router_prob_before_dropping
+        self.normalize_router_prob_before_dropping = (
+            normalize_router_prob_before_dropping
+        )
         self.moe_eval_capacity_token_fraction = moe_eval_capacity_token_fraction
         self.moe_token_dropout = moe_token_dropout
         self.output_router_logits = output_router_logits

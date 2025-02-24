@@ -28,7 +28,13 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import PaddingStrategy, TensorType, add_end_docstrings, is_sentencepiece_available, logging
+from ...utils import (
+    PaddingStrategy,
+    TensorType,
+    add_end_docstrings,
+    is_sentencepiece_available,
+    logging,
+)
 from ..xlm_roberta.tokenization_xlm_roberta_fast import (
     VOCAB_FILES_NAMES,
 )
@@ -231,7 +237,11 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             vocab_file,
@@ -267,7 +277,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
     @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         boxes: Union[List[List[int]], List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -330,7 +342,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         if text_pair is not None:
             # in case text + text_pair are provided, text = questions, text_pair = words
             if not _is_valid_text_input(text):
-                raise ValueError("text input must of type `str` (single example) or `List[str]` (batch of examples). ")
+                raise ValueError(
+                    "text input must of type `str` (single example) or `List[str]` (batch of examples). "
+                )
             if not isinstance(text_pair, (list, tuple)):
                 raise ValueError(
                     "words must of type `List[str]` (single pretokenized example), "
@@ -347,20 +361,30 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         if text_pair is not None:
             is_batched = isinstance(text, (list, tuple))
         else:
-            is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            is_batched = (
+                isinstance(text, (list, tuple))
+                and text
+                and isinstance(text[0], (list, tuple))
+            )
 
         words = text if text_pair is None else text_pair
         if boxes is None:
             raise ValueError("You must provide corresponding bounding boxes")
         if is_batched:
             if len(words) != len(boxes):
-                raise ValueError("You must provide words and boxes for an equal amount of examples")
+                raise ValueError(
+                    "You must provide words and boxes for an equal amount of examples"
+                )
             for words_example, boxes_example in zip(words, boxes):
                 if len(words_example) != len(boxes_example):
-                    raise ValueError("You must provide as many words as there are bounding boxes")
+                    raise ValueError(
+                        "You must provide as many words as there are bounding boxes"
+                    )
         else:
             if len(words) != len(boxes):
-                raise ValueError("You must provide as many words as there are bounding boxes")
+                raise ValueError(
+                    "You must provide as many words as there are bounding boxes"
+                )
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
@@ -368,7 +392,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                     f"batch length of `text`: {len(text)} does not match batch length of `text_pair`:"
                     f" {len(text_pair)}."
                 )
-            batch_text_or_text_pairs = list(zip(text, text_pair)) if text_pair is not None else text
+            batch_text_or_text_pairs = (
+                list(zip(text, text_pair)) if text_pair is not None else text
+            )
             is_pair = bool(text_pair is not None)
             return self.batch_encode_plus(
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
@@ -416,7 +442,13 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                 **kwargs,
             )
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+    def tokenize(
+        self,
+        text: str,
+        pair: Optional[str] = None,
+        add_special_tokens: bool = False,
+        **kwargs,
+    ) -> List[str]:
         batched_input = [(text, pair)] if pair else [text]
 
         self._tokenizer.encode_special_tokens = kwargs.pop(
@@ -424,7 +456,10 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         encodings = self._tokenizer.encode_batch(
-            batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
+            batched_input,
+            add_special_tokens=add_special_tokens,
+            is_pretokenized=False,
+            **kwargs,
         )
 
         return encodings[0].tokens
@@ -457,7 +492,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ) -> BatchEncoding:
         if not isinstance(batch_text_or_text_pairs, list):
-            raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
+            raise TypeError(
+                f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})"
+            )
 
         # Set the truncation and padding strategy and restore the initial configuration
         self.set_truncation_and_padding(
@@ -470,7 +507,10 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         if is_pair:
-            batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
+            batch_text_or_text_pairs = [
+                (text.split(), text_pair)
+                for text, text_pair in batch_text_or_text_pairs
+            ]
 
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
@@ -491,9 +531,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=True
-                if word_labels is not None
-                else return_offsets_mapping,  # we use offsets to create the labels
+                return_offsets_mapping=(
+                    True if word_labels is not None else return_offsets_mapping
+                ),  # we use offsets to create the labels
                 return_length=return_length,
                 verbose=verbose,
             )
@@ -527,7 +567,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         token_boxes = []
         for batch_index in range(len(sanitized_tokens["input_ids"])):
             if return_overflowing_tokens:
-                original_index = sanitized_tokens["overflow_to_sample_mapping"][batch_index]
+                original_index = sanitized_tokens["overflow_to_sample_mapping"][
+                    batch_index
+                ]
             else:
                 original_index = batch_index
             token_boxes_example = []
@@ -559,7 +601,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             labels = []
             for batch_index in range(len(sanitized_tokens["input_ids"])):
                 if return_overflowing_tokens:
-                    original_index = sanitized_tokens["overflow_to_sample_mapping"][batch_index]
+                    original_index = sanitized_tokens["overflow_to_sample_mapping"][
+                        batch_index
+                    ]
                 else:
                     original_index = batch_index
                 labels_example = []
@@ -572,7 +616,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
                         if self.only_label_first_subword:
                             if offset[0] == 0:
                                 # Use the real label id for the first token of the word, and padding ids for the remaining tokens
-                                labels_example.append(word_labels[original_index][word_id])
+                                labels_example.append(
+                                    word_labels[original_index][word_id]
+                                )
                             else:
                                 labels_example.append(self.pad_token_label)
                         else:
@@ -586,7 +632,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             if not return_offsets_mapping:
                 del sanitized_tokens["offset_mapping"]
 
-        return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
+        return BatchEncoding(
+            sanitized_tokens, sanitized_encodings, tensor_type=return_tensors
+        )
 
     def _encode_plus(
         self,
@@ -646,13 +694,19 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         if return_tensors is None and not return_overflowing_tokens:
             batched_output = BatchEncoding(
                 {
-                    key: value[0] if len(value) > 0 and isinstance(value[0], list) else value
+                    key: (
+                        value[0]
+                        if len(value) > 0 and isinstance(value[0], list)
+                        else value
+                    )
                     for key, value in batched_output.items()
                 },
                 batched_output.encodings,
             )
 
-        self._eventual_warn_about_too_long_sequence(batched_output["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(
+            batched_output["input_ids"], max_length, verbose
+        )
 
         return batched_output
 
@@ -700,10 +754,17 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
 
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+        if (
+            max_length is not None
+            and pad_to_multiple_of is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
+        needs_to_be_padded = (
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(required_input) != max_length
+        )
 
         # Initialize attention mask if not present.
         if return_attention_mask and "attention_mask" not in encoded_inputs:
@@ -711,35 +772,58 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_side = padding_side if padding_side is not None else self.padding_side
+            padding_side = (
+                padding_side if padding_side is not None else self.padding_side
+            )
             if padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+                    encoded_inputs["attention_mask"] = (
+                        encoded_inputs["attention_mask"] + [0] * difference
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
+                        encoded_inputs["token_type_ids"]
+                        + [self.pad_token_type_id] * difference
                     )
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    encoded_inputs["bbox"] = (
+                        encoded_inputs["bbox"] + [self.pad_token_box] * difference
+                    )
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    encoded_inputs["labels"] = (
+                        encoded_inputs["labels"] + [self.pad_token_label] * difference
+                    )
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                    encoded_inputs["special_tokens_mask"] = (
+                        encoded_inputs["special_tokens_mask"] + [1] * difference
+                    )
+                encoded_inputs[self.model_input_names[0]] = (
+                    required_input + [self.pad_token_id] * difference
+                )
             elif padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
+                    encoded_inputs["attention_mask"] = [
+                        0
+                    ] * difference + encoded_inputs["attention_mask"]
                 if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
+                    encoded_inputs["token_type_ids"] = [
+                        self.pad_token_type_id
+                    ] * difference + encoded_inputs["token_type_ids"]
                 if "bbox" in encoded_inputs:
-                    encoded_inputs["bbox"] = [self.pad_token_box] * difference + encoded_inputs["bbox"]
+                    encoded_inputs["bbox"] = [
+                        self.pad_token_box
+                    ] * difference + encoded_inputs["bbox"]
                 if "labels" in encoded_inputs:
-                    encoded_inputs["labels"] = [self.pad_token_label] * difference + encoded_inputs["labels"]
+                    encoded_inputs["labels"] = [
+                        self.pad_token_label
+                    ] * difference + encoded_inputs["labels"]
                 if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                    encoded_inputs["special_tokens_mask"] = [
+                        1
+                    ] * difference + encoded_inputs["special_tokens_mask"]
+                encoded_inputs[self.model_input_names[0]] = [
+                    self.pad_token_id
+                ] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(padding_side))
 
@@ -796,7 +880,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -807,7 +893,9 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory.")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):

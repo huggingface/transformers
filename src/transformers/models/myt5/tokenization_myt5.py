@@ -56,7 +56,12 @@ class ByteRewriter:
         reverse_rewriting_rules = {v: k for k, v in rewriting_rules.items()}
         self.reverse_hash_tree = self.construct_hash_tree(reverse_rewriting_rules)
 
-    def add_leaf(self, hash_tree: Dict[str, Union[dict, List[str]]], byte_in_sequence: str, byte_out_sequence: str):
+    def add_leaf(
+        self,
+        hash_tree: Dict[str, Union[dict, List[str]]],
+        byte_in_sequence: str,
+        byte_out_sequence: str,
+    ):
         """
         Add a leaf with the output byte sequence to the hash tree.
         """
@@ -71,7 +76,9 @@ class ByteRewriter:
 
         tree_pointer[self.LEAF] = byte_out_list
 
-    def construct_hash_tree(self, rewriting_rules: Dict[str, str]) -> Dict[str, Union[dict, List[str]]]:
+    def construct_hash_tree(
+        self, rewriting_rules: Dict[str, str]
+    ) -> Dict[str, Union[dict, List[str]]]:
         """
         Construct a hash tree for rewritten byte sequences.
         """
@@ -175,9 +182,19 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
             additional_special_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
-        elif extra_ids > 0 and additional_special_tokens is not None and len(additional_special_tokens) > 0:
+        elif (
+            extra_ids > 0
+            and additional_special_tokens is not None
+            and len(additional_special_tokens) > 0
+        ):
             # Check that we have the right number of extra_id special tokens
-            extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))
+            extra_tokens = len(
+                set(
+                    filter(
+                        lambda x: bool("extra_id" in str(x)), additional_special_tokens
+                    )
+                )
+            )
             if extra_tokens != extra_ids:
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
@@ -185,9 +202,21 @@ class MyT5Tokenizer(PreTrainedTokenizer):
                     " extra_ids tokens"
                 )
 
-        pad_token = AddedToken(pad_token, lstrip=True, rstrip=True) if isinstance(pad_token, str) else pad_token
-        eos_token = AddedToken(eos_token, lstrip=True, rstrip=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=True, rstrip=True) if isinstance(unk_token, str) else unk_token
+        pad_token = (
+            AddedToken(pad_token, lstrip=True, rstrip=True)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=True, rstrip=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=True, rstrip=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
         # unk token needs to be in the vocab with correct index
         self._added_tokens_decoder = {0: pad_token, 1: eos_token, 2: unk_token}
         self.offset = len(self._added_tokens_decoder)
@@ -214,13 +243,19 @@ class MyT5Tokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.get_vocab
     def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
+        vocab = {
+            self.convert_ids_to_tokens(i): i
+            for i in range(self.vocab_size + self.offset)
+        }
         vocab.update(self.added_tokens_encoder)
         return vocab
 
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -239,7 +274,9 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         # normal case: some special tokens
@@ -356,7 +393,9 @@ class MyT5Tokenizer(PreTrainedTokenizer):
                 out_tokens.append(token)
 
         out_tokens = self.morphological_decode(out_tokens)
-        _added_tokens = set(self.added_tokens_decoder.values()) | set(self.added_tokens_encoder)
+        _added_tokens = set(self.added_tokens_decoder.values()) | set(
+            self.added_tokens_encoder
+        )
         for token in out_tokens:
             if token in _added_tokens:
                 bstring += bytes(token, "utf-8")
@@ -365,13 +404,19 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         string = bstring.decode("utf-8", errors="ignore")
         return string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "")
+                + VOCAB_FILES_NAMES["vocab_file"],
             )
         else:
-            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+            vocab_file = (
+                filename_prefix + "-" if filename_prefix else ""
+            ) + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
             writer.write(json.dumps(self.byte_maps, indent=2, ensure_ascii=False))
         return (vocab_file,)

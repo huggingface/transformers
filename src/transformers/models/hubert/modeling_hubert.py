@@ -26,7 +26,11 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    CausalLMOutput,
+    SequenceClassifierOutput,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -156,7 +160,11 @@ def _compute_mask_indices(
             dummy_mask_idx = spec_aug_mask_idx[0]
 
         spec_aug_mask_idx = np.concatenate(
-            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+            [
+                spec_aug_mask_idx,
+                np.ones(max_num_masked_span - num_masked_span, dtype=np.int32)
+                * dummy_mask_idx,
+            ]
         )
         spec_aug_mask_idxs.append(spec_aug_mask_idx)
 
@@ -166,18 +174,22 @@ def _compute_mask_indices(
     spec_aug_mask_idxs = np.broadcast_to(
         spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
     )
-    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(
+        batch_size, max_num_masked_span * mask_length
+    )
 
     # add offset to the starting indexes so that indexes now create a span
     offsets = np.arange(mask_length)[None, None, :]
-    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
-        batch_size, max_num_masked_span * mask_length
-    )
+    offsets = np.broadcast_to(
+        offsets, (batch_size, max_num_masked_span, mask_length)
+    ).reshape(batch_size, max_num_masked_span * mask_length)
     spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
 
     # ensure that we cannot have indices larger than sequence_length
     if spec_aug_mask_idxs.max() > sequence_length - 1:
-        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = (
+            sequence_length - 1
+        )
 
     # scatter indices to mask
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
@@ -251,7 +263,9 @@ class HubertGroupNormConvLayer(nn.Module):
         )
         self.activation = ACT2FN[config.feat_extract_activation]
 
-        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
+        self.layer_norm = nn.GroupNorm(
+            num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
@@ -282,7 +296,9 @@ class HubertPositionalConvEmbedding(nn.Module):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
 
-                with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+                with deepspeed.zero.GatheredParameters(
+                    self.conv.weight, modifier_rank=0
+                ):
                     self.conv = weight_norm(self.conv, name="weight", dim=2)
                 if hasattr(self.conv, "parametrizations"):
                     weight_g = self.conv.parametrizations.weight.original0
@@ -331,10 +347,14 @@ class HubertFeatureEncoder(nn.Module):
 
         if config.feat_extract_norm == "group":
             conv_layers = [HubertGroupNormConvLayer(config, layer_id=0)] + [
-                HubertNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+                HubertNoLayerNormConvLayer(config, layer_id=i + 1)
+                for i in range(config.num_feat_extract_layers - 1)
             ]
         elif config.feat_extract_norm == "layer":
-            conv_layers = [HubertLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+            conv_layers = [
+                HubertLayerNormConvLayer(config, layer_id=i)
+                for i in range(config.num_feat_extract_layers)
+            ]
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
@@ -383,7 +403,9 @@ class HubertFeatureProjection(nn.Module):
         super().__init__()
         self.feat_proj_layer_norm = config.feat_proj_layer_norm
         if self.feat_proj_layer_norm:
-            self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
+            self.layer_norm = nn.LayerNorm(
+                config.conv_dim[-1], eps=config.layer_norm_eps
+            )
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
@@ -432,7 +454,11 @@ class HubertAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -509,7 +535,10 @@ class HubertAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -520,7 +549,9 @@ class HubertAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -528,12 +559,18 @@ class HubertAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -585,7 +622,9 @@ class HubertFlashAttention2(HubertAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # HubertFlashAttention2 attention does not support output_attentions
         if output_attentions:
-            raise ValueError("HubertFlashAttention2 attention does not support output_attentions")
+            raise ValueError(
+                "HubertFlashAttention2 attention does not support output_attentions"
+            )
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -615,8 +654,12 @@ class HubertFlashAttention2(HubertAttention):
             # reuse k, v, self_attention
             key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
             value_states = self._reshape(self.v_proj(hidden_states), -1, bsz)
-            key_states = torch.cat([past_key_value[0].transpose(1, 2), key_states], dim=1)
-            value_states = torch.cat([past_key_value[1].transpose(1, 2), value_states], dim=1)
+            key_states = torch.cat(
+                [past_key_value[0].transpose(1, 2), key_states], dim=1
+            )
+            value_states = torch.cat(
+                [past_key_value[1].transpose(1, 2), value_states], dim=1
+            )
         else:
             # self_attention
             key_states = self._reshape(self.k_proj(hidden_states), -1, bsz)
@@ -759,7 +802,9 @@ class HubertSdpaAttention(HubertAttention):
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
         # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
-        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+        is_causal = (
+            True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+        )
 
         # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
         # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
@@ -802,7 +847,9 @@ class HubertFeedForward(nn.Module):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
-        self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.intermediate_dense = nn.Linear(
+            config.hidden_size, config.intermediate_size
+        )
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
@@ -835,12 +882,16 @@ class HubertEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = HubertFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         attn_residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
@@ -896,7 +947,9 @@ class HubertEncoderLayerStableLayerNorm(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = HubertFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layer_norm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
 
         if getattr(config, "adapter_attn_dim", None) is not None:
             self.adapter_layer = HubertAttnAdapterLayer(config)
@@ -912,11 +965,15 @@ class HubertEncoderLayerStableLayerNorm(nn.Module):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+        hidden_states = hidden_states + self.feed_forward(
+            self.final_layer_norm(hidden_states)
+        )
 
         if self.adapter_layer is not None:
             hidden_states = hidden_states + self.adapter_layer(hidden_states)
@@ -937,7 +994,9 @@ class HubertEncoder(nn.Module):
         self.pos_conv_embed = HubertPositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [HubertEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
@@ -954,17 +1013,28 @@ class HubertEncoder(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens output 0
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(
+                1, 1, hidden_states.shape[2]
+            )
             hidden_states[~expand_attention_mask] = 0
             if self._use_flash_attention_2:
                 # 2d mask is passed through the layers
-                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+                attention_mask = (
+                    attention_mask
+                    if (attention_mask is not None and 0 in attention_mask)
+                    else None
+                )
             else:
                 # extend attention_mask
-                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(
+                    dtype=hidden_states.dtype
+                )
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
                 attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                    attention_mask.shape[0],
+                    1,
+                    attention_mask.shape[-1],
+                    attention_mask.shape[-1],
                 )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -981,7 +1051,11 @@ class HubertEncoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = (
+                True
+                if self.training and (dropout_probability < self.config.layerdrop)
+                else False
+            )
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -993,7 +1067,9 @@ class HubertEncoder(nn.Module):
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        output_attentions=output_attentions,
                     )
                 hidden_states = layer_outputs[0]
 
@@ -1007,7 +1083,11 @@ class HubertEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1024,7 +1104,10 @@ class HubertEncoderStableLayerNorm(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList(
-            [HubertEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
+            [
+                HubertEncoderLayerStableLayerNorm(config)
+                for _ in range(config.num_hidden_layers)
+            ]
         )
         self.gradient_checkpointing = False
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
@@ -1042,17 +1125,30 @@ class HubertEncoderStableLayerNorm(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens are not attended to
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states = hidden_states * expand_attention_mask.to(dtype=hidden_states.dtype)
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(
+                1, 1, hidden_states.shape[2]
+            )
+            hidden_states = hidden_states * expand_attention_mask.to(
+                dtype=hidden_states.dtype
+            )
             if self._use_flash_attention_2:
                 # 2d mask is passed through the layers
-                attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
+                attention_mask = (
+                    attention_mask
+                    if (attention_mask is not None and 0 in attention_mask)
+                    else None
+                )
             else:
                 # extend attention_mask
-                attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+                attention_mask = 1.0 - attention_mask[:, None, None, :].to(
+                    dtype=hidden_states.dtype
+                )
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
                 attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+                    attention_mask.shape[0],
+                    1,
+                    attention_mask.shape[-1],
+                    attention_mask.shape[-1],
                 )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -1068,7 +1164,11 @@ class HubertEncoderStableLayerNorm(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = (
+                True
+                if self.training and (dropout_probability < self.config.layerdrop)
+                else False
+            )
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
@@ -1081,7 +1181,9 @@ class HubertEncoderStableLayerNorm(nn.Module):
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        output_attentions=output_attentions,
                     )
                 hidden_states = layer_outputs[0]
 
@@ -1097,7 +1199,11 @@ class HubertEncoderStableLayerNorm(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -1132,10 +1238,14 @@ class HubertPreTrainedModel(PreTrainedModel):
                 import deepspeed
 
                 if hasattr(module, "weight_v") and hasattr(module, "weight_g"):
-                    with deepspeed.zero.GatheredParameters([module.weight_v, module.weight_g], modifier_rank=0):
+                    with deepspeed.zero.GatheredParameters(
+                        [module.weight_v, module.weight_g], modifier_rank=0
+                    ):
                         nn.init.kaiming_normal_(module.weight.data)
                 else:
-                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                    with deepspeed.zero.GatheredParameters(
+                        module.weight, modifier_rank=0
+                    ):
                         nn.init.kaiming_normal_(module.weight.data)
             else:
                 nn.init.kaiming_normal_(module.weight.data)
@@ -1143,7 +1253,9 @@ class HubertPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int]
+    ):
         """
         Computes the output length of the convolutional layers
         """
@@ -1151,22 +1263,37 @@ class HubertPreTrainedModel(PreTrainedModel):
         def _conv_out_length(input_length, kernel_size, stride):
             # 1D convolutional layer output length formula taken
             # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            return (
+                torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+            )
 
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+        for kernel_size, stride in zip(
+            self.config.conv_kernel, self.config.conv_stride
+        ):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
 
         return input_lengths
 
-    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
-        output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor
+    ):
+        output_lengths = self._get_feat_extract_output_lengths(
+            attention_mask.sum(-1)
+        ).to(torch.long)
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+            (batch_size, feature_vector_length),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
         )
         # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask[
+            (
+                torch.arange(attention_mask.shape[0], device=attention_mask.device),
+                output_lengths - 1,
+            )
+        ] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
@@ -1240,7 +1367,9 @@ class HubertModel(HubertPreTrainedModel):
         self.feature_projection = HubertFeatureProjection(config)
 
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
+            self.masked_spec_embed = nn.Parameter(
+                torch.Tensor(config.hidden_size).uniform_()
+            )
 
         if config.do_stable_layer_norm:
             self.encoder = HubertEncoderStableLayerNorm(config)
@@ -1271,7 +1400,9 @@ class HubertModel(HubertPreTrainedModel):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
         elif self.config.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
                 (batch_size, sequence_length),
@@ -1280,8 +1411,12 @@ class HubertModel(HubertPreTrainedModel):
                 attention_mask=attention_mask,
                 min_masks=self.config.mask_time_min_masks,
             )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            mask_time_indices = torch.tensor(
+                mask_time_indices, device=hidden_states.device, dtype=torch.bool
+            )
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(
+                hidden_states.dtype
+            )
 
         if self.config.mask_feature_prob > 0 and self.training:
             # generate indices & apply SpecAugment along feature axis
@@ -1291,14 +1426,20 @@ class HubertModel(HubertPreTrainedModel):
                 mask_length=self.config.mask_feature_length,
                 min_masks=self.config.mask_feature_min_masks,
             )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
-            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
+            mask_feature_indices = torch.tensor(
+                mask_feature_indices, device=hidden_states.device, dtype=torch.bool
+            )
+            mask_feature_indices = mask_feature_indices[:, None].expand(
+                -1, sequence_length, -1
+            )
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1335,21 +1476,33 @@ class HubertModel(HubertPreTrainedModel):
         >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
         >>> hidden_states = model(input_values).last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         extract_features = self.feature_extractor(input_values)
         extract_features = extract_features.transpose(1, 2)
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask
+            )
 
         hidden_states = self.feature_projection(extract_features)
-        hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices
+        )
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -1393,7 +1546,9 @@ class HubertForCTC(HubertPreTrainedModel):
                 "or define `vocab_size` of your model's configuration."
             )
         output_hidden_size = (
-            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+            config.output_hidden_size
+            if hasattr(config, "add_adapter") and config.add_adapter
+            else config.hidden_size
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
@@ -1414,9 +1569,17 @@ class HubertForCTC(HubertPreTrainedModel):
         # ok to repurpose this function here.
         target_lang = self.target_lang
 
-        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
-            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
-        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
+        if (
+            target_lang is not None
+            and getattr(self.config, "adapter_attn_dim", None) is None
+        ):
+            raise ValueError(
+                f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined."
+            )
+        elif (
+            target_lang is None
+            and getattr(self.config, "adapter_attn_dim", None) is not None
+        ):
             logger.info("By default `target_lang` is set to 'eng'.")
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
@@ -1472,10 +1635,14 @@ class HubertForCTC(HubertPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None and labels.max() >= self.config.vocab_size:
-            raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+            raise ValueError(
+                f"Label values must be <= vocab_size: {self.config.vocab_size}"
+            )
 
         outputs = self.hubert(
             input_values,
@@ -1494,9 +1661,13 @@ class HubertForCTC(HubertPreTrainedModel):
         if labels is not None:
             # retrieve loss input_lengths from attention_mask
             attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+                attention_mask
+                if attention_mask is not None
+                else torch.ones_like(input_values, dtype=torch.long)
             )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            input_lengths = self._get_feat_extract_output_lengths(
+                attention_mask.sum(-1)
+            ).to(torch.long)
 
             # assuming that padded tokens are filled with -100
             # when not being attended to
@@ -1505,7 +1676,9 @@ class HubertForCTC(HubertPreTrainedModel):
             flattened_targets = labels.masked_select(labels_mask)
 
             # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+            log_probs = nn.functional.log_softmax(
+                logits, dim=-1, dtype=torch.float32
+            ).transpose(0, 1)
 
             with torch.backends.cudnn.flags(enabled=False):
                 loss = nn.functional.ctc_loss(
@@ -1523,7 +1696,10 @@ class HubertForCTC(HubertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1544,7 +1720,9 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
                 "Sequence classification does not support the use of Hubert adapters (config.add_adapter=True)"
             )
         self.hubert = HubertModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
+        num_layers = (
+            config.num_hidden_layers + 1
+        )  # transformer layers + input embeddings
         if config.use_weighted_layer_sum:
             self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
         self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
@@ -1605,8 +1783,12 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        output_hidden_states = (
+            True if self.config.use_weighted_layer_sum else output_hidden_states
+        )
 
         outputs = self.hubert(
             input_values,
@@ -1628,10 +1810,16 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            padding_mask = self._get_feature_vector_attention_mask(
+                hidden_states.shape[1], attention_mask
+            )
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(
+                1, 1, hidden_states.shape[2]
+            )
             hidden_states[~expand_padding_mask] = 0.0
-            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
+            pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(
+                -1, 1
+            )
 
         logits = self.classifier(pooled_output)
 
@@ -1652,4 +1840,9 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
         )
 
 
-__all__ = ["HubertForCTC", "HubertForSequenceClassification", "HubertModel", "HubertPreTrainedModel"]
+__all__ = [
+    "HubertForCTC",
+    "HubertForSequenceClassification",
+    "HubertModel",
+    "HubertPreTrainedModel",
+]

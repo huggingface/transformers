@@ -16,7 +16,12 @@
 
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    HeliumConfig,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     require_read_token,
     require_torch,
@@ -51,7 +56,12 @@ class HeliumModelTester(GemmaModelTester):
 @require_torch
 class HeliumModelTest(GemmaModelTest, unittest.TestCase):
     all_model_classes = (
-        (HeliumModel, HeliumForCausalLM, HeliumForSequenceClassification, HeliumForTokenClassification)
+        (
+            HeliumModel,
+            HeliumForCausalLM,
+            HeliumForSequenceClassification,
+            HeliumForTokenClassification,
+        )
         if is_torch_available()
         else ()
     )
@@ -73,7 +83,9 @@ class HeliumModelTest(GemmaModelTest, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = HeliumModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HeliumConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=HeliumConfig, hidden_size=37
+        )
 
 
 @slow
@@ -88,7 +100,9 @@ class HeliumIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = (
+                torch.cuda.get_device_capability()[0]
+            )
 
     @require_read_token
     def test_model_2b(self):
@@ -98,10 +112,15 @@ class HeliumIntegrationTest(unittest.TestCase):
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision="refs/pr/1"
+            model_id,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.bfloat16,
+            revision="refs/pr/1",
         ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id, revision="refs/pr/1")
-        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(
+            torch_device
+        )
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)

@@ -70,8 +70,12 @@ class Protein:
 
 def from_proteinnet_string(proteinnet_str: str) -> Protein:
     tag_re = r"(\[[A-Z]+\]\n)"
-    tags: List[str] = [tag.strip() for tag in re.split(tag_re, proteinnet_str) if len(tag) > 0]
-    groups: Iterator[Tuple[str, List[str]]] = zip(tags[0::2], [l.split("\n") for l in tags[1::2]])
+    tags: List[str] = [
+        tag.strip() for tag in re.split(tag_re, proteinnet_str) if len(tag) > 0
+    ]
+    groups: Iterator[Tuple[str, List[str]]] = zip(
+        tags[0::2], [l.split("\n") for l in tags[1::2]]
+    )
 
     atoms: List[str] = ["N", "CA", "C"]
     aatype = None
@@ -84,16 +88,25 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
                 if seq[i] not in residue_constants.restypes:
                     seq[i] = "X"  # FIXME: strings are immutable
             aatype = np.array(
-                [residue_constants.restype_order.get(res_symbol, residue_constants.restype_num) for res_symbol in seq]
+                [
+                    residue_constants.restype_order.get(
+                        res_symbol, residue_constants.restype_num
+                    )
+                    for res_symbol in seq
+                ]
             )
         elif "[TERTIARY]" == g[0]:
             tertiary: List[List[float]] = []
             for axis in range(3):
                 tertiary.append(list(map(float, g[1][axis].split())))
             tertiary_np = np.array(tertiary)
-            atom_positions = np.zeros((len(tertiary[0]) // 3, residue_constants.atom_type_num, 3)).astype(np.float32)
+            atom_positions = np.zeros(
+                (len(tertiary[0]) // 3, residue_constants.atom_type_num, 3)
+            ).astype(np.float32)
             for i, atom in enumerate(atoms):
-                atom_positions[:, residue_constants.atom_order[atom], :] = np.transpose(tertiary_np[:, i::3])
+                atom_positions[:, residue_constants.atom_order[atom], :] = np.transpose(
+                    tertiary_np[:, i::3]
+                )
             atom_positions *= PICO_TO_ANGSTROM
         elif "[MASK]" == g[0]:
             mask = np.array(list(map({"-": 0, "+": 1}.get, g[1][0].strip())))
@@ -228,7 +241,9 @@ def to_pdb(prot: Protein) -> str:
     # Add all atom sites.
     for i in range(n):
         res_name_3 = res_1to3(aatype[i])
-        for atom_name, pos, mask, b_factor in zip(atom_types, atom_positions[i], atom_mask[i], b_factors[i]):
+        for atom_name, pos, mask, b_factor in zip(
+            atom_types, atom_positions[i], atom_mask[i], b_factors[i]
+        ):
             if mask < 0.5:
                 continue
 
@@ -265,9 +280,7 @@ def to_pdb(prot: Protein) -> str:
         if should_terminate:
             # Close the chain.
             chain_end = "TER"
-            chain_termination_line = (
-                f"{chain_end:<6}{atom_index:>5}      {res_1to3(aatype[i]):>3} {chain_tag:>1}{residue_index[i]:>4}"
-            )
+            chain_termination_line = f"{chain_end:<6}{atom_index:>5}      {res_1to3(aatype[i]):>3} {chain_tag:>1}{residue_index[i]:>4}"
             pdb_lines.append(chain_termination_line)
             atom_index += 1
 
@@ -322,7 +335,11 @@ def from_prediction(
         atom_positions=result["final_atom_positions"],
         atom_mask=result["final_atom_mask"],
         residue_index=features["residue_index"] + 1,
-        b_factors=b_factors if b_factors is not None else np.zeros_like(result["final_atom_mask"]),
+        b_factors=(
+            b_factors
+            if b_factors is not None
+            else np.zeros_like(result["final_atom_mask"])
+        ),
         chain_index=chain_index,
         remark=remark,
         parents=parents,

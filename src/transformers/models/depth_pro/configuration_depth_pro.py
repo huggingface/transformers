@@ -87,7 +87,11 @@ class DepthProConfig(PretrainedConfig):
     ```"""
 
     model_type = "depth_pro"
-    sub_configs = {"image_model_config": AutoConfig, "patch_model_config": AutoConfig, "fov_model_config": AutoConfig}
+    sub_configs = {
+        "image_model_config": AutoConfig,
+        "patch_model_config": AutoConfig,
+        "fov_model_config": AutoConfig,
+    }
 
     def __init__(
         self,
@@ -114,11 +118,16 @@ class DepthProConfig(PretrainedConfig):
         # scaled_images_ratios is sorted
         if scaled_images_ratios != sorted(scaled_images_ratios):
             raise ValueError(
-                f"Values in scaled_images_ratios={scaled_images_ratios} " "should be sorted from low to high"
+                f"Values in scaled_images_ratios={scaled_images_ratios} "
+                "should be sorted from low to high"
             )
 
         # scaled_images_ratios, scaled_images_overlap_ratios, scaled_images_feature_dims should be consistent
-        if not (len(scaled_images_ratios) == len(scaled_images_overlap_ratios) == len(scaled_images_feature_dims)):
+        if not (
+            len(scaled_images_ratios)
+            == len(scaled_images_overlap_ratios)
+            == len(scaled_images_feature_dims)
+        ):
             raise ValueError(
                 f"len(scaled_images_ratios)={len(scaled_images_ratios)} and "
                 f"len(scaled_images_overlap_ratios)={len(scaled_images_overlap_ratios)} and "

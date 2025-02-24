@@ -216,22 +216,33 @@ class PerceiverOnnxConfig(OnnxConfig):
         if isinstance(preprocessor, PreTrainedTokenizerBase):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
             batch_size = compute_effective_axis_dimension(
-                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+                batch_size,
+                fixed_dimension=OnnxConfig.default_fixed_batch,
+                num_token_to_add=0,
             )
             # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
             token_to_add = preprocessor.num_special_tokens_to_add(is_pair)
             seq_length = compute_effective_axis_dimension(
-                seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+                seq_length,
+                fixed_dimension=OnnxConfig.default_fixed_sequence,
+                num_token_to_add=token_to_add,
             )
             # Generate dummy inputs according to compute batch and sequence
             dummy_input = [" ".join(["a"]) * seq_length] * batch_size
             inputs = dict(preprocessor(dummy_input, return_tensors=framework))
             inputs["inputs"] = inputs.pop("input_ids")
             return inputs
-        elif isinstance(preprocessor, FeatureExtractionMixin) and preprocessor.model_input_names[0] == "pixel_values":
+        elif (
+            isinstance(preprocessor, FeatureExtractionMixin)
+            and preprocessor.model_input_names[0] == "pixel_values"
+        ):
             # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
-            batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
-            dummy_input = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+            batch_size = compute_effective_axis_dimension(
+                batch_size, fixed_dimension=OnnxConfig.default_fixed_batch
+            )
+            dummy_input = self._generate_dummy_images(
+                batch_size, num_channels, image_height, image_width
+            )
             inputs = dict(preprocessor(images=dummy_input, return_tensors=framework))
             inputs["inputs"] = inputs.pop("pixel_values")
             return inputs

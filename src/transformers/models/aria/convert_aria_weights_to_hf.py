@@ -55,7 +55,9 @@ KEYS_TO_MODIFY_MAPPING = {
 
 
 def load_original_state_dict(model_id):
-    directory_path = snapshot_download(repo_id=model_id, allow_patterns=["*.safetensors"])
+    directory_path = snapshot_download(
+        repo_id=model_id, allow_patterns=["*.safetensors"]
+    )
 
     original_state_dict = {}
     for path in glob.glob(f"{directory_path}/*"):
@@ -83,7 +85,9 @@ def convert_state_dict_to_hf(state_dict):
     return new_state_dict
 
 
-def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, old_state_dict_id):
+def convert_aria_llama_to_hf(
+    text_model_id, vision_model_id, output_hub_path, old_state_dict_id
+):
     torch.set_default_dtype(torch.float16)
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -93,7 +97,9 @@ def convert_aria_llama_to_hf(text_model_id, vision_model_id, output_hub_path, ol
             "pad_token": "<pad>",
         },
     )
-    tokenizer.add_tokens(AddedToken("<|img|>", special=True, normalized=False), special_tokens=True)
+    tokenizer.add_tokens(
+        AddedToken("<|img|>", special=True, normalized=False), special_tokens=True
+    )
     tokenizer.add_special_tokens({"pad_token": "<pad>"})
     tokenizer.chat_template = "{% if not add_generation_prompt is defined %}{% set add_generation_prompt = false %}{% endif %}{% for message in messages %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}{% elif message['content'] is iterable %}{% for item in message['content'] %}{% if item['type'] == 'text' %}{{ item['text'] }}{% elif item['type'] == 'image' %}<fim_prefix><|img|><fim_suffix>{% endif %}{% endfor %}{% endif %}<|im_end|>\n{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"
 
@@ -155,7 +161,12 @@ def main():
         help="Location on the hub of the raw state dict of the original model. The filename needs to be `model_state_dict.bin`",
     )
     args = parser.parse_args()
-    convert_aria_llama_to_hf(args.text_model_id, args.vision_model_id, args.output_hub_path, args.old_state_dict_id)
+    convert_aria_llama_to_hf(
+        args.text_model_id,
+        args.vision_model_id,
+        args.output_hub_path,
+        args.old_state_dict_id,
+    )
 
 
 if __name__ == "__main__":

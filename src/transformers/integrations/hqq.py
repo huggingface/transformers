@@ -30,7 +30,13 @@ def autoname_modules(model):
 
 # Get the linear_tag from a modul name. For example: model.layers.31.self_attn.k_proj -> self_attn.k_proj
 def name_to_linear_tag(name):
-    return ".".join([n for n in name.split(".") if ((n not in ["model", "layers"]) and (not n.isnumeric()))])
+    return ".".join(
+        [
+            n
+            for n in name.split(".")
+            if ((n not in ["model", "layers"]) and (not n.isnumeric()))
+        ]
+    )
 
 
 # Get all linear tags available
@@ -45,7 +51,9 @@ def get_linear_tags(model):
     return list(linear_tags)
 
 
-def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_name=None):
+def _prepare_for_hqq_linear(
+    model, patch_params, has_been_replaced, current_key_name=None
+):
     for name, module in model.named_children():
         if current_key_name is None:
             current_key_name = []
@@ -82,7 +90,12 @@ def _prepare_for_hqq_linear(model, patch_params, has_been_replaced, current_key_
     return model, has_been_replaced
 
 
-def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_convert=None, has_been_replaced=False):
+def prepare_for_hqq_linear(
+    model,
+    quantization_config=None,
+    modules_to_not_convert=None,
+    has_been_replaced=False,
+):
     """
     Prepares nn.Linear layers for HQQ quantization.
     Since each layer type can have separate quantization parameters, we need to do the following:
@@ -91,7 +104,9 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     3- Map quantization parameters as a dictionary linear_tag -> quant_params as HQQLinear exepects it, this is referred to as patch_params
     """
 
-    modules_to_not_convert = [] if modules_to_not_convert is None else modules_to_not_convert
+    modules_to_not_convert = (
+        [] if modules_to_not_convert is None else modules_to_not_convert
+    )
 
     # Add name to module
     autoname_modules(model)
@@ -102,7 +117,9 @@ def prepare_for_hqq_linear(model, quantization_config=None, modules_to_not_conve
     # Convert quantization_config to layer-wise config
     skip_modules = quantization_config.skip_modules
     quant_config = quantization_config.quant_config
-    linear_tags = list(set(linear_tags) - set(skip_modules) - set(modules_to_not_convert))
+    linear_tags = list(
+        set(linear_tags) - set(skip_modules) - set(modules_to_not_convert)
+    )
 
     if any(key in linear_tags for key in quant_config.keys()):
         # If the user doesn't specify a key from get_linear_tags, the layer is not quantized via (key, None)

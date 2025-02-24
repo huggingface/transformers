@@ -22,7 +22,12 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_torch_available, logging, requires_backends
 
@@ -94,7 +99,9 @@ def full_unpacked_stream_to_tensor(
     # Place each batch entry into the batch tensor.
     for bi in range(batch_size):
         tokens_to_place = all_bi_tokens_to_place[bi]
-        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][offset : tokens_to_place + offset]
+        new_padded_tensor[bi, :tokens_to_place] = full_unpacked_stream[bi][
+            offset : tokens_to_place + offset
+        ]
 
     return new_padded_tensor
 
@@ -119,8 +126,12 @@ def construct_full_unpacked_stream(
         # and append to lists. We use lists rather than tensors because each subsequence is variable-sized.
         # TODO Remove this logic in a subsequent release since subsequences are not supported.
         image_adjustment = image_tokens[batch_index][0]
-        subsequence_stream = torch.cat([image_adjustment, input_stream[batch_index, 0]], dim=0)
-        num_real_tokens = image_adjustment.shape[0] + num_real_text_tokens[batch_index][0]
+        subsequence_stream = torch.cat(
+            [image_adjustment, input_stream[batch_index, 0]], dim=0
+        )
+        num_real_tokens = (
+            image_adjustment.shape[0] + num_real_text_tokens[batch_index][0]
+        )
         all_si_stream.append(subsequence_stream[:num_real_tokens])
         all_bi_stream.append(torch.cat(all_si_stream, dim=0))
 
@@ -155,12 +166,19 @@ def _segment_prompt_into_text_token_conversions(prompt: str) -> List:
         ]:
             continue
         prompt_text_list.append(
-            (elem, i > 1 and prompt_split[i - 1] in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING])
+            (
+                elem,
+                i > 1
+                and prompt_split[i - 1]
+                in [TOKEN_BBOX_OPEN_STRING, TOKEN_POINT_OPEN_STRING],
+            )
         )
     return prompt_text_list
 
 
-def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokenizer) -> List[int]:
+def _transform_coordinates_and_tokenize(
+    prompt: str, scale_factor: float, tokenizer
+) -> List[int]:
     """
     This function transforms the prompt in the following fashion:
     - <box> <point> and </box> </point> to their respective token mappings
@@ -184,11 +202,15 @@ def _transform_coordinates_and_tokenize(prompt: str, scale_factor: float, tokeni
     for elem in prompt_text_list:
         if elem[1]:
             # This is a location, we need to tokenize it
-            within_tag_tokenized = _transform_within_tags(elem[0], scale_factor, tokenizer)
+            within_tag_tokenized = _transform_within_tags(
+                elem[0], scale_factor, tokenizer
+            )
             # Surround the text with the open and close tags
             transformed_prompt_tokens.extend(within_tag_tokenized)
         else:
-            transformed_prompt_tokens.extend(tokenizer(elem[0], add_special_tokens=False).input_ids)
+            transformed_prompt_tokens.extend(
+                tokenizer(elem[0], add_special_tokens=False).input_ids
+            )
     return transformed_prompt_tokens
 
 
@@ -211,7 +233,9 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> List[in
     num_ints = [float(num.strip()) for num in num_int_strs]
     # scale to transformed image siz
     if len(num_ints) == 2:
-        num_ints_translated = scale_point_to_transformed_image(x=num_ints[0], y=num_ints[1], scale_factor=scale_factor)
+        num_ints_translated = scale_point_to_transformed_image(
+            x=num_ints[0], y=num_ints[1], scale_factor=scale_factor
+        )
     elif len(num_ints) == 4:
         num_ints_translated = scale_bbox_to_transformed_image(
             top=num_ints[0],
@@ -249,12 +273,17 @@ def _tokenize_prompts_with_image_and_batch(
         for prompt_seq, scale_factor_seq in zip(prompts, scale_factors):
             transformed_prompt_tokens.append(
                 [
-                    _transform_coordinates_and_tokenize(prompt, scale_factor.item(), tokenizer)
+                    _transform_coordinates_and_tokenize(
+                        prompt, scale_factor.item(), tokenizer
+                    )
                     for prompt, scale_factor in zip(prompt_seq, scale_factor_seq)
                 ]
             )
     else:
-        transformed_prompt_tokens = [[tokenizer.tokenize(prompt) for prompt in prompt_seq] for prompt_seq in prompts]
+        transformed_prompt_tokens = [
+            [tokenizer.tokenize(prompt) for prompt in prompt_seq]
+            for prompt_seq in prompts
+        ]
 
     prompts_tokens = transformed_prompt_tokens
 
@@ -262,7 +291,9 @@ def _tokenize_prompts_with_image_and_batch(
         bos_token = tokenizer.vocab["<s>"]
     else:
         bos_token = tokenizer.vocab["|ENDOFTEXT|"]
-    prompts_tokens = [[[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens]
+    prompts_tokens = [
+        [[bos_token] + x for x in prompt_seq] for prompt_seq in prompts_tokens
+    ]
     if add_beginning_of_answer_token:
         beginning_of_answer = tokenizer.vocab[BEGINNING_OF_ANSWER_STRING]
         # Only add bbox open token to the last subsequence since that is what will be completed
@@ -275,11 +306,15 @@ def _tokenize_prompts_with_image_and_batch(
     #   - make all the sequences equal length.
     # Get the prompts length.
 
-    prompts_length = [[len(x) for x in prompts_tokens_seq] for prompts_tokens_seq in prompts_tokens]
+    prompts_length = [
+        [len(x) for x in prompts_tokens_seq] for prompts_tokens_seq in prompts_tokens
+    ]
     # Get the max prompts length.
     max_prompt_len: int = np.max(prompts_length)
     # Number of tokens in the each sample of the batch.
-    samples_length = min(max_prompt_len + max_tokens_to_generate, max_position_embeddings)
+    samples_length = min(
+        max_prompt_len + max_tokens_to_generate, max_position_embeddings
+    )
     if max_prompt_len + max_tokens_to_generate > max_position_embeddings:
         logger.warning(
             f"Max subsequence prompt length of {max_prompt_len} + max tokens to generate {max_tokens_to_generate}",
@@ -289,7 +324,9 @@ def _tokenize_prompts_with_image_and_batch(
     for prompt_tokens_seq, prompts_length_seq in zip(prompts_tokens, prompts_length):
         for prompt_tokens, prompt_length in zip(prompt_tokens_seq, prompts_length_seq):
             if len(prompt_tokens) > samples_length:
-                raise ValueError("Length of subsequence prompt exceeds sequence length.")
+                raise ValueError(
+                    "Length of subsequence prompt exceeds sequence length."
+                )
             padding_size = samples_length - prompt_length
             prompt_tokens.extend([tokenizer.vocab["|ENDOFTEXT|"]] * padding_size)
 
@@ -310,7 +347,9 @@ def original_to_transformed_w_coords(original_coords, scale_w):
     return np.round(original_coords * scale_w).astype(np.int32)
 
 
-def scale_point_to_transformed_image(x: float, y: float, scale_factor: float) -> List[int]:
+def scale_point_to_transformed_image(
+    x: float, y: float, scale_factor: float
+) -> List[int]:
     x_scaled = original_to_transformed_w_coords(np.array([x / 2]), scale_factor)[0]
     y_scaled = original_to_transformed_h_coords(np.array([y / 2]), scale_factor)[0]
     return [x_scaled, y_scaled]
@@ -320,9 +359,15 @@ def scale_bbox_to_transformed_image(
     top: float, left: float, bottom: float, right: float, scale_factor: float
 ) -> List[int]:
     top_scaled = original_to_transformed_w_coords(np.array([top / 2]), scale_factor)[0]
-    left_scaled = original_to_transformed_h_coords(np.array([left / 2]), scale_factor)[0]
-    bottom_scaled = original_to_transformed_w_coords(np.array([bottom / 2]), scale_factor)[0]
-    right_scaled = original_to_transformed_h_coords(np.array([right / 2]), scale_factor)[0]
+    left_scaled = original_to_transformed_h_coords(np.array([left / 2]), scale_factor)[
+        0
+    ]
+    bottom_scaled = original_to_transformed_w_coords(
+        np.array([bottom / 2]), scale_factor
+    )[0]
+    right_scaled = original_to_transformed_h_coords(
+        np.array([right / 2]), scale_factor
+    )[0]
     return [top_scaled, left_scaled, bottom_scaled, right_scaled]
 
 
@@ -350,15 +395,28 @@ class FuyuProcessor(ProcessorMixin):
         self.image_processor = image_processor
         self.tokenizer = tokenizer
         self.max_tokens_to_generate = 10
-        self.max_position_embeddings = 16384  # TODO Can't derive this from model files: where to set it?
+        self.max_position_embeddings = (
+            16384  # TODO Can't derive this from model files: where to set it?
+        )
         self.pad_token_id = 0
         self.dummy_image_index = -1
 
-    def _left_pad_inputs_with_attention_mask(self, model_inputs: List[Dict], return_attention_mask: bool):
-        max_length_input_ids = max(entry["input_ids"].shape[1] for entry in model_inputs)
-        max_length_image_patch_indices = max(entry["image_patches_indices"].shape[1] for entry in model_inputs)
+    def _left_pad_inputs_with_attention_mask(
+        self, model_inputs: List[Dict], return_attention_mask: bool
+    ):
+        max_length_input_ids = max(
+            entry["input_ids"].shape[1] for entry in model_inputs
+        )
+        max_length_image_patch_indices = max(
+            entry["image_patches_indices"].shape[1] for entry in model_inputs
+        )
 
-        batched_inputs = {"input_ids": [], "image_patches": [], "image_patches_indices": [], "attention_mask": []}
+        batched_inputs = {
+            "input_ids": [],
+            "image_patches": [],
+            "image_patches_indices": [],
+            "attention_mask": [],
+        }
 
         for entry in model_inputs:
             for key, tensor in entry.items():
@@ -366,7 +424,11 @@ class FuyuProcessor(ProcessorMixin):
                     num_padding_tokens = max_length_input_ids - tensor.shape[1]
                     padded_input_ids = torch.cat(
                         [
-                            torch.full((tensor.shape[0], num_padding_tokens), self.pad_token_id, dtype=torch.long),
+                            torch.full(
+                                (tensor.shape[0], num_padding_tokens),
+                                self.pad_token_id,
+                                dtype=torch.long,
+                            ),
                             tensor,
                         ],
                         dim=1,
@@ -374,7 +436,12 @@ class FuyuProcessor(ProcessorMixin):
                     batched_inputs[key].append(padded_input_ids)
 
                     attention_mask = torch.cat(
-                        [torch.zeros(tensor.shape[0], num_padding_tokens, dtype=torch.long), torch.ones_like(tensor)],
+                        [
+                            torch.zeros(
+                                tensor.shape[0], num_padding_tokens, dtype=torch.long
+                            ),
+                            torch.ones_like(tensor),
+                        ],
                         dim=1,
                     )
                     batched_inputs["attention_mask"].append(attention_mask)
@@ -384,11 +451,15 @@ class FuyuProcessor(ProcessorMixin):
                     batched_inputs[key].append(tensor)
 
                 else:  # for image_patches_indices
-                    num_padding_indices = max_length_image_patch_indices - tensor.shape[1]
+                    num_padding_indices = (
+                        max_length_image_patch_indices - tensor.shape[1]
+                    )
                     padded_indices = torch.cat(
                         [
                             torch.full(
-                                (tensor.shape[0], num_padding_indices), self.dummy_image_index, dtype=torch.long
+                                (tensor.shape[0], num_padding_indices),
+                                self.dummy_image_index,
+                                dtype=torch.long,
                             ),
                             tensor,
                         ],
@@ -449,8 +520,13 @@ class FuyuProcessor(ProcessorMixin):
             num_sub_sequences=self.subsequence_length,
         )
         max_prompt_length = max(x.shape[-1] for x in image_padded_unpacked_tokens)
-        max_seq_len_batch = min(max_prompt_length + self.max_tokens_to_generate, self.max_position_embeddings)
-        tokens_to_place = min(max_seq_len_batch, max(0, image_padded_unpacked_tokens[0].shape[0]))
+        max_seq_len_batch = min(
+            max_prompt_length + self.max_tokens_to_generate,
+            self.max_position_embeddings,
+        )
+        tokens_to_place = min(
+            max_seq_len_batch, max(0, image_padded_unpacked_tokens[0].shape[0])
+        )
 
         # Use same packing logic for the image patch indices.
         image_patch_input_indices = full_unpacked_stream_to_tensor(
@@ -461,7 +537,9 @@ class FuyuProcessor(ProcessorMixin):
             new_seq_len=max_seq_len_batch,
             offset=0,
         )
-        image_patches_tensor = torch.stack([img[0] for img in model_image_input["image_patches"]])
+        image_patches_tensor = torch.stack(
+            [img[0] for img in model_image_input["image_patches"]]
+        )
         batch_encoding = {
             "input_ids": image_padded_unpacked_tokens[0].unsqueeze(0),
             "image_patches": image_patches_tensor,
@@ -506,7 +584,9 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Check input validity ---
         if text is None and images is None:
-            raise ValueError("You have to specify either text or images. Both cannot be None.")
+            raise ValueError(
+                "You have to specify either text or images. Both cannot be None."
+            )
         # check if images and text inputs are reversed for BC
         images, text = _validate_images_text_input_order(images, text)
 
@@ -517,16 +597,22 @@ class FuyuProcessor(ProcessorMixin):
         )
 
         if not output_kwargs["text_kwargs"].setdefault("return_attention_mask", True):
-            raise ValueError("`return_attention_mask=False` is not supported for this model.")
+            raise ValueError(
+                "`return_attention_mask=False` is not supported for this model."
+            )
 
         if text is not None and images is None:
-            logger.warning("You are processing a text with no associated image. Make sure it is intended.")
+            logger.warning(
+                "You are processing a text with no associated image. Make sure it is intended."
+            )
             self.current_processor = self.tokenizer
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
             return text_encoding
 
         if text is None and images is not None:
-            logger.warning("You are processing an image with no associated text. Make sure it is intended.")
+            logger.warning(
+                "You are processing an image with no associated text. Make sure it is intended."
+            )
             prompts = [[""]]
         if text is not None and images is not None:
             if isinstance(text, str):
@@ -538,7 +624,9 @@ class FuyuProcessor(ProcessorMixin):
 
         # FIXME - We hard code "pt" here because the rest of the processing assumes torch tensors
         output_kwargs["images_kwargs"]["return_tensors"] = "pt"
-        image_encoding = self.image_processor.preprocess(images, **output_kwargs["images_kwargs"])
+        image_encoding = self.image_processor.preprocess(
+            images, **output_kwargs["images_kwargs"]
+        )
         batch_images = image_encoding["images"]
         image_unpadded_heights = image_encoding["image_unpadded_heights"]
         image_unpadded_widths = image_encoding["image_unpadded_widths"]
@@ -548,15 +636,29 @@ class FuyuProcessor(ProcessorMixin):
 
         # --- Use self.tokenizer to get the ids of special tokens to insert into image ids ---
 
-        image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)["input_ids"][1]
-        image_newline_id = self.tokenizer("|NEWLINE|", add_special_tokens=False)["input_ids"][1]
+        image_placeholder_id = self.tokenizer("|SPEAKER|", add_special_tokens=False)[
+            "input_ids"
+        ][1]
+        image_newline_id = self.tokenizer("|NEWLINE|", add_special_tokens=False)[
+            "input_ids"
+        ][1]
         tensor_batch_images = torch.stack([img[0] for img in batch_images]).unsqueeze(1)
 
         # --- Use self.image_processor again to obtain the full token ids and batch inputs ---
         all_encodings = []
 
-        for prompt, scale_factor, image_unpadded_height, image_unpadded_width, tensor_batch_image in zip(
-            prompts, scale_factors, image_unpadded_heights, image_unpadded_widths, tensor_batch_images
+        for (
+            prompt,
+            scale_factor,
+            image_unpadded_height,
+            image_unpadded_width,
+            tensor_batch_image,
+        ) in zip(
+            prompts,
+            scale_factors,
+            image_unpadded_heights,
+            image_unpadded_widths,
+            tensor_batch_images,
         ):
             sample_encoding = self.get_sample_encoding(
                 prompts=[prompt],
@@ -617,7 +719,11 @@ class FuyuProcessor(ProcessorMixin):
             return (None, None)
 
         def tokens_to_boxes(tokens, original_size):
-            while (pair := find_delimiters_pair(tokens, TOKEN_BBOX_OPEN_STRING, TOKEN_BBOX_CLOSE_STRING)) != (
+            while (
+                pair := find_delimiters_pair(
+                    tokens, TOKEN_BBOX_OPEN_STRING, TOKEN_BBOX_CLOSE_STRING
+                )
+            ) != (
                 None,
                 None,
             ):
@@ -642,7 +748,11 @@ class FuyuProcessor(ProcessorMixin):
             return tokens
 
         def tokens_to_points(tokens, original_size):
-            while (pair := find_delimiters_pair(tokens, TOKEN_POINT_OPEN_STRING, TOKEN_POINT_CLOSE_STRING)) != (
+            while (
+                pair := find_delimiters_pair(
+                    tokens, TOKEN_POINT_OPEN_STRING, TOKEN_POINT_CLOSE_STRING
+                )
+            ) != (
                 None,
                 None,
             ):
@@ -667,12 +777,21 @@ class FuyuProcessor(ProcessorMixin):
             return tokens
 
         if target_sizes is None:
-            target_sizes = ((self.image_processor.size["height"], self.image_processor.size["width"]),) * len(outputs)
+            target_sizes = (
+                (
+                    self.image_processor.size["height"],
+                    self.image_processor.size["width"],
+                ),
+            ) * len(outputs)
         elif target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         if len(outputs) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as output sequences")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as output sequences"
+            )
 
         results = []
         for seq, size in zip(outputs, target_sizes):
@@ -682,7 +801,9 @@ class FuyuProcessor(ProcessorMixin):
 
         return results
 
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+    def post_process_image_text_to_text(
+        self, generated_outputs, skip_special_tokens=True, **kwargs
+    ):
         """
         Post-processes the output of `FuyuForConditionalGeneration` to only return the text output.
 
@@ -698,19 +819,26 @@ class FuyuProcessor(ProcessorMixin):
         Returns:
             `List[str]`: The decoded text output.
         """
-        beginning_of_answer = self.tokenizer.convert_tokens_to_ids(BEGINNING_OF_ANSWER_STRING)
+        beginning_of_answer = self.tokenizer.convert_tokens_to_ids(
+            BEGINNING_OF_ANSWER_STRING
+        )
         # get boa index for each outputted sequence tensor
         # start all generated sequences from the beginning of the answer token, pad to have consistent length
         unpadded_output_sequences = [
-            seq[(seq == beginning_of_answer).nonzero(as_tuple=True)[0] + 1 :] for seq in generated_outputs
+            seq[(seq == beginning_of_answer).nonzero(as_tuple=True)[0] + 1 :]
+            for seq in generated_outputs
         ]
         max_len = max(len(seq) for seq in unpadded_output_sequences)
         # convert to torch and pad sequences
-        padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.pad_token_id)
+        padded_output_sequences = torch.full(
+            (len(unpadded_output_sequences), max_len), self.pad_token_id
+        )
         for i, seq in enumerate(unpadded_output_sequences):
             padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
 
-        return self.batch_decode(padded_output_sequences, skip_special_tokens=skip_special_tokens, **kwargs)
+        return self.batch_decode(
+            padded_output_sequences, skip_special_tokens=skip_special_tokens, **kwargs
+        )
 
     def batch_decode(self, *args, **kwargs):
         """

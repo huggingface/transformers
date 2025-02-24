@@ -67,12 +67,36 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         model_max_length=2048,
         **kwargs,
     ) -> None:
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        mask_token = AddedToken(mask_token, lstrip=False, rstrip=False) if isinstance(mask_token, str) else mask_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        mask_token = (
+            AddedToken(mask_token, lstrip=False, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
+        cls_token = (
+            AddedToken(cls_token, lstrip=False, rstrip=False)
+            if isinstance(cls_token, str)
+            else cls_token
+        )
+        sep_token = (
+            AddedToken(sep_token, lstrip=False, rstrip=False)
+            if isinstance(sep_token, str)
+            else sep_token
+        )
 
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
@@ -110,7 +134,10 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         return self._utf_vocab_size
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -129,7 +156,9 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         # normal case: some special tokens
@@ -159,7 +188,13 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         else:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id] + token_ids_1 + [self.sep_token_id]
+            return (
+                [self.cls_token_id]
+                + token_ids_0
+                + [self.sep_token_id]
+                + token_ids_1
+                + [self.sep_token_id]
+            )
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
@@ -193,7 +228,9 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         return string
 
     # PerceiverTokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         return ()
 
 

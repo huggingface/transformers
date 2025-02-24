@@ -82,17 +82,39 @@ class DiffLlamaAttention(nn.Module):
         self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.o_proj = nn.Linear(
+            self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias
+        )
 
         self.lambda_init = lambda_init_fn(layer_idx)
-        self.lambda_q1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
-        self.lambda_k1 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
-        self.lambda_q2 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
-        self.lambda_k2 = nn.Parameter(torch.normal(0, config.lambda_std_dev, size=(self.head_dim,)))
-        self.groupnorm = nn.RMSNorm(2 * self.head_dim, eps=config.rms_norm_eps, elementwise_affine=False)
+        self.lambda_q1 = nn.Parameter(
+            torch.normal(0, config.lambda_std_dev, size=(self.head_dim,))
+        )
+        self.lambda_k1 = nn.Parameter(
+            torch.normal(0, config.lambda_std_dev, size=(self.head_dim,))
+        )
+        self.lambda_q2 = nn.Parameter(
+            torch.normal(0, config.lambda_std_dev, size=(self.head_dim,))
+        )
+        self.lambda_k2 = nn.Parameter(
+            torch.normal(0, config.lambda_std_dev, size=(self.head_dim,))
+        )
+        self.groupnorm = nn.RMSNorm(
+            2 * self.head_dim, eps=config.rms_norm_eps, elementwise_affine=False
+        )
 
     def forward(
         self,
@@ -113,38 +135,54 @@ class DiffLlamaAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
         value_states = torch.cat(torch.chunk(value_states, 2, dim=1), dim=-1)
         value_states = value_states.repeat(1, 2, 1, 1)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(
+            query_states, key_states.transpose(2, 3)
+        ) / math.sqrt(self.head_dim)
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
+        attn_weights = nn.functional.softmax(
+            attn_weights, dim=-1, dtype=torch.float32
+        ).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.attention_dropout, training=self.training
         )
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
+        lambda_1 = torch.exp(
+            torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)
+        ).to(query_states.dtype)
+        lambda_2 = torch.exp(
+            torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)
+        ).to(query_states.dtype)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = torch.matmul(attn_weights, value_states)
@@ -206,9 +244,15 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         if position_embeddings is None:
             logger.warning_once(
@@ -220,12 +264,16 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
             cos, sin = self.rotary_emb(value_states, position_ids)
         else:
             cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -294,12 +342,12 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         attn_output = torch.cat([attn_output1, attn_output2], dim=-1)
         attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=2)
 
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
+        lambda_1 = torch.exp(
+            torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)
+        ).to(query_states.dtype)
+        lambda_2 = torch.exp(
+            torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)
+        ).to(query_states.dtype)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = attn_output1 - lambda_full * attn_output2
@@ -356,17 +404,27 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -399,12 +457,12 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
 
         attn_output1, attn_output2 = torch.chunk(attn_output, 2, dim=1)
 
-        lambda_1 = torch.exp(torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
-        lambda_2 = torch.exp(torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)).to(
-            query_states.dtype
-        )
+        lambda_1 = torch.exp(
+            torch.sum(self.lambda_q1 * self.lambda_k1, dim=-1, dtype=torch.float32)
+        ).to(query_states.dtype)
+        lambda_2 = torch.exp(
+            torch.sum(self.lambda_q2 * self.lambda_k2, dim=-1, dtype=torch.float32)
+        ).to(query_states.dtype)
         lambda_full = lambda_1 - lambda_2 + self.lambda_init
 
         attn_output = attn_output1 - lambda_full * attn_output2
@@ -427,7 +485,9 @@ class DiffLlamaDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DiffLlamaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.self_attn = DIFFLLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = DIFFLLAMA_ATTENTION_CLASSES[config._attn_implementation](
+            config=config, layer_idx=layer_idx
+        )
 
 
 class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):

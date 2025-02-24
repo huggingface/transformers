@@ -157,7 +157,10 @@ class EfficientNetOnnxConfig(OnnxConfig):
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
         return OrderedDict(
             [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                (
+                    "pixel_values",
+                    {0: "batch", 1: "num_channels", 2: "height", 3: "width"},
+                ),
             ]
         )
 

@@ -32,8 +32,11 @@ def pull_message(step_log: dict, test_mode: bool = True):
                     self.role = role
                     self.content = content
                     self.metadata = metadata
+
         else:
-            raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+            raise ImportError(
+                "Gradio should be installed in order to launch a gradio demo."
+            )
 
     if step_log.get("rationale"):
         yield ChatMessage(role="assistant", content=step_log["rationale"])
@@ -48,7 +51,9 @@ def pull_message(step_log: dict, test_mode: bool = True):
             content=str(content),
         )
     if step_log.get("observation"):
-        yield ChatMessage(role="assistant", content=f"```\n{step_log['observation']}\n```")
+        yield ChatMessage(
+            role="assistant", content=f"```\n{step_log['observation']}\n```"
+        )
     if step_log.get("error"):
         yield ChatMessage(
             role="assistant",
@@ -70,8 +75,11 @@ def stream_to_gradio(agent, task: str, test_mode: bool = False, **kwargs):
                     self.role = role
                     self.content = content
                     self.metadata = metadata
+
         else:
-            raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+            raise ImportError(
+                "Gradio should be installed in order to launch a gradio demo."
+            )
 
     for step_log in agent.run(task, stream=True, **kwargs):
         if isinstance(step_log, dict):
@@ -81,7 +89,10 @@ def stream_to_gradio(agent, task: str, test_mode: bool = False, **kwargs):
     final_answer = step_log  # Last log is the run's final_answer
 
     if isinstance(final_answer, AgentText):
-        yield ChatMessage(role="assistant", content=f"**Final answer:**\n```\n{final_answer.to_string()}\n```")
+        yield ChatMessage(
+            role="assistant",
+            content=f"**Final answer:**\n```\n{final_answer.to_string()}\n```",
+        )
     elif isinstance(final_answer, AgentImage):
         yield ChatMessage(
             role="assistant",
@@ -100,7 +111,10 @@ class Monitor:
     def __init__(self, tracked_llm_engine):
         self.step_durations = []
         self.tracked_llm_engine = tracked_llm_engine
-        if getattr(self.tracked_llm_engine, "last_input_token_count", "Not found") != "Not found":
+        if (
+            getattr(self.tracked_llm_engine, "last_input_token_count", "Not found")
+            != "Not found"
+        ):
             self.total_input_token_count = 0
             self.total_output_token_count = 0
 
@@ -108,10 +122,16 @@ class Monitor:
         step_duration = step_log["step_duration"]
         self.step_durations.append(step_duration)
         logger.info(f"Step {len(self.step_durations)}:")
-        logger.info(f"- Time taken: {step_duration:.2f} seconds (valid only if step succeeded)")
+        logger.info(
+            f"- Time taken: {step_duration:.2f} seconds (valid only if step succeeded)"
+        )
 
         if getattr(self.tracked_llm_engine, "last_input_token_count", None) is not None:
-            self.total_input_token_count += self.tracked_llm_engine.last_input_token_count
-            self.total_output_token_count += self.tracked_llm_engine.last_output_token_count
+            self.total_input_token_count += (
+                self.tracked_llm_engine.last_input_token_count
+            )
+            self.total_output_token_count += (
+                self.tracked_llm_engine.last_output_token_count
+            )
             logger.info(f"- Input tokens: {self.total_input_token_count}")
             logger.info(f"- Output tokens: {self.total_output_token_count}")

@@ -90,7 +90,11 @@ def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) 
         `int`: The number of image tokens.
     """
     height, width = image_size
-    patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
+    patch_height, patch_width = (
+        patch_size
+        if isinstance(patch_size, (tuple, list))
+        else (patch_size, patch_size)
+    )
     num_width_tokens = (width - 1) // patch_width + 1
     num_height_tokens = (height - 1) // patch_height + 1
     return num_height_tokens, num_width_tokens
@@ -121,7 +125,11 @@ def get_resize_output_image_size(
         `tuple`: The target (height, width) dimension of the output image after resizing.
     """
     max_height, max_width = size if isinstance(size, (tuple, list)) else (size, size)
-    patch_height, patch_width = patch_size if isinstance(patch_size, (tuple, list)) else (patch_size, patch_size)
+    patch_height, patch_width = (
+        patch_size
+        if isinstance(patch_size, (tuple, list))
+        else (patch_size, patch_size)
+    )
     height, width = get_image_size(input_image, input_data_format)
 
     ratio = max(height / max_height, width / max_width)
@@ -131,7 +139,9 @@ def get_resize_output_image_size(
         height = int(math.ceil(height / ratio))
         width = int(math.ceil(width / ratio))
 
-    num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
+    num_height_tokens, num_width_tokens = _num_image_tokens(
+        (height, width), (patch_height, patch_width)
+    )
     return num_height_tokens * patch_height, num_width_tokens * patch_width
 
 
@@ -187,7 +197,9 @@ class PixtralImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"longest_edge": 1024}
-        patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
+        patch_size = (
+            patch_size if patch_size is not None else {"height": 16, "width": 16}
+        )
         patch_size = get_size_dict(patch_size, default_to_square=True)
 
         self.do_resize = do_resize
@@ -197,8 +209,14 @@ class PixtralImageProcessor(BaseImageProcessor):
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
-        self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
+        self.image_mean = (
+            image_mean
+            if image_mean is not None
+            else [0.48145466, 0.4578275, 0.40821073]
+        )
+        self.image_std = (
+            image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
+        )
         self.do_convert_rgb = do_convert_rgb
         self._valid_processor_keys = [
             "images",
@@ -250,12 +268,16 @@ class PixtralImageProcessor(BaseImageProcessor):
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("size must contain either 'longest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "size must contain either 'longest_edge' or 'height' and 'width'."
+            )
 
         if "height" in patch_size and "width" in patch_size:
             patch_size = (patch_size["height"], patch_size["width"])
         else:
-            raise ValueError("patch_size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "patch_size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -388,13 +410,20 @@ class PixtralImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=self._valid_processor_keys,
+        )
 
         images = make_list_of_images(images)
 
@@ -444,14 +473,23 @@ class PixtralImageProcessor(BaseImageProcessor):
                 )
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            image = to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
 
             batch_images.append(image)
             batch_image_sizes.append(get_image_size(image, data_format))
@@ -464,7 +502,8 @@ class PixtralImageProcessor(BaseImageProcessor):
         )
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_sizes": batch_image_sizes},
+            tensor_type=return_tensors,
         )
 
 

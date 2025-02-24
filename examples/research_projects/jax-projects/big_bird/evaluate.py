@@ -19,12 +19,16 @@ def expand_to_aliases(given_answers, make_sub_answers=False):
         # if answers are longer than one word, make sure a predictions is correct if it coresponds to the complete 1: or :-1 sub word
         # *e.g.* if the correct answer contains a prefix such as "the", or "a"
         given_answers = (
-            given_answers + get_sub_answers(given_answers, begin=1) + get_sub_answers(given_answers, end=-1)
+            given_answers
+            + get_sub_answers(given_answers, begin=1)
+            + get_sub_answers(given_answers, end=-1)
         )
     answers = []
     for answer in given_answers:
         alias = answer.replace("_", " ").lower()
-        alias = "".join(c if c not in PUNCTUATION_SET_TO_EXCLUDE else " " for c in alias)
+        alias = "".join(
+            c if c not in PUNCTUATION_SET_TO_EXCLUDE else " " for c in alias
+        )
         answers.append(" ".join(alias.split()).strip())
     return set(answers)
 
@@ -48,7 +52,9 @@ def format_dataset(sample):
     long_answers = sample["annotations"]["long_answer"]
     short_answers = sample["annotations"]["short_answers"]
 
-    context_string = " ".join([context[i] for i in range(len(context)) if not is_html[i]])
+    context_string = " ".join(
+        [context[i] for i in range(len(context)) if not is_html[i]]
+    )
 
     # 0 - No ; 1 - Yes
     for answer in sample["annotations"]["yes_no_answer"]:
@@ -89,11 +95,17 @@ def format_dataset(sample):
 
 def main():
     dataset = load_from_disk("natural-questions-validation")
-    dataset = dataset.map(format_dataset).remove_columns(["annotations", "document", "id"])
+    dataset = dataset.map(format_dataset).remove_columns(
+        ["annotations", "document", "id"]
+    )
     print(dataset)
 
-    short_validation_dataset = dataset.filter(lambda x: (len(x["question"]) + len(x["context"])) < 4 * 4096)
-    short_validation_dataset = short_validation_dataset.filter(lambda x: x["category"] != "null")
+    short_validation_dataset = dataset.filter(
+        lambda x: (len(x["question"]) + len(x["context"])) < 4 * 4096
+    )
+    short_validation_dataset = short_validation_dataset.filter(
+        lambda x: x["category"] != "null"
+    )
 
     model_id = "vasudevgupta/flax-bigbird-natural-questions"
     model = FlaxBigBirdForNaturalQuestions.from_pretrained(model_id)

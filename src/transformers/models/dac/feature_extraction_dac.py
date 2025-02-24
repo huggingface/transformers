@@ -54,7 +54,12 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         hop_length: int = 512,
         **kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            **kwargs,
+        )
         self.hop_length = hop_length
 
     def __call__(
@@ -113,20 +118,25 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
             )
 
         if padding and truncation:
-            raise ValueError("Both padding and truncation were set. Make sure you only set one.")
+            raise ValueError(
+                "Both padding and truncation were set. Make sure you only set one."
+            )
         elif padding is None:
             # by default let's pad the inputs
             padding = True
 
         is_batched = bool(
-            isinstance(raw_audio, (list, tuple)) and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
+            isinstance(raw_audio, (list, tuple))
+            and (isinstance(raw_audio[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
             raw_audio = [np.asarray(audio, dtype=np.float32).T for audio in raw_audio]
         elif not is_batched and not isinstance(raw_audio, np.ndarray):
             raw_audio = np.asarray(raw_audio, dtype=np.float32)
-        elif isinstance(raw_audio, np.ndarray) and raw_audio.dtype is np.dtype(np.float64):
+        elif isinstance(raw_audio, np.ndarray) and raw_audio.dtype is np.dtype(
+            np.float64
+        ):
             raw_audio = raw_audio.astype(np.float32)
 
         # always return batch
@@ -136,9 +146,13 @@ class DacFeatureExtractor(SequenceFeatureExtractor):
         # verify inputs are valid
         for idx, example in enumerate(raw_audio):
             if example.ndim > 2:
-                raise ValueError(f"Expected input shape (channels, length) but got shape {example.shape}")
+                raise ValueError(
+                    f"Expected input shape (channels, length) but got shape {example.shape}"
+                )
             if self.feature_size == 1 and example.ndim != 1:
-                raise ValueError(f"Expected mono audio but example has {example.shape[-1]} channels")
+                raise ValueError(
+                    f"Expected mono audio but example has {example.shape[-1]} channels"
+                )
             if self.feature_size == 2:
                 raise ValueError("Stereo audio isn't supported for now")
 

@@ -130,7 +130,9 @@ class Swin2SRConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.num_channels_out = num_channels if num_channels_out is None else num_channels_out
+        self.num_channels_out = (
+            num_channels if num_channels_out is None else num_channels_out
+        )
         self.embed_dim = embed_dim
         self.depths = depths
         self.num_layers = len(depths)

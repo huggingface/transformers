@@ -79,11 +79,19 @@ class FlaxBloomModelTester:
         self.bos_token_id = bos_token_id
         self.initializer_range = initializer_range
         self.is_encoder_decoder = False
-        self.apply_residual_connection_post_layernorm = apply_residual_connection_post_layernorm
+        self.apply_residual_connection_post_layernorm = (
+            apply_residual_connection_post_layernorm
+        )
 
     def prepare_config_and_inputs(self):
-        input_ids = np.clip(ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size), 3, self.vocab_size)
-        input_ids = np.concatenate((input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1)
+        input_ids = np.clip(
+            ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size),
+            3,
+            self.vocab_size,
+        )
+        input_ids = np.concatenate(
+            (input_ids, 2 * np.ones((self.batch_size, 1), dtype=np.int64)), -1
+        )
 
         config = BloomConfig(
             vocab_size=self.vocab_size,
@@ -128,10 +136,14 @@ class FlaxBloomModelTester:
 
         outputs = model(input_ids)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
-    def check_use_cache_forward_with_attn_mask(self, model_class_name, config, inputs_dict):
+    def check_use_cache_forward_with_attn_mask(
+        self, model_class_name, config, inputs_dict
+    ):
         max_length = 20
         model = model_class_name(config)
 
@@ -143,7 +155,9 @@ class FlaxBloomModelTester:
         attention_mask_cache = jnp.concatenate(
             [
                 attention_mask,
-                jnp.zeros((attention_mask.shape[0], max_length - attention_mask.shape[1])),
+                jnp.zeros(
+                    (attention_mask.shape[0], max_length - attention_mask.shape[1])
+                ),
             ],
             axis=-1,
         )
@@ -163,13 +177,17 @@ class FlaxBloomModelTester:
 
         outputs = model(input_ids, attention_mask=attention_mask)
 
-        diff = np.max(np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5])))
+        diff = np.max(
+            np.abs((outputs_cache_next[0][:, -1, :5] - outputs[0][:, -1, :5]))
+        )
         self.parent.assertTrue(diff < 1e-3, msg=f"Max diff is {diff}")
 
 
 @require_flax
 class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxBloomModel, FlaxBloomForCausalLM) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxBloomModel, FlaxBloomForCausalLM) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxBloomModelTester(self)
@@ -182,7 +200,9 @@ class FlaxBloomModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_use_cache_forward_with_attn_mask(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
-            self.model_tester.check_use_cache_forward_with_attn_mask(model_class, config, inputs_dict)
+            self.model_tester.check_use_cache_forward_with_attn_mask(
+                model_class, config, inputs_dict
+            )
 
     @slow
     def test_model_from_pretrained(self):
@@ -200,9 +220,13 @@ class FlaxBloomGenerationTest(unittest.TestCase):
 
     def setUp(self):
         self.model_id = "bigscience/bloom-560m"
-        self.tokenizer = BloomTokenizerFast.from_pretrained(self.model_id, padding_side="left")
+        self.tokenizer = BloomTokenizerFast.from_pretrained(
+            self.model_id, padding_side="left"
+        )
         self.model_tester = FlaxBloomModelTester(self)
-        self.model = FlaxBloomForCausalLM.from_pretrained(self.model_id, from_pt=True, revision="gs555750")
+        self.model = FlaxBloomForCausalLM.from_pretrained(
+            self.model_id, from_pt=True, revision="gs555750"
+        )
 
     def test_model_batched_gen(self):
         # tests if the model outputs the same generation for the same batched input
@@ -210,7 +234,9 @@ class FlaxBloomGenerationTest(unittest.TestCase):
             "Hello there is this string is definitely longer I believe that",
             "Hello there is this string is definitely longer I believe that",
         ]
-        inputs = self.tokenizer(input_sentences, return_tensors="np", padding=True, truncation=True)
+        inputs = self.tokenizer(
+            input_sentences, return_tensors="np", padding=True, truncation=True
+        )
         sequences_fx = self.model.generate(**inputs, max_length=20).sequences
         self.assertEqual(sequences_fx[0].tolist(), sequences_fx[1].tolist())
 
@@ -221,23 +247,33 @@ class FlaxBloomGenerationTest(unittest.TestCase):
             "Hello there is this string is definitely longer I believe that",
             "Hi I want to order",
         ]
-        inputs = self.tokenizer(input_sentences_batch, return_tensors="np", padding=True, truncation=True)
+        inputs = self.tokenizer(
+            input_sentences_batch, return_tensors="np", padding=True, truncation=True
+        )
         sequences_fx_batch = self.model.generate(**inputs, max_length=20).sequences
 
         input_sentence_simple = "Hi I want to order"
         inputs_simple = self.tokenizer(input_sentence_simple, return_tensors="np")
-        sequences_fx_simple = self.model.generate(**inputs_simple, max_length=20).sequences
+        sequences_fx_simple = self.model.generate(
+            **inputs_simple, max_length=20
+        ).sequences
 
-        self.assertEqual(sequences_fx_batch[1][6:].tolist(), sequences_fx_simple[0][:-6].tolist())
+        self.assertEqual(
+            sequences_fx_batch[1][6:].tolist(), sequences_fx_simple[0][:-6].tolist()
+        )
 
     def test_batch_generated_text(self):
         input_sentences = [
             "Hello what is",
             "Running a quick test with the",
         ]
-        inputs = self.tokenizer(input_sentences, return_tensors="np", padding=True, truncation=True)
+        inputs = self.tokenizer(
+            input_sentences, return_tensors="np", padding=True, truncation=True
+        )
         generated_ids = self.model.generate(**inputs, max_length=20).sequences
-        generated_text = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        generated_text = self.tokenizer.batch_decode(
+            generated_ids, skip_special_tokens=True
+        )
 
         # these generations match those of the PyTorch model, ensuring correctness
         EXPECTED_GENERATIONS = [

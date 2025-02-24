@@ -42,7 +42,10 @@ def download_prompt(prompt_or_repo_id, agent_name, mode="run"):
         return prompt_or_repo_id
 
     prompt_file = cached_file(
-        prompt_or_repo_id, PROMPT_FILES[mode], repo_type="dataset", user_agent={"agent": agent_name}
+        prompt_or_repo_id,
+        PROMPT_FILES[mode],
+        repo_type="dataset",
+        user_agent={"agent": agent_name},
     )
     with open(prompt_file, "r", encoding="utf-8") as f:
         return f.read()
@@ -780,10 +783,16 @@ SUPPORTED_PLAN_TYPES = ["default", "structured"]
 
 PROMPTS_FOR_INITIAL_PLAN = {
     "default": {"system": SYSTEM_PROMPT_PLAN, "user": USER_PROMPT_PLAN},
-    "structured": {"system": SYSTEM_PROMPT_PLAN_STRUCTURED, "user": USER_PROMPT_PLAN_STRUCTURED},
+    "structured": {
+        "system": SYSTEM_PROMPT_PLAN_STRUCTURED,
+        "user": USER_PROMPT_PLAN_STRUCTURED,
+    },
 }
 
 PROMPTS_FOR_PLAN_UPDATE = {
     "default": {"system": SYSTEM_PROMPT_PLAN_UPDATE, "user": USER_PROMPT_PLAN_UPDATE},
-    "structured": {"system": SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED, "user": USER_PROMPT_PLAN_UPDATE_STRUCTURED},
+    "structured": {
+        "system": SYSTEM_PROMPT_PLAN_UPDATE_STRUCTURED,
+        "user": USER_PROMPT_PLAN_UPDATE_STRUCTURED,
+    },
 }

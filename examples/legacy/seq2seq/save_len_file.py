@@ -22,16 +22,29 @@ from utils import Seq2SeqDataset, pickle_save
 
 
 def save_len_file(
-    tokenizer_name, data_dir, max_source_length=1024, max_target_length=1024, consider_target=False, **kwargs
+    tokenizer_name,
+    data_dir,
+    max_source_length=1024,
+    max_target_length=1024,
+    consider_target=False,
+    **kwargs
 ):
     """Save max(src_len, tgt_len) for each example to allow dynamic batching."""
     tok = AutoTokenizer.from_pretrained(tokenizer_name)
-    train_ds = Seq2SeqDataset(tok, data_dir, max_source_length, max_target_length, type_path="train", **kwargs)
+    train_ds = Seq2SeqDataset(
+        tok, data_dir, max_source_length, max_target_length, type_path="train", **kwargs
+    )
     pad = tok.pad_token_id
 
     def get_lens(ds):
         dl = tqdm(
-            DataLoader(ds, batch_size=512, num_workers=8, shuffle=False, collate_fn=ds.collate_fn),
+            DataLoader(
+                ds,
+                batch_size=512,
+                num_workers=8,
+                shuffle=False,
+                collate_fn=ds.collate_fn,
+            ),
             desc=str(ds.len_file),
         )
         max_lens = []
@@ -46,7 +59,9 @@ def save_len_file(
         return max_lens
 
     train_lens = get_lens(train_ds)
-    val_ds = Seq2SeqDataset(tok, data_dir, max_source_length, max_target_length, type_path="val", **kwargs)
+    val_ds = Seq2SeqDataset(
+        tok, data_dir, max_source_length, max_target_length, type_path="val", **kwargs
+    )
     val_lens = get_lens(val_ds)
     pickle_save(train_lens, train_ds.len_file)
     pickle_save(val_lens, val_ds.len_file)

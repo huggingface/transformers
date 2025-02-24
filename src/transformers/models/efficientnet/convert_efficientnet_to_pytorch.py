@@ -14,7 +14,8 @@
 # limitations under the License.
 """Convert EfficientNet checkpoints from the original repository.
 
-URL: https://github.com/keras-team/keras/blob/v2.11.0/keras/applications/efficientnet.py"""
+URL: https://github.com/keras-team/keras/blob/v2.11.0/keras/applications/efficientnet.py
+"""
 
 import argparse
 import json
@@ -131,7 +132,9 @@ def get_efficientnet_config(model_name):
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
     config.num_labels = 1000
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
 
     config.id2label = id2label
@@ -159,7 +162,11 @@ def convert_image_processor(model_name):
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def rename_keys(original_param_names):
-    block_names = [v.split("_")[0].split("block")[1] for v in original_param_names if v.startswith("block")]
+    block_names = [
+        v.split("_")[0].split("block")[1]
+        for v in original_param_names
+        if v.startswith("block")
+    ]
     block_names = sorted(set(block_names))
     num_blocks = len(block_names)
     block_name_mapping = {b: str(i) for b, i in zip(block_names, range(num_blocks))}
@@ -169,45 +176,126 @@ def rename_keys(original_param_names):
     rename_keys.append(("stem_bn/gamma:0", "embeddings.batchnorm.weight"))
     rename_keys.append(("stem_bn/beta:0", "embeddings.batchnorm.bias"))
     rename_keys.append(("stem_bn/moving_mean:0", "embeddings.batchnorm.running_mean"))
-    rename_keys.append(("stem_bn/moving_variance:0", "embeddings.batchnorm.running_var"))
+    rename_keys.append(
+        ("stem_bn/moving_variance:0", "embeddings.batchnorm.running_var")
+    )
 
     for b in block_names:
         hf_b = block_name_mapping[b]
-        rename_keys.append((f"block{b}_expand_conv/kernel:0", f"encoder.blocks.{hf_b}.expansion.expand_conv.weight"))
-        rename_keys.append((f"block{b}_expand_bn/gamma:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.weight"))
-        rename_keys.append((f"block{b}_expand_bn/beta:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.bias"))
         rename_keys.append(
-            (f"block{b}_expand_bn/moving_mean:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_mean")
+            (
+                f"block{b}_expand_conv/kernel:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_conv.weight",
+            )
         )
         rename_keys.append(
-            (f"block{b}_expand_bn/moving_variance:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_var")
+            (
+                f"block{b}_expand_bn/gamma:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.weight",
+            )
         )
         rename_keys.append(
-            (f"block{b}_dwconv/depthwise_kernel:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight")
-        )
-        rename_keys.append((f"block{b}_bn/gamma:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.weight"))
-        rename_keys.append((f"block{b}_bn/beta:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.bias"))
-        rename_keys.append(
-            (f"block{b}_bn/moving_mean:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_mean")
+            (
+                f"block{b}_expand_bn/beta:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.bias",
+            )
         )
         rename_keys.append(
-            (f"block{b}_bn/moving_variance:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_var")
+            (
+                f"block{b}_expand_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.running_mean",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_expand_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.running_var",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_dwconv/depthwise_kernel:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/gamma:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/beta:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_mean",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_var",
+            )
         )
 
-        rename_keys.append((f"block{b}_se_reduce/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.weight"))
-        rename_keys.append((f"block{b}_se_reduce/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.bias"))
-        rename_keys.append((f"block{b}_se_expand/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.weight"))
-        rename_keys.append((f"block{b}_se_expand/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.bias"))
         rename_keys.append(
-            (f"block{b}_project_conv/kernel:0", f"encoder.blocks.{hf_b}.projection.project_conv.weight")
-        )
-        rename_keys.append((f"block{b}_project_bn/gamma:0", f"encoder.blocks.{hf_b}.projection.project_bn.weight"))
-        rename_keys.append((f"block{b}_project_bn/beta:0", f"encoder.blocks.{hf_b}.projection.project_bn.bias"))
-        rename_keys.append(
-            (f"block{b}_project_bn/moving_mean:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_mean")
+            (
+                f"block{b}_se_reduce/kernel:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.reduce.weight",
+            )
         )
         rename_keys.append(
-            (f"block{b}_project_bn/moving_variance:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_var")
+            (
+                f"block{b}_se_reduce/bias:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.reduce.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_se_expand/kernel:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.expand.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_se_expand/bias:0",
+                f"encoder.blocks.{hf_b}.squeeze_excite.expand.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_conv/kernel:0",
+                f"encoder.blocks.{hf_b}.projection.project_conv.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/gamma:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.weight",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/beta:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.bias",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.running_mean",
+            )
+        )
+        rename_keys.append(
+            (
+                f"block{b}_project_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.running_var",
+            )
         )
 
     rename_keys.append(("top_conv/kernel:0", "encoder.top_conv.weight"))
@@ -247,7 +335,9 @@ def replace_params(hf_params, tf_params, key_mapping):
 
 
 @torch.no_grad()
-def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_model, push_to_hub):
+def convert_efficientnet_checkpoint(
+    model_name, pytorch_dump_folder_path, save_model, push_to_hub
+):
     """
     Copy/paste/tweak model's weights to our EfficientNet structure.
     """
@@ -298,7 +388,9 @@ def convert_efficientnet_checkpoint(model_name, pytorch_dump_folder_path, save_m
     original_logits = original_model.predict(x)
 
     # Check whether original and HF model outputs match  -> np.allclose
-    assert np.allclose(original_logits, hf_logits, atol=1e-3), "The predicted logits are not the same."
+    assert np.allclose(
+        original_logits, hf_logits, atol=1e-3
+    ), "The predicted logits are not the same."
     print("Model outputs match!")
 
     if save_model:
@@ -333,7 +425,16 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument("--save_model", action="store_true", help="Save model to local")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push model and image processor to the hub",
+    )
 
     args = parser.parse_args()
-    convert_efficientnet_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)
+    convert_efficientnet_checkpoint(
+        args.model_name,
+        args.pytorch_dump_folder_path,
+        args.save_model,
+        args.push_to_hub,
+    )

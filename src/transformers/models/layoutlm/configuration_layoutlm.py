@@ -178,14 +178,20 @@ class LayoutLMOnnxConfig(OnnxConfig):
         """
 
         input_dict = super().generate_dummy_inputs(
-            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+            tokenizer,
+            batch_size=batch_size,
+            seq_length=seq_length,
+            is_pair=is_pair,
+            framework=framework,
         )
 
         # Generate a dummy bbox
         box = [48, 84, 73, 128]
 
         if not framework == TensorType.PYTORCH:
-            raise NotImplementedError("Exporting LayoutLM to ONNX is currently only supported for PyTorch.")
+            raise NotImplementedError(
+                "Exporting LayoutLM to ONNX is currently only supported for PyTorch."
+            )
 
         if not is_torch_available():
             raise ValueError("Cannot generate dummy inputs without PyTorch installed.")

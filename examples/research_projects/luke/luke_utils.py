@@ -18,21 +18,34 @@ def padding_tensor(sequences, padding_value, padding_side, sequence_length):
     for i, tensor in enumerate(sequences):
         if padding_side == "right":
             if isinstance(padding_value, tuple):
-                out_tensor[i, : len(tensor[:sequence_length]), :2] = tensor[:sequence_length]
+                out_tensor[i, : len(tensor[:sequence_length]), :2] = tensor[
+                    :sequence_length
+                ]
             else:
-                out_tensor[i, : len(tensor[:sequence_length])] = tensor[:sequence_length]
+                out_tensor[i, : len(tensor[:sequence_length])] = tensor[
+                    :sequence_length
+                ]
         else:
             if isinstance(padding_value, tuple):
-                out_tensor[i, len(tensor[:sequence_length]) - 1 :, :2] = tensor[:sequence_length]
+                out_tensor[i, len(tensor[:sequence_length]) - 1 :, :2] = tensor[
+                    :sequence_length
+                ]
             else:
-                out_tensor[i, len(tensor[:sequence_length]) - 1 :] = tensor[:sequence_length]
+                out_tensor[i, len(tensor[:sequence_length]) - 1 :] = tensor[
+                    :sequence_length
+                ]
 
     return out_tensor.tolist()
 
 
 def is_punctuation(char):
     cp = ord(char)
-    if (cp >= 33 and cp <= 47) or (cp >= 58 and cp <= 64) or (cp >= 91 and cp <= 96) or (cp >= 123 and cp <= 126):
+    if (
+        (cp >= 33 and cp <= 47)
+        or (cp >= 58 and cp <= 64)
+        or (cp >= 91 and cp <= 96)
+        or (cp >= 123 and cp <= 126)
+    ):
         return True
     cat = unicodedata.category(char)
     if cat.startswith("P"):
@@ -82,7 +95,11 @@ class DataCollatorForLukeTokenClassification(DataCollatorMixin):
         import torch
 
         label_name = "label" if "label" in features[0].keys() else "labels"
-        labels = [feature[label_name] for feature in features] if label_name in features[0].keys() else None
+        labels = (
+            [feature[label_name] for feature in features]
+            if label_name in features[0].keys()
+            else None
+        )
         batch = self.tokenizer.pad(
             features,
             padding=self.padding,
@@ -99,17 +116,23 @@ class DataCollatorForLukeTokenClassification(DataCollatorMixin):
         padding_side = self.tokenizer.padding_side
         if padding_side == "right":
             batch[label_name] = [
-                list(label) + [self.label_pad_token_id] * (sequence_length - len(label)) for label in labels
+                list(label) + [self.label_pad_token_id] * (sequence_length - len(label))
+                for label in labels
             ]
         else:
             batch[label_name] = [
-                [self.label_pad_token_id] * (sequence_length - len(label)) + list(label) for label in labels
+                [self.label_pad_token_id] * (sequence_length - len(label)) + list(label)
+                for label in labels
             ]
 
         ner_tags = [feature["ner_tags"] for feature in features]
         batch["ner_tags"] = padding_tensor(ner_tags, -1, padding_side, sequence_length)
-        original_entity_spans = [feature["original_entity_spans"] for feature in features]
-        batch["original_entity_spans"] = padding_tensor(original_entity_spans, (-1, -1), padding_side, sequence_length)
+        original_entity_spans = [
+            feature["original_entity_spans"] for feature in features
+        ]
+        batch["original_entity_spans"] = padding_tensor(
+            original_entity_spans, (-1, -1), padding_side, sequence_length
+        )
         batch = {k: torch.tensor(v, dtype=torch.int64) for k, v in batch.items()}
 
         return batch

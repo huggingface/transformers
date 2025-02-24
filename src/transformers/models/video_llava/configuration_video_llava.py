@@ -110,8 +110,12 @@ class VideoLlavaConfig(PretrainedConfig):
         if isinstance(self.vision_config, dict):
             if "model_type" not in vision_config:
                 vision_config["model_type"] = "clip_vision_model"
-                logger.warning("Key=`model_type` not found in vision config, setting it to `clip_vision_model`")
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
+                logger.warning(
+                    "Key=`model_type` not found in vision config, setting it to `clip_vision_model`"
+                )
+            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](
+                **vision_config
+            )
         elif vision_config is None:
             self.vision_config = CONFIG_MAPPING["clip_vision_model"](
                 intermediate_size=4096,
@@ -127,7 +131,9 @@ class VideoLlavaConfig(PretrainedConfig):
         if isinstance(text_config, dict):
             if "model_type" not in text_config:
                 text_config["model_type"] = "llama"
-                logger.warning("Key=`model_type` not found in text config, setting it to `llama`")
+                logger.warning(
+                    "Key=`model_type` not found in text config, setting it to `llama`"
+                )
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["llama"]()

@@ -21,7 +21,13 @@ from .quantizers_utils import get_module_from_name
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_flute_available, is_hadamard_available, is_torch_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_flute_available,
+    is_hadamard_available,
+    is_torch_available,
+    logging,
+)
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -46,13 +52,19 @@ class HiggsHfQuantizer(HfQuantizer):
 
     def validate_environment(self, device_map, **kwargs):
         if not torch.cuda.is_available():
-            raise NotImplementedError("HIGGS quantization is only supported on GPU. Please use a different quantizer.")
+            raise NotImplementedError(
+                "HIGGS quantization is only supported on GPU. Please use a different quantizer."
+            )
 
         if not is_accelerate_available():
-            raise ImportError("Using `higgs` quantization requires Accelerate: `pip install accelerate`")
+            raise ImportError(
+                "Using `higgs` quantization requires Accelerate: `pip install accelerate`"
+            )
 
         if not is_flute_available():
-            raise ImportError("Using `higgs` quantization requires FLUTE: `pip install flute-kernel>=0.3.0`")
+            raise ImportError(
+                "Using `higgs` quantization requires FLUTE: `pip install flute-kernel>=0.3.0`"
+            )
 
         if not is_hadamard_available():
             raise ImportError(
@@ -64,7 +76,9 @@ class HiggsHfQuantizer(HfQuantizer):
                 "You are attempting to load a HIGGS model without setting device_map."
                 " Please set device_map comprised of 'cuda' devices."
             )
-        elif isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        elif isinstance(device_map, dict) and (
+            "cpu" in device_map.values() or "disk" in device_map.values()
+        ):
             raise ValueError(
                 "You are attempting to load a HIGGS model with a device_map that contains a CPU or disk device."
                 " This is not supported. Please remove the CPU or disk device from the device_map."
@@ -72,7 +86,9 @@ class HiggsHfQuantizer(HfQuantizer):
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            logger.info("`torch_dtype` is None. Setting `torch_dtype=torch.float16` for FLUTE compatibility.")
+            logger.info(
+                "`torch_dtype` is None. Setting `torch_dtype=torch.float16` for FLUTE compatibility."
+            )
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16 and torch_dtype != torch.bfloat16:
             raise ValueError(
@@ -140,28 +156,46 @@ class HiggsHfQuantizer(HfQuantizer):
         from ..integrations import HiggsLinear
 
         flute_workspaces = {}
-        flute_modules = {name: module for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
-        for name, module in tqdm(flute_modules.items(), desc="Repacking HIGGS modules", leave=False):
+        flute_modules = {
+            name: module
+            for name, module in model.named_modules()
+            if isinstance(module, HiggsLinear)
+        }
+        for name, module in tqdm(
+            flute_modules.items(), desc="Repacking HIGGS modules", leave=False
+        ):
             # Every HiggsLinear needs a "workspace": a buffer for the unpacking operation.
             # This buffer needs to be on the same device as the weights, but can be reused across modules otherwise.
             if module.weight.device not in flute_workspaces:
-                flute_workspaces[module.weight.device] = make_workspace_streamk(device=module.weight.device)
+                flute_workspaces[module.weight.device] = make_workspace_streamk(
+                    device=module.weight.device
+                )
             module.workspace = flute_workspaces[module.weight.device]
 
             # FLUTE weights are packed in a way that is optimized for a specific number of SMs (GPU streaming multiprocessors).
             # If the model is loaded on a different device than the one it was saved on, we need to repack the weights.
-            module.tune_metadata = TuneMetaData.from_dict(self.quantization_config.tune_metadata[name])
+            module.tune_metadata = TuneMetaData.from_dict(
+                self.quantization_config.tune_metadata[name]
+            )
             module.weight.data, module.tune_metadata = maybe_tune_and_repack(
                 weight=module.weight.data,
                 scales=module.scales.data,
                 metadata=module.tune_metadata,
             )
-            self.quantization_config.tune_metadata[name] = module.tune_metadata.to_dict()
+            self.quantization_config.tune_metadata[name] = (
+                module.tune_metadata.to_dict()
+            )
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(
+        self, model, missing_keys: List[str], prefix: str
+    ) -> List[str]:
         from ..integrations import HiggsLinear
 
-        higgs_names = {name for name, module in model.named_modules() if isinstance(module, HiggsLinear)}
+        higgs_names = {
+            name
+            for name, module in model.named_modules()
+            if isinstance(module, HiggsLinear)
+        }
 
         def should_update(key: str) -> bool:
             if key.endswith(".weight") or key.endswith(".bias"):
@@ -189,7 +223,11 @@ class HiggsHfQuantizer(HfQuantizer):
         from ..integrations import HiggsLinear
 
         module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, HiggsLinear) and tensor_name == "weight" and param_value.dtype != torch.int16:
+        if (
+            isinstance(module, HiggsLinear)
+            and tensor_name == "weight"
+            and param_value.dtype != torch.int16
+        ):
             # Only quantize weights of HiggsLinear modules that are not already quantized
             return True
         else:

@@ -127,20 +127,24 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
-            -config.hidden_size :, :
-        ]
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[: config.hidden_size, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = (
+            in_proj_bias[: config.hidden_size]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[config.hidden_size : config.hidden_size * 2, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = (
+            in_proj_bias[config.hidden_size : config.hidden_size * 2]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-config.hidden_size :, :]
+        )
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = (
+            in_proj_bias[-config.hidden_size :]
+        )
 
 
 def remove_classification_head_(state_dict):
@@ -175,7 +179,9 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
         out_features=["stage3"],
         embedding_dynamic_padding=True,
     )
-    config = ViTHybridConfig(backbone_config=backbone_config, image_size=384, num_labels=1000)
+    config = ViTHybridConfig(
+        backbone_config=backbone_config, image_size=384, num_labels=1000
+    )
     base_model = False
 
     # load original model from timm
@@ -193,7 +199,9 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
 
     repo_id = "huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -220,7 +228,10 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, push_to_hub=False
         size={"shortest_edge": timm_transforms[0].size},
         resample=pillow_resamplings[timm_transforms[0].interpolation.value],
         do_center_crop=True,
-        crop_size={"height": timm_transforms[1].size[0], "width": timm_transforms[1].size[1]},
+        crop_size={
+            "height": timm_transforms[1].size[0],
+            "width": timm_transforms[1].size[1],
+        },
         do_normalize=True,
         image_mean=timm_transforms[-1].mean.tolist(),
         image_std=timm_transforms[-1].std.tolist(),
@@ -272,11 +283,18 @@ if __name__ == "__main__":
         help="Name of the hybrid ViT timm model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether to upload the model to the HuggingFace hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether to upload the model to the HuggingFace hub.",
     )
 
     args = parser.parse_args()
-    convert_vit_checkpoint(args.vit_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_vit_checkpoint(
+        args.vit_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

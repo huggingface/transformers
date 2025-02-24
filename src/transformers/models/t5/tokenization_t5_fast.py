@@ -97,9 +97,13 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     ):
         # Add extra_ids to the special token list
         if additional_special_tokens is not None:
-            extra_tokens = [x for x in additional_special_tokens if "<extra_id_" in str(x)]
+            extra_tokens = [
+                x for x in additional_special_tokens if "<extra_id_" in str(x)
+            ]
             if len(extra_tokens) < 1:
-                additional_special_tokens += [f"<extra_id_{i}>" for i in range(extra_ids)]
+                additional_special_tokens += [
+                    f"<extra_id_{i}>" for i in range(extra_ids)
+                ]
             elif extra_ids > 0 and extra_ids != len(extra_tokens):
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
@@ -136,10 +140,17 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     @staticmethod
-    def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
+    def _eventually_correct_t5_max_length(
+        pretrained_model_name_or_path, max_model_length, init_max_model_length
+    ):
         if pretrained_model_name_or_path in T5TokenizerFast.max_model_input_sizes:
-            deprecated_max_model_length = T5TokenizerFast.max_model_input_sizes[pretrained_model_name_or_path]
-            if init_max_model_length is not None and init_max_model_length != max_model_length:
+            deprecated_max_model_length = T5TokenizerFast.max_model_input_sizes[
+                pretrained_model_name_or_path
+            ]
+            if (
+                init_max_model_length is not None
+                and init_max_model_length != max_model_length
+            ):
                 return init_max_model_length
             elif init_max_model_length is None:
                 warnings.warn(
@@ -157,7 +168,9 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
         return max_model_length
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -168,7 +181,9 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
@@ -227,11 +242,18 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
     def get_sentinel_tokens(self):
         return list(
-            set(filter(lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None, self.additional_special_tokens))
+            set(
+                filter(
+                    lambda x: bool(re.search(r"<extra_id_\d+>", x)) is not None,
+                    self.additional_special_tokens,
+                )
+            )
         )
 
     def get_sentinel_token_ids(self):
-        return [self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()]
+        return [
+            self.convert_tokens_to_ids(token) for token in self.get_sentinel_tokens()
+        ]
 
 
 __all__ = ["T5TokenizerFast"]

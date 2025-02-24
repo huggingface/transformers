@@ -16,7 +16,10 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import (
+    BackboneConfigMixin,
+    get_aligned_output_features_output_indices,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -96,7 +99,9 @@ class RTDetrResNetConfig(BackboneConfigMixin, PretrainedConfig):
     ):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
-            raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
+            raise ValueError(
+                f"layer_type={layer_type} is not one of {','.join(self.layer_types)}"
+            )
         self.num_channels = num_channels
         self.embedding_size = embedding_size
         self.hidden_sizes = hidden_sizes
@@ -105,9 +110,15 @@ class RTDetrResNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
         self.downsample_in_bottleneck = downsample_in_bottleneck
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        self.stage_names = ["stem"] + [
+            f"stage{idx}" for idx in range(1, len(depths) + 1)
+        ]
+        self._out_features, self._out_indices = (
+            get_aligned_output_features_output_indices(
+                out_features=out_features,
+                out_indices=out_indices,
+                stage_names=self.stage_names,
+            )
         )
 
 

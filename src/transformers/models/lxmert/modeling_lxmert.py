@@ -269,9 +269,15 @@ class LxmertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=0)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=0)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size, padding_idx=0)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=0
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size, padding_idx=0
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size, padding_idx=0
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -291,7 +297,9 @@ class LxmertEmbeddings(nn.Module):
         position_ids = position_ids.unsqueeze(0).expand(input_shape)
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(
+                input_shape, dtype=torch.long, device=self.position_ids.device
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -333,7 +341,9 @@ class LxmertAttention(nn.Module):
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(self, hidden_states, context, attention_mask=None, output_attentions=False):
+    def forward(
+        self, hidden_states, context, attention_mask=None, output_attentions=False
+    ):
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(context)
         mixed_value_layer = self.value(context)
@@ -361,7 +371,9 @@ class LxmertAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
         return outputs
 
 
@@ -385,12 +397,20 @@ class LxmertCrossAttentionLayer(nn.Module):
         self.att = LxmertAttention(config)
         self.output = LxmertAttentionOutput(config)
 
-    def forward(self, input_tensor, ctx_tensor, ctx_att_mask=None, output_attentions=False):
-        output = self.att(input_tensor, ctx_tensor, ctx_att_mask, output_attentions=output_attentions)
+    def forward(
+        self, input_tensor, ctx_tensor, ctx_att_mask=None, output_attentions=False
+    ):
+        output = self.att(
+            input_tensor, ctx_tensor, ctx_att_mask, output_attentions=output_attentions
+        )
         if output_attentions:
             attention_probs = output[1]
         attention_output = self.output(output[0], input_tensor)
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        outputs = (
+            (attention_output, attention_probs)
+            if output_attentions
+            else (attention_output,)
+        )
         return outputs
 
 
@@ -411,7 +431,11 @@ class LxmertSelfAttentionLayer(nn.Module):
         if output_attentions:
             attention_probs = output[1]
         attention_output = self.output(output[0], input_tensor)
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        outputs = (
+            (attention_output, attention_probs)
+            if output_attentions
+            else (attention_output,)
+        )
         return outputs
 
 
@@ -449,7 +473,9 @@ class LxmertLayer(nn.Module):
         self.output = LxmertOutput(config)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
-        outputs = self.attention(hidden_states, attention_mask, output_attentions=output_attentions)
+        outputs = self.attention(
+            hidden_states, attention_mask, output_attentions=output_attentions
+        )
         attention_output = outputs[0]
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
@@ -496,10 +522,16 @@ class LxmertXLayer(nn.Module):
         )
         return lang_att_output, visual_att_output
 
-    def self_att(self, lang_input, lang_attention_mask, visual_input, visual_attention_mask):
+    def self_att(
+        self, lang_input, lang_attention_mask, visual_input, visual_attention_mask
+    ):
         # Self Attention
-        lang_att_output = self.lang_self_att(lang_input, lang_attention_mask, output_attentions=False)
-        visual_att_output = self.visn_self_att(visual_input, visual_attention_mask, output_attentions=False)
+        lang_att_output = self.lang_self_att(
+            lang_input, lang_attention_mask, output_attentions=False
+        )
+        visual_att_output = self.visn_self_att(
+            visual_input, visual_attention_mask, output_attentions=False
+        )
         return lang_att_output[0], visual_att_output[0]
 
     def output_fc(self, lang_input, visual_input):
@@ -590,9 +622,15 @@ class LxmertEncoder(nn.Module):
 
         # Layers
         # Using self.layer instead of self.l_layer to support loading BERT weights.
-        self.layer = nn.ModuleList([LxmertLayer(config) for _ in range(self.num_l_layers)])
-        self.x_layers = nn.ModuleList([LxmertXLayer(config) for _ in range(self.num_x_layers)])
-        self.r_layers = nn.ModuleList([LxmertLayer(config) for _ in range(self.num_r_layers)])
+        self.layer = nn.ModuleList(
+            [LxmertLayer(config) for _ in range(self.num_l_layers)]
+        )
+        self.x_layers = nn.ModuleList(
+            [LxmertXLayer(config) for _ in range(self.num_x_layers)]
+        )
+        self.r_layers = nn.ModuleList(
+            [LxmertLayer(config) for _ in range(self.num_r_layers)]
+        )
 
     def forward(
         self,
@@ -605,15 +643,23 @@ class LxmertEncoder(nn.Module):
     ):
         vision_hidden_states = ()
         language_hidden_states = ()
-        vision_attentions = () if output_attentions or self.config.output_attentions else None
-        language_attentions = () if output_attentions or self.config.output_attentions else None
-        cross_encoder_attentions = () if output_attentions or self.config.output_attentions else None
+        vision_attentions = (
+            () if output_attentions or self.config.output_attentions else None
+        )
+        language_attentions = (
+            () if output_attentions or self.config.output_attentions else None
+        )
+        cross_encoder_attentions = (
+            () if output_attentions or self.config.output_attentions else None
+        )
 
         visual_feats = self.visn_fc(visual_feats, visual_pos)
 
         # Run language layers
         for layer_module in self.layer:
-            l_outputs = layer_module(lang_feats, lang_attention_mask, output_attentions=output_attentions)
+            l_outputs = layer_module(
+                lang_feats, lang_attention_mask, output_attentions=output_attentions
+            )
             lang_feats = l_outputs[0]
             language_hidden_states = language_hidden_states + (lang_feats,)
             if language_attentions is not None:
@@ -621,7 +667,9 @@ class LxmertEncoder(nn.Module):
 
         # Run relational layers
         for layer_module in self.r_layers:
-            v_outputs = layer_module(visual_feats, visual_attention_mask, output_attentions=output_attentions)
+            v_outputs = layer_module(
+                visual_feats, visual_attention_mask, output_attentions=output_attentions
+            )
             visual_feats = v_outputs[0]
             vision_hidden_states = vision_hidden_states + (visual_feats,)
             if vision_attentions is not None:
@@ -741,7 +789,10 @@ class LxmertVisualObjHead(nn.Module):
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder_dict = nn.ModuleDict(
-            {key: nn.Linear(config.hidden_size, self.visual_losses[key]["num"]) for key in self.visual_losses}
+            {
+                key: nn.Linear(config.hidden_size, self.visual_losses[key]["num"])
+                for key in self.visual_losses
+            }
         )
 
     def forward(self, hidden_states):
@@ -755,7 +806,9 @@ class LxmertVisualObjHead(nn.Module):
 class LxmertPreTrainingHeads(nn.Module):
     def __init__(self, config, lxmert_model_embedding_weights):
         super(LxmertPreTrainingHeads, self).__init__()
-        self.predictions = LxmertLMPredictionHead(config, lxmert_model_embedding_weights)
+        self.predictions = LxmertLMPredictionHead(
+            config, lxmert_model_embedding_weights
+        )
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -891,7 +944,9 @@ class LxmertModel(LxmertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertModelOutput,
@@ -910,14 +965,24 @@ class LxmertModel(LxmertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[LxmertModelOutput, Tuple[torch.FloatTensor]]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -951,13 +1016,21 @@ class LxmertModel(LxmertPreTrainedModel):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(
+            self.dtype
+        ).min
 
         # Process the visual attention mask
         if visual_attention_mask is not None:
-            extended_visual_attention_mask = visual_attention_mask.unsqueeze(1).unsqueeze(2)
-            extended_visual_attention_mask = extended_visual_attention_mask.to(dtype=self.dtype)
-            extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * torch.finfo(self.dtype).min
+            extended_visual_attention_mask = visual_attention_mask.unsqueeze(
+                1
+            ).unsqueeze(2)
+            extended_visual_attention_mask = extended_visual_attention_mask.to(
+                dtype=self.dtype
+            )
+            extended_visual_attention_mask = (
+                1.0 - extended_visual_attention_mask
+            ) * torch.finfo(self.dtype).min
         else:
             extended_visual_attention_mask = None
 
@@ -989,24 +1062,36 @@ class LxmertModel(LxmertPreTrainedModel):
                 cross_encoder_attentions,
             )
 
-        hidden_states = (language_hidden_states, vision_hidden_states) if output_hidden_states else ()
+        hidden_states = (
+            (language_hidden_states, vision_hidden_states)
+            if output_hidden_states
+            else ()
+        )
 
         visual_output = vision_hidden_states[-1]
         lang_output = language_hidden_states[-1]
         pooled_output = self.pooler(lang_output)
 
         if not return_dict:
-            return (lang_output, visual_output, pooled_output) + hidden_states + all_attentions
+            return (
+                (lang_output, visual_output, pooled_output)
+                + hidden_states
+                + all_attentions
+            )
 
         return LxmertModelOutput(
             pooled_output=pooled_output,
             language_output=lang_output,
             vision_output=visual_output,
-            language_hidden_states=language_hidden_states if output_hidden_states else None,
+            language_hidden_states=(
+                language_hidden_states if output_hidden_states else None
+            ),
             vision_hidden_states=vision_hidden_states if output_hidden_states else None,
             language_attentions=language_attentions if output_attentions else None,
             vision_attentions=vision_attentions if output_attentions else None,
-            cross_encoder_attentions=cross_encoder_attentions if output_attentions else None,
+            cross_encoder_attentions=(
+                cross_encoder_attentions if output_attentions else None
+            ),
         )
 
 
@@ -1034,7 +1119,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.lxmert = LxmertModel(config)
 
         # Pre-training heads
-        self.cls = LxmertPreTrainingHeads(config, self.lxmert.embeddings.word_embeddings.weight)
+        self.cls = LxmertPreTrainingHeads(
+            config, self.lxmert.embeddings.word_embeddings.weight
+        )
         if self.task_obj_predict:
             self.obj_predict_head = LxmertVisualObjHead(config)
         if self.task_qa:
@@ -1073,11 +1160,18 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.visual_losses = visual_losses
 
     def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+        self,
+        new_num_tokens: int,
+        pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
         # Adding the following steps to resize bias to match the shape of resized embeddings
-        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
-        self.cls.predictions.bias = self._resize_bias(self.cls.predictions.bias, new_num_tokens)
+        new_embeddings = super().resize_token_embeddings(
+            new_num_tokens, pad_to_multiple_of, mean_resizing
+        )
+        self.cls.predictions.bias = self._resize_bias(
+            self.cls.predictions.bias, new_num_tokens
+        )
         return new_embeddings
 
     def _resize_bias(self, bias, new_num_tokens: int):
@@ -1085,7 +1179,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         if new_num_tokens <= old_num_tokens:
             new_bias = bias[:new_num_tokens]
         else:
-            extra_bias = torch.zeros(new_num_tokens - old_num_tokens, device=bias.device)
+            extra_bias = torch.zeros(
+                new_num_tokens - old_num_tokens, device=bias.device
+            )
             new_bias = torch.cat([bias, extra_bias])
         new_bias = nn.Parameter(new_bias)
         return new_bias
@@ -1155,14 +1251,22 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         # Copy labels from the previous weights
         num_labels_to_copy = min(cur_qa_labels, num_labels)
-        new_qa_logit_layer.weight.data[:num_labels_to_copy, :] = cur_qa_logit_layer.weight.data[:num_labels_to_copy, :]
+        new_qa_logit_layer.weight.data[:num_labels_to_copy, :] = (
+            cur_qa_logit_layer.weight.data[:num_labels_to_copy, :]
+        )
         if getattr(cur_qa_logit_layer, "bias", None) is not None:
-            new_qa_logit_layer.bias.data[:num_labels_to_copy] = cur_qa_logit_layer.bias.data[:num_labels_to_copy]
+            new_qa_logit_layer.bias.data[:num_labels_to_copy] = (
+                cur_qa_logit_layer.bias.data[:num_labels_to_copy]
+            )
 
         return new_qa_logit_layer
 
-    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=LxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=LxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1173,7 +1277,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         token_type_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        obj_labels: Optional[Dict[str, Tuple[torch.FloatTensor, torch.FloatTensor]]] = None,
+        obj_labels: Optional[
+            Dict[str, Tuple[torch.FloatTensor, torch.FloatTensor]]
+        ] = None,
         matched_label: Optional[torch.LongTensor] = None,
         ans: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1210,7 +1316,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             )
             labels = kwargs.pop("masked_lm_labels")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
         lxmert_output = self.lxmert(
@@ -1231,7 +1339,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             lxmert_output[1],
             lxmert_output[2],
         )
-        lang_prediction_scores, cross_relationship_score = self.cls(lang_output, pooled_output)
+        lang_prediction_scores, cross_relationship_score = self.cls(
+            lang_output, pooled_output
+        )
         if self.task_qa:
             answer_score = self.answer_head(pooled_output)
         else:
@@ -1239,7 +1349,12 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         total_loss = (
             None
-            if (labels is None and matched_label is None and obj_labels is None and ans is None)
+            if (
+                labels is None
+                and matched_label is None
+                and obj_labels is None
+                and ans is None
+            )
             else torch.tensor(0.0, device=device)
         )
         if labels is not None and self.task_mask_lm:
@@ -1249,7 +1364,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             )
             total_loss += masked_lm_loss
         if matched_label is not None and self.task_matched:
-            matched_loss = self.loss_fcts["ce"](cross_relationship_score.view(-1, 2), matched_label.view(-1))
+            matched_loss = self.loss_fcts["ce"](
+                cross_relationship_score.view(-1, 2), matched_label.view(-1)
+            )
             total_loss += matched_loss
         if obj_labels is not None and self.task_obj_predict:
             total_visual_loss = torch.tensor(0.0, device=input_ids.device)
@@ -1272,7 +1389,9 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
                 total_visual_loss += visual_loss
             total_loss += total_visual_loss
         if ans is not None and self.task_qa:
-            answer_loss = self.loss_fcts["ce"](answer_score.view(-1, self.num_qa_labels), ans.view(-1))
+            answer_loss = self.loss_fcts["ce"](
+                answer_score.view(-1, self.num_qa_labels), ans.view(-1)
+            )
             total_loss += answer_loss
 
         if not return_dict:
@@ -1386,13 +1505,19 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
         # Copy labels from the previous weights
         num_labels_to_copy = min(cur_qa_labels, num_labels)
-        new_qa_logit_layer.weight.data[:num_labels_to_copy, :] = cur_qa_logit_layer.weight.data[:num_labels_to_copy, :]
+        new_qa_logit_layer.weight.data[:num_labels_to_copy, :] = (
+            cur_qa_logit_layer.weight.data[:num_labels_to_copy, :]
+        )
         if getattr(cur_qa_logit_layer, "bias", None) is not None:
-            new_qa_logit_layer.bias.data[:num_labels_to_copy] = cur_qa_logit_layer.bias.data[:num_labels_to_copy]
+            new_qa_logit_layer.bias.data[:num_labels_to_copy] = (
+                cur_qa_logit_layer.bias.data[:num_labels_to_copy]
+            )
 
         return new_qa_logit_layer
 
-    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LxmertForQuestionAnsweringOutput,
@@ -1416,7 +1541,9 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         labels (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             A one-hot representation of the correct answer
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         lxmert_output = self.lxmert(
             input_ids=input_ids,

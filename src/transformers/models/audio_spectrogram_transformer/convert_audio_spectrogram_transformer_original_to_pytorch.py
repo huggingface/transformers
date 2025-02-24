@@ -58,7 +58,9 @@ def get_audio_spectrogram_transformer_config(model_name):
         config.num_labels = 527
         filename = "audioset-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -76,7 +78,9 @@ def rename_key(name):
     if "pos_embed" in name:
         name = name.replace("pos_embed", "embeddings.position_embeddings")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     # transformer blocks
     if "blocks" in name:
         name = name.replace("blocks", "encoder.layer")
@@ -94,7 +98,10 @@ def rename_key(name):
         name = name.replace("mlp.fc2", "output.dense")
     # final layernorm
     if "audio_spectrogram_transformer.norm" in name:
-        name = name.replace("audio_spectrogram_transformer.norm", "audio_spectrogram_transformer.layernorm")
+        name = name.replace(
+            "audio_spectrogram_transformer.norm",
+            "audio_spectrogram_transformer.layernorm",
+        )
     # classifier head
     if "module.mlp_head.0" in name:
         name = name.replace("module.mlp_head.0", "classifier.layernorm")
@@ -150,7 +157,9 @@ def remove_keys(state_dict):
 
 
 @torch.no_grad()
-def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
+def convert_audio_spectrogram_transformer_checkpoint(
+    model_name, pytorch_dump_folder_path, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to our Audio Spectrogram Transformer structure.
     """
@@ -206,7 +215,12 @@ def convert_audio_spectrogram_transformer_checkpoint(model_name, pytorch_dump_fo
 
     if "speech-commands" in model_name:
         # TODO: Convert dataset to Parquet
-        dataset = load_dataset("google/speech_commands", "v0.02", split="validation", trust_remote_code=True)
+        dataset = load_dataset(
+            "google/speech_commands",
+            "v0.02",
+            split="validation",
+            trust_remote_code=True,
+        )
         waveform = dataset[0]["audio"]["array"]
     else:
         filepath = hf_hub_download(
@@ -269,11 +283,18 @@ if __name__ == "__main__":
         help="Name of the Audio Spectrogram Transformer model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_audio_spectrogram_transformer_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_audio_spectrogram_transformer_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

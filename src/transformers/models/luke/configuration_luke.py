@@ -119,7 +119,12 @@ class LukeConfig(PretrainedConfig):
         **kwargs,
     ):
         """Constructs LukeConfig."""
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.entity_vocab_size = entity_vocab_size

@@ -36,7 +36,11 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -75,7 +79,9 @@ def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
     for name, shape in init_vars:
         # Checkpoint is 12Gb, save memory by not loading useless variables
         # Output embedding and cls are reset at classification time
-        if any(deny in name for deny in ("adam_v", "adam_m", "output_embedding", "cls")):
+        if any(
+            deny in name for deny in ("adam_v", "adam_m", "output_embedding", "cls")
+        ):
             # logger.info("Skipping loading of %s", name)
             continue
         logger.info(f"Loading TF weight {name} with shape {shape}")
@@ -93,7 +99,14 @@ def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            n
+            in [
+                "adam_v",
+                "adam_m",
+                "AdamWeightDecayOptimizer",
+                "AdamWeightDecayOptimizer_1",
+                "global_step",
+            ]
             for n in name
         ):
             logger.info(f"Skipping {'/'.join(name)}")
@@ -127,7 +140,9 @@ def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
             array = np.transpose(array)
         try:
             if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+                raise ValueError(
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+                )
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -142,19 +157,29 @@ class RemBertEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.input_embedding_size, padding_idx=config.pad_token_id
+            config.vocab_size,
+            config.input_embedding_size,
+            padding_idx=config.pad_token_id,
         )
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.input_embedding_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.input_embedding_size)
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.input_embedding_size
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.input_embedding_size
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.input_embedding_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(
+            config.input_embedding_size, eps=config.layer_norm_eps
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)),
+            persistent=False,
         )
 
     def forward(
@@ -173,10 +198,14 @@ class RemBertEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[
+                :, past_key_values_length : seq_length + past_key_values_length
+            ]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(
+                input_shape, dtype=torch.long, device=self.position_ids.device
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -209,7 +238,9 @@ class RemBertPooler(nn.Module):
 class RemBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -228,7 +259,10 @@ class RemBertSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -304,7 +338,9 @@ class RemBertSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
@@ -319,7 +355,9 @@ class RemBertSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -338,7 +376,10 @@ class RemBertAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -349,7 +390,9 @@ class RemBertAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     # Copied from transformers.models.bert.modeling_bert.BertAttention.forward
@@ -373,7 +416,9 @@ class RemBertAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -401,7 +446,9 @@ class RemBertOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -418,7 +465,9 @@ class RemBertLayer(nn.Module):
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
-                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
+                raise ValueError(
+                    f"{self} should be used as a decoder model if cross attention is added"
+                )
             self.crossattention = RemBertAttention(config)
         self.intermediate = RemBertIntermediate(config)
         self.output = RemBertOutput(config)
@@ -435,7 +484,9 @@ class RemBertLayer(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = (
+            past_key_value[:2] if past_key_value is not None else None
+        )
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -450,7 +501,9 @@ class RemBertLayer(nn.Module):
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
         else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+            outputs = self_attention_outputs[
+                1:
+            ]  # add self attentions if we output attention weights
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -461,7 +514,9 @@ class RemBertLayer(nn.Module):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            cross_attn_past_key_value = (
+                past_key_value[-2:] if past_key_value is not None else None
+            )
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -472,14 +527,19 @@ class RemBertLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            outputs = (
+                outputs + cross_attention_outputs[1:-1]
+            )  # add cross attentions if we output attention weights
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -501,8 +561,12 @@ class RemBertEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.embedding_hidden_mapping_in = nn.Linear(config.input_embedding_size, config.hidden_size)
-        self.layer = nn.ModuleList([RemBertLayer(config) for _ in range(config.num_hidden_layers)])
+        self.embedding_hidden_mapping_in = nn.Linear(
+            config.input_embedding_size, config.hidden_size
+        )
+        self.layer = nn.ModuleList(
+            [RemBertLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -527,7 +591,9 @@ class RemBertEncoder(nn.Module):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.add_cross_attention else None
+        )
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -615,7 +681,9 @@ class RemBertLMPredictionHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.output_embedding_size)
         self.decoder = nn.Linear(config.output_embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
-        self.LayerNorm = nn.LayerNorm(config.output_embedding_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(
+            config.output_embedding_size, eps=config.layer_norm_eps
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
@@ -768,7 +836,9 @@ class RemBertModel(RemBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="google/rembert",
         output_type=BaseModelOutputWithPastAndCrossAttentions,
@@ -809,11 +879,19 @@ class RemBertModel(RemBertPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -821,7 +899,9 @@ class RemBertModel(RemBertPreTrainedModel):
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -834,25 +914,35 @@ class RemBertModel(RemBertPreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = (
+            past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        )
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(
+                ((batch_size, seq_length + past_key_values_length)), device=device
+            )
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape
+        )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_batch_size, encoder_sequence_length, _ = (
+                encoder_hidden_states.size()
+            )
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            encoder_extended_attention_mask = self.invert_attention_mask(
+                encoder_attention_mask
+            )
         else:
             encoder_extended_attention_mask = None
 
@@ -883,7 +973,9 @@ class RemBertModel(RemBertPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = (
+            self.pooler(sequence_output) if self.pooler is not None else None
+        )
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -898,7 +990,9 @@ class RemBertModel(RemBertPreTrainedModel):
         )
 
 
-@add_start_docstrings("""RemBERT Model with a `language modeling` head on top.""", REMBERT_START_DOCSTRING)
+@add_start_docstrings(
+    """RemBERT Model with a `language modeling` head on top.""", REMBERT_START_DOCSTRING
+)
 class RemBertForMaskedLM(RemBertPreTrainedModel):
     _tied_weights_keys = ["cls.predictions.decoder.weight"]
 
@@ -923,7 +1017,9 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="google/rembert",
         output_type=MaskedLMOutput,
@@ -950,7 +1046,9 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.rembert(
             input_ids,
@@ -972,11 +1070,15 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size), labels.view(-1)
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return (
+                ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            )
 
         return MaskedLMOutput(
             loss=masked_lm_loss,
@@ -985,15 +1087,25 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, attention_mask=None, **model_kwargs
+    ):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
 
         #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
+        assert (
+            self.config.pad_token_id is not None
+        ), "The PAD token should be defined for generation"
+        attention_mask = torch.cat(
+            [attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))],
+            dim=-1,
+        )
         dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
+            (effective_batch_size, 1),
+            self.config.pad_token_id,
+            dtype=torch.long,
+            device=input_ids.device,
         )
         input_ids = torch.cat([input_ids, dummy_token], dim=1)
 
@@ -1001,7 +1113,8 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", REMBERT_START_DOCSTRING
+    """RemBERT Model with a `language modeling` head on top for CLM fine-tuning.""",
+    REMBERT_START_DOCSTRING,
 )
 class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["cls.predictions.decoder.weight"]
@@ -1010,7 +1123,9 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `RemBertForCausalLM` as a standalone, add `is_decoder=True.`")
+            logger.warning(
+                "If you want to use `RemBertForCausalLM` as a standalone, add `is_decoder=True.`"
+            )
 
         self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.cls = RemBertOnlyMLMHead(config)
@@ -1024,8 +1139,12 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1085,7 +1204,9 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
 
         >>> prediction_logits = outputs.logits
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.rembert(
             input_ids,
@@ -1132,7 +1253,10 @@ class RemBertForCausalLM(RemBertPreTrainedModel, GenerationMixin):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past[:2])
+                tuple(
+                    past_state.index_select(0, beam_idx.to(past_state.device))
+                    for past_state in layer_past[:2]
+                )
                 + layer_past[2:],
             )
         return reordered_past
@@ -1156,7 +1280,9 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="google/rembert",
         output_type=SequenceClassifierOutput,
@@ -1181,7 +1307,9 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.rembert(
             input_ids,
@@ -1205,7 +1333,9 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1252,7 +1382,9 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        REMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="google/rembert",
         output_type=MultipleChoiceModelOutput,
@@ -1277,13 +1409,31 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        num_choices = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        input_ids = (
+            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        )
+        attention_mask = (
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
+        )
+        token_type_ids = (
+            token_type_ids.view(-1, token_type_ids.size(-1))
+            if token_type_ids is not None
+            else None
+        )
+        position_ids = (
+            position_ids.view(-1, position_ids.size(-1))
+            if position_ids is not None
+            else None
+        )
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
@@ -1344,7 +1494,9 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="google/rembert",
         output_type=TokenClassifierOutput,
@@ -1367,7 +1519,9 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.rembert(
             input_ids,
@@ -1422,7 +1576,9 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint="google/rembert",
         output_type=QuestionAnsweringModelOutput,
@@ -1452,7 +1608,9 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.rembert(
             input_ids,

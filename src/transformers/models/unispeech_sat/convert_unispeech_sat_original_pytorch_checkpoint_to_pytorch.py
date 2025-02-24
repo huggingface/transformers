@@ -19,7 +19,12 @@ import argparse
 import fairseq
 import torch
 
-from transformers import UniSpeechSatConfig, UniSpeechSatForCTC, UniSpeechSatForPreTraining, logging
+from transformers import (
+    UniSpeechSatConfig,
+    UniSpeechSatForCTC,
+    UniSpeechSatForPreTraining,
+    logging,
+)
 
 
 logging.set_verbosity_info()
@@ -86,7 +91,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_pointer.data = value
 
-    logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+    logger.info(
+        f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}."
+    )
 
 
 def recursively_load_weights(fairseq_model, hf_model):
@@ -108,9 +115,15 @@ def recursively_load_weights(fairseq_model, hf_model):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "unispeech_sat." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+                mapped_key = (
+                    "unispeech_sat." + mapped_key
+                    if mapped_key not in TOP_LEVEL_KEYS
+                    else mapped_key
+                )
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
-                    if "layer_norm_for_extract" in name and (".".join(name.split(".")[:-1]) != key):
+                    if "layer_norm_for_extract" in name and (
+                        ".".join(name.split(".")[:-1]) != key
+                    ):
                         # special case since naming is very similar
                         continue
                     is_used = True
@@ -136,7 +149,9 @@ def recursively_load_weights(fairseq_model, hf_model):
     logger.warning(f"Unused weights: {unused_weights}")
 
 
-def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
+def load_conv_layer(
+    full_name, value, feature_extractor, unused_weights, use_group_norm
+):
     name = full_name.split("conv_layers.")[-1]
     items = name.split(".")
     layer_id = int(items[0])
@@ -144,45 +159,71 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
     if type_id == 0:
         if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].conv.bias.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].conv.weight.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
-    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
+            logger.info(
+                f"Feat extract conv layer {layer_id} was initialized from {full_name}."
+            )
+    elif (type_id == 2 and not use_group_norm) or (
+        type_id == 2 and layer_id == 0 and use_group_norm
+    ):
         if "bias" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
         elif "weight" in name:
-            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
+            if (
+                value.shape
+                != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
+            ):
                 raise ValueError(
                     f"{full_name} has size {value.shape}, but"
                     f" {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
                 )
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(
+                f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}."
+            )
     else:
         unused_weights.append(full_name)
 
 
 @torch.no_grad()
 def convert_unispeech_sat_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
+    checkpoint_path,
+    pytorch_dump_folder_path,
+    config_path=None,
+    dict_path=None,
+    is_finetuned=True,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -211,14 +252,34 @@ def convert_unispeech_sat_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint"
+    )
+    parser.add_argument(
+        "--dict_path", default=None, type=str, help="Path to dict of fine-tuned model"
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--not_finetuned",
+        action="store_true",
+        help="Whether the model to convert is a fine-tuned model or not",
     )
     args = parser.parse_args()
     convert_unispeech_sat_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, not args.not_finetuned
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.config_path,
+        args.dict_path,
+        not args.not_finetuned,
     )

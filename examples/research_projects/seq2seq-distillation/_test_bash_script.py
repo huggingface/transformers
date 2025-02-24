@@ -52,7 +52,13 @@ class TestMbartCc25Enro(TestCasePlus):
         }
 
         # Clean up bash script
-        bash_script = (self.test_file_dir / "train_mbart_cc25_enro.sh").open().read().split("finetune.py")[1].strip()
+        bash_script = (
+            (self.test_file_dir / "train_mbart_cc25_enro.sh")
+            .open()
+            .read()
+            .split("finetune.py")[1]
+            .strip()
+        )
         bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
         for k, v in env_vars_to_replace.items():
             bash_script = bash_script.replace(k, str(v))
@@ -87,7 +93,9 @@ class TestMbartCc25Enro(TestCasePlus):
         metrics = load_json(model.metrics_save_path)
         first_step_stats = metrics["val"][0]
         last_step_stats = metrics["val"][-1]
-        self.assertEqual(len(metrics["val"]), (args.max_epochs / args.val_check_interval))
+        self.assertEqual(
+            len(metrics["val"]), (args.max_epochs / args.val_check_interval)
+        )
         assert isinstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
 
         self.assertGreater(last_step_stats["val_avg_gen_time"], 0.01)
@@ -97,13 +105,21 @@ class TestMbartCc25Enro(TestCasePlus):
         # test learning requirements:
 
         # 1. BLEU improves over the course of training by more than 2 pts
-        self.assertGreater(last_step_stats["val_avg_bleu"] - first_step_stats["val_avg_bleu"], 2)
+        self.assertGreater(
+            last_step_stats["val_avg_bleu"] - first_step_stats["val_avg_bleu"], 2
+        )
 
         # 2. BLEU finishes above 17
         self.assertGreater(last_step_stats["val_avg_bleu"], 17)
 
         # 3. test BLEU and val BLEU within ~1.1 pt.
-        self.assertLess(abs(metrics["val"][-1]["val_avg_bleu"] - metrics["test"][-1]["test_avg_bleu"]), 1.1)
+        self.assertLess(
+            abs(
+                metrics["val"][-1]["val_avg_bleu"]
+                - metrics["test"][-1]["test_avg_bleu"]
+            ),
+            1.1,
+        )
 
         # check lightning ckpt can be loaded and has a reasonable statedict
         contents = os.listdir(output_dir)
@@ -112,7 +128,12 @@ class TestMbartCc25Enro(TestCasePlus):
         ckpt = torch.load(full_path, map_location="cpu")
         expected_key = "model.model.decoder.layers.0.encoder_attn_layer_norm.weight"
         assert expected_key in ckpt["state_dict"]
-        assert ckpt["state_dict"]["model.model.decoder.layers.0.encoder_attn_layer_norm.weight"].dtype == torch.float32
+        assert (
+            ckpt["state_dict"][
+                "model.model.decoder.layers.0.encoder_attn_layer_norm.weight"
+            ].dtype
+            == torch.float32
+        )
 
         # TODO: turn on args.do_predict when PL bug fixed.
         if args.do_predict:
@@ -141,7 +162,11 @@ class TestDistilMarianNoTeacher(TestCasePlus):
 
         # Clean up bash script
         bash_script = (
-            (self.test_file_dir / "distil_marian_no_teacher.sh").open().read().split("distillation.py")[1].strip()
+            (self.test_file_dir / "distil_marian_no_teacher.sh")
+            .open()
+            .read()
+            .split("distillation.py")[1]
+            .strip()
         )
         bash_script = bash_script.replace("\\\n", "").strip().replace('"$@"', "")
         bash_script = bash_script.replace("--fp16 ", " ")
@@ -177,12 +202,18 @@ class TestDistilMarianNoTeacher(TestCasePlus):
         metrics = load_json(model.metrics_save_path)
         first_step_stats = metrics["val"][0]
         last_step_stats = metrics["val"][-1]
-        assert len(metrics["val"]) >= (args.max_epochs / args.val_check_interval)  # +1 accounts for val_sanity_check
+        assert len(metrics["val"]) >= (
+            args.max_epochs / args.val_check_interval
+        )  # +1 accounts for val_sanity_check
 
         assert last_step_stats["val_avg_gen_time"] >= 0.01
 
-        assert first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]  # model learned nothing
-        assert 1.0 >= last_step_stats["val_avg_gen_time"]  # model hanging on generate. Maybe bad config was saved.
+        assert (
+            first_step_stats["val_avg_bleu"] < last_step_stats["val_avg_bleu"]
+        )  # model learned nothing
+        assert (
+            1.0 >= last_step_stats["val_avg_gen_time"]
+        )  # model hanging on generate. Maybe bad config was saved.
         assert isinstance(last_step_stats[f"val_avg_{model.val_metric}"], float)
 
         # check lightning ckpt can be loaded and has a reasonable statedict
@@ -192,7 +223,12 @@ class TestDistilMarianNoTeacher(TestCasePlus):
         ckpt = torch.load(full_path, map_location="cpu")
         expected_key = "model.model.decoder.layers.0.encoder_attn_layer_norm.weight"
         assert expected_key in ckpt["state_dict"]
-        assert ckpt["state_dict"]["model.model.decoder.layers.0.encoder_attn_layer_norm.weight"].dtype == torch.float32
+        assert (
+            ckpt["state_dict"][
+                "model.model.decoder.layers.0.encoder_attn_layer_norm.weight"
+            ].dtype
+            == torch.float32
+        )
 
         # TODO: turn on args.do_predict when PL bug fixed.
         if args.do_predict:

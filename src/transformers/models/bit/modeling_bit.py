@@ -57,7 +57,9 @@ _IMAGE_CLASS_CHECKPOINT = "google/bit-50"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
 
 
-def get_padding_value(padding=None, kernel_size=7, stride=1, dilation=1) -> Tuple[Tuple, bool]:
+def get_padding_value(
+    padding=None, kernel_size=7, stride=1, dilation=1
+) -> Tuple[Tuple, bool]:
     r"""
     Utility function to get the tuple padding value given the kernel_size and padding.
 
@@ -117,7 +119,9 @@ class WeightStandardizedConv2d(nn.Conv2d):
         bias=False,
         eps=1e-6,
     ):
-        padding, is_dynamic = get_padding_value(padding, kernel_size, stride=stride, dilation=dilation)
+        padding, is_dynamic = get_padding_value(
+            padding, kernel_size, stride=stride, dilation=dilation
+        )
         super().__init__(
             in_channel,
             out_channels,
@@ -138,10 +142,21 @@ class WeightStandardizedConv2d(nn.Conv2d):
         if self.pad is not None:
             hidden_state = self.pad(hidden_state)
         weight = nn.functional.batch_norm(
-            self.weight.reshape(1, self.out_channels, -1), None, None, training=True, momentum=0.0, eps=self.eps
+            self.weight.reshape(1, self.out_channels, -1),
+            None,
+            None,
+            training=True,
+            momentum=0.0,
+            eps=self.eps,
         ).reshape_as(self.weight)
         hidden_state = nn.functional.conv2d(
-            hidden_state, weight, self.bias, self.stride, self.padding, self.dilation, self.groups
+            hidden_state,
+            weight,
+            self.bias,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.groups,
         )
         return hidden_state
 
@@ -151,15 +166,21 @@ class BitGroupNormActivation(nn.GroupNorm):
     A module that combines group normalization with an activation function.
     """
 
-    def __init__(self, config, num_channels, eps=1e-5, affine=True, apply_activation=True):
-        super(BitGroupNormActivation, self).__init__(config.num_groups, num_channels, eps=eps, affine=affine)
+    def __init__(
+        self, config, num_channels, eps=1e-5, affine=True, apply_activation=True
+    ):
+        super(BitGroupNormActivation, self).__init__(
+            config.num_groups, num_channels, eps=eps, affine=affine
+        )
         if apply_activation:
             self.activation = ACT2FN[config.hidden_act]
         else:
             self.activation = nn.Identity()
 
     def forward(self, hidden_state):
-        hidden_state = nn.functional.group_norm(hidden_state, self.num_groups, self.weight, self.bias, self.eps)
+        hidden_state = nn.functional.group_norm(
+            hidden_state, self.num_groups, self.weight, self.bias, self.eps
+        )
         hidden_state = self.activation(hidden_state)
         return hidden_state
 
@@ -188,7 +209,13 @@ class DynamicPad2d(nn.Module):
         self.value = value
 
         def compute_padding(x, kernel_size, stride, dilation):
-            return max((math.ceil(x / stride) - 1) * stride + (kernel_size - 1) * dilation + 1 - x, 0)
+            return max(
+                (math.ceil(x / stride) - 1) * stride
+                + (kernel_size - 1) * dilation
+                + 1
+                - x,
+                0,
+            )
 
         self.compute_padding = compute_padding
 
@@ -197,8 +224,12 @@ class DynamicPad2d(nn.Module):
         input_height, input_width = input.size()[-2:]
 
         # Compute the padding values
-        padding_height = self.compute_padding(input_height, self.kernel_size[0], self.stride[0], self.dilation[0])
-        padding_width = self.compute_padding(input_width, self.kernel_size[1], self.stride[1], self.dilation[1])
+        padding_height = self.compute_padding(
+            input_height, self.kernel_size[0], self.stride[0], self.dilation[0]
+        )
+        padding_width = self.compute_padding(
+            input_width, self.kernel_size[1], self.stride[1], self.dilation[1]
+        )
 
         # apply pad
         if padding_height > 0 or padding_width > 0:
@@ -228,9 +259,19 @@ class BitMaxPool2d(nn.MaxPool2d):
         padding_value=0,
         use_dynamic_padding=True,
     ):
-        kernel_size = kernel_size if isinstance(kernel_size, collections.abc.Iterable) else (kernel_size, kernel_size)
-        stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
-        dilation = dilation if isinstance(dilation, collections.abc.Iterable) else (dilation, dilation)
+        kernel_size = (
+            kernel_size
+            if isinstance(kernel_size, collections.abc.Iterable)
+            else (kernel_size, kernel_size)
+        )
+        stride = (
+            stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
+        )
+        dilation = (
+            dilation
+            if isinstance(dilation, collections.abc.Iterable)
+            else (dilation, dilation)
+        )
         super().__init__(kernel_size, stride, padding, dilation, ceil_mode)
         if use_dynamic_padding:
             self.pad = DynamicPad2d(kernel_size, stride, dilation, padding_value)
@@ -240,7 +281,12 @@ class BitMaxPool2d(nn.MaxPool2d):
     def forward(self, hidden_states):
         hidden_states = self.pad(hidden_states)
         return nn.functional.max_pool2d(
-            hidden_states, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode
+            hidden_states,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.ceil_mode,
         )
 
 
@@ -261,16 +307,25 @@ class BitEmbeddings(nn.Module):
             padding=config.global_padding,
         )
 
-        self.pooler = BitMaxPool2d(kernel_size=3, stride=2, use_dynamic_padding=config.embedding_dynamic_padding)
+        self.pooler = BitMaxPool2d(
+            kernel_size=3,
+            stride=2,
+            use_dynamic_padding=config.embedding_dynamic_padding,
+        )
 
         # Use the same padding strategy as convolutional layers
-        if config.global_padding is not None and config.global_padding.upper() == "SAME":
+        if (
+            config.global_padding is not None
+            and config.global_padding.upper() == "SAME"
+        ):
             self.pad = nn.Identity()
         else:
             self.pad = nn.ConstantPad2d(padding=(1, 1, 1, 1), value=0.0)
 
         if not config.layer_type == "preactivation":
-            self.norm = BitGroupNormActivation(config, num_channels=config.embedding_size)
+            self.norm = BitGroupNormActivation(
+                config, num_channels=config.embedding_size
+            )
         else:
             self.norm = nn.Identity()
 
@@ -295,7 +350,9 @@ class BitEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.convnext.modeling_convnext.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -308,8 +365,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -378,17 +439,29 @@ class BitPreActivationBottleneckLayer(nn.Module):
             self.downsample = None
 
         self.norm1 = BitGroupNormActivation(config, in_channels)
-        self.conv1 = WeightStandardizedConv2d(in_channels, mid_channels, 1, eps=1e-8, padding=config.global_padding)
+        self.conv1 = WeightStandardizedConv2d(
+            in_channels, mid_channels, 1, eps=1e-8, padding=config.global_padding
+        )
 
         self.norm2 = BitGroupNormActivation(config, num_channels=mid_channels)
         self.conv2 = WeightStandardizedConv2d(
-            mid_channels, mid_channels, 3, stride=stride, groups=groups, eps=1e-8, padding=config.global_padding
+            mid_channels,
+            mid_channels,
+            3,
+            stride=stride,
+            groups=groups,
+            eps=1e-8,
+            padding=config.global_padding,
         )
 
         self.norm3 = BitGroupNormActivation(config, mid_channels)
-        self.conv3 = WeightStandardizedConv2d(mid_channels, out_channels, 1, eps=1e-8, padding=config.global_padding)
+        self.conv3 = WeightStandardizedConv2d(
+            mid_channels, out_channels, 1, eps=1e-8, padding=config.global_padding
+        )
 
-        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        self.drop_path = (
+            BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        )
 
     def forward(self, hidden_states):
         hidden_states_preact = self.norm1(hidden_states)
@@ -439,7 +512,9 @@ class BitBottleneckLayer(nn.Module):
         else:
             self.downsample = None
 
-        self.conv1 = WeightStandardizedConv2d(in_channels, mid_chs, 1, eps=1e-8, padding=config.global_padding)
+        self.conv1 = WeightStandardizedConv2d(
+            in_channels, mid_chs, 1, eps=1e-8, padding=config.global_padding
+        )
         self.norm1 = BitGroupNormActivation(config, num_channels=mid_chs)
         self.conv2 = WeightStandardizedConv2d(
             mid_chs,
@@ -452,9 +527,15 @@ class BitBottleneckLayer(nn.Module):
             padding=config.global_padding,
         )
         self.norm2 = BitGroupNormActivation(config, num_channels=mid_chs)
-        self.conv3 = WeightStandardizedConv2d(mid_chs, out_channels, 1, eps=1e-8, padding=config.global_padding)
-        self.norm3 = BitGroupNormActivation(config, num_channels=out_channels, apply_activation=False)
-        self.drop_path = BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        self.conv3 = WeightStandardizedConv2d(
+            mid_chs, out_channels, 1, eps=1e-8, padding=config.global_padding
+        )
+        self.norm3 = BitGroupNormActivation(
+            config, num_channels=out_channels, apply_activation=False
+        )
+        self.drop_path = (
+            BitDropPath(drop_path_rate) if drop_path_rate > 0 else nn.Identity()
+        )
 
         self.activation = ACT2FN[config.hidden_act]
 
@@ -490,12 +571,19 @@ class BitDownsampleConv(nn.Module):
     ):
         super().__init__()
         self.conv = WeightStandardizedConv2d(
-            in_channels, out_channels, 1, stride=stride, eps=1e-8, padding=config.global_padding
+            in_channels,
+            out_channels,
+            1,
+            stride=stride,
+            eps=1e-8,
+            padding=config.global_padding,
         )
         self.norm = (
             nn.Identity()
             if preact
-            else BitGroupNormActivation(config, num_channels=out_channels, apply_activation=False)
+            else BitGroupNormActivation(
+                config, num_channels=out_channels, apply_activation=False
+            )
         )
 
     def forward(self, x):
@@ -589,7 +677,9 @@ class BitEncoder(nn.Module):
 
         layer_dropouts = [
             x.tolist()
-            for x in torch.Tensor(np.linspace(0, config.drop_path_rate, sum(config.depths))).split(config.depths)
+            for x in torch.Tensor(
+                np.linspace(0, config.drop_path_rate, sum(config.depths))
+            ).split(config.depths)
         ]
 
         for stage_idx, (current_depth, current_hidden_size, layer_dropout) in enumerate(
@@ -615,7 +705,9 @@ class BitEncoder(nn.Module):
 
             self.stages.add_module(str(stage_idx), stage)
 
-    def _get_updated_hyperparameters(self, stage_idx, current_stride, current_hidden_size, dilation, config):
+    def _get_updated_hyperparameters(
+        self, stage_idx, current_stride, current_hidden_size, dilation, config
+    ):
         out_channels = make_div(current_hidden_size * config.width_factor)
         stride = 1 if stage_idx == 0 else 2
         if current_stride >= config.output_stride:
@@ -624,7 +716,10 @@ class BitEncoder(nn.Module):
         return out_channels, stride, dilation
 
     def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
+        self,
+        hidden_state: Tensor,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> BaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
@@ -728,17 +823,26 @@ class BitModel(BitPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         embedding_output = self.embedder(pixel_values)
 
         encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -772,7 +876,11 @@ class BitForImageClassification(BitPreTrainedModel):
         # classification head
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
+            (
+                nn.Linear(config.hidden_sizes[-1], config.num_labels)
+                if config.num_labels > 0
+                else nn.Identity()
+            ),
         )
         # initialize weights and apply final processing
         self.post_init()
@@ -796,9 +904,15 @@ class BitForImageClassification(BitPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        outputs = self.bit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.bit(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -810,7 +924,9 @@ class BitForImageClassification(BitPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -831,7 +947,9 @@ class BitForImageClassification(BitPreTrainedModel):
             output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )
 
 
 @add_start_docstrings(
@@ -854,7 +972,10 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
     @add_start_docstrings_to_model_forward(BIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> BackboneOutput:
         """
         Returns:
@@ -876,9 +997,13 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         outputs = self.bit(pixel_values, output_hidden_states=True, return_dict=True)

@@ -52,7 +52,9 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
             siblings = parent.find_all(child.name, recursive=False)
             xpath_tags.append(child.name)
             xpath_subscripts.append(
-                0 if 1 == len(siblings) else next(i for i, s in enumerate(siblings, 1) if s is child)
+                0
+                if 1 == len(siblings)
+                else next(i for i, s in enumerate(siblings, 1) if s is child)
             )
             child = parent
         xpath_tags.reverse()
@@ -159,7 +161,10 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
                 f"but is of type {type(html_strings)}."
             )
 
-        is_batched = bool(isinstance(html_strings, (list, tuple)) and (isinstance(html_strings[0], str)))
+        is_batched = bool(
+            isinstance(html_strings, (list, tuple))
+            and (isinstance(html_strings[0], str))
+        )
 
         if not is_batched:
             html_strings = [html_strings]
@@ -168,10 +173,14 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
         nodes = []
         xpaths = []
         for html_string in html_strings:
-            all_doc_strings, string2xtag_seq, string2xsubs_seq = self.get_three_from_single(html_string)
+            all_doc_strings, string2xtag_seq, string2xsubs_seq = (
+                self.get_three_from_single(html_string)
+            )
             nodes.append(all_doc_strings)
             xpath_strings = []
-            for node, tag_list, sub_list in zip(all_doc_strings, string2xtag_seq, string2xsubs_seq):
+            for node, tag_list, sub_list in zip(
+                all_doc_strings, string2xtag_seq, string2xsubs_seq
+            ):
                 xpath_string = self.construct_xpath(tag_list, sub_list)
                 xpath_strings.append(xpath_string)
             xpaths.append(xpath_strings)

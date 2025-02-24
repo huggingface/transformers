@@ -57,7 +57,10 @@ from .configuration_bamba import BambaConfig
 
 if is_mamba_2_ssm_available():
     from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-    from mamba_ssm.ops.triton.ssd_combined import mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
+    from mamba_ssm.ops.triton.ssd_combined import (
+        mamba_chunk_scan_combined,
+        mamba_split_conv1d_scan_combined,
+    )
 else:
     selective_state_update = None
 
@@ -87,7 +90,9 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    def __init__(self, config: BambaConfig, batch_size, dtype=torch.float16, device=None):
+    def __init__(
+        self, config: BambaConfig, batch_size, dtype=torch.float16, device=None
+    ):
         super().__init__(config, batch_size, dtype, device)
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
@@ -102,7 +107,10 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
                 self.conv_states += [
                     torch.zeros(
                         batch_size,
-                        (config.mamba_expand * config.hidden_size + 2 * config.mamba_n_groups * ssm_state_size),
+                        (
+                            config.mamba_expand * config.hidden_size
+                            + 2 * config.mamba_n_groups * ssm_state_size
+                        ),
                         conv_kernel_size,
                         device=device,
                         dtype=dtype,
@@ -123,8 +131,14 @@ class HybridMambaAttentionDynamicCache(modeling_jamba.HybridMambaAttentionDynami
                 self.ssm_states += [torch.tensor([[]] * batch_size, device=device)]
                 self.transformer_layers.append(i)
 
-        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
-        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.key_cache = [
+            torch.tensor([[]] * batch_size, device=device)
+            for _ in range(config.num_hidden_layers)
+        ]
+        self.value_cache = [
+            torch.tensor([[]] * batch_size, device=device)
+            for _ in range(config.num_hidden_layers)
+        ]
 
 
 class BambaRotaryEmbedding(nn.Module):
@@ -132,7 +146,9 @@ class BambaRotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_type = config.rope_scaling.get(
+                "rope_type", config.rope_scaling.get("type")
+            )
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -153,11 +169,18 @@ class BambaRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
@@ -170,13 +193,21 @@ class BambaRotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -203,7 +234,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -225,8 +258,12 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(
+        query.dtype
+    )
+    attn_weights = nn.functional.dropout(
+        attn_weights, p=dropout, training=module.training
+    )
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
@@ -281,23 +318,35 @@ class BambaAttention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.head_dim = getattr(
+            config, "head_dim", config.hidden_size // config.num_attention_heads
+        )
+        self.num_key_value_groups = (
+            config.num_attention_heads // config.num_key_value_heads
+        )
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_attention_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size,
+            config.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+            config.num_attention_heads * self.head_dim,
+            config.hidden_size,
+            bias=config.attention_bias,
         )
 
     def forward(
@@ -317,22 +366,30 @@ class BambaAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -377,7 +434,11 @@ def pad_tensor_by_size(input_tensor: torch.Tensor, pad_size: int):
 
     Assumes that we only have tensors of either size 4 or 3
     """
-    pad_shape = (0, 0, 0, 0, 0, pad_size, 0, 0) if len(input_tensor.shape) == 4 else (0, 0, 0, pad_size, 0, 0)
+    pad_shape = (
+        (0, 0, 0, 0, 0, pad_size, 0, 0)
+        if len(input_tensor.shape) == 4
+        else (0, 0, 0, pad_size, 0, 0)
+    )
 
     return torch.nn.functional.pad(input_tensor, pad_shape, mode="constant", value=0)
 
@@ -394,11 +455,17 @@ def reshape_into_chunks(input_tensor, pad_size, chunk_size):
 
     if len(input_tensor.shape) == 3:
         # [bsz, seq_len multiple of chunk_size, num_heads] -> [bsz, -1, chunk_size, num_heads]
-        return input_tensor.reshape(input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2])
+        return input_tensor.reshape(
+            input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2]
+        )
     else:
         # [bsz, seq_len multiple of chunk_size, num_heads, head_dim or state_size] -> [bsz, -1, chunk_size, num_heads, head_dim or state_size]
         return input_tensor.reshape(
-            input_tensor.shape[0], -1, chunk_size, input_tensor.shape[2], input_tensor.shape[3]
+            input_tensor.shape[0],
+            -1,
+            chunk_size,
+            input_tensor.shape[2],
+            input_tensor.shape[3],
         )
 
 
@@ -411,25 +478,41 @@ def segment_sum(input_tensor):
     # [..., chunk_size] -> [..., chunk_size, chunk_size]
     input_tensor = input_tensor[..., None].expand(*input_tensor.size(), chunk_size)
     # 2. create a lower triangular mask with the diagonal set to 0 to 0 out elements above diag
-    mask = torch.tril(torch.ones(chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool), diagonal=-1)
+    mask = torch.tril(
+        torch.ones(
+            chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool
+        ),
+        diagonal=-1,
+    )
     input_tensor = input_tensor.masked_fill(~mask, 0)
     # 3. compute actual cumsum
     tensor_segsum = torch.cumsum(input_tensor, dim=-2)
 
     # 4. apply mask to keep only the lower triangular part of the cumulative sum result (incl diagonal this time)
-    mask = torch.tril(torch.ones(chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool), diagonal=0)
+    mask = torch.tril(
+        torch.ones(
+            chunk_size, chunk_size, device=input_tensor.device, dtype=torch.bool
+        ),
+        diagonal=0,
+    )
     tensor_segsum = tensor_segsum.masked_fill(~mask, -torch.inf)
     return tensor_segsum
 
 
-is_fast_path_available = all((selective_state_update, causal_conv1d_fn, causal_conv1d_update))
+is_fast_path_available = all(
+    (selective_state_update, causal_conv1d_fn, causal_conv1d_update)
+)
 
 
 def apply_mask_to_padding_states(hidden_states, attention_mask):
     """
     Tunes out the hidden states for padding tokens, see https://github.com/state-spaces/mamba/issues/66
     """
-    if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+    if (
+        attention_mask is not None
+        and attention_mask.shape[1] > 1
+        and attention_mask.shape[0] > 1
+    ):
         dtype = hidden_states.dtype
         hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
@@ -503,11 +586,15 @@ class BambaMixer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = BambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = BambaRMSNormGated(
+            self.intermediate_size, eps=self.layer_norm_epsilon
+        )
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
-        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
+        self.out_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=self.use_bias
+        )
 
         if not is_fast_path_available:
             logger.warning_once(
@@ -516,7 +603,9 @@ class BambaMixer(nn.Module):
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
         else:
-            logger.warning_once("The fast path for Bamba will be used when running the model on a GPU")
+            logger.warning_once(
+                "The fast path for Bamba will be used when running the model on a GPU"
+            )
 
     def cuda_kernels_forward(
         self,
@@ -561,19 +650,29 @@ class BambaMixer(nn.Module):
 
             hidden_states, B, C = torch.split(
                 hidden_states_B_C,
-                [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                [
+                    self.intermediate_size,
+                    groups_time_state_size,
+                    groups_time_state_size,
+                ],
                 dim=-1,
             )
 
             # 3. SSM transformation
             A = -torch.exp(self.A_log.float())  # (nheads,)
-            A = A[:, None, ...][:, :, None].expand(-1, self.head_dim, self.ssm_state_size).to(dtype=torch.float32)
+            A = (
+                A[:, None, ...][:, :, None]
+                .expand(-1, self.head_dim, self.ssm_state_size)
+                .to(dtype=torch.float32)
+            )
             dt = dt[:, :, None].expand(-1, -1, self.head_dim)
             dt_bias = self.dt_bias[:, None, ...].expand(-1, self.head_dim)
             D = self.D[:, None, ...].expand(-1, self.head_dim)
             B = B.view(batch_size, self.n_groups, B.shape[1] // self.n_groups)
             C = C.view(batch_size, self.n_groups, C.shape[1] // self.n_groups)
-            hidden_states_reshaped = hidden_states.view(batch_size, self.num_heads, self.head_dim)
+            hidden_states_reshaped = hidden_states.view(
+                batch_size, self.num_heads, self.head_dim
+            )
             hidden_states = selective_state_update(
                 cache_params.ssm_states[self.layer_idx],
                 hidden_states_reshaped,
@@ -586,15 +685,23 @@ class BambaMixer(nn.Module):
                 dt_bias=dt_bias,
                 dt_softplus=True,
             )
-            hidden_states = hidden_states.view(batch_size, self.num_heads * self.head_dim)
+            hidden_states = hidden_states.view(
+                batch_size, self.num_heads * self.head_dim
+            )
             hidden_states = self.norm(hidden_states, gate)
 
             # 4. Final linear projection
             out = self.out_proj(hidden_states)[:, None, ...]
         # Fused calculations or step by step if no initialized cache is found
         else:
-            A = -torch.exp(self.A_log.float())  # (num_heads) or (intermediate_size, state_size)
-            dt_limit_kwargs = {} if self.time_step_limit == (0.0, float("inf")) else {"dt_limit": self.time_step_limit}
+            A = -torch.exp(
+                self.A_log.float()
+            )  # (num_heads) or (intermediate_size, state_size)
+            dt_limit_kwargs = (
+                {}
+                if self.time_step_limit == (0.0, float("inf"))
+                else {"dt_limit": self.time_step_limit}
+            )
 
             # 2-4. Fused kernel for conv1d, SSM, and the final projection
             if self.training and cache_params is None:
@@ -633,13 +740,19 @@ class BambaMixer(nn.Module):
                     hidden_states_B_C_transposed = hidden_states_B_C.transpose(1, 2)
                     conv_states = nn.functional.pad(
                         hidden_states_B_C_transposed,
-                        (self.conv_kernel_size - hidden_states_B_C_transposed.shape[-1], 0),
+                        (
+                            self.conv_kernel_size
+                            - hidden_states_B_C_transposed.shape[-1],
+                            0,
+                        ),
                     )
                     cache_params.conv_states[self.layer_idx].copy_(conv_states)
 
                 if self.activation not in ["silu", "swish"]:
                     hidden_states_B_C = self.act(
-                        self.conv1d(hidden_states_B_C.transpose(1, 2))[..., :seq_len].transpose(1, 2)
+                        self.conv1d(hidden_states_B_C.transpose(1, 2))[
+                            ..., :seq_len
+                        ].transpose(1, 2)
                     )
                 else:
                     hidden_states_B_C = causal_conv1d_fn(
@@ -649,10 +762,16 @@ class BambaMixer(nn.Module):
                         activation=self.activation,
                     ).transpose(1, 2)
 
-                hidden_states_B_C = apply_mask_to_padding_states(hidden_states_B_C, attention_mask)
+                hidden_states_B_C = apply_mask_to_padding_states(
+                    hidden_states_B_C, attention_mask
+                )
                 hidden_states, B, C = torch.split(
                     hidden_states_B_C,
-                    [self.intermediate_size, groups_time_state_size, groups_time_state_size],
+                    [
+                        self.intermediate_size,
+                        groups_time_state_size,
+                        groups_time_state_size,
+                    ],
                     dim=-1,
                 )
 
@@ -901,13 +1020,21 @@ class BambaMixer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
-            return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
+            return self.cuda_kernels_forward(
+                hidden_states, cache_params, cache_position, attention_mask
+            )
         dtype = hidden_states.dtype
-        if attention_mask is not None and attention_mask.shape[1] > 1 and attention_mask.shape[0] > 1:
+        if (
+            attention_mask is not None
+            and attention_mask.shape[1] > 1
+            and attention_mask.shape[0] > 1
+        ):
             # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
             hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
 
-        return self.torch_forward(hidden_states, cache_params, cache_position, attention_mask)
+        return self.torch_forward(
+            hidden_states, cache_params, cache_position, attention_mask
+        )
 
 
 class BambaMLP(nn.Module):
@@ -916,9 +1043,15 @@ class BambaMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.gate_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
+        self.up_proj = nn.Linear(
+            self.hidden_size, self.intermediate_size, bias=config.mlp_bias
+        )
+        self.down_proj = nn.Linear(
+            self.intermediate_size, self.hidden_size, bias=config.mlp_bias
+        )
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -954,7 +1087,9 @@ class BambaDecoderLayer(nn.Module):
         ffn_layer_class = BambaMLP if num_experts == 1 else None
         self.feed_forward = ffn_layer_class(config)
         self.input_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.pre_ff_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.pre_ff_layernorm = BambaRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
         self.layer_type = layer_type
         if layer_type == "mamba":
@@ -973,9 +1108,13 @@ class BambaDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -1175,10 +1314,16 @@ class BambaModel(BambaPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, self.padding_idx
+        )
         decoder_layers = []
         for i in range(config.num_hidden_layers):
-            decoder_layers.append(BambaDecoderLayer(config, layer_idx=i, layer_type=config.layers_block_type[i]))
+            decoder_layers.append(
+                BambaDecoderLayer(
+                    config, layer_idx=i, layer_type=config.layers_block_type[i]
+                )
+            )
         self.layers = nn.ModuleList(decoder_layers)
 
         self._attn_implementation = config._attn_implementation
@@ -1210,16 +1355,26 @@ class BambaModel(BambaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1238,12 +1393,18 @@ class BambaModel(BambaPreTrainedModel):
             )
 
         if cache_position is None:
-            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+            cache_position = torch.arange(
+                hidden_states.shape[1], device=hidden_states.device
+            )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
         mamba_mask = self._update_mamba_mask(attention_mask, cache_position)
 
@@ -1255,7 +1416,9 @@ class BambaModel(BambaPreTrainedModel):
 
         for decoder_layer in self.layers:
             # Depending on the layer type we opt for 2D base attention mask (Mamba) or 4D causal mask (Attention)
-            layer_mask = mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
+            layer_mask = (
+                mamba_mask if decoder_layer.layer_type == "mamba" else causal_mask
+            )
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -1303,7 +1466,11 @@ class BambaModel(BambaPreTrainedModel):
         next_cache = None if not use_cache else past_key_values
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1327,7 +1494,9 @@ class BambaModel(BambaPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
         if self.config._attn_implementation == "sdpa" and not output_attentions:
@@ -1368,7 +1537,9 @@ class BambaModel(BambaPreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -1411,23 +1582,32 @@ class BambaModel(BambaPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_attention_mask = (attention_mask[:, None, None, :] == attention_mask[:, None, :, None])[
-                    :, :, -sequence_length:, :
-                ].to(dtype)
-                padding_mask = causal_mask[:, :, :, :mask_length] + padding_attention_mask
-                padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
+                padding_attention_mask = (
+                    attention_mask[:, None, None, :] == attention_mask[:, None, :, None]
+                )[:, :, -sequence_length:, :].to(dtype)
+                padding_mask = (
+                    causal_mask[:, :, :, :mask_length] + padding_attention_mask
                 )
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -1438,7 +1618,9 @@ class BambaModel(BambaPreTrainedModel):
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+        if cache_position[0] > 0 or (
+            attention_mask is not None and torch.all(attention_mask == 1)
+        ):
             mamba_mask = None
         return mamba_mask
 
@@ -1477,7 +1659,9 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1526,11 +1710,19 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1549,12 +1741,21 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None)
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep
+        )
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1589,12 +1790,13 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
         #              (we can't check exception 3 while compiling)
         if not empty_past_kv:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
+            if inputs_embeds is not None or (  # Exception 1
+                is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1]
+            ):  # Exception 3
                 input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+            elif (
+                input_ids.shape[1] != cache_position.shape[0]
+            ):  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
         else:
             past_key_values = HybridMambaAttentionDynamicCache(
@@ -1612,7 +1814,9 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         if inputs_embeds is not None and empty_past_kv:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids.contiguous()}  # `contiguous()` needed for compilation use cases
+            model_inputs = {
+                "input_ids": input_ids.contiguous()
+            }  # `contiguous()` needed for compilation use cases
 
         model_inputs.update(
             {

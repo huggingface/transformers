@@ -13,7 +13,9 @@ sess_opt = ort.SessionOptions()
 sess_opt.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
 print("Create inference session...")
 execution_provider = ["TensorrtExecutionProvider", "CUDAExecutionProvider"]
-sess = ort.InferenceSession("model.onnx", sess_options=sess_opt, providers=execution_provider)
+sess = ort.InferenceSession(
+    "model.onnx", sess_options=sess_opt, providers=execution_provider
+)
 run_opt = ort.RunOptions()
 
 sequence = 128
@@ -47,4 +49,8 @@ for iter in range(max_iters):
         },
         run_options=run_opt,
     )
-print("Average Inference Time = {:.3f} ms".format((time.time() - start_time) * 1000 / max_iters))
+print(
+    "Average Inference Time = {:.3f} ms".format(
+        (time.time() - start_time) * 1000 / max_iters
+    )
+)

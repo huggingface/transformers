@@ -31,7 +31,10 @@ from .configuration_utils import PretrainedConfig, WatermarkingConfig
 if is_torch_available():
     import torch
 
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+    from .logits_process import (
+        SynthIDTextWatermarkLogitsProcessor,
+        WatermarkLogitsProcessor,
+    )
 
 
 logger = logging.get_logger(__name__)
@@ -134,7 +137,9 @@ class WatermarkDetector:
             watermarking_config = watermarking_config.to_dict()
 
         self.bos_token_id = (
-            model_config.bos_token_id if not model_config.is_encoder_decoder else model_config.decoder_start_token_id
+            model_config.bos_token_id
+            if not model_config.is_encoder_decoder
+            else model_config.decoder_start_token_id
         )
         self.greenlist_ratio = watermarking_config["greenlist_ratio"]
         self.ignore_repeated_ngrams = ignore_repeated_ngrams
@@ -143,7 +148,9 @@ class WatermarkDetector:
         )
 
         # Expensive re-seeding and sampling is cached.
-        self._get_ngram_score_cached = lru_cache(maxsize=max_cache_size)(self._get_ngram_score)
+        self._get_ngram_score_cached = lru_cache(maxsize=max_cache_size)(
+            self._get_ngram_score
+        )
 
     def _get_ngram_score(self, prefix: torch.LongTensor, target: int):
         greenlist_ids = self.processor._get_greenlist_ids(prefix)
@@ -153,7 +160,9 @@ class WatermarkDetector:
         batch_size, seq_length = input_ids.shape
         selfhash = int(self.processor.seeding_scheme == "selfhash")
         n = self.processor.context_width + 1 - selfhash
-        indices = torch.arange(n).unsqueeze(0) + torch.arange(seq_length - n + 1).unsqueeze(1)
+        indices = torch.arange(n).unsqueeze(0) + torch.arange(
+            seq_length - n + 1
+        ).unsqueeze(1)
         ngram_tensors = input_ids[:, indices]
 
         num_tokens_scored_batch = np.zeros(batch_size)
@@ -164,22 +173,30 @@ class WatermarkDetector:
             for ngram_example in frequencies_table.keys():
                 prefix = ngram_example if selfhash else ngram_example[:-1]
                 target = ngram_example[-1]
-                ngram_to_watermark_lookup[ngram_example] = self._get_ngram_score_cached(prefix, target)
+                ngram_to_watermark_lookup[ngram_example] = self._get_ngram_score_cached(
+                    prefix, target
+                )
 
             if self.ignore_repeated_ngrams:
                 # counts a green/red hit once per unique ngram.
                 # num total tokens scored becomes the number unique ngrams.
                 num_tokens_scored_batch[batch_idx] = len(frequencies_table.keys())
-                green_token_count_batch[batch_idx] = sum(ngram_to_watermark_lookup.values())
+                green_token_count_batch[batch_idx] = sum(
+                    ngram_to_watermark_lookup.values()
+                )
             else:
                 num_tokens_scored_batch[batch_idx] = sum(frequencies_table.values())
                 green_token_count_batch[batch_idx] = sum(
                     freq * outcome
-                    for freq, outcome in zip(frequencies_table.values(), ngram_to_watermark_lookup.values())
+                    for freq, outcome in zip(
+                        frequencies_table.values(), ngram_to_watermark_lookup.values()
+                    )
                 )
         return num_tokens_scored_batch, green_token_count_batch
 
-    def _compute_z_score(self, green_token_count: np.array, total_num_tokens: np.array) -> np.array:
+    def _compute_z_score(
+        self, green_token_count: np.array, total_num_tokens: np.array
+    ) -> np.array:
         expected_count = self.greenlist_ratio
         numer = green_token_count - expected_count * total_num_tokens
         denom = np.sqrt(total_num_tokens * expected_count * (1 - expected_count))
@@ -257,7 +274,9 @@ class BayesianDetectorConfig(PretrainedConfig):
             Prior probability P(w) that a text is watermarked.
     """
 
-    def __init__(self, watermarking_depth: int = None, base_rate: float = 0.5, **kwargs):
+    def __init__(
+        self, watermarking_depth: int = None, base_rate: float = 0.5, **kwargs
+    ):
         self.watermarking_depth = watermarking_depth
         self.base_rate = base_rate
         # These can be set later to store information about this detector.
@@ -297,10 +316,16 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         """Initializes the model parameters."""
         super().__init__()
         self.watermarking_depth = watermarking_depth
-        self.beta = torch.nn.Parameter(-2.5 + 0.001 * torch.randn(1, 1, watermarking_depth))
-        self.delta = torch.nn.Parameter(0.001 * torch.randn(1, 1, self.watermarking_depth, watermarking_depth))
+        self.beta = torch.nn.Parameter(
+            -2.5 + 0.001 * torch.randn(1, 1, watermarking_depth)
+        )
+        self.delta = torch.nn.Parameter(
+            0.001 * torch.randn(1, 1, self.watermarking_depth, watermarking_depth)
+        )
 
-    def _compute_latents(self, g_values: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_latents(
+        self, g_values: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Computes the unique token probability distribution given g-values.
 
         Args:
@@ -319,14 +344,18 @@ class BayesianDetectorWatermarkedLikelihood(nn.Module):
         # logistic regression model psi = sigmoid(delta * x + beta).
 
         # [batch_size, seq_len, watermarking_depth, watermarking_depth]
-        x = torch.repeat_interleave(torch.unsqueeze(g_values, dim=-2), self.watermarking_depth, axis=-2)
+        x = torch.repeat_interleave(
+            torch.unsqueeze(g_values, dim=-2), self.watermarking_depth, axis=-2
+        )
 
         # mask all elements above -1 diagonal for autoregressive factorization
         x = torch.tril(x, diagonal=-1)
 
         # [batch_size, seq_len, watermarking_depth]
         # (i, j, k, l) x (i, j, k, l) -> (i, j, k) einsum equivalent
-        logits = (self.delta[..., None, :] @ x.type(self.delta.dtype)[..., None]).squeeze() + self.beta
+        logits = (
+            self.delta[..., None, :] @ x.type(self.delta.dtype)[..., None]
+        ).squeeze() + self.beta
 
         p_two_unique_tokens = torch.sigmoid(logits)
         p_one_unique_token = 1 - p_two_unique_tokens
@@ -418,8 +447,12 @@ class BayesianDetectorModel(PreTrainedModel):
         """
         mask = torch.unsqueeze(mask, dim=-1)
         prior = torch.clamp(prior, min=1e-5, max=1 - 1e-5)
-        log_likelihoods_watermarked = torch.log(torch.clamp(likelihoods_watermarked, min=1e-30, max=float("inf")))
-        log_likelihoods_unwatermarked = torch.log(torch.clamp(likelihoods_unwatermarked, min=1e-30, max=float("inf")))
+        log_likelihoods_watermarked = torch.log(
+            torch.clamp(likelihoods_watermarked, min=1e-30, max=float("inf"))
+        )
+        log_likelihoods_unwatermarked = torch.log(
+            torch.clamp(likelihoods_unwatermarked, min=1e-30, max=float("inf"))
+        )
         log_odds = log_likelihoods_watermarked - log_likelihoods_unwatermarked
 
         # Sum relative surprisals (log odds) across all token positions and layers.
@@ -476,7 +509,9 @@ class BayesianDetectorModel(PreTrainedModel):
         if not return_dict:
             return (out,) if loss is None else (out, loss)
 
-        return BayesianWatermarkDetectorModelOutput(loss=loss, posterior_probabilities=out)
+        return BayesianWatermarkDetectorModelOutput(
+            loss=loss, posterior_probabilities=out
+        )
 
 
 class SynthIDTextWatermarkDetector:

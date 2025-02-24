@@ -30,7 +30,11 @@ from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import BaseModelOutputWithPast, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -70,7 +74,9 @@ class GraniteMoeSharedMLP(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.input_linear(hidden_states)
         chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        hidden_states = (
+            self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        )
         hidden_states = self.output_linear(hidden_states)
         return hidden_states
 
@@ -159,13 +165,21 @@ class GraniteMoeSharedTopKGating(nn.Module):
 
     def forward(self, hidden_states):
         # compute the top_k routing decision
-        logits = self.layer(hidden_states).float()  # [batch_size x seq_len, num_experts]
-        top_k_logits, top_k_indices = logits.topk(self.top_k, dim=1)  # [num_tokens, top_k]
-        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(hidden_states)  # [num_tokens, top_k]
+        logits = self.layer(
+            hidden_states
+        ).float()  # [batch_size x seq_len, num_experts]
+        top_k_logits, top_k_indices = logits.topk(
+            self.top_k, dim=1
+        )  # [num_tokens, top_k]
+        top_k_gates = torch.softmax(top_k_logits, dim=1).type_as(
+            hidden_states
+        )  # [num_tokens, top_k]
 
         # compute number of input given to each expert
         zeros = torch.zeros(
-            [top_k_gates.size(0), self.num_experts], dtype=top_k_gates.dtype, device=top_k_gates.device
+            [top_k_gates.size(0), self.num_experts],
+            dtype=top_k_gates.dtype,
+            device=top_k_gates.device,
         )  # [num_tokens, num_experts]
         gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
         expert_size = gates.long().sum(0)  # [num_experts,]
@@ -176,7 +190,9 @@ class GraniteMoeSharedTopKGating(nn.Module):
         # sort and group input tokens according to expert assignment
         top_k_experts = top_k_indices.flatten()  # [num_tokens * top_k]
         _, index_sorted_experts = top_k_experts.sort(0)  # [num_tokens * top_k]
-        batch_index = index_sorted_experts.div(self.top_k, rounding_mode="trunc")  # [num_tokens * top_k]
+        batch_index = index_sorted_experts.div(
+            self.top_k, rounding_mode="trunc"
+        )  # [num_tokens * top_k]
 
         # gather the gate values for grouped input tokens
         top_k_gates = top_k_gates.flatten()  # [num_tokens * top_k]
@@ -229,17 +245,25 @@ class GraniteMoeSharedMoE(nn.Module):
         """
         bsz, length, emb_size = layer_input.size()
         layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
+        _, batch_index, batch_gates, expert_size, router_logits = self.router(
+            layer_input
+        )
 
         expert_inputs = layer_input[batch_index]
         hidden_states = self.input_linear(expert_inputs, expert_size)
         chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        hidden_states = (
+            self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
+        )
         expert_outputs = self.output_linear(hidden_states, expert_size)
 
         expert_outputs = expert_outputs * batch_gates[:, None]
 
-        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
+        zeros = torch.zeros(
+            (bsz * length, self.input_size),
+            dtype=expert_outputs.dtype,
+            device=expert_outputs.device,
+        )
         layer_output = zeros.index_add(0, batch_index, expert_outputs)
         layer_output = layer_output.view(bsz, length, self.input_size)
         return layer_output, router_logits
@@ -287,7 +311,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(
+        batch, num_key_value_heads, n_rep, slen, head_dim
+    )
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
@@ -323,10 +349,22 @@ class GraniteMoeSharedAttention(nn.Module):
                 f" and `num_heads`: {self.num_heads})."
             )
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.v_proj = nn.Linear(
+            self.hidden_size,
+            self.num_key_value_heads * self.head_dim,
+            bias=config.attention_bias,
+        )
+        self.o_proj = nn.Linear(
+            self.hidden_size, self.hidden_size, bias=config.attention_bias
+        )
 
     def forward(
         self,
@@ -337,7 +375,9 @@ class GraniteMoeSharedAttention(nn.Module):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
@@ -346,30 +386,46 @@ class GraniteMoeSharedAttention(nn.Module):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        attn_weights = (
+            torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        )
 
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        attn_weights = nn.functional.softmax(
+            attn_weights, dim=-1, dtype=torch.float32
+        ).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.attention_dropout, training=self.training
+        )
         attn_output = torch.matmul(attn_weights, value_states)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
@@ -415,7 +471,9 @@ class GraniteMoeSharedFlashAttention2(GraniteMoeSharedAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         output_attentions = False
 
@@ -428,17 +486,27 @@ class GraniteMoeSharedFlashAttention2(GraniteMoeSharedAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
         # to be able to avoid many of these transpose/reshape/view.
@@ -516,7 +584,9 @@ class GraniteMoeSharedSdpaAttention(GraniteMoeSharedAttention):
         output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         if output_attentions:
@@ -542,17 +612,27 @@ class GraniteMoeSharedSdpaAttention(GraniteMoeSharedAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, q_len, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
+        value_states = value_states.view(
+            bsz, q_len, self.num_key_value_heads, self.head_dim
+        ).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
@@ -602,16 +682,24 @@ class GraniteMoeSharedDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = GRANITEMOESHARED_ATTENTION_CLASSES[config._attn_implementation](
-            config=config, layer_idx=layer_idx
-        )
+        self.self_attn = GRANITEMOESHARED_ATTENTION_CLASSES[
+            config._attn_implementation
+        ](config=config, layer_idx=layer_idx)
 
         self.block_sparse_moe = GraniteMoeSharedMoE(config)
-        self.input_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = GraniteMoeSharedRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_attention_layernorm = GraniteMoeSharedRMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
 
         self.residual_multiplier = config.residual_multiplier
-        self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
+        self.shared_mlp = (
+            None
+            if config.shared_intermediate_size == 0
+            else GraniteMoeSharedMLP(config)
+        )
 
     def forward(
         self,
@@ -623,9 +711,13 @@ class GraniteMoeSharedDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         output_router_logits: Optional[bool] = False,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -751,7 +843,9 @@ class GraniteMoeSharedRotaryEmbedding(nn.Module):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            self.rope_type = config.rope_scaling.get(
+                "rope_type", config.rope_scaling.get("type")
+            )
         else:
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
@@ -772,11 +866,18 @@ class GraniteMoeSharedRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len
+            )
+            self.register_buffer(
+                "inv_freq", inv_freq, persistent=False
+            )  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+        if (
+            seq_len < self.original_max_seq_len
+            and self.max_seq_len_cached > self.original_max_seq_len
+        ):  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
             # the buffer is automatically moved, but not the original copy)
             self.original_inv_freq = self.original_inv_freq.to(device)
@@ -789,13 +890,21 @@ class GraniteMoeSharedRotaryEmbedding(nn.Module):
             self._dynamic_frequency_update(position_ids, device=x.device)
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = (
+            self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        )
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        device_type = (
+            device_type
+            if isinstance(device_type, str) and device_type != "mps"
+            else "cpu"
+        )
         with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            freqs = (
+                inv_freq_expanded.float() @ position_ids_expanded.float()
+            ).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
@@ -898,9 +1007,14 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.hidden_size, self.padding_idx
+        )
         self.layers = nn.ModuleList(
-            [GraniteMoeSharedDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                GraniteMoeSharedDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.norm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
@@ -939,15 +1053,25 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -961,7 +1085,9 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         inputs_embeds = inputs_embeds * self.embedding_multiplier
 
         return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):  # kept for BC (non `Cache` `past_key_values` inputs)
+        if use_cache and not isinstance(
+            past_key_values, Cache
+        ):  # kept for BC (non `Cache` `past_key_values` inputs)
             return_legacy_cache = True
             past_key_values = DynamicCache.from_legacy_cache(past_key_values)
             logger.warning_once(
@@ -970,15 +1096,23 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             )
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # embed positions
@@ -1045,7 +1179,11 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
         return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1070,11 +1208,17 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1115,7 +1259,9 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -1158,22 +1304,29 @@ class GraniteMoeSharedModel(GraniteMoeSharedPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -1212,7 +1365,9 @@ def load_balancing_loss_func(
 
     if isinstance(gate_logits, tuple):
         compute_device = gate_logits[0].device
-        concatenated_gate_logits = torch.cat([layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0)
+        concatenated_gate_logits = torch.cat(
+            [layer_gate.to(compute_device) for layer_gate in gate_logits], dim=0
+        )
 
     routing_weights = torch.nn.functional.softmax(concatenated_gate_logits, dim=-1)
 
@@ -1228,20 +1383,24 @@ def load_balancing_loss_func(
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
     else:
         batch_size, sequence_length = attention_mask.shape
-        num_hidden_layers = concatenated_gate_logits.shape[0] // (batch_size * sequence_length)
+        num_hidden_layers = concatenated_gate_logits.shape[0] // (
+            batch_size * sequence_length
+        )
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of expert_mask
         expert_attention_mask = (
             attention_mask[None, :, :, None, None]
-            .expand((num_hidden_layers, batch_size, sequence_length, top_k, num_experts))
+            .expand(
+                (num_hidden_layers, batch_size, sequence_length, top_k, num_experts)
+            )
             .reshape(-1, top_k, num_experts)
             .to(compute_device)
         )
 
         # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
-        )
+        tokens_per_expert = torch.sum(
+            expert_mask.float() * expert_attention_mask, dim=0
+        ) / torch.sum(expert_attention_mask, dim=0)
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
         router_per_expert_attention_mask = (
@@ -1252,9 +1411,9 @@ def load_balancing_loss_func(
         )
 
         # Compute the average probability of routing to these experts
-        router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / torch.sum(
-            router_per_expert_attention_mask, dim=0
-        )
+        router_prob_per_expert = torch.sum(
+            routing_weights * router_per_expert_attention_mask, dim=0
+        ) / torch.sum(router_per_expert_attention_mask, dim=0)
 
     overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
     return overall_loss * num_experts
@@ -1295,7 +1454,9 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
         return self.model
 
     @add_start_docstrings_to_model_forward(GRANITEMOESHARED_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1337,14 +1498,24 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+            output_router_logits
+            if output_router_logits is not None
+            else self.config.output_router_logits
         )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model(
@@ -1386,7 +1557,9 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
                 attention_mask,
             )
             if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
+                loss += self.router_aux_loss_coef * aux_loss.to(
+                    loss.device
+                )  # make sure to reside in the same device
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1409,9 +1582,16 @@ class GraniteMoeSharedForCausalLM(GraniteMoeSharedPreTrainedModel, GenerationMix
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                tuple(
+                    past_state.index_select(0, beam_idx.to(past_state.device))
+                    for past_state in layer_past
+                ),
             )
         return reordered_past
 
 
-__all__ = ["GraniteMoeSharedForCausalLM", "GraniteMoeSharedModel", "GraniteMoeSharedPreTrainedModel"]
+__all__ = [
+    "GraniteMoeSharedForCausalLM",
+    "GraniteMoeSharedModel",
+    "GraniteMoeSharedPreTrainedModel",
+]

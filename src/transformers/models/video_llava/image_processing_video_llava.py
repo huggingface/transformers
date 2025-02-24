@@ -105,8 +105,12 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 224, "width": 224}
+        )
+        crop_size = get_size_dict(
+            crop_size, default_to_square=True, param_name="crop_size"
+        )
 
         self.do_resize = do_resize
         self.size = size
@@ -152,7 +156,9 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "Size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -247,22 +253,32 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, param_name="size", default_to_square=False)
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
+        crop_size = get_size_dict(
+            crop_size, param_name="crop_size", default_to_square=True
+        )
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         if images is not None:
             images = make_list_of_images(images)
         if videos is not None:
             videos = make_batched_videos(videos)
 
-        if (videos is not None and not valid_images(videos)) or (images is not None and not valid_images(images)):
+        if (videos is not None and not valid_images(videos)) or (
+            images is not None and not valid_images(images)
+        ):
             raise ValueError(
                 "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -368,18 +384,34 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(image)
 
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+            image = self.resize(
+                image=image,
+                size=size,
+                resample=resample,
+                input_data_format=input_data_format,
+            )
 
         if do_center_crop:
-            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+            image = self.center_crop(
+                image=image, size=crop_size, input_data_format=input_data_format
+            )
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+            image = self.rescale(
+                image=image, scale=rescale_factor, input_data_format=input_data_format
+            )
 
         if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            image = self.normalize(
+                image=image,
+                mean=image_mean,
+                std=image_std,
+                input_data_format=input_data_format,
+            )
 
-        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        image = to_channel_dimension_format(
+            image, data_format, input_channel_dim=input_data_format
+        )
 
         return image
 

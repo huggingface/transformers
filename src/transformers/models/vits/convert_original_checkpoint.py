@@ -163,7 +163,12 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_shape = hf_pointer.shape
 
     # strip off the kernel dimension at the end (original weights are Conv1d)
-    if key.endswith(".k_proj") or key.endswith(".v_proj") or key.endswith(".q_proj") or key.endswith(".out_proj"):
+    if (
+        key.endswith(".k_proj")
+        or key.endswith(".v_proj")
+        or key.endswith(".q_proj")
+        or key.endswith(".out_proj")
+    ):
         value = value.squeeze(-1)
 
     if hf_shape != value.shape:
@@ -189,7 +194,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_pointer.data = value
 
-    logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
+    logger.info(
+        f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}."
+    )
 
 
 def should_ignore(name, ignore_keys):
@@ -234,7 +241,10 @@ def recursively_load_weights(fairseq_dict, hf_model):
                     # remap the layer index since we removed the Flip layers
                     if "flow.flows" in mapped_key:
                         layer_index = str(int(layer_index) // 2)
-                    if "duration_predictor.flows" in mapped_key or "duration_predictor.post_flows" in mapped_key:
+                    if (
+                        "duration_predictor.flows" in mapped_key
+                        or "duration_predictor.post_flows" in mapped_key
+                    ):
                         layer_index = str(int(layer_index) // 2 + 1)
 
                     mapped_key = mapped_key.replace("*", layer_index)
@@ -313,7 +323,9 @@ def convert_checkpoint(
 
         is_uroman = hps["data"]["training_files"].split(".")[-1] == "uroman"
         if is_uroman:
-            logger.warning("For this checkpoint, you should use `uroman` to convert input text before tokenizing it!")
+            logger.warning(
+                "For this checkpoint, you should use `uroman` to convert input text before tokenizing it!"
+            )
     else:
         logger.info(f"***Converting model: {checkpoint_path}***")
         is_uroman = False
@@ -329,7 +341,10 @@ def convert_checkpoint(
         phonemize = True
     else:
         # Save vocab as temporary json file
-        symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
+        symbols = [
+            line.replace("\n", "")
+            for line in open(vocab_path, encoding="utf-8").readlines()
+        ]
         symbol_to_id = {s: i for i, s in enumerate(symbols)}
         # MMS-TTS does not use a <pad> token, so we set to the token used to space characters
         _pad = symbols[0]
@@ -337,9 +352,18 @@ def convert_checkpoint(
 
     with tempfile.NamedTemporaryFile() as tf:
         with open(tf.name, "w", encoding="utf-8") as f:
-            f.write(json.dumps(symbol_to_id, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+            f.write(
+                json.dumps(symbol_to_id, indent=2, sort_keys=True, ensure_ascii=False)
+                + "\n"
+            )
 
-        tokenizer = VitsTokenizer(tf.name, language=language, phonemize=phonemize, is_uroman=is_uroman, pad_token=_pad)
+        tokenizer = VitsTokenizer(
+            tf.name,
+            language=language,
+            phonemize=phonemize,
+            is_uroman=is_uroman,
+            pad_token=_pad,
+        )
 
     config.vocab_size = len(symbols)
     model = VitsModel(config)
@@ -362,19 +386,48 @@ def convert_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Local path to original checkpoint")
-    parser.add_argument("--vocab_path", default=None, type=str, help="Path to vocab.txt")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument("--language", default=None, type=str, help="Tokenizer language (three-letter code)")
-    parser.add_argument("--num_speakers", default=None, type=int, help="Number of speakers")
     parser.add_argument(
-        "--sampling_rate", default=None, type=int, help="Sampling rate on which the model was trained."
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        help="Local path to original checkpoint",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--vocab_path", default=None, type=str, help="Path to vocab.txt"
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--language",
+        default=None,
+        type=str,
+        help="Tokenizer language (three-letter code)",
+    )
+    parser.add_argument(
+        "--num_speakers", default=None, type=int, help="Number of speakers"
+    )
+    parser.add_argument(
+        "--sampling_rate",
+        default=None,
+        type=int,
+        help="Sampling rate on which the model was trained.",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()

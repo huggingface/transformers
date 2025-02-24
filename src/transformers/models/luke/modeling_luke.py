@@ -390,9 +390,15 @@ class LukeEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -402,7 +408,9 @@ class LukeEmbeddings(nn.Module):
         # End copy
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
+            config.max_position_embeddings,
+            config.hidden_size,
+            padding_idx=self.padding_idx,
         )
 
     def forward(
@@ -415,9 +423,13 @@ class LukeEmbeddings(nn.Module):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx).to(input_ids.device)
+                position_ids = create_position_ids_from_input_ids(
+                    input_ids, self.padding_idx
+                ).to(input_ids.device)
             else:
-                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+                position_ids = self.create_position_ids_from_inputs_embeds(
+                    inputs_embeds
+                )
 
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -425,7 +437,9 @@ class LukeEmbeddings(nn.Module):
             input_shape = inputs_embeds.size()[:-1]
 
         if token_type_ids is None:
-            token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            token_type_ids = torch.zeros(
+                input_shape, dtype=torch.long, device=self.position_ids.device
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -451,7 +465,10 @@ class LukeEmbeddings(nn.Module):
         sequence_length = input_shape[1]
 
         position_ids = torch.arange(
-            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+            self.padding_idx + 1,
+            sequence_length + self.padding_idx + 1,
+            dtype=torch.long,
+            device=inputs_embeds.device,
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
@@ -461,18 +478,29 @@ class LukeEntityEmbeddings(nn.Module):
         super().__init__()
         self.config = config
 
-        self.entity_embeddings = nn.Embedding(config.entity_vocab_size, config.entity_emb_size, padding_idx=0)
+        self.entity_embeddings = nn.Embedding(
+            config.entity_vocab_size, config.entity_emb_size, padding_idx=0
+        )
         if config.entity_emb_size != config.hidden_size:
-            self.entity_embedding_dense = nn.Linear(config.entity_emb_size, config.hidden_size, bias=False)
+            self.entity_embedding_dense = nn.Linear(
+                config.entity_emb_size, config.hidden_size, bias=False
+            )
 
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size
+        )
+        self.token_type_embeddings = nn.Embedding(
+            config.type_vocab_size, config.hidden_size
+        )
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, entity_ids: torch.LongTensor, position_ids: torch.LongTensor, token_type_ids: torch.LongTensor = None
+        self,
+        entity_ids: torch.LongTensor,
+        position_ids: torch.LongTensor,
+        token_type_ids: torch.LongTensor = None,
     ):
         if token_type_ids is None:
             token_type_ids = torch.zeros_like(entity_ids)
@@ -482,10 +510,14 @@ class LukeEntityEmbeddings(nn.Module):
             entity_embeddings = self.entity_embedding_dense(entity_embeddings)
 
         position_embeddings = self.position_embeddings(position_ids.clamp(min=0))
-        position_embedding_mask = (position_ids != -1).type_as(position_embeddings).unsqueeze(-1)
+        position_embedding_mask = (
+            (position_ids != -1).type_as(position_embeddings).unsqueeze(-1)
+        )
         position_embeddings = position_embeddings * position_embedding_mask
         position_embeddings = torch.sum(position_embeddings, dim=-2)
-        position_embeddings = position_embeddings / position_embedding_mask.sum(dim=-2).clamp(min=1e-7)
+        position_embeddings = position_embeddings / position_embedding_mask.sum(
+            dim=-2
+        ).clamp(min=1e-7)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -499,7 +531,9 @@ class LukeEntityEmbeddings(nn.Module):
 class LukeSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
@@ -522,7 +556,10 @@ class LukeSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -539,7 +576,9 @@ class LukeSelfAttention(nn.Module):
         if entity_hidden_states is None:
             concat_hidden_states = word_hidden_states
         else:
-            concat_hidden_states = torch.cat([word_hidden_states, entity_hidden_states], dim=1)
+            concat_hidden_states = torch.cat(
+                [word_hidden_states, entity_hidden_states], dim=1
+            )
 
         key_layer = self.transpose_for_scores(self.key(concat_hidden_states))
         value_layer = self.transpose_for_scores(self.value(concat_hidden_states))
@@ -548,9 +587,15 @@ class LukeSelfAttention(nn.Module):
             # compute query vectors using word-word (w2w), word-entity (w2e), entity-word (e2w), entity-entity (e2e)
             # query layers
             w2w_query_layer = self.transpose_for_scores(self.query(word_hidden_states))
-            w2e_query_layer = self.transpose_for_scores(self.w2e_query(word_hidden_states))
-            e2w_query_layer = self.transpose_for_scores(self.e2w_query(entity_hidden_states))
-            e2e_query_layer = self.transpose_for_scores(self.e2e_query(entity_hidden_states))
+            w2e_query_layer = self.transpose_for_scores(
+                self.w2e_query(word_hidden_states)
+            )
+            e2w_query_layer = self.transpose_for_scores(
+                self.e2w_query(entity_hidden_states)
+            )
+            e2e_query_layer = self.transpose_for_scores(
+                self.e2e_query(entity_hidden_states)
+            )
 
             # compute w2w, w2e, e2w, and e2e key vectors used with the query vectors computed above
             w2w_key_layer = key_layer[:, :, :word_size, :]
@@ -559,15 +604,29 @@ class LukeSelfAttention(nn.Module):
             e2e_key_layer = key_layer[:, :, word_size:, :]
 
             # compute attention scores based on the dot product between the query and key vectors
-            w2w_attention_scores = torch.matmul(w2w_query_layer, w2w_key_layer.transpose(-1, -2))
-            w2e_attention_scores = torch.matmul(w2e_query_layer, w2e_key_layer.transpose(-1, -2))
-            e2w_attention_scores = torch.matmul(e2w_query_layer, e2w_key_layer.transpose(-1, -2))
-            e2e_attention_scores = torch.matmul(e2e_query_layer, e2e_key_layer.transpose(-1, -2))
+            w2w_attention_scores = torch.matmul(
+                w2w_query_layer, w2w_key_layer.transpose(-1, -2)
+            )
+            w2e_attention_scores = torch.matmul(
+                w2e_query_layer, w2e_key_layer.transpose(-1, -2)
+            )
+            e2w_attention_scores = torch.matmul(
+                e2w_query_layer, e2w_key_layer.transpose(-1, -2)
+            )
+            e2e_attention_scores = torch.matmul(
+                e2e_query_layer, e2e_key_layer.transpose(-1, -2)
+            )
 
             # combine attention scores to create the final attention score matrix
-            word_attention_scores = torch.cat([w2w_attention_scores, w2e_attention_scores], dim=3)
-            entity_attention_scores = torch.cat([e2w_attention_scores, e2e_attention_scores], dim=3)
-            attention_scores = torch.cat([word_attention_scores, entity_attention_scores], dim=2)
+            word_attention_scores = torch.cat(
+                [w2w_attention_scores, w2e_attention_scores], dim=3
+            )
+            entity_attention_scores = torch.cat(
+                [e2w_attention_scores, e2e_attention_scores], dim=3
+            )
+            attention_scores = torch.cat(
+                [word_attention_scores, entity_attention_scores], dim=2
+            )
 
         else:
             query_layer = self.transpose_for_scores(self.query(concat_hidden_states))
@@ -602,7 +661,11 @@ class LukeSelfAttention(nn.Module):
             output_entity_hidden_states = context_layer[:, word_size:, :]
 
         if output_attentions:
-            outputs = (output_word_hidden_states, output_entity_hidden_states, attention_probs)
+            outputs = (
+                output_word_hidden_states,
+                output_entity_hidden_states,
+                attention_probs,
+            )
         else:
             outputs = (output_word_hidden_states, output_entity_hidden_states)
 
@@ -617,7 +680,9 @@ class LukeSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -632,7 +697,9 @@ class LukeAttention(nn.Module):
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
+        raise NotImplementedError(
+            "LUKE does not support the pruning of attention heads"
+        )
 
     def forward(
         self,
@@ -655,7 +722,9 @@ class LukeAttention(nn.Module):
             concat_hidden_states = word_hidden_states
         else:
             concat_self_outputs = torch.cat(self_outputs[:2], dim=1)
-            concat_hidden_states = torch.cat([word_hidden_states, entity_hidden_states], dim=1)
+            concat_hidden_states = torch.cat(
+                [word_hidden_states, entity_hidden_states], dim=1
+            )
 
         attention_output = self.output(concat_self_outputs, concat_hidden_states)
 
@@ -695,7 +764,9 @@ class LukeOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -733,10 +804,15 @@ class LukeLayer(nn.Module):
         else:
             concat_attention_output = torch.cat(self_attention_outputs[:2], dim=1)
 
-        outputs = self_attention_outputs[2:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            2:
+        ]  # add self attentions if we output attention weights
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, concat_attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            concat_attention_output,
         )
         word_layer_output = layer_output[:, :word_size, :]
         if entity_hidden_states is None:
@@ -758,7 +834,9 @@ class LukeEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([LukeLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [LukeLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -778,7 +856,9 @@ class LukeEncoder(nn.Module):
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_word_hidden_states = all_word_hidden_states + (word_hidden_states,)
-                all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
+                all_entity_hidden_states = all_entity_hidden_states + (
+                    entity_hidden_states,
+                )
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             if self.gradient_checkpointing and self.training:
@@ -809,7 +889,9 @@ class LukeEncoder(nn.Module):
 
         if output_hidden_states:
             all_word_hidden_states = all_word_hidden_states + (word_hidden_states,)
-            all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
+            all_entity_hidden_states = all_entity_hidden_states + (
+                entity_hidden_states,
+            )
 
         if not return_dict:
             return tuple(
@@ -870,7 +952,9 @@ class EntityPredictionHead(nn.Module):
         super().__init__()
         self.config = config
         self.transform = EntityPredictionHeadTransform(config)
-        self.decoder = nn.Linear(config.entity_emb_size, config.entity_vocab_size, bias=False)
+        self.decoder = nn.Linear(
+            config.entity_emb_size, config.entity_vocab_size, bias=False
+        )
         self.bias = nn.Parameter(torch.zeros(config.entity_vocab_size))
 
     def forward(self, hidden_states):
@@ -1032,10 +1116,16 @@ class LukeModel(LukePreTrainedModel):
         self.entity_embeddings.entity_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        raise NotImplementedError("LUKE does not support the pruning of attention heads")
+        raise NotImplementedError(
+            "LUKE does not support the pruning of attention heads"
+        )
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseLukeModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=BaseLukeModelOutputWithPooling, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1091,14 +1181,24 @@ class LukeModel(LukePreTrainedModel):
         >>> word_last_hidden_state = outputs.last_hidden_state
         >>> entity_last_hidden_state = outputs.entity_last_hidden_state
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -1117,9 +1217,13 @@ class LukeModel(LukePreTrainedModel):
         if entity_ids is not None:
             entity_seq_length = entity_ids.size(1)
             if entity_attention_mask is None:
-                entity_attention_mask = torch.ones((batch_size, entity_seq_length), device=device)
+                entity_attention_mask = torch.ones(
+                    (batch_size, entity_seq_length), device=device
+                )
             if entity_token_type_ids is None:
-                entity_token_type_ids = torch.zeros((batch_size, entity_seq_length), dtype=torch.long, device=device)
+                entity_token_type_ids = torch.zeros(
+                    (batch_size, entity_seq_length), dtype=torch.long, device=device
+                )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -1137,13 +1241,17 @@ class LukeModel(LukePreTrainedModel):
         )
 
         # Second, compute extended attention mask
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, entity_attention_mask)
+        extended_attention_mask = self.get_extended_attention_mask(
+            attention_mask, entity_attention_mask
+        )
 
         # Third, compute entity embeddings and concatenate with word embeddings
         if entity_ids is None:
             entity_embedding_output = None
         else:
-            entity_embedding_output = self.entity_embeddings(entity_ids, entity_position_ids, entity_token_type_ids)
+            entity_embedding_output = self.entity_embeddings(
+                entity_ids, entity_position_ids, entity_token_type_ids
+            )
 
         # Fourth, send embeddings through the model
         encoder_outputs = self.encoder(
@@ -1160,7 +1268,9 @@ class LukeModel(LukePreTrainedModel):
         sequence_output = encoder_outputs[0]
 
         # Sixth, we compute the pooled_output, word_sequence_output and entity_sequence_output based on the sequence_output
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = (
+            self.pooler(sequence_output) if self.pooler is not None else None
+        )
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1175,7 +1285,9 @@ class LukeModel(LukePreTrainedModel):
         )
 
     def get_extended_attention_mask(
-        self, word_attention_mask: torch.LongTensor, entity_attention_mask: Optional[torch.LongTensor]
+        self,
+        word_attention_mask: torch.LongTensor,
+        entity_attention_mask: Optional[torch.LongTensor],
     ):
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -1198,10 +1310,16 @@ class LukeModel(LukePreTrainedModel):
         elif attention_mask.dim() == 2:
             extended_attention_mask = attention_mask[:, None, None, :]
         else:
-            raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape})")
+            raise ValueError(
+                f"Wrong shape for attention_mask (shape {attention_mask.shape})"
+            )
 
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
+        extended_attention_mask = extended_attention_mask.to(
+            dtype=self.dtype
+        )  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(
+            self.dtype
+        ).min
         return extended_attention_mask
 
 
@@ -1261,7 +1379,11 @@ class LukeLMHead(nn.Module):
     LUKE_START_DOCSTRING,
 )
 class LukeForMaskedLM(LukePreTrainedModel):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias", "entity_predictions.decoder.weight"]
+    _tied_weights_keys = [
+        "lm_head.decoder.weight",
+        "lm_head.decoder.bias",
+        "entity_predictions.decoder.weight",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1278,7 +1400,10 @@ class LukeForMaskedLM(LukePreTrainedModel):
 
     def tie_weights(self):
         super().tie_weights()
-        self._tie_or_clone_weights(self.entity_predictions.decoder, self.luke.entity_embeddings.entity_embeddings)
+        self._tie_or_clone_weights(
+            self.entity_predictions.decoder,
+            self.luke.entity_embeddings.entity_embeddings,
+        )
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -1286,8 +1411,12 @@ class LukeForMaskedLM(LukePreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=LukeMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=LukeMaskedLMOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1320,7 +1449,9 @@ class LukeForMaskedLM(LukePreTrainedModel):
 
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1345,7 +1476,9 @@ class LukeForMaskedLM(LukePreTrainedModel):
         if labels is not None:
             # move labels to correct device to enable model parallelism
             labels = labels.to(logits.device)
-            mlm_loss = self.loss_fn(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            mlm_loss = self.loss_fn(
+                logits.view(-1, self.config.vocab_size), labels.view(-1)
+            )
             if loss is None:
                 loss = mlm_loss
 
@@ -1354,7 +1487,10 @@ class LukeForMaskedLM(LukePreTrainedModel):
         if outputs.entity_last_hidden_state is not None:
             entity_logits = self.entity_predictions(outputs.entity_last_hidden_state)
             if entity_labels is not None:
-                mep_loss = self.loss_fn(entity_logits.view(-1, self.config.entity_vocab_size), entity_labels.view(-1))
+                mep_loss = self.loss_fn(
+                    entity_logits.view(-1, self.config.entity_vocab_size),
+                    entity_labels.view(-1),
+                )
                 if loss is None:
                     loss = mep_loss
                 else:
@@ -1408,8 +1544,12 @@ class LukeForEntityClassification(LukePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=EntityClassificationOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=EntityClassificationOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1454,7 +1594,9 @@ class LukeForEntityClassification(LukePreTrainedModel):
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: person
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1485,12 +1627,20 @@ class LukeForEntityClassification(LukePreTrainedModel):
             if labels.ndim == 1:
                 loss = nn.functional.cross_entropy(logits, labels)
             else:
-                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(
+                    logits.view(-1), labels.view(-1).type_as(logits)
+                )
 
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                for v in [
+                    loss,
+                    logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
                 if v is not None
             )
 
@@ -1523,8 +1673,12 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=EntityPairClassificationOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=EntityPairClassificationOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1572,7 +1726,9 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: per:cities_of_residence
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1591,7 +1747,11 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         )
 
         feature_vector = torch.cat(
-            [outputs.entity_last_hidden_state[:, 0, :], outputs.entity_last_hidden_state[:, 1, :]], dim=1
+            [
+                outputs.entity_last_hidden_state[:, 0, :],
+                outputs.entity_last_hidden_state[:, 1, :],
+            ],
+            dim=1,
         )
         feature_vector = self.dropout(feature_vector)
         logits = self.classifier(feature_vector)
@@ -1605,12 +1765,20 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
             if labels.ndim == 1:
                 loss = nn.functional.cross_entropy(logits, labels)
             else:
-                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(
+                    logits.view(-1), labels.view(-1).type_as(logits)
+                )
 
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                for v in [
+                    loss,
+                    logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
                 if v is not None
             )
 
@@ -1643,8 +1811,12 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=EntitySpanClassificationOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
+    @replace_return_docstrings(
+        output_type=EntitySpanClassificationOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1708,7 +1880,9 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         Beyoncé PER
         Los Angeles LOC
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1727,17 +1901,29 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         )
         hidden_size = outputs.last_hidden_state.size(-1)
 
-        entity_start_positions = entity_start_positions.unsqueeze(-1).expand(-1, -1, hidden_size)
+        entity_start_positions = entity_start_positions.unsqueeze(-1).expand(
+            -1, -1, hidden_size
+        )
         if entity_start_positions.device != outputs.last_hidden_state.device:
-            entity_start_positions = entity_start_positions.to(outputs.last_hidden_state.device)
-        start_states = torch.gather(outputs.last_hidden_state, -2, entity_start_positions)
+            entity_start_positions = entity_start_positions.to(
+                outputs.last_hidden_state.device
+            )
+        start_states = torch.gather(
+            outputs.last_hidden_state, -2, entity_start_positions
+        )
 
-        entity_end_positions = entity_end_positions.unsqueeze(-1).expand(-1, -1, hidden_size)
+        entity_end_positions = entity_end_positions.unsqueeze(-1).expand(
+            -1, -1, hidden_size
+        )
         if entity_end_positions.device != outputs.last_hidden_state.device:
-            entity_end_positions = entity_end_positions.to(outputs.last_hidden_state.device)
+            entity_end_positions = entity_end_positions.to(
+                outputs.last_hidden_state.device
+            )
         end_states = torch.gather(outputs.last_hidden_state, -2, entity_end_positions)
 
-        feature_vector = torch.cat([start_states, end_states, outputs.entity_last_hidden_state], dim=2)
+        feature_vector = torch.cat(
+            [start_states, end_states, outputs.entity_last_hidden_state], dim=2
+        )
 
         feature_vector = self.dropout(feature_vector)
         logits = self.classifier(feature_vector)
@@ -1749,14 +1935,24 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
             # When the number of dimension of `labels` is 2, cross entropy is used as the loss function. The binary
             # cross entropy is used otherwise.
             if labels.ndim == 2:
-                loss = nn.functional.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = nn.functional.cross_entropy(
+                    logits.view(-1, self.num_labels), labels.view(-1)
+                )
             else:
-                loss = nn.functional.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
+                loss = nn.functional.binary_cross_entropy_with_logits(
+                    logits.view(-1), labels.view(-1).type_as(logits)
+                )
 
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                for v in [
+                    loss,
+                    logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
                 if v is not None
             )
 
@@ -1782,14 +1978,18 @@ class LukeForSequenceClassification(LukePreTrainedModel):
         self.num_labels = config.num_labels
         self.luke = LukeModel(config)
         self.dropout = nn.Dropout(
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+            config.classifier_dropout
+            if config.classifier_dropout is not None
+            else config.hidden_dropout_prob
         )
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeSequenceClassifierOutput,
@@ -1818,7 +2018,9 @@ class LukeForSequenceClassification(LukePreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1848,7 +2050,9 @@ class LukeForSequenceClassification(LukePreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1869,7 +2073,13 @@ class LukeForSequenceClassification(LukePreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                for v in [
+                    loss,
+                    logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
                 if v is not None
             )
 
@@ -1897,14 +2107,18 @@ class LukeForTokenClassification(LukePreTrainedModel):
 
         self.luke = LukeModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+            config.classifier_dropout
+            if config.classifier_dropout is not None
+            else config.hidden_dropout_prob
         )
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeTokenClassifierOutput,
@@ -1933,7 +2147,9 @@ class LukeForTokenClassification(LukePreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1966,7 +2182,13 @@ class LukeForTokenClassification(LukePreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, logits, outputs.hidden_states, outputs.entity_hidden_states, outputs.attentions]
+                for v in [
+                    loss,
+                    logits,
+                    outputs.hidden_states,
+                    outputs.entity_hidden_states,
+                    outputs.attentions,
+                ]
                 if v is not None
             )
 
@@ -1998,7 +2220,9 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeQuestionAnsweringModelOutput,
@@ -2032,7 +2256,9 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
             Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
             are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -2111,14 +2337,18 @@ class LukeForMultipleChoice(LukePreTrainedModel):
 
         self.luke = LukeModel(config)
         self.dropout = nn.Dropout(
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+            config.classifier_dropout
+            if config.classifier_dropout is not None
+            else config.hidden_dropout_prob
         )
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LUKE_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LukeMultipleChoiceModelOutput,
@@ -2147,20 +2377,40 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
+        num_choices = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
 
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+        input_ids = (
+            input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
+        )
+        attention_mask = (
+            attention_mask.view(-1, attention_mask.size(-1))
+            if attention_mask is not None
+            else None
+        )
+        token_type_ids = (
+            token_type_ids.view(-1, token_type_ids.size(-1))
+            if token_type_ids is not None
+            else None
+        )
+        position_ids = (
+            position_ids.view(-1, position_ids.size(-1))
+            if position_ids is not None
+            else None
+        )
         inputs_embeds = (
             inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
             if inputs_embeds is not None
             else None
         )
 
-        entity_ids = entity_ids.view(-1, entity_ids.size(-1)) if entity_ids is not None else None
+        entity_ids = (
+            entity_ids.view(-1, entity_ids.size(-1)) if entity_ids is not None else None
+        )
         entity_attention_mask = (
             entity_attention_mask.view(-1, entity_attention_mask.size(-1))
             if entity_attention_mask is not None
@@ -2172,7 +2422,9 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             else None
         )
         entity_position_ids = (
-            entity_position_ids.view(-1, entity_position_ids.size(-2), entity_position_ids.size(-1))
+            entity_position_ids.view(
+                -1, entity_position_ids.size(-2), entity_position_ids.size(-1)
+            )
             if entity_position_ids is not None
             else None
         )

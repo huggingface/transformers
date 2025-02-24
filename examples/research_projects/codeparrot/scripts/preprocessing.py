@@ -21,7 +21,11 @@ PATTERN = re.compile(r"\s+")
 
 def get_hash(example):
     """Get hash of content field."""
-    return {"hash": insecure_hashlib.md5(re.sub(PATTERN, "", example["content"]).encode("utf-8")).hexdigest()}
+    return {
+        "hash": insecure_hashlib.md5(
+            re.sub(PATTERN, "", example["content"]).encode("utf-8")
+        ).hexdigest()
+    }
 
 
 def line_stats(example):
@@ -189,7 +193,9 @@ print(f"Size of filtered dataset: {len(ds_filter)}")
 # Deduplicate with minhash and jaccard similarity
 if args.near_deduplication:
     t_start = time.time()
-    ds_filter, duplicate_clusters = deduplicate_dataset(ds_filter, args.jaccard_threshold)
+    ds_filter, duplicate_clusters = deduplicate_dataset(
+        ds_filter, args.jaccard_threshold
+    )
     print(f"Time to deduplicate dataset: {time.time()-t_start:.2f}")
     print(f"Size of deduplicate dataset: {len(ds_filter)}")
 

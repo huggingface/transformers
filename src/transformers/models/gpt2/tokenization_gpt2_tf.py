@@ -25,7 +25,13 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         merges (List[str]): Merges list for Byte Pair Tokenizer
     """
 
-    def __init__(self, vocab: Dict[str, int], merges: List[str], max_length: int = None, pad_token_id: int = None):
+    def __init__(
+        self,
+        vocab: Dict[str, int],
+        merges: List[str],
+        max_length: int = None,
+        pad_token_id: int = None,
+    ):
         super().__init__()
         self.pad_token_id = pad_token_id
         self.max_length = max_length
@@ -54,7 +60,12 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         return cls(vocab, merges, *args, **kwargs)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        *init_inputs,
+        **kwargs
+    ):
         """Creates TFGPT2Tokenizer from pretrained GPT2Tokenizer
 
         Args:
@@ -68,7 +79,9 @@ class TFGPT2Tokenizer(keras.layers.Layer):
         tf_tokenizer = TFGPT2Tokenizer.from_pretrained("openai-community/gpt2")
         ```
         """
-        tokenizer = GPT2Tokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
+        tokenizer = GPT2Tokenizer.from_pretrained(
+            pretrained_model_name_or_path, *init_inputs, **kwargs
+        )
         return cls.from_tokenizer(tokenizer, *init_inputs, **kwargs)
 
     @classmethod

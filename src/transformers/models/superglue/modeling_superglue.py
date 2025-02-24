@@ -34,7 +34,9 @@ _CONFIG_FOR_DOC_ = "SuperGlueConfig"
 _CHECKPOINT_FOR_DOC_ = "magic-leap-community/superglue_indoor"
 
 
-def concat_pairs(tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.Tensor]) -> Tuple[torch.Tensor]:
+def concat_pairs(
+    tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.Tensor]
+) -> Tuple[torch.Tensor]:
     """
     Concatenate two tuples of tensors pairwise
 
@@ -47,10 +49,17 @@ def concat_pairs(tensor_tuple0: Tuple[torch.Tensor], tensor_tuple1: Tuple[torch.
     Returns:
         (`Tuple[torch.Tensor]`): Tuple of concatenated tensors.
     """
-    return tuple([torch.cat([tensor0, tensor1]) for tensor0, tensor1 in zip(tensor_tuple0, tensor_tuple1)])
+    return tuple(
+        [
+            torch.cat([tensor0, tensor1])
+            for tensor0, tensor1 in zip(tensor_tuple0, tensor_tuple1)
+        ]
+    )
 
 
-def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
+def normalize_keypoints(
+    keypoints: torch.Tensor, height: int, width: int
+) -> torch.Tensor:
     """
     Normalize keypoints locations based on image image_shape
 
@@ -65,7 +74,9 @@ def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> tor
     Returns:
         Normalized keypoints locations of shape (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`).
     """
-    size = torch.tensor([width, height], device=keypoints.device, dtype=keypoints.dtype)[None]
+    size = torch.tensor(
+        [width, height], device=keypoints.device, dtype=keypoints.dtype
+    )[None]
     center = size / 2
     scaling = size.max(1, keepdim=True).values * 0.7
     return (keypoints - center[:, None, :]) / scaling[:, None, :]
@@ -95,12 +106,18 @@ def log_sinkhorn_iterations(
     log_u_scaling = torch.zeros_like(log_source_distribution)
     log_v_scaling = torch.zeros_like(log_target_distribution)
     for _ in range(num_iterations):
-        log_u_scaling = log_source_distribution - torch.logsumexp(log_cost_matrix + log_v_scaling.unsqueeze(1), dim=2)
-        log_v_scaling = log_target_distribution - torch.logsumexp(log_cost_matrix + log_u_scaling.unsqueeze(2), dim=1)
+        log_u_scaling = log_source_distribution - torch.logsumexp(
+            log_cost_matrix + log_v_scaling.unsqueeze(1), dim=2
+        )
+        log_v_scaling = log_target_distribution - torch.logsumexp(
+            log_cost_matrix + log_u_scaling.unsqueeze(2), dim=1
+        )
     return log_cost_matrix + log_u_scaling.unsqueeze(2) + log_v_scaling.unsqueeze(1)
 
 
-def log_optimal_transport(scores: torch.Tensor, reg_param: torch.Tensor, iterations: int) -> torch.Tensor:
+def log_optimal_transport(
+    scores: torch.Tensor, reg_param: torch.Tensor, iterations: int
+) -> torch.Tensor:
     """
     Perform Differentiable Optimal Transport in Log-space for stability
 
@@ -118,20 +135,34 @@ def log_optimal_transport(scores: torch.Tensor, reg_param: torch.Tensor, iterati
     """
     batch_size, num_rows, num_columns = scores.shape
     one_tensor = scores.new_tensor(1)
-    num_rows_tensor, num_columns_tensor = (num_rows * one_tensor).to(scores), (num_columns * one_tensor).to(scores)
+    num_rows_tensor, num_columns_tensor = (num_rows * one_tensor).to(scores), (
+        num_columns * one_tensor
+    ).to(scores)
 
     source_reg_param = reg_param.expand(batch_size, num_rows, 1)
     target_reg_param = reg_param.expand(batch_size, 1, num_columns)
     reg_param = reg_param.expand(batch_size, 1, 1)
 
-    couplings = torch.cat([torch.cat([scores, source_reg_param], -1), torch.cat([target_reg_param, reg_param], -1)], 1)
+    couplings = torch.cat(
+        [
+            torch.cat([scores, source_reg_param], -1),
+            torch.cat([target_reg_param, reg_param], -1),
+        ],
+        1,
+    )
 
     log_normalization = -(num_rows_tensor + num_columns_tensor).log()
     log_source_distribution = torch.cat(
-        [log_normalization.expand(num_rows), num_columns_tensor.log()[None] + log_normalization]
+        [
+            log_normalization.expand(num_rows),
+            num_columns_tensor.log()[None] + log_normalization,
+        ]
     )
     log_target_distribution = torch.cat(
-        [log_normalization.expand(num_columns), num_rows_tensor.log()[None] + log_normalization]
+        [
+            log_normalization.expand(num_columns),
+            num_rows_tensor.log()[None] + log_normalization,
+        ]
     )
     log_source_distribution, log_target_distribution = (
         log_source_distribution[None].expand(batch_size, -1),
@@ -139,9 +170,14 @@ def log_optimal_transport(scores: torch.Tensor, reg_param: torch.Tensor, iterati
     )
 
     log_optimal_transport_matrix = log_sinkhorn_iterations(
-        couplings, log_source_distribution, log_target_distribution, num_iterations=iterations
+        couplings,
+        log_source_distribution,
+        log_target_distribution,
+        num_iterations=iterations,
     )
-    log_optimal_transport_matrix = log_optimal_transport_matrix - log_normalization  # multiply probabilities by M+N
+    log_optimal_transport_matrix = (
+        log_optimal_transport_matrix - log_normalization
+    )  # multiply probabilities by M+N
     return log_optimal_transport_matrix
 
 
@@ -188,7 +224,9 @@ class KeypointMatchingOutput(ModelOutput):
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
-    def __init__(self, config: SuperGlueConfig, in_channels: int, out_channels: int) -> None:
+    def __init__(
+        self, config: SuperGlueConfig, in_channels: int, out_channels: int
+    ) -> None:
         super().__init__()
         self.linear = nn.Linear(in_channels, out_channels)
         self.batch_norm = nn.BatchNorm1d(out_channels)
@@ -212,7 +250,9 @@ class SuperGlueKeypointEncoder(nn.Module):
         encoder_channels = [3] + layer_sizes + [hidden_size]
 
         layers = [
-            SuperGlueMultiLayerPerceptron(config, encoder_channels[i - 1], encoder_channels[i])
+            SuperGlueMultiLayerPerceptron(
+                config, encoder_channels[i - 1], encoder_channels[i]
+            )
             for i in range(1, len(encoder_channels) - 1)
         ]
         layers.append(nn.Linear(encoder_channels[-2], encoder_channels[-1]))
@@ -238,7 +278,9 @@ class SuperGlueKeypointEncoder(nn.Module):
 class SuperGlueSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
@@ -256,14 +298,22 @@ class SuperGlueSelfAttention(nn.Module):
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = nn.Embedding(
+                2 * config.max_position_embeddings - 1, self.attention_head_size
+            )
 
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -318,27 +368,48 @@ class SuperGlueSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             query_length, key_length = query_layer.shape[2], key_layer.shape[2]
             if use_cache:
-                position_ids_l = torch.tensor(key_length - 1, dtype=torch.long, device=hidden_states.device).view(
-                    -1, 1
-                )
+                position_ids_l = torch.tensor(
+                    key_length - 1, dtype=torch.long, device=hidden_states.device
+                ).view(-1, 1)
             else:
-                position_ids_l = torch.arange(query_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(key_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+                position_ids_l = torch.arange(
+                    query_length, dtype=torch.long, device=hidden_states.device
+                ).view(-1, 1)
+            position_ids_r = torch.arange(
+                key_length, dtype=torch.long, device=hidden_states.device
+            ).view(1, -1)
             distance = position_ids_l - position_ids_r
 
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            positional_embedding = self.distance_embedding(
+                distance + self.max_position_embeddings - 1
+            )
+            positional_embedding = positional_embedding.to(
+                dtype=query_layer.dtype
+            )  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+                relative_position_scores_query = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
+                relative_position_scores_key = torch.einsum(
+                    "bhrd,lrd->bhlr", key_layer, positional_embedding
+                )
+                attention_scores = (
+                    attention_scores
+                    + relative_position_scores_query
+                    + relative_position_scores_key
+                )
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
@@ -362,7 +433,9 @@ class SuperGlueSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
@@ -398,7 +471,10 @@ class SuperGlueAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -409,7 +485,9 @@ class SuperGlueAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -432,7 +510,9 @@ class SuperGlueAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -457,7 +537,9 @@ class SuperGlueAttentionalPropagation(nn.Module):
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[
+        torch.Tensor, Optional[Tuple[torch.Tensor]], Optional[Tuple[torch.Tensor]]
+    ]:
         attention_outputs = self.attention(
             descriptors,
             attention_mask=attention_mask,
@@ -484,7 +566,12 @@ class SuperGlueAttentionalGNN(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layers_types = config.gnn_layers_types
-        self.layers = nn.ModuleList([SuperGlueAttentionalPropagation(config) for _ in range(len(self.layers_types))])
+        self.layers = nn.ModuleList(
+            [
+                SuperGlueAttentionalPropagation(config)
+                for _ in range(len(self.layers_types))
+            ]
+        )
 
     def forward(
         self,
@@ -510,7 +597,9 @@ class SuperGlueAttentionalGNN(nn.Module):
                     .reshape(batch_size, num_keypoints, self.hidden_size)
                 )
                 encoder_attention_mask = (
-                    mask.reshape(-1, 2, 1, 1, num_keypoints).flip(1).reshape(batch_size, 1, 1, num_keypoints)
+                    mask.reshape(-1, 2, 1, 1, num_keypoints)
+                    .flip(1)
+                    .reshape(batch_size, 1, 1, num_keypoints)
                     if mask is not None
                     else None
                 )
@@ -620,7 +709,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     def __init__(self, config: SuperGlueConfig) -> None:
         super().__init__(config)
 
-        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(
+            config.keypoint_detector_config
+        )
 
         self.keypoint_encoder = SuperGlueKeypointEncoder(config)
         self.gnn = SuperGlueAttentionalGNN(config)
@@ -690,14 +781,18 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         batch_size, _, num_keypoints, _ = keypoints.shape
         # (batch_size, 2, num_keypoints, 2) -> (batch_size * 2, num_keypoints, 2)
         keypoints = keypoints.reshape(batch_size * 2, num_keypoints, 2)
-        descriptors = descriptors.reshape(batch_size * 2, num_keypoints, self.config.hidden_size)
+        descriptors = descriptors.reshape(
+            batch_size * 2, num_keypoints, self.config.hidden_size
+        )
         scores = scores.reshape(batch_size * 2, num_keypoints)
         mask = mask.reshape(batch_size * 2, num_keypoints) if mask is not None else None
 
         # Keypoint normalization
         keypoints = normalize_keypoints(keypoints, height, width)
 
-        encoded_keypoints = self.keypoint_encoder(keypoints, scores, output_hidden_states=output_hidden_states)
+        encoded_keypoints = self.keypoint_encoder(
+            keypoints, scores, output_hidden_states=output_hidden_states
+        )
 
         last_hidden_state = encoded_keypoints[0]
 
@@ -706,9 +801,13 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
 
         if mask is not None:
             input_shape = descriptors.size()
-            extended_attention_mask = self.get_extended_attention_mask(mask, input_shape)
+            extended_attention_mask = self.get_extended_attention_mask(
+                mask, input_shape
+            )
         else:
-            extended_attention_mask = torch.ones((batch_size, num_keypoints), device=keypoints.device)
+            extended_attention_mask = torch.ones(
+                (batch_size, num_keypoints), device=keypoints.device
+            )
 
         # Multi-layer Transformer network.
         gnn_outputs = self.gnn(
@@ -723,7 +822,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         projected_descriptors = self.final_projection(descriptors)
 
         # (batch_size * 2, num_keypoints, descriptor_dim) -> (batch_size, 2, num_keypoints, descriptor_dim)
-        final_descriptors = projected_descriptors.reshape(batch_size, 2, num_keypoints, self.config.hidden_size)
+        final_descriptors = projected_descriptors.reshape(
+            batch_size, 2, num_keypoints, self.config.hidden_size
+        )
         final_descriptors0 = final_descriptors[:, 0]
         final_descriptors1 = final_descriptors[:, 1]
 
@@ -737,7 +838,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             scores = scores.masked_fill(mask0 == 0, -1e9)
 
         # Run the optimal transport.
-        scores = log_optimal_transport(scores, self.bin_score, iterations=self.config.sinkhorn_iterations)
+        scores = log_optimal_transport(
+            scores, self.bin_score, iterations=self.config.sinkhorn_iterations
+        )
 
         # Get the matches with score above "match_threshold".
         max0 = scores[:, :-1, :-1].max(2)
@@ -748,26 +851,36 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         mutual1 = arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
         zero = scores.new_tensor(0)
         matching_scores0 = torch.where(mutual0, max0.values.exp(), zero)
-        matching_scores0 = torch.where(matching_scores0 > self.config.matching_threshold, matching_scores0, zero)
-        matching_scores1 = torch.where(mutual1, matching_scores0.gather(1, indices1), zero)
+        matching_scores0 = torch.where(
+            matching_scores0 > self.config.matching_threshold, matching_scores0, zero
+        )
+        matching_scores1 = torch.where(
+            mutual1, matching_scores0.gather(1, indices1), zero
+        )
         valid0 = mutual0 & (matching_scores0 > zero)
         valid1 = mutual1 & valid0.gather(1, indices1)
         matches0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
         matches1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
 
         matches = torch.cat([matches0, matches1]).reshape(batch_size, 2, -1)
-        matching_scores = torch.cat([matching_scores0, matching_scores1]).reshape(batch_size, 2, -1)
+        matching_scores = torch.cat([matching_scores0, matching_scores1]).reshape(
+            batch_size, 2, -1
+        )
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + encoded_keypoints[1]
             all_hidden_states = all_hidden_states + gnn_outputs[1]
             all_hidden_states = all_hidden_states + (projected_descriptors,)
             all_hidden_states = tuple(
-                x.reshape(batch_size, 2, num_keypoints, -1).transpose(-1, -2) for x in all_hidden_states
+                x.reshape(batch_size, 2, num_keypoints, -1).transpose(-1, -2)
+                for x in all_hidden_states
             )
         if output_attentions:
             all_attentions = all_attentions + gnn_outputs[2]
-            all_attentions = tuple(x.reshape(batch_size, 2, -1, num_keypoints, num_keypoints) for x in all_attentions)
+            all_attentions = tuple(
+                x.reshape(batch_size, 2, -1, num_keypoints, num_keypoints)
+                for x in all_attentions
+            )
 
         return (
             matches,
@@ -809,16 +922,28 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         ```"""
         loss = None
         if labels is not None:
-            raise ValueError("SuperGlue is not trainable, no labels should be provided.")
+            raise ValueError(
+                "SuperGlue is not trainable, no labels should be provided."
+            )
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values.ndim != 5 or pixel_values.size(1) != 2:
-            raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
+            raise ValueError(
+                "Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)"
+            )
 
         batch_size, _, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(batch_size * 2, channels, height, width)
@@ -827,7 +952,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         keypoints, scores, descriptors, mask = keypoint_detections[:4]
         keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
         scores = scores.reshape(batch_size, 2, -1).to(pixel_values)
-        descriptors = descriptors.reshape(batch_size, 2, -1, self.config.hidden_size).to(pixel_values)
+        descriptors = descriptors.reshape(
+            batch_size, 2, -1, self.config.hidden_size
+        ).to(pixel_values)
         mask = mask.reshape(batch_size, 2, -1)
 
         absolute_keypoints = keypoints.clone()
@@ -848,7 +975,15 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [loss, matches, matching_scores, keypoints, mask, hidden_states, attentions]
+                for v in [
+                    loss,
+                    matches,
+                    matching_scores,
+                    keypoints,
+                    mask,
+                    hidden_states,
+                    attentions,
+                ]
                 if v is not None
             )
 

@@ -122,7 +122,9 @@ class EsmConfig(PretrainedConfig):
         vocab_list=None,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id, mask_token_id=mask_token_id, **kwargs
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -141,21 +143,29 @@ class EsmConfig(PretrainedConfig):
         self.is_folding_model = is_folding_model
         if is_folding_model:
             if esmfold_config is None:
-                logger.info("No esmfold_config supplied for folding model, using default values.")
+                logger.info(
+                    "No esmfold_config supplied for folding model, using default values."
+                )
                 esmfold_config = EsmFoldConfig()
             elif isinstance(esmfold_config, dict):
                 esmfold_config = EsmFoldConfig(**esmfold_config)
             self.esmfold_config = esmfold_config
             if vocab_list is None:
-                logger.warning("No vocab_list supplied for folding model, assuming the ESM-2 vocabulary!")
+                logger.warning(
+                    "No vocab_list supplied for folding model, assuming the ESM-2 vocabulary!"
+                )
                 self.vocab_list = get_default_vocab_list()
             else:
                 self.vocab_list = vocab_list
         else:
             self.esmfold_config = None
             self.vocab_list = None
-        if self.esmfold_config is not None and getattr(self.esmfold_config, "use_esm_attn_map", False):
-            raise ValueError("The HuggingFace port of ESMFold does not support use_esm_attn_map at this time!")
+        if self.esmfold_config is not None and getattr(
+            self.esmfold_config, "use_esm_attn_map", False
+        ):
+            raise ValueError(
+                "The HuggingFace port of ESMFold does not support use_esm_attn_map at this time!"
+            )
 
     def to_dict(self):
         """
@@ -225,7 +235,9 @@ class TrunkConfig:
             self.structure_module = StructureModuleConfig(**self.structure_module)
 
         if self.max_recycles <= 0:
-            raise ValueError(f"`max_recycles` should be positive, got {self.max_recycles}.")
+            raise ValueError(
+                f"`max_recycles` should be positive, got {self.max_recycles}."
+            )
         if self.sequence_state_dim % self.sequence_state_dim != 0:
             raise ValueError(
                 "`sequence_state_dim` should be a round multiple of `sequence_state_dim`, got"
@@ -251,10 +263,14 @@ class TrunkConfig:
                 f" {self.pairwise_state_dim} != {pairwise_num_heads} * {self.pairwise_head_width}."
             )
         if self.pairwise_state_dim % 2 != 0:
-            raise ValueError(f"`pairwise_state_dim` should be even, got {self.pairwise_state_dim}.")
+            raise ValueError(
+                f"`pairwise_state_dim` should be even, got {self.pairwise_state_dim}."
+            )
 
         if self.dropout >= 0.4:
-            raise ValueError(f"`dropout` should not be greater than 0.4, got {self.dropout}.")
+            raise ValueError(
+                f"`dropout` should not be greater than 0.4, got {self.dropout}."
+            )
 
     def to_dict(self):
         """

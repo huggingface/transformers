@@ -54,7 +54,10 @@ check_min_version("4.50.0.dev0")
 
 logger = get_logger(__name__)
 
-require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
+require_version(
+    "datasets>=2.0.0",
+    "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt",
+)
 
 
 def reduce_labels_transform(labels: np.ndarray, **kwargs) -> np.ndarray:
@@ -73,7 +76,9 @@ def reduce_labels_transform(labels: np.ndarray, **kwargs) -> np.ndarray:
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a image semantic segmentation task")
+    parser = argparse.ArgumentParser(
+        description="Finetune a transformers model on a image semantic segmentation task"
+    )
     parser.add_argument(
         "--model_name_or_path",
         type=str,
@@ -148,7 +153,12 @@ def parse_args():
         default=1e-8,
         help="Epsilon for AdamW optimizer",
     )
-    parser.add_argument("--num_train_epochs", type=int, default=3, help="Total number of training epochs to perform.")
+    parser.add_argument(
+        "--num_train_epochs",
+        type=int,
+        default=3,
+        help="Total number of training epochs to perform.",
+    )
     parser.add_argument(
         "--max_train_steps",
         type=int,
@@ -166,18 +176,40 @@ def parse_args():
         type=SchedulerType,
         default="polynomial",
         help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+        choices=[
+            "linear",
+            "cosine",
+            "cosine_with_restarts",
+            "polynomial",
+            "constant",
+            "constant_with_warmup",
+        ],
     )
     parser.add_argument(
-        "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
+        "--num_warmup_steps",
+        type=int,
+        default=0,
+        help="Number of steps for the warmup in the lr scheduler.",
     )
-    parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
-    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
-        "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
+        "--output_dir", type=str, default=None, help="Where to store the final model."
     )
-    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--seed", type=int, default=None, help="A seed for reproducible training."
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the model to the Hub.",
+    )
+    parser.add_argument(
+        "--hub_model_id",
+        type=str,
+        help="The name of the repository to keep in sync with the local `output_dir`.",
+    )
+    parser.add_argument(
+        "--hub_token", type=str, help="The token to use to push to the Model Hub."
+    )
     parser.add_argument(
         "--trust_remote_code",
         action="store_true",
@@ -254,7 +286,10 @@ def main():
         accelerator_log_kwargs["log_with"] = args.report_to
         accelerator_log_kwargs["project_dir"] = args.output_dir
 
-    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
+    accelerator = Accelerator(
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        **accelerator_log_kwargs,
+    )
 
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -278,7 +313,9 @@ def main():
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
             api = HfApi()
-            repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            repo_id = api.create_repo(
+                repo_name, exist_ok=True, token=args.hub_token
+            ).repo_id
 
             with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
                 if "step_*" not in gitignore:
@@ -293,7 +330,11 @@ def main():
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
     # TODO support datasets from local folders
-    dataset = load_dataset(args.dataset_name, cache_dir=args.cache_dir, trust_remote_code=args.trust_remote_code)
+    dataset = load_dataset(
+        args.dataset_name,
+        cache_dir=args.cache_dir,
+        trust_remote_code=args.trust_remote_code,
+    )
 
     # Rename column names to standardized names (only "image" and "label" need to be present)
     if "pixel_values" in dataset["train"].column_names:
@@ -302,7 +343,9 @@ def main():
         dataset = dataset.rename_columns({"annotation": "label"})
 
     # If we don't have a validation split, split off a percentage of train as validation.
-    args.train_val_split = None if "validation" in dataset.keys() else args.train_val_split
+    args.train_val_split = (
+        None if "validation" in dataset.keys() else args.train_val_split
+    )
     if isinstance(args.train_val_split, float) and args.train_val_split > 0.0:
         split = dataset["train"].train_test_split(args.train_val_split)
         dataset["train"] = split["train"]
@@ -316,13 +359,18 @@ def main():
     else:
         repo_id = args.dataset_name
         filename = "id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
     # Load pretrained model and image processor
     config = AutoConfig.from_pretrained(
-        args.model_name_or_path, id2label=id2label, label2id=label2id, trust_remote_code=args.trust_remote_code
+        args.model_name_or_path,
+        id2label=id2label,
+        label2id=label2id,
+        trust_remote_code=args.trust_remote_code,
     )
     image_processor = AutoImageProcessor.from_pretrained(
         args.model_name_or_path, trust_remote_code=args.trust_remote_code
@@ -337,25 +385,48 @@ def main():
     # Define transforms to be applied to each image and target.
     if "shortest_edge" in image_processor.size:
         # We instead set the target size as (shortest_edge, shortest_edge) to here to ensure all images are batchable.
-        height, width = image_processor.size["shortest_edge"], image_processor.size["shortest_edge"]
+        height, width = (
+            image_processor.size["shortest_edge"],
+            image_processor.size["shortest_edge"],
+        )
     else:
         height, width = image_processor.size["height"], image_processor.size["width"]
     train_transforms = A.Compose(
         [
-            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
+            A.Lambda(
+                name="reduce_labels",
+                mask=reduce_labels_transform if args.do_reduce_labels else None,
+                p=1.0,
+            ),
             # pad image with 255, because it is ignored by loss
-            A.PadIfNeeded(min_height=height, min_width=width, border_mode=0, value=255, p=1.0),
+            A.PadIfNeeded(
+                min_height=height, min_width=width, border_mode=0, value=255, p=1.0
+            ),
             A.RandomCrop(height=height, width=width, p=1.0),
             A.HorizontalFlip(p=0.5),
-            A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),
+            A.Normalize(
+                mean=image_processor.image_mean,
+                std=image_processor.image_std,
+                max_pixel_value=255.0,
+                p=1.0,
+            ),
             ToTensorV2(),
         ]
     )
     val_transforms = A.Compose(
         [
-            A.Lambda(name="reduce_labels", mask=reduce_labels_transform if args.do_reduce_labels else None, p=1.0),
+            A.Lambda(
+                name="reduce_labels",
+                mask=reduce_labels_transform if args.do_reduce_labels else None,
+                p=1.0,
+            ),
             A.Resize(height=height, width=width, p=1.0),
-            A.Normalize(mean=image_processor.image_mean, std=image_processor.image_std, max_pixel_value=255.0, p=1.0),
+            A.Normalize(
+                mean=image_processor.image_mean,
+                std=image_processor.image_std,
+                max_pixel_value=255.0,
+                p=1.0,
+            ),
             ToTensorV2(),
         ]
     )
@@ -364,7 +435,9 @@ def main():
         pixel_values = []
         labels = []
         for image, target in zip(example_batch["image"], example_batch["label"]):
-            transformed = transforms(image=np.array(image.convert("RGB")), mask=np.array(target))
+            transformed = transforms(
+                image=np.array(image.convert("RGB")), mask=np.array(target)
+            )
             pixel_values.append(transformed["image"])
             labels.append(transformed["mask"])
 
@@ -384,10 +457,15 @@ def main():
         eval_dataset = dataset["validation"].with_transform(preprocess_val_batch_fn)
 
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset,
+        shuffle=True,
+        collate_fn=default_data_collator,
+        batch_size=args.per_device_train_batch_size,
     )
     eval_dataloader = DataLoader(
-        eval_dataset, collate_fn=default_data_collator, batch_size=args.per_device_eval_batch_size
+        eval_dataset,
+        collate_fn=default_data_collator,
+        batch_size=args.per_device_eval_batch_size,
     )
 
     # Optimizer
@@ -405,7 +483,9 @@ def main():
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(
+        len(train_dataloader) / args.gradient_accumulation_steps
+    )
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
@@ -414,18 +494,24 @@ def main():
         name=args.lr_scheduler_type,
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps * accelerator.num_processes,
-        num_training_steps=args.max_train_steps
-        if overrode_max_train_steps
-        else args.max_train_steps * accelerator.num_processes,
+        num_training_steps=(
+            args.max_train_steps
+            if overrode_max_train_steps
+            else args.max_train_steps * accelerator.num_processes
+        ),
     )
 
     # Prepare everything with our `accelerator`.
-    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
-        model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+    model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = (
+        accelerator.prepare(
+            model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
+        )
     )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(
+        len(train_dataloader) / args.gradient_accumulation_steps
+    )
     if overrode_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
@@ -439,21 +525,33 @@ def main():
     if args.with_tracking:
         experiment_config = vars(args)
         # TensorBoard cannot log Enums, need the raw value
-        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        experiment_config["lr_scheduler_type"] = experiment_config[
+            "lr_scheduler_type"
+        ].value
         accelerator.init_trackers("semantic_segmentation_no_trainer", experiment_config)
 
     # Train!
-    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+    total_batch_size = (
+        args.per_device_train_batch_size
+        * accelerator.num_processes
+        * args.gradient_accumulation_steps
+    )
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(
+        f"  Instantaneous batch size per device = {args.per_device_train_batch_size}"
+    )
+    logger.info(
+        f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}"
+    )
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+    progress_bar = tqdm(
+        range(args.max_train_steps), disable=not accelerator.is_local_main_process
+    )
     completed_steps = 0
     starting_epoch = 0
 
@@ -466,7 +564,9 @@ def main():
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
-            path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+            path = dirs[
+                -1
+            ]  # Sorts folders by date modified, most recent checkpoint is the last
             checkpoint_path = path
             path = os.path.basename(checkpoint_path)
 
@@ -481,7 +581,10 @@ def main():
             completed_steps = starting_epoch * num_update_steps_per_epoch
         else:
             # need to multiply `gradient_accumulation_steps` to reflect real steps
-            resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
+            resume_step = (
+                int(training_difference.replace("step_", ""))
+                * args.gradient_accumulation_steps
+            )
             starting_epoch = resume_step // len(train_dataloader)
             completed_steps = resume_step // args.gradient_accumulation_steps
             resume_step -= starting_epoch * len(train_dataloader)
@@ -493,9 +596,15 @@ def main():
         model.train()
         if args.with_tracking:
             total_loss = 0
-        if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
+        if (
+            args.resume_from_checkpoint
+            and epoch == starting_epoch
+            and resume_step is not None
+        ):
             # We skip the first `n` batches in the dataloader when resuming from a checkpoint
-            active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
+            active_dataloader = accelerator.skip_first_batches(
+                train_dataloader, resume_step
+            )
         else:
             active_dataloader = train_dataloader
         for step, batch in enumerate(active_dataloader):
@@ -516,7 +625,10 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
+                if (
+                    completed_steps % checkpointing_steps == 0
+                    and accelerator.sync_gradients
+                ):
                     output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
@@ -545,16 +657,23 @@ def main():
 
         logger.info("***** Running evaluation *****")
         model.eval()
-        for step, batch in enumerate(tqdm(eval_dataloader, disable=not accelerator.is_local_main_process)):
+        for step, batch in enumerate(
+            tqdm(eval_dataloader, disable=not accelerator.is_local_main_process)
+        ):
             with torch.no_grad():
                 outputs = model(**batch)
 
             upsampled_logits = torch.nn.functional.interpolate(
-                outputs.logits, size=batch["labels"].shape[-2:], mode="bilinear", align_corners=False
+                outputs.logits,
+                size=batch["labels"].shape[-2:],
+                mode="bilinear",
+                align_corners=False,
             )
             predictions = upsampled_logits.argmax(dim=1)
 
-            predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
+            predictions, references = accelerator.gather_for_metrics(
+                (predictions, batch["labels"])
+            )
 
             metric.add_batch(
                 predictions=predictions,
@@ -585,7 +704,9 @@ def main():
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
             unwrapped_model.save_pretrained(
-                args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+                args.output_dir,
+                is_main_process=accelerator.is_main_process,
+                save_function=accelerator.save,
             )
             if accelerator.is_main_process:
                 image_processor.save_pretrained(args.output_dir)
@@ -610,7 +731,9 @@ def main():
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(
-            args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
+            args.output_dir,
+            is_main_process=accelerator.is_main_process,
+            save_function=accelerator.save,
         )
         if accelerator.is_main_process:
             image_processor.save_pretrained(args.output_dir)
@@ -624,7 +747,8 @@ def main():
                 )
 
             all_results = {
-                f"eval_{k}": v.tolist() if isinstance(v, np.ndarray) else v for k, v in eval_metrics.items()
+                f"eval_{k}": v.tolist() if isinstance(v, np.ndarray) else v
+                for k, v in eval_metrics.items()
             }
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump(all_results, f, indent=2)

@@ -22,7 +22,12 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ConvNextConfig, SegformerImageProcessor, UperNetConfig, UperNetForSemanticSegmentation
+from transformers import (
+    ConvNextConfig,
+    SegformerImageProcessor,
+    UperNetConfig,
+    UperNetForSemanticSegmentation,
+)
 
 
 def get_upernet_config(model_name):
@@ -50,12 +55,16 @@ def get_upernet_config(model_name):
     num_labels = 150
     repo_id = "huggingface/label-files"
     filename = "ade20k-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
     backbone_config = ConvNextConfig(
-        depths=depths, hidden_sizes=hidden_sizes, out_features=["stage1", "stage2", "stage3", "stage4"]
+        depths=depths,
+        hidden_sizes=hidden_sizes,
+        out_features=["stage1", "stage2", "stage3", "stage4"],
     )
     config = UperNetConfig(
         backbone_config=backbone_config,
@@ -127,7 +136,9 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         "upernet-convnext-xlarge": "https://download.openmmlab.com/mmsegmentation/v0.5/convnext/upernet_convnext_xlarge_fp16_640x640_160k_ade20k/upernet_convnext_xlarge_fp16_640x640_160k_ade20k_20220226_080344-95fc38c2.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")[
+        "state_dict"
+    ]
 
     config = get_upernet_config(model_name)
     model = UperNetForSemanticSegmentation(config)
@@ -159,23 +170,43 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     if model_name == "upernet-convnext-tiny":
         expected_slice = torch.tensor(
-            [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
+            [
+                [-8.8110, -8.8110, -8.6521],
+                [-8.8110, -8.8110, -8.6521],
+                [-8.7746, -8.7746, -8.6130],
+            ]
         )
     elif model_name == "upernet-convnext-small":
         expected_slice = torch.tensor(
-            [[-8.8236, -8.8236, -8.6771], [-8.8236, -8.8236, -8.6771], [-8.7638, -8.7638, -8.6240]]
+            [
+                [-8.8236, -8.8236, -8.6771],
+                [-8.8236, -8.8236, -8.6771],
+                [-8.7638, -8.7638, -8.6240],
+            ]
         )
     elif model_name == "upernet-convnext-base":
         expected_slice = torch.tensor(
-            [[-8.8558, -8.8558, -8.6905], [-8.8558, -8.8558, -8.6905], [-8.7669, -8.7669, -8.6021]]
+            [
+                [-8.8558, -8.8558, -8.6905],
+                [-8.8558, -8.8558, -8.6905],
+                [-8.7669, -8.7669, -8.6021],
+            ]
         )
     elif model_name == "upernet-convnext-large":
         expected_slice = torch.tensor(
-            [[-8.6660, -8.6660, -8.6210], [-8.6660, -8.6660, -8.6210], [-8.6310, -8.6310, -8.5964]]
+            [
+                [-8.6660, -8.6660, -8.6210],
+                [-8.6660, -8.6660, -8.6210],
+                [-8.6310, -8.6310, -8.5964],
+            ]
         )
     elif model_name == "upernet-convnext-xlarge":
         expected_slice = torch.tensor(
-            [[-8.4980, -8.4980, -8.3977], [-8.4980, -8.4980, -8.3977], [-8.4379, -8.4379, -8.3412]]
+            [
+                [-8.4980, -8.4980, -8.3977],
+                [-8.4980, -8.4980, -8.3977],
+                [-8.4379, -8.4379, -8.3412],
+            ]
         )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
@@ -200,15 +231,25 @@ if __name__ == "__main__":
         "--model_name",
         default="upernet-convnext-tiny",
         type=str,
-        choices=[f"upernet-convnext-{size}" for size in ["tiny", "small", "base", "large", "xlarge"]],
+        choices=[
+            f"upernet-convnext-{size}"
+            for size in ["tiny", "small", "base", "large", "xlarge"]
+        ],
         help="Name of the ConvNext UperNet model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_upernet_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_upernet_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

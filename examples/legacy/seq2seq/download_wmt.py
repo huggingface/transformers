@@ -19,7 +19,9 @@ import fire
 from tqdm import tqdm
 
 
-def download_wmt_dataset(src_lang="ro", tgt_lang="en", dataset="wmt16", save_dir=None) -> None:
+def download_wmt_dataset(
+    src_lang="ro", tgt_lang="en", dataset="wmt16", save_dir=None
+) -> None:
     """Download a dataset using the datasets package and save it to the format expected by finetune.py
     Format of save_dir: train.source, train.target, val.source, val.target, test.source, test.target.
 

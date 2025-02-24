@@ -149,4 +149,9 @@ class TrajectoryTransformerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.kaiming_initializer_range = kaiming_initializer_range
         self.use_cache = use_cache
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )

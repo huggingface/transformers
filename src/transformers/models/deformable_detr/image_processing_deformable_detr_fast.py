@@ -65,7 +65,9 @@ class DeformableDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKw
     pad_size: Optional[Dict[str, int]]
 
 
-class DeformableDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class DeformableDetrFastImageProcessorPreprocessKwargs(
+    DefaultFastImageProcessorPreprocessKwargs
+):
     format: Optional[AnnotationFormat]
     annotations: Optional[Dict]
     do_convert_annotations: Optional[bool]
@@ -75,11 +77,16 @@ class DeformableDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessor
     masks_path: Optional[Union[str, pathlib.Path]]
 
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (
+    AnnotationFormat.COCO_DETECTION,
+    AnnotationFormat.COCO_PANOPTIC,
+)
 
 
 # inspired by https://github.com/facebookresearch/deformable_detr/blob/master/datasets/coco.py#L33
-def convert_coco_poly_to_mask(segmentations, height: int, width: int, device: torch.device) -> torch.Tensor:
+def convert_coco_poly_to_mask(
+    segmentations, height: int, width: int, device: torch.device
+) -> torch.Tensor:
     """
     Convert a COCO polygon annotation to a mask.
 
@@ -146,7 +153,9 @@ def prepare_coco_detection_annotation(
     area = torch.as_tensor(area, dtype=torch.float32, device=image.device)
     iscrowd = torch.zeros_like(classes, dtype=torch.int64, device=image.device)
     # guard against no boxes via resizing
-    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(-1, 4)
+    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(
+        -1, 4
+    )
     boxes[:, 2:] += boxes[:, :2]
     boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
     boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
@@ -159,7 +168,11 @@ def prepare_coco_detection_annotation(
         "boxes": boxes[keep],
         "area": area[keep],
         "iscrowd": iscrowd[keep],
-        "orig_size": torch.as_tensor([int(image_height), int(image_width)], dtype=torch.int64, device=image.device),
+        "orig_size": torch.as_tensor(
+            [int(image_height), int(image_width)],
+            dtype=torch.int64,
+            device=image.device,
+        ),
     }
 
     if keypoints:
@@ -172,7 +185,9 @@ def prepare_coco_detection_annotation(
 
     if return_segmentation_masks:
         segmentation_masks = [obj["segmentation"] for obj in annotations]
-        masks = convert_coco_poly_to_mask(segmentation_masks, image_height, image_width, device=image.device)
+        masks = convert_coco_poly_to_mask(
+            segmentation_masks, image_height, image_width, device=image.device
+        )
         new_target["masks"] = masks[keep]
 
     return new_target
@@ -200,13 +215,17 @@ def masks_to_boxes(masks: torch.Tensor) -> torch.Tensor:
     x_mask = masks * torch.unsqueeze(x, 0)
     x_max = x_mask.view(x_mask.shape[0], -1).max(-1)[0]
     x_min = (
-        torch.where(masks, x.unsqueeze(0), torch.tensor(1e8, device=masks.device)).view(masks.shape[0], -1).min(-1)[0]
+        torch.where(masks, x.unsqueeze(0), torch.tensor(1e8, device=masks.device))
+        .view(masks.shape[0], -1)
+        .min(-1)[0]
     )
 
     y_mask = masks * torch.unsqueeze(y, 0)
     y_max = y_mask.view(y_mask.shape[0], -1).max(-1)[0]
     y_min = (
-        torch.where(masks, y.unsqueeze(0), torch.tensor(1e8, device=masks.device)).view(masks.shape[0], -1).min(-1)[0]
+        torch.where(masks, y.unsqueeze(0), torch.tensor(1e8, device=masks.device))
+        .view(masks.shape[0], -1)
+        .min(-1)[0]
     )
 
     return torch.stack([x_min, y_min, x_max, y_max], 1)
@@ -241,16 +260,30 @@ def prepare_coco_panoptic_annotation(
 
     new_target = {}
     new_target["image_id"] = torch.as_tensor(
-        [target["image_id"] if "image_id" in target else target["id"]], dtype=torch.int64, device=image.device
+        [target["image_id"] if "image_id" in target else target["id"]],
+        dtype=torch.int64,
+        device=image.device,
     )
-    new_target["size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
-    new_target["orig_size"] = torch.as_tensor([image_height, image_width], dtype=torch.int64, device=image.device)
+    new_target["size"] = torch.as_tensor(
+        [image_height, image_width], dtype=torch.int64, device=image.device
+    )
+    new_target["orig_size"] = torch.as_tensor(
+        [image_height, image_width], dtype=torch.int64, device=image.device
+    )
 
     if "segments_info" in target:
-        masks = read_image(annotation_path).permute(1, 2, 0).to(torch.int32).to(image.device)
+        masks = (
+            read_image(annotation_path)
+            .permute(1, 2, 0)
+            .to(torch.int32)
+            .to(image.device)
+        )
         masks = rgb_to_id(masks)
 
-        ids = torch.as_tensor([segment_info["id"] for segment_info in target["segments_info"]], device=image.device)
+        ids = torch.as_tensor(
+            [segment_info["id"] for segment_info in target["segments_info"]],
+            device=image.device,
+        )
         masks = masks == ids[:, None, None]
         masks = masks.to(torch.bool)
         if return_masks:
@@ -311,7 +344,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     valid_init_kwargs = DeformableDetrFastImageProcessorInitKwargs
     valid_preprocess_kwargs = DeformableDetrFastImageProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs: Unpack[DeformableDetrFastImageProcessorInitKwargs]) -> None:
+    def __init__(
+        self, **kwargs: Unpack[DeformableDetrFastImageProcessorInitKwargs]
+    ) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -325,14 +360,21 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         else:
             max_size = None if size is None else 1333
 
-        size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+        size = (
+            size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
+        )
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
-        if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
-            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+        if (
+            do_convert_annotations is None
+            and getattr(self, "do_convert_annotations", None) is None
+        ):
+            self.do_convert_annotations = (
+                do_normalize if do_normalize is not None else self.do_normalize
+            )
 
         super().__init__(**kwargs)
 
@@ -347,7 +389,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         if "max_size" in kwargs:
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
+            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop(
+                "pad_and_return_pixel_mask"
+            )
         return super().from_dict(image_processor_dict, **kwargs)
 
     def prepare_annotation(
@@ -365,12 +409,21 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                False
+                if return_segmentation_masks is None
+                else return_segmentation_masks
+            )
             target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
+                image,
+                target,
+                return_segmentation_masks,
+                input_data_format=input_data_format,
             )
         elif format == AnnotationFormat.COCO_PANOPTIC:
-            return_segmentation_masks = True if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                True if return_segmentation_masks is None else return_segmentation_masks
+            )
             target = prepare_coco_panoptic_annotation(
                 image,
                 target,
@@ -409,7 +462,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        )
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -419,7 +474,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 size["longest_edge"],
             )
         elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size["max_height"], size["max_width"])
+            new_size = get_image_size_for_max_height_width(
+                image.size()[-2:], size["max_height"], size["max_width"]
+            )
         elif size.height and size.width:
             new_size = (size["height"], size["width"])
         else:
@@ -459,8 +516,12 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             resample (`InterpolationMode`, defaults to `InterpolationMode.NEAREST`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST
-        ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.NEAREST
+        )
+        ratio_height, ratio_width = [
+            target / orig for target, orig in zip(target_size, orig_size)
+        ]
 
         new_annotation = {}
         new_annotation["size"] = target_size
@@ -469,7 +530,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             if key == "boxes":
                 boxes = value
                 scaled_boxes = boxes * torch.as_tensor(
-                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32, device=boxes.device
+                    [ratio_width, ratio_height, ratio_width, ratio_height],
+                    dtype=torch.float32,
+                    device=boxes.device,
                 )
                 new_annotation["boxes"] = scaled_boxes
             elif key == "area":
@@ -478,7 +541,10 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["area"] = scaled_area
             elif key == "masks":
                 masks = value[:, None]
-                masks = [F.resize(mask, target_size, interpolation=interpolation) for mask in masks]
+                masks = [
+                    F.resize(mask, target_size, interpolation=interpolation)
+                    for mask in masks
+                ]
                 masks = torch.stack(masks).to(torch.float32)
                 masks = masks[:, 0] > threshold
                 new_annotation["masks"] = masks
@@ -489,7 +555,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
         return new_annotation
 
-    def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+    def normalize_annotation(
+        self, annotation: Dict, image_size: Tuple[int, int]
+    ) -> Dict:
         image_height, image_width = image_size
         norm_annotation = {}
         for key, value in annotation.items():
@@ -497,7 +565,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 boxes = value
                 boxes = corners_to_center_format(boxes)
                 boxes /= torch.as_tensor(
-                    [image_width, image_height, image_width, image_height], dtype=torch.float32, device=boxes.device
+                    [image_width, image_height, image_width, image_height],
+                    dtype=torch.float32,
+                    device=boxes.device,
                 )
                 norm_annotation[key] = boxes
             else:
@@ -517,7 +587,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         """
         new_annotation = {}
         new_annotation["size"] = output_image_size
-        ratio_height, ratio_width = (input / output for output, input in zip(output_image_size, input_image_size))
+        ratio_height, ratio_width = (
+            input / output for output, input in zip(output_image_size, input_image_size)
+        )
 
         for key, value in annotation.items():
             if key == "masks":
@@ -531,7 +603,10 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["masks"] = masks
             elif key == "boxes" and update_bboxes:
                 boxes = value
-                boxes *= torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height], device=boxes.device)
+                boxes *= torch.as_tensor(
+                    [ratio_width, ratio_height, ratio_width, ratio_height],
+                    device=boxes.device,
+                )
                 new_annotation["boxes"] = boxes
             elif key == "size":
                 new_annotation["size"] = output_image_size
@@ -605,7 +680,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[DeformableDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[DeformableDetrFastImageProcessorPreprocessKwargs],
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
@@ -675,7 +752,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         processed_images = []
         processed_annotations = []
         pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+        for image, annotation in zip(
+            images, annotations if annotations is not None else [None] * len(images)
+        ):
             # prepare (COCO annotations as a list of Dict -> DEFORMABLE_DETR target as a single Dict per image)
             if annotations is not None:
                 annotation = self.prepare_annotation(
@@ -688,7 +767,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 )
 
             if do_resize:
-                resized_image = self.resize(image, size=size, interpolation=interpolation)
+                resized_image = self.resize(
+                    image, size=size, interpolation=interpolation
+                )
                 if annotations is not None:
                     annotation = self.resize_annotation(
                         annotation,
@@ -699,14 +780,18 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
             if do_rescale and do_normalize:
                 # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
+                image = F.normalize(
+                    image.to(dtype=torch.float32), image_mean, image_std
+                )
             elif do_rescale:
                 image = image * rescale_factor
             elif do_normalize:
                 image = F.normalize(image, image_mean, image_std)
 
             if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
+                annotation = self.normalize_annotation(
+                    annotation, get_image_size(image, ChannelDimension.FIRST)
+                )
 
             processed_images.append(image)
             processed_annotations.append(annotation)
@@ -722,15 +807,22 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
             padded_images = []
             padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+            for image, annotation in zip(
+                images, annotations if annotations is not None else [None] * len(images)
+            ):
                 # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
                 if padded_size == image.size()[-2:]:
                     padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
+                    pixel_masks.append(
+                        torch.ones(padded_size, dtype=torch.int64, device=image.device)
+                    )
                     padded_annotations.append(annotation)
                     continue
                 image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+                    image,
+                    padded_size,
+                    annotation=annotation,
+                    update_bboxes=do_convert_annotations,
                 )
                 padded_images.append(image)
                 padded_annotations.append(annotation)
@@ -743,7 +835,8 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                BatchFeature(annotation, tensor_type=return_tensors)
+                for annotation in annotations
             ]
         return encoded_inputs
 
@@ -771,12 +864,18 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+            )
         if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
+        topk_values, topk_indexes = torch.topk(
+            prob.view(out_logits.shape[0], -1), 100, dim=1
+        )
         scores = topk_values
         topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
         labels = topk_indexes % out_logits.shape[2]
@@ -788,12 +887,19 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
         boxes = boxes * scale_fct[:, None, :]
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = [
+            {"scores": s, "labels": l, "boxes": b}
+            for s, l, b in zip(scores, labels, boxes)
+        ]
 
         return results
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
+        self,
+        outputs,
+        threshold: float = 0.5,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+        top_k: int = 100,
     ):
         """
         Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -839,7 +945,9 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                boxes.device
+            )
             boxes = boxes * scale_fct[:, None, :]
 
         results = []

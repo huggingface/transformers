@@ -54,7 +54,8 @@ logger = logging.getLogger(__name__)
 check_min_version("4.50.0.dev0")
 
 require_version(
-    "datasets>=1.8.0", "To fix: pip install -r examples/tensorflow/contrastive-image-text/requirements.txt"
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/tensorflow/contrastive-image-text/requirements.txt",
 )
 
 
@@ -65,32 +66,55 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}, default=None
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        },
+        default=None,
     )
     vision_model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained image model or model identifier from huggingface.co/models"},
+        metadata={
+            "help": "Path to pretrained image model or model identifier from huggingface.co/models"
+        },
         default=None,
     )
     text_model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained text model or model identifier from huggingface.co/models"}, default=None
+        metadata={
+            "help": "Path to pretrained text model or model identifier from huggingface.co/models"
+        },
+        default=None,
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
-    image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
+    image_processor_name: str = field(
+        default=None, metadata={"help": "Name or path of preprocessor config."}
+    )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from s3"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     use_fast_tokenizer: bool = field(
         default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+        metadata={
+            "help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."
+        },
     )
     token: str = field(
         default=None,
@@ -112,10 +136,12 @@ class ModelArguments:
         },
     )
     freeze_vision_model: bool = field(
-        default=False, metadata={"help": "Whether to freeze the vision model parameters or not."}
+        default=False,
+        metadata={"help": "Whether to freeze the vision model parameters or not."},
     )
     freeze_text_model: bool = field(
-        default=False, metadata={"help": "Whether to freeze the text model parameters or not."}
+        default=False,
+        metadata={"help": "Whether to freeze the text model parameters or not."},
     )
 
 
@@ -126,22 +152,33 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
-    data_dir: Optional[str] = field(default=None, metadata={"help": "The data directory containing input files."})
+    data_dir: Optional[str] = field(
+        default=None, metadata={"help": "The data directory containing input files."}
+    )
     image_column: Optional[str] = field(
         default="image_path",
-        metadata={"help": "The name of the column in the datasets containing the full image file paths."},
+        metadata={
+            "help": "The name of the column in the datasets containing the full image file paths."
+        },
     )
     caption_column: Optional[str] = field(
         default="caption",
-        metadata={"help": "The name of the column in the datasets containing the image captions."},
+        metadata={
+            "help": "The name of the column in the datasets containing the image captions."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines file)."}
+        default=None,
+        metadata={"help": "The input training data file (a jsonlines file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
@@ -179,7 +216,8 @@ class DataTrainingArguments:
         },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -187,18 +225,33 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
             if self.test_file is not None:
                 extension = self.test_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`test_file` should be a csv or a json file."
 
 
 dataset_name_mapping = {
@@ -209,14 +262,22 @@ dataset_name_mapping = {
 def crop_to_square(image):
     height, width = tf.shape(image)[0], tf.shape(image)[1]
     if height > width:
-        image = tf.image.crop_to_bounding_box(image, (height - width) // 2, 0, width, width)
+        image = tf.image.crop_to_bounding_box(
+            image, (height - width) // 2, 0, width, width
+        )
     elif width > height:
-        image = tf.image.crop_to_bounding_box(image, 0, (width - height) // 2, height, height)
+        image = tf.image.crop_to_bounding_box(
+            image, 0, (width - height) // 2, height, height
+        )
     return image
 
 
-def load_as_tf_dataset(dataset, image_column, image_size, mean, std, batch_size, shuffle):
-    dataset = dataset.with_format("tensorflow")[:]  # Load the dataset as tensor slices, but not the images yet!
+def load_as_tf_dataset(
+    dataset, image_column, image_size, mean, std, batch_size, shuffle
+):
+    dataset = dataset.with_format("tensorflow")[
+        :
+    ]  # Load the dataset as tensor slices, but not the images yet!
     tf_dataset = tf.data.Dataset.from_tensor_slices(dataset)
 
     def load_image(sample):
@@ -224,7 +285,9 @@ def load_as_tf_dataset(dataset, image_column, image_size, mean, std, batch_size,
         image = tf.io.read_file(image_path)
         image = tf.image.decode_image(image, channels=3, expand_animations=False)
         image = crop_to_square(image)
-        image = tf.image.resize(image, [image_size, image_size], method="bicubic", antialias=True)
+        image = tf.image.resize(
+            image, [image_size, image_size], method="bicubic", antialias=True
+        )
         image = image / 255.0
         image = (image - mean) / std
         image = tf.transpose(image, perm=[2, 0, 1])  # Convert to channels-first
@@ -234,7 +297,9 @@ def load_as_tf_dataset(dataset, image_column, image_size, mean, std, batch_size,
 
     if shuffle:
         tf_dataset = tf_dataset.shuffle(len(tf_dataset))
-    tf_dataset = tf_dataset.map(load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+    tf_dataset = tf_dataset.map(
+        load_image, num_parallel_calls=tf.data.experimental.AUTOTUNE
+    )
     tf_dataset = tf_dataset.batch(batch_size, drop_remainder=shuffle)
     tf_dataset = tf_dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
@@ -247,26 +312,39 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TFTrainingArguments)
+    )
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        model_args, data_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if model_args.model_name_or_path is not None:
-        if model_args.vision_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
+        if (
+            model_args.vision_model_name_or_path is not None
+            or model_args.text_model_name_or_path is not None
+        ):
             raise ValueError(
                 "If using model_name_or_path, you cannot specify separate image/text model paths as well!"
             )
 
-    if model_args.vision_model_name_or_path is not None or model_args.text_model_name_or_path is not None:
+    if (
+        model_args.vision_model_name_or_path is not None
+        or model_args.text_model_name_or_path is not None
+    ):
         if model_args.model_name_or_path is not None:
             raise ValueError(
                 "If using separate image/text model paths, you cannot specify model_name_or_path as well!"
             )
-        if not (model_args.vision_model_name_or_path is not None and model_args.text_model_name_or_path is not None):
+        if not (
+            model_args.vision_model_name_or_path is not None
+            and model_args.text_model_name_or_path is not None
+        ):
             raise ValueError(
                 "If using separate image/text model paths, you must specify both vision_model_name_or_path "
                 "and text_model_name_or_path!"
@@ -297,13 +375,19 @@ def main():
 
     # 3. Detecting last checkpoint and eventually continue from last checkpoint
     last_checkpoint = None
-    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+    if (
+        os.path.isdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
         if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
             raise ValueError(
                 f"Output directory ({training_args.output_dir}) already exists and is not empty. "
                 "Use --overwrite_output_dir to overcome."
             )
-        elif last_checkpoint is not None and training_args.resume_from_checkpoint is None:
+        elif (
+            last_checkpoint is not None and training_args.resume_from_checkpoint is None
+        ):
             logger.info(
                 f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
                 "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
@@ -430,13 +514,17 @@ def main():
     elif training_args.do_predict:
         column_names = dataset["test"].column_names
     else:
-        logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
+        logger.info(
+            "There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`."
+        )
         return
 
     # 6. Get the column names for input/target.
     dataset_columns = dataset_name_mapping.get(data_args.dataset_name, None)
     if data_args.image_column is None:
-        image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
+        image_column = (
+            dataset_columns[0] if dataset_columns is not None else column_names[0]
+        )
     else:
         image_column = data_args.image_column
         if image_column not in column_names:
@@ -444,7 +532,9 @@ def main():
                 f"--image_column' value '{data_args.image_column}' needs to be one of: {', '.join(column_names)}"
             )
     if data_args.caption_column is None:
-        caption_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
+        caption_column = (
+            dataset_columns[1] if dataset_columns is not None else column_names[1]
+        )
     else:
         caption_column = data_args.caption_column
         if caption_column not in column_names:
@@ -457,7 +547,12 @@ def main():
     # We need to tokenize input captions and transform the images.
     def tokenize_captions(examples):
         captions = list(examples[caption_column])
-        text_inputs = tokenizer(captions, max_length=data_args.max_seq_length, padding="max_length", truncation=True)
+        text_inputs = tokenizer(
+            captions,
+            max_length=data_args.max_seq_length,
+            padding="max_length",
+            truncation=True,
+        )
         examples["input_ids"] = text_inputs.input_ids
         examples["attention_mask"] = text_inputs.attention_mask
         return examples
@@ -482,7 +577,9 @@ def main():
             train_dataset = train_dataset.select(range(max_train_samples))
 
         train_dataset = train_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+            filter_corrupt_images,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
         )
         train_dataset = train_dataset.map(
             function=tokenize_captions,
@@ -512,7 +609,9 @@ def main():
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
         eval_dataset = eval_dataset.filter(
-            filter_corrupt_images, batched=True, num_proc=data_args.preprocessing_num_workers
+            filter_corrupt_images,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
         )
         eval_dataset = eval_dataset.map(
             function=tokenize_captions,
@@ -545,14 +644,21 @@ def main():
         if data_args.dataset_name is not None:
             push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
         else:
-            push_to_hub_model_id = f"{model_name}-finetuned-contrastive-image-text-modeling"
+            push_to_hub_model_id = (
+                f"{model_name}-finetuned-contrastive-image-text-modeling"
+            )
 
-    model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "contrastive-image-text-modeling"}
+    model_card_kwargs = {
+        "finetuned_from": model_args.model_name_or_path,
+        "tasks": "contrastive-image-text-modeling",
+    }
     if data_args.dataset_name is not None:
         model_card_kwargs["dataset_tags"] = data_args.dataset_name
         if data_args.dataset_config_name is not None:
             model_card_kwargs["dataset_args"] = data_args.dataset_config_name
-            model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            model_card_kwargs["dataset"] = (
+                f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            )
         else:
             model_card_kwargs["dataset"] = data_args.dataset_name
 
@@ -571,7 +677,9 @@ def main():
 
     # # 9. Training
     if training_args.do_train:
-        num_train_steps = int(len(tf_train_dataset) * int(training_args.num_train_epochs))
+        num_train_steps = int(
+            len(tf_train_dataset) * int(training_args.num_train_epochs)
+        )
         if training_args.warmup_steps > 0:
             num_warmup_steps = training_args.warmup_steps
         elif training_args.warmup_ratio > 0:

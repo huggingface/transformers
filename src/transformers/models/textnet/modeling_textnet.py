@@ -69,7 +69,9 @@ class TextNetConvLayer(nn.Module):
             padding=padding,
             bias=False,
         )
-        self.batch_norm = nn.BatchNorm2d(config.stem_out_channels, config.batch_norm_eps)
+        self.batch_norm = nn.BatchNorm2d(
+            config.stem_out_channels, config.batch_norm_eps
+        )
 
         self.activation = nn.Identity()
         if self.activation_function is not None:
@@ -91,7 +93,14 @@ class TextNetRepConvLayer(nn.Module):
     The "Rep" in the name stands for "re-parameterization" (introduced by RepVGG).
     """
 
-    def __init__(self, config: TextNetConfig, in_channels: int, out_channels: int, kernel_size: int, stride: int):
+    def __init__(
+        self,
+        config: TextNetConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+    ):
         super().__init__()
 
         self.num_channels = in_channels
@@ -111,7 +120,9 @@ class TextNetRepConvLayer(nn.Module):
             padding=padding,
             bias=False,
         )
-        self.main_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
+        self.main_batch_norm = nn.BatchNorm2d(
+            num_features=out_channels, eps=config.batch_norm_eps
+        )
 
         vertical_padding = ((kernel_size[0] - 1) // 2, 0)
         horizontal_padding = (0, (kernel_size[1] - 1) // 2)
@@ -125,7 +136,9 @@ class TextNetRepConvLayer(nn.Module):
                 padding=vertical_padding,
                 bias=False,
             )
-            self.vertical_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
+            self.vertical_batch_norm = nn.BatchNorm2d(
+                num_features=out_channels, eps=config.batch_norm_eps
+            )
         else:
             self.vertical_conv, self.vertical_batch_norm = None, None
 
@@ -138,7 +151,9 @@ class TextNetRepConvLayer(nn.Module):
                 padding=horizontal_padding,
                 bias=False,
             )
-            self.horizontal_batch_norm = nn.BatchNorm2d(num_features=out_channels, eps=config.batch_norm_eps)
+            self.horizontal_batch_norm = nn.BatchNorm2d(
+                num_features=out_channels, eps=config.batch_norm_eps
+            )
         else:
             self.horizontal_conv, self.horizontal_batch_norm = None, None
 
@@ -181,7 +196,9 @@ class TextNetStage(nn.Module):
         stage_in_channel_size = config.hidden_sizes[depth]
         stage_out_channel_size = config.hidden_sizes[depth + 1]
 
-        in_channels = [stage_in_channel_size] + [stage_out_channel_size] * (num_layers - 1)
+        in_channels = [stage_in_channel_size] + [stage_out_channel_size] * (
+            num_layers - 1
+        )
         out_channels = [stage_out_channel_size] * num_layers
 
         stage = []
@@ -221,7 +238,9 @@ class TextNetEncoder(nn.Module):
             output = (hidden_state,)
             return output + (hidden_states,) if output_hidden_states else output
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_state, hidden_states=hidden_states
+        )
 
 
 TEXTNET_START_DOCSTRING = r"""
@@ -291,17 +310,28 @@ class TextNetModel(TextNetPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> Union[Tuple[Any, List[Any]], Tuple[Any], BaseModelOutputWithPoolingAndNoAttention]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[
+        Tuple[Any, List[Any]], Tuple[Any], BaseModelOutputWithPoolingAndNoAttention
+    ]:
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         hidden_state = self.stem(pixel_values)
 
         encoder_outputs = self.encoder(
-            hidden_state, output_hidden_states=output_hidden_states, return_dict=return_dict
+            hidden_state,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -332,7 +362,11 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         self.textnet = TextNetModel(config)
         self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.flatten = nn.Flatten()
-        self.fc = nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.fc = (
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
+        )
 
         # classification head
         self.classifier = nn.ModuleList([self.avg_pool, self.flatten])
@@ -341,7 +375,9 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=ImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -376,9 +412,15 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> outputs.logits.shape
         torch.Size([1, 2])
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        outputs = self.textnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.textnet(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
         last_hidden_state = outputs[0]
         for layer in self.classifier:
             last_hidden_state = layer(last_hidden_state)
@@ -389,7 +431,9 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -410,7 +454,9 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
             output = (logits,) + outputs[2:]
             return (loss,) + output if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )
 
 
 @add_start_docstrings(
@@ -433,7 +479,10 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
     @add_start_docstrings_to_model_forward(TEXTNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[Tuple], BackboneOutput]:
         """
         Returns:
@@ -456,12 +505,18 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         >>> with torch.no_grad():
         >>>     outputs = model(**inputs)
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
-        outputs = self.textnet(pixel_values, output_hidden_states=True, return_dict=return_dict)
+        outputs = self.textnet(
+            pixel_values, output_hidden_states=True, return_dict=return_dict
+        )
 
         hidden_states = outputs.hidden_states if return_dict else outputs[2]
 
@@ -484,4 +539,9 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         )
 
 
-__all__ = ["TextNetBackbone", "TextNetModel", "TextNetPreTrainedModel", "TextNetForImageClassification"]
+__all__ = [
+    "TextNetBackbone",
+    "TextNetModel",
+    "TextNetPreTrainedModel",
+    "TextNetForImageClassification",
+]

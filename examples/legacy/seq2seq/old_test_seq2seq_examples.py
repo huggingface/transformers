@@ -49,7 +49,9 @@ class TestTheRest(TestCasePlus):
         input_file_name = Path(self.get_auto_remove_tmp_dir()) / "utest_input.source"
         output_file_name = input_file_name.parent / "utest_output.txt"
         assert not output_file_name.exists()
-        articles = [" New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."]
+        articles = [
+            " New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County."
+        ]
         _dump_articles(input_file_name, articles)
 
         score_path = str(Path(self.get_auto_remove_tmp_dir()) / "scores.json")
@@ -90,7 +92,11 @@ class TestTheRest(TestCasePlus):
         assert not output_file_name.exists()
 
         text = {
-            "en": ["Machine learning is great, isn't it?", "I like to eat bananas", "Tomorrow is another great day!"],
+            "en": [
+                "Machine learning is great, isn't it?",
+                "I like to eat bananas",
+                "Tomorrow is another great day!",
+            ],
             "de": [
                 "Maschinelles Lernen ist großartig, oder?",
                 "Ich esse gerne Bananen",

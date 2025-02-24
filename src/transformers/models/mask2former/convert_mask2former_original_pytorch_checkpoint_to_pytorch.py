@@ -130,13 +130,16 @@ class OriginalMask2FormerConfigToOursConverter:
         elif model.SEM_SEG_HEAD.NUM_CLASSES == 65:
             filename = "mapillary-vistas-id2label.json"
 
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(
+            open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+        )
         id2label = {int(k): v for k, v in id2label.items()}
         label2id = {label: idx for idx, label in id2label.items()}
 
         if model.SWIN.EMBED_DIM == 96:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-tiny-patch4-window7-224", out_features=["stage1", "stage2", "stage3", "stage4"]
+                "microsoft/swin-tiny-patch4-window7-224",
+                out_features=["stage1", "stage2", "stage3", "stage4"],
             )
         elif model.SWIN.EMBED_DIM == 128:
             backbone_config = SwinConfig(
@@ -149,10 +152,13 @@ class OriginalMask2FormerConfigToOursConverter:
 
         elif model.SWIN.EMBED_DIM == 192:
             backbone_config = SwinConfig.from_pretrained(
-                "microsoft/swin-large-patch4-window12-384", out_features=["stage1", "stage2", "stage3", "stage4"]
+                "microsoft/swin-large-patch4-window12-384",
+                out_features=["stage1", "stage2", "stage3", "stage4"],
             )
         else:
-            raise ValueError(f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!")
+            raise ValueError(
+                f"embed dim {model.SWIN.EMBED_DIM} not supported for Swin!"
+            )
 
         backbone_config.drop_path_rate = model.SWIN.DROP_PATH_RATE
         backbone_config.attention_probs_dropout_prob = model.SWIN.ATTN_DROP_RATE
@@ -213,12 +219,20 @@ class OriginalMask2FormerCheckpointToOursConverter:
         self.original_model = original_model
         self.config = config
 
-    def pop_all(self, renamed_keys: List[Tuple[str, str]], dst_state_dict: StateDict, src_state_dict: StateDict):
+    def pop_all(
+        self,
+        renamed_keys: List[Tuple[str, str]],
+        dst_state_dict: StateDict,
+        src_state_dict: StateDict,
+    ):
         for src_key, dst_key in renamed_keys:
             dst_state_dict[dst_key] = src_state_dict.pop(src_key)
 
     def replace_maskformer_swin_backbone(
-        self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig
+        self,
+        dst_state_dict: StateDict,
+        src_state_dict: StateDict,
+        config: Mask2FormerConfig,
     ):
         dst_prefix: str = "pixel_level_module.encoder"
         src_prefix: str = "backbone"
@@ -228,9 +242,18 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 f"{src_prefix}.patch_embed.proj.weight",
                 f"{dst_prefix}.model.embeddings.patch_embeddings.projection.weight",
             ),
-            (f"{src_prefix}.patch_embed.proj.bias", f"{dst_prefix}.model.embeddings.patch_embeddings.projection.bias"),
-            (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.model.embeddings.norm.weight"),
-            (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.model.embeddings.norm.bias"),
+            (
+                f"{src_prefix}.patch_embed.proj.bias",
+                f"{dst_prefix}.model.embeddings.patch_embeddings.projection.bias",
+            ),
+            (
+                f"{src_prefix}.patch_embed.norm.weight",
+                f"{dst_prefix}.model.embeddings.norm.weight",
+            ),
+            (
+                f"{src_prefix}.patch_embed.norm.bias",
+                f"{dst_prefix}.model.embeddings.norm.bias",
+            ),
         ]
         num_layers = len(config.backbone_config.depths)
         for layer_idx in range(num_layers):
@@ -254,8 +277,12 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 # now we need to handle the attentions
                 # read in weights + bias of input projection layer of cross-attention
 
-                src_att_weight = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"]
-                src_att_bias = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"]
+                src_att_weight = src_state_dict[
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                ]
+                src_att_bias = src_state_dict[
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                ]
 
                 size = src_att_weight.shape[0]
                 offset = size // 3
@@ -281,8 +308,12 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 ] = src_att_bias[-offset:]
 
                 # let's pop them
-                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight")
-                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias")
+                src_state_dict.pop(
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                )
+                src_state_dict.pop(
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                )
                 # proj
                 renamed_keys.extend(
                     [
@@ -376,7 +407,12 @@ class OriginalMask2FormerCheckpointToOursConverter:
             )
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    def replace_swin_backbone(self, dst_state_dict: StateDict, src_state_dict: StateDict, config: Mask2FormerConfig):
+    def replace_swin_backbone(
+        self,
+        dst_state_dict: StateDict,
+        src_state_dict: StateDict,
+        config: Mask2FormerConfig,
+    ):
         dst_prefix: str = "pixel_level_module.encoder"
         src_prefix: str = "backbone"
 
@@ -385,9 +421,18 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 f"{src_prefix}.patch_embed.proj.weight",
                 f"{dst_prefix}.embeddings.patch_embeddings.projection.weight",
             ),
-            (f"{src_prefix}.patch_embed.proj.bias", f"{dst_prefix}.embeddings.patch_embeddings.projection.bias"),
-            (f"{src_prefix}.patch_embed.norm.weight", f"{dst_prefix}.embeddings.norm.weight"),
-            (f"{src_prefix}.patch_embed.norm.bias", f"{dst_prefix}.embeddings.norm.bias"),
+            (
+                f"{src_prefix}.patch_embed.proj.bias",
+                f"{dst_prefix}.embeddings.patch_embeddings.projection.bias",
+            ),
+            (
+                f"{src_prefix}.patch_embed.norm.weight",
+                f"{dst_prefix}.embeddings.norm.weight",
+            ),
+            (
+                f"{src_prefix}.patch_embed.norm.bias",
+                f"{dst_prefix}.embeddings.norm.bias",
+            ),
         ]
 
         for layer_idx in range(len(config.backbone_config.depths)):
@@ -411,8 +456,12 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 # now we need to handle the attentions
                 # read in weights + bias of input projection layer of cross-attention
 
-                src_att_weight = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"]
-                src_att_bias = src_state_dict[f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"]
+                src_att_weight = src_state_dict[
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                ]
+                src_att_bias = src_state_dict[
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                ]
 
                 size = src_att_weight.shape[0]
                 offset = size // 3
@@ -438,8 +487,12 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 ] = src_att_bias[-offset:]
 
                 # let's pop them
-                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight")
-                src_state_dict.pop(f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias")
+                src_state_dict.pop(
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.weight"
+                )
+                src_state_dict.pop(
+                    f"{src_prefix}.layers.{layer_idx}.blocks.{block_idx}.attn.qkv.bias"
+                )
                 # proj
                 renamed_keys.extend(
                     [
@@ -534,7 +587,9 @@ class OriginalMask2FormerCheckpointToOursConverter:
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Backbone + Pixel Decoder
-    def replace_pixel_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_pixel_module(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "pixel_level_module.decoder"
         src_prefix: str = "sem_seg_head.pixel_decoder"
 
@@ -549,27 +604,55 @@ class OriginalMask2FormerCheckpointToOursConverter:
         def rename_keys_for_self_attn(src_prefix: str, dst_prefix: str):
             self_attn_keys = []
             self_attn_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.attention_weights", f"{dst_prefix}.attention_weights")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.attention_weights", f"{dst_prefix}.attention_weights"
+                )
             )
             self_attn_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.output_proj", f"{dst_prefix}.output_proj")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.output_proj", f"{dst_prefix}.output_proj"
+                )
             )
             self_attn_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.sampling_offsets", f"{dst_prefix}.sampling_offsets")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.sampling_offsets", f"{dst_prefix}.sampling_offsets"
+                )
             )
-            self_attn_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.value_proj", f"{dst_prefix}.value_proj"))
+            self_attn_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.value_proj", f"{dst_prefix}.value_proj"
+                )
+            )
 
             return self_attn_keys
 
         def rename_keys_for_encoder_layer(src_prefix: str, dst_prefix: str):
             encoder_keys = []
-            encoder_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear1", f"{dst_prefix}.fc1"))
-            encoder_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.linear2", f"{dst_prefix}.fc2"))
             encoder_keys.extend(
-                rename_keys_for_weight_bias(f"{src_prefix}.norm1", f"{dst_prefix}.self_attn_layer_norm")
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear1", f"{dst_prefix}.fc1"
+                )
             )
-            encoder_keys.extend(rename_keys_for_weight_bias(f"{src_prefix}.norm2", f"{dst_prefix}.final_layer_norm"))
-            encoder_keys.extend(rename_keys_for_self_attn(f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"))
+            encoder_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.linear2", f"{dst_prefix}.fc2"
+                )
+            )
+            encoder_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.norm1", f"{dst_prefix}.self_attn_layer_norm"
+                )
+            )
+            encoder_keys.extend(
+                rename_keys_for_weight_bias(
+                    f"{src_prefix}.norm2", f"{dst_prefix}.final_layer_norm"
+                )
+            )
+            encoder_keys.extend(
+                rename_keys_for_self_attn(
+                    f"{src_prefix}.self_attn", f"{dst_prefix}.self_attn"
+                )
+            )
 
             return encoder_keys
 
@@ -593,32 +676,49 @@ class OriginalMask2FormerCheckpointToOursConverter:
             for j in range(2):
                 renamed_keys.extend(
                     [
-                        (f"{src_prefix}.input_proj.{i}.{j}.weight", f"{dst_prefix}.input_projections.{i}.{j}.weight"),
-                        (f"{src_prefix}.input_proj.{i}.{j}.bias", f"{dst_prefix}.input_projections.{i}.{j}.bias"),
+                        (
+                            f"{src_prefix}.input_proj.{i}.{j}.weight",
+                            f"{dst_prefix}.input_projections.{i}.{j}.weight",
+                        ),
+                        (
+                            f"{src_prefix}.input_proj.{i}.{j}.bias",
+                            f"{dst_prefix}.input_projections.{i}.{j}.bias",
+                        ),
                     ]
                 )
 
-        renamed_keys.extend([(f"{src_prefix}.transformer.level_embed", f"{dst_prefix}.level_embed")])
+        renamed_keys.extend(
+            [(f"{src_prefix}.transformer.level_embed", f"{dst_prefix}.level_embed")]
+        )
 
         # layers
         for layer_idx in range(self.config.encoder_layers):
             renamed_keys.extend(
                 rename_keys_for_encoder_layer(
-                    f"{src_prefix}.transformer.encoder.layers.{layer_idx}", f"{dst_prefix}.encoder.layers.{layer_idx}"
+                    f"{src_prefix}.transformer.encoder.layers.{layer_idx}",
+                    f"{dst_prefix}.encoder.layers.{layer_idx}",
                 )
             )
 
         # proj
         renamed_keys.extend(
             [
-                (f"{src_prefix}.mask_features.weight", f"{dst_prefix}.mask_projection.weight"),
-                (f"{src_prefix}.mask_features.bias", f"{dst_prefix}.mask_projection.bias"),
+                (
+                    f"{src_prefix}.mask_features.weight",
+                    f"{dst_prefix}.mask_projection.weight",
+                ),
+                (
+                    f"{src_prefix}.mask_features.bias",
+                    f"{dst_prefix}.mask_projection.bias",
+                ),
             ]
         )
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
     # Transformer Decoder
-    def rename_keys_in_masked_attention_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def rename_keys_in_masked_attention_decoder(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor"
 
@@ -689,16 +789,28 @@ class OriginalMask2FormerCheckpointToOursConverter:
             )
 
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight", f"{dst_prefix}.layers.{i}.fc1.weight")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight",
+                    f"{dst_prefix}.layers.{i}.fc1.weight",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias", f"{dst_prefix}.layers.{i}.fc1.bias")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias",
+                    f"{dst_prefix}.layers.{i}.fc1.bias",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight",
+                    f"{dst_prefix}.layers.{i}.fc2.weight",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias",
+                    f"{dst_prefix}.layers.{i}.fc2.bias",
+                )
             )
             rename_keys.append(
                 (
@@ -715,11 +827,15 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         return rename_keys
 
-    def replace_masked_attention_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_masked_attention_decoder(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "transformer_module.decoder"
         src_prefix: str = "sem_seg_head.predictor"
 
-        renamed_keys = self.rename_keys_in_masked_attention_decoder(dst_state_dict, src_state_dict)
+        renamed_keys = self.rename_keys_in_masked_attention_decoder(
+            dst_state_dict, src_state_dict
+        )
 
         # add more
         renamed_keys.extend(
@@ -746,7 +862,9 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
 
-    def replace_keys_qkv_transformer_decoder(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_keys_qkv_transformer_decoder(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "transformer_module.decoder.layers"
         src_prefix: str = "sem_seg_head.predictor"
         for i in range(self.config.decoder_layers - 1):
@@ -758,29 +876,51 @@ class OriginalMask2FormerCheckpointToOursConverter:
                 f"{src_prefix}.transformer_self_attention_layers.{i}.self_attn.in_proj_bias"
             )
             # next, add query, keys and values (in that order) to the state dict
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-            dst_state_dict[f"{dst_prefix}.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.q_proj.weight"] = (
+                in_proj_weight[:256, :]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.q_proj.bias"] = in_proj_bias[
+                :256
+            ]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.k_proj.weight"] = (
+                in_proj_weight[256:512, :]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.k_proj.bias"] = in_proj_bias[
+                256:512
+            ]
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.v_proj.weight"] = (
+                in_proj_weight[-256:, :]
+            )
+            dst_state_dict[f"{dst_prefix}.{i}.self_attn.v_proj.bias"] = in_proj_bias[
+                -256:
+            ]
 
-    def replace_transformer_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_transformer_module(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = "transformer_module"
         src_prefix: str = "sem_seg_head.predictor"
 
         self.replace_masked_attention_decoder(dst_state_dict, src_state_dict)
 
         renamed_keys = [
-            (f"{src_prefix}.query_embed.weight", f"{dst_prefix}.queries_embedder.weight"),
-            (f"{src_prefix}.query_feat.weight", f"{dst_prefix}.queries_features.weight"),
+            (
+                f"{src_prefix}.query_embed.weight",
+                f"{dst_prefix}.queries_embedder.weight",
+            ),
+            (
+                f"{src_prefix}.query_feat.weight",
+                f"{dst_prefix}.queries_features.weight",
+            ),
             (f"{src_prefix}.level_embed.weight", f"{dst_prefix}.level_embed.weight"),
         ]
 
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
         self.replace_keys_qkv_transformer_decoder(dst_state_dict, src_state_dict)
 
-    def replace_universal_segmentation_module(self, dst_state_dict: StateDict, src_state_dict: StateDict):
+    def replace_universal_segmentation_module(
+        self, dst_state_dict: StateDict, src_state_dict: StateDict
+    ):
         dst_prefix: str = ""
         src_prefix: str = "sem_seg_head.predictor"
 
@@ -803,7 +943,9 @@ class OriginalMask2FormerCheckpointToOursConverter:
         logger.info(f"Not copied keys are {pformat(src_state_dict.keys())}")
         logger.info("🙌 Done")
 
-        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
+        state_dict = {
+            key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()
+        }
         mask2former.load_state_dict(state_dict)
         return mask2former
 
@@ -815,13 +957,17 @@ class OriginalMask2FormerCheckpointToOursConverter:
 
         self.replace_universal_segmentation_module(dst_state_dict, src_state_dict)
 
-        state_dict = {key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()}
+        state_dict = {
+            key: dst_state_dict[key] for key in dst_state_dict.to_track.keys()
+        }
         mask2former.load_state_dict(state_dict)
 
         return mask2former
 
     @staticmethod
-    def using_dirs(checkpoints_dir: Path, config_dir: Path) -> Iterator[Tuple[object, Path, Path]]:
+    def using_dirs(
+        checkpoints_dir: Path, config_dir: Path
+    ) -> Iterator[Tuple[object, Path, Path]]:
         checkpoints: List[Path] = checkpoints_dir.glob("**/*.pkl")
 
         for checkpoint in checkpoints:
@@ -839,7 +985,13 @@ class OriginalMask2FormerCheckpointToOursConverter:
             # config file corresponding to checkpoint
             config_file_name = f"{checkpoint.parents[0].stem}.yaml"
 
-            config: Path = config_dir / dataset_name / segmentation_task / "swin" / config_file_name
+            config: Path = (
+                config_dir
+                / dataset_name
+                / segmentation_task
+                / "swin"
+                / config_file_name
+            )
             yield config, checkpoint
 
 
@@ -857,19 +1009,24 @@ def test(
         x = image_processor(images=im, return_tensors="pt")["pixel_values"]
 
         original_model_backbone_features = original_model.backbone(x.clone())
-        our_model_output: Mask2FormerModelOutput = our_model.model(x.clone(), output_hidden_states=True)
+        our_model_output: Mask2FormerModelOutput = our_model.model(
+            x.clone(), output_hidden_states=True
+        )
 
         # Test backbone
         for original_model_feature, our_model_feature in zip(
-            original_model_backbone_features.values(), our_model_output.encoder_hidden_states
+            original_model_backbone_features.values(),
+            our_model_output.encoder_hidden_states,
         ):
             assert torch.allclose(
                 original_model_feature, our_model_feature, atol=tolerance
             ), "The backbone features are not the same."
 
         # Test pixel decoder
-        mask_features, _, multi_scale_features = original_model.sem_seg_head.pixel_decoder.forward_features(
-            original_model_backbone_features
+        mask_features, _, multi_scale_features = (
+            original_model.sem_seg_head.pixel_decoder.forward_features(
+                original_model_backbone_features
+            )
         )
 
         for original_model_feature, our_model_feature in zip(
@@ -886,14 +1043,20 @@ def test(
         y = (tr_complete(im) * 255.0).to(torch.int).float()
 
         # modify original Mask2Former code to return mask and class logits
-        original_class_logits, original_mask_logits = original_model([{"image": y.clone().squeeze(0)}])
+        original_class_logits, original_mask_logits = original_model(
+            [{"image": y.clone().squeeze(0)}]
+        )
 
         our_model_out: Mask2FormerForUniversalSegmentationOutput = our_model(x.clone())
         our_mask_logits = our_model_out.masks_queries_logits
         our_class_logits = our_model_out.class_queries_logits
 
-        assert original_mask_logits.shape == our_mask_logits.shape, "Output masks shapes are not matching."
-        assert original_class_logits.shape == our_class_logits.shape, "Output class logits shapes are not matching."
+        assert (
+            original_mask_logits.shape == our_mask_logits.shape
+        ), "Output masks shapes are not matching."
+        assert (
+            original_class_logits.shape == our_class_logits.shape
+        ), "Output class logits shapes are not matching."
         assert torch.allclose(
             original_class_logits, our_class_logits, atol=tolerance
         ), "The class logits are not the same."
@@ -910,7 +1073,11 @@ def get_model_name(checkpoint_file: Path):
 
     # `segmentation_task_type` must be one of the following: `instance-segmentation`, `panoptic-segmentation`, `semantic-segmentation`
     segmentation_task_name: str = checkpoint_file.parents[1].stem
-    if segmentation_task_name not in ["instance-segmentation", "panoptic-segmentation", "semantic-segmentation"]:
+    if segmentation_task_name not in [
+        "instance-segmentation",
+        "panoptic-segmentation",
+        "semantic-segmentation",
+    ]:
         raise ValueError(
             f"{segmentation_task_name} must be wrong since acceptable values are: instance-segmentation,"
             " panoptic-segmentation, semantic-segmentation."
@@ -926,7 +1093,9 @@ def get_model_name(checkpoint_file: Path):
 
     backbone = "swin"
     backbone_types = ["tiny", "small", "base_IN21k", "base", "large"]
-    backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[0].replace("_", "-")
+    backbone_type = list(filter(lambda x: x in model_name_raw, backbone_types))[
+        0
+    ].replace("_", "-")
 
     model_name = f"mask2former-{backbone}-{backbone_type}-{dataset_name}-{segmentation_task_name.split('-')[0]}"
 
@@ -973,9 +1142,14 @@ if __name__ == "__main__":
     sys.path.append(str(mask2former_dir.parent))
     # import original Mask2Former config and model from original source code repo
     from Mask2Former.mask2former.config import add_maskformer2_config
-    from Mask2Former.mask2former.maskformer_model import MaskFormer as OriginalMask2Former
+    from Mask2Former.mask2former.maskformer_model import (
+        MaskFormer as OriginalMask2Former,
+    )
 
-    for config_file, checkpoint_file in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
+    for (
+        config_file,
+        checkpoint_file,
+    ) in OriginalMask2FormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
         model_name = get_model_name(checkpoint_file)
@@ -990,16 +1164,22 @@ if __name__ == "__main__":
 
         DetectionCheckpointer(original_model).load(str(checkpoint_file))
 
-        config: Mask2FormerConfig = OriginalMask2FormerConfigToOursConverter()(original_config)
+        config: Mask2FormerConfig = OriginalMask2FormerConfigToOursConverter()(
+            original_config
+        )
         mask2former = Mask2FormerModel(config=config).eval()
 
         converter = OriginalMask2FormerCheckpointToOursConverter(original_model, config)
         mask2former = converter.convert(mask2former)
 
-        mask2former_for_segmentation = Mask2FormerForUniversalSegmentation(config=config).eval()
+        mask2former_for_segmentation = Mask2FormerForUniversalSegmentation(
+            config=config
+        ).eval()
         mask2former_for_segmentation.model = mask2former
 
-        mask2former_for_segmentation = converter.convert_universal_segmentation(mask2former_for_segmentation)
+        mask2former_for_segmentation = converter.convert_universal_segmentation(
+            mask2former_for_segmentation
+        )
 
         tolerance = 3e-1
         high_tolerance_models = [

@@ -24,7 +24,9 @@ from transformers import EncodecFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
-from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
+from ...test_sequence_feature_extraction_common import (
+    SequenceFeatureExtractionTestMixin,
+)
 
 
 if is_torch_available():
@@ -66,7 +68,9 @@ class EnCodecFeatureExtractionTester:
         self.batch_size = batch_size
         self.min_seq_length = min_seq_length
         self.max_seq_length = max_seq_length
-        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
+        self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (
+            self.batch_size - 1
+        )
         self.feature_size = feature_size
         self.padding_value = padding_value
         self.sampling_rate = sampling_rate
@@ -90,7 +94,9 @@ class EnCodecFeatureExtractionTester:
             # make sure that inputs increase in size
             audio_inputs = [
                 _flatten(floats_list((x, self.feature_size)))
-                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+                for x in range(
+                    self.min_seq_length, self.max_seq_length, self.seq_length_diff
+                )
             ]
 
         if numpify:
@@ -100,7 +106,9 @@ class EnCodecFeatureExtractionTester:
 
 
 @require_torch
-class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+class EnCodecFeatureExtractionTest(
+    SequenceFeatureExtractionTestMixin, unittest.TestCase
+):
     feature_extraction_class = EncodecFeatureExtractor
 
     def setUp(self):
@@ -108,37 +116,57 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
-        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         # create three inputs of length 800, 1000, and 1200
         audio_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_audio_inputs = [np.asarray(audio_input) for audio_input in audio_inputs]
 
         # Test not batched input
-        encoded_sequences_1 = feat_extract(audio_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_audio_inputs[0], return_tensors="np").input_values
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+        encoded_sequences_1 = feat_extract(
+            audio_inputs[0], return_tensors="np"
+        ).input_values
+        encoded_sequences_2 = feat_extract(
+            np_audio_inputs[0], return_tensors="np"
+        ).input_values
+        self.assertTrue(
+            np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3)
+        )
 
         # Test batched
-        encoded_sequences_1 = feat_extract(audio_inputs, padding=True, return_tensors="np").input_values
-        encoded_sequences_2 = feat_extract(np_audio_inputs, padding=True, return_tensors="np").input_values
+        encoded_sequences_1 = feat_extract(
+            audio_inputs, padding=True, return_tensors="np"
+        ).input_values
+        encoded_sequences_2 = feat_extract(
+            np_audio_inputs, padding=True, return_tensors="np"
+        ).input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_double_precision_pad(self):
-        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feature_extractor = self.feature_extraction_class(
+            **self.feat_extract_tester.prepare_feat_extract_dict()
+        )
         np_audio_inputs = np.random.rand(100).astype(np.float64)
         py_audio_inputs = np_audio_inputs.tolist()
 
         for inputs in [py_audio_inputs, np_audio_inputs]:
-            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
+            np_processed = feature_extractor.pad(
+                [{"input_values": inputs}], return_tensors="np"
+            )
             self.assertTrue(np_processed.input_values.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
+            pt_processed = feature_extractor.pad(
+                [{"input_values": inputs}], return_tensors="pt"
+            )
             self.assertTrue(pt_processed.input_values.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
         # automatic decoding with librispeech
         audio_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -159,7 +187,9 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor = EncodecFeatureExtractor()
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEqual(input_values.shape, (1, 1, 93680))
-        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(
+            input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6
+        )
 
     def test_integration_stereo(self):
         # fmt: off
@@ -178,13 +208,19 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor = EncodecFeatureExtractor(feature_size=2)
         input_values = feature_extractor(input_audio, return_tensors="pt").input_values
         self.assertEqual(input_values.shape, (1, 2, 93680))
-        torch.testing.assert_close(input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6)
-        torch.testing.assert_close(input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(
+            input_values[0, 0, :30], EXPECTED_INPUT_VALUES, rtol=1e-6, atol=1e-6
+        )
+        torch.testing.assert_close(
+            input_values[0, 1, :30], EXPECTED_INPUT_VALUES * 0.5, rtol=1e-6, atol=1e-6
+        )
 
     def test_truncation_and_padding(self):
         input_audio = self._load_datasamples(2)
         # would be easier if the stride was like
-        feature_extractor = EncodecFeatureExtractor(feature_size=1, chunk_length_s=1, overlap=0.01)
+        feature_extractor = EncodecFeatureExtractor(
+            feature_size=1, chunk_length_s=1, overlap=0.01
+        )
 
         # pad and trunc raise an error ?
         with self.assertRaisesRegex(
@@ -196,7 +232,9 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             ).input_values
 
         # truncate to chunk
-        truncated_outputs = feature_extractor(input_audio, truncation=True, return_tensors="pt").input_values
+        truncated_outputs = feature_extractor(
+            input_audio, truncation=True, return_tensors="pt"
+        ).input_values
         self.assertEqual(truncated_outputs.shape, (2, 1, 71520))  # 2 chunks
 
         # force truncate to max_length
@@ -206,11 +244,15 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertEqual(truncated_outputs.shape, (2, 1, 48000))
 
         # pad to chunk
-        padded_outputs = feature_extractor(input_audio, padding=True, return_tensors="pt").input_values
+        padded_outputs = feature_extractor(
+            input_audio, padding=True, return_tensors="pt"
+        ).input_values
         self.assertEqual(padded_outputs.shape, (2, 1, 95280))
 
         # pad to chunk
-        truncated_outputs = feature_extractor(input_audio, return_tensors="pt").input_values
+        truncated_outputs = feature_extractor(
+            input_audio, return_tensors="pt"
+        ).input_values
         self.assertEqual(truncated_outputs.shape, (2, 1, 95280))
 
         # force pad to max length
@@ -224,9 +266,13 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             ValueError,
             "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$",
         ):
-            truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
+            truncated_outputs = feature_extractor(
+                input_audio, padding=False, return_tensors="pt"
+            ).input_values
 
-        truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
+        truncated_outputs = feature_extractor(
+            input_audio[0], padding=False, return_tensors="pt"
+        ).input_values
         self.assertEqual(truncated_outputs.shape, (1, 1, 93680))
 
         # no pad if no chunk_length_s
@@ -235,9 +281,13 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             ValueError,
             "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$",
         ):
-            truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
+            truncated_outputs = feature_extractor(
+                input_audio, padding=False, return_tensors="pt"
+            ).input_values
 
-        truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
+        truncated_outputs = feature_extractor(
+            input_audio[0], padding=False, return_tensors="pt"
+        ).input_values
         self.assertEqual(truncated_outputs.shape, (1, 1, 93680))
 
         # no pad if no overlap
@@ -247,7 +297,11 @@ class EnCodecFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             ValueError,
             "^Unable to create tensor, you should probably activate padding with 'padding=True' to have batched tensors with the same length.$",
         ):
-            truncated_outputs = feature_extractor(input_audio, padding=False, return_tensors="pt").input_values
+            truncated_outputs = feature_extractor(
+                input_audio, padding=False, return_tensors="pt"
+            ).input_values
 
-        truncated_outputs = feature_extractor(input_audio[0], padding=False, return_tensors="pt").input_values
+        truncated_outputs = feature_extractor(
+            input_audio[0], padding=False, return_tensors="pt"
+        ).input_values
         self.assertEqual(truncated_outputs.shape, (1, 1, 93680))

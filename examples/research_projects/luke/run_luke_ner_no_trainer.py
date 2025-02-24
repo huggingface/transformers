@@ -30,7 +30,11 @@ import torch
 from accelerate import Accelerator, DistributedDataParallelKwargs
 from datasets import ClassLabel, load_dataset, load_metric
 from huggingface_hub import Repository, create_repo
-from luke_utils import DataCollatorForLukeTokenClassification, is_punctuation, padding_tensor
+from luke_utils import (
+    DataCollatorForLukeTokenClassification,
+    is_punctuation,
+    padding_tensor,
+)
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
@@ -49,7 +53,10 @@ from transformers.utils.versions import require_version
 
 
 logger = logging.getLogger(__name__)
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/pytorch/token-classification/requirements.txt",
+)
 
 
 def parse_args():
@@ -69,10 +76,16 @@ def parse_args():
         help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
-        "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
+        "--train_file",
+        type=str,
+        default=None,
+        help="A csv or a json file containing the training data.",
     )
     parser.add_argument(
-        "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
+        "--validation_file",
+        type=str,
+        default=None,
+        help="A csv or a json file containing the validation data.",
     )
     parser.add_argument(
         "--text_column_name",
@@ -154,8 +167,15 @@ def parse_args():
         default=5e-5,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
-    parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
-    parser.add_argument("--num_train_epochs", type=int, default=3, help="Total number of training epochs to perform.")
+    parser.add_argument(
+        "--weight_decay", type=float, default=0.0, help="Weight decay to use."
+    )
+    parser.add_argument(
+        "--num_train_epochs",
+        type=int,
+        default=3,
+        help="Total number of training epochs to perform.",
+    )
     parser.add_argument(
         "--max_train_steps",
         type=int,
@@ -173,13 +193,27 @@ def parse_args():
         type=SchedulerType,
         default="linear",
         help="The scheduler type to use.",
-        choices=["linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup"],
+        choices=[
+            "linear",
+            "cosine",
+            "cosine_with_restarts",
+            "polynomial",
+            "constant",
+            "constant_with_warmup",
+        ],
     )
     parser.add_argument(
-        "--num_warmup_steps", type=int, default=0, help="Number of steps for the warmup in the lr scheduler."
+        "--num_warmup_steps",
+        type=int,
+        default=0,
+        help="Number of steps for the warmup in the lr scheduler.",
     )
-    parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
-    parser.add_argument("--seed", type=int, default=None, help="A seed for reproducible training.")
+    parser.add_argument(
+        "--output_dir", type=str, default=None, help="Where to store the final model."
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None, help="A seed for reproducible training."
+    )
     parser.add_argument(
         "--label_all_tokens",
         action="store_true",
@@ -202,26 +236,46 @@ def parse_args():
         action="store_true",
         help="Activate debug mode and run training only with a subset of data.",
     )
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
-        "--hub_model_id", type=str, help="The name of the repository to keep in sync with the local `output_dir`."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the model to the Hub.",
     )
-    parser.add_argument("--hub_token", type=str, help="The token to use to push to the Model Hub.")
+    parser.add_argument(
+        "--hub_model_id",
+        type=str,
+        help="The name of the repository to keep in sync with the local `output_dir`.",
+    )
+    parser.add_argument(
+        "--hub_token", type=str, help="The token to use to push to the Model Hub."
+    )
     args = parser.parse_args()
 
     # Sanity checks
-    if args.task_name is None and args.train_file is None and args.validation_file is None:
+    if (
+        args.task_name is None
+        and args.train_file is None
+        and args.validation_file is None
+    ):
         raise ValueError("Need either a task name or a training/validation file.")
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+            assert extension in [
+                "csv",
+                "json",
+            ], "`train_file` should be a csv or a json file."
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            assert extension in [
+                "csv",
+                "json",
+            ], "`validation_file` should be a csv or a json file."
 
     if args.push_to_hub:
-        assert args.output_dir is not None, "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
+        assert (
+            args.output_dir is not None
+        ), "Need an `output_dir` to create a repo when `--push_to_hub` is passed."
 
     return args
 
@@ -242,7 +296,9 @@ def main():
 
     # Setup logging, we only want one process per machine to log things on the screen.
     # accelerator.is_local_main_process is only True for one process per machine.
-    logger.setLevel(logging.INFO if accelerator.is_local_main_process else logging.ERROR)
+    logger.setLevel(
+        logging.INFO if accelerator.is_local_main_process else logging.ERROR
+    )
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_info()
@@ -262,7 +318,9 @@ def main():
             if repo_name is None:
                 repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
-            repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
+            repo_id = create_repo(
+                repo_name, exist_ok=True, token=args.hub_token
+            ).repo_id
             # Clone repo locally
             repo = Repository(args.output_dir, clone_from=repo_id, token=args.hub_token)
         elif args.output_dir is not None:
@@ -351,11 +409,15 @@ def main():
     if args.config_name:
         config = LukeConfig.from_pretrained(args.config_name, num_labels=num_labels)
     elif args.model_name_or_path:
-        config = LukeConfig.from_pretrained(args.model_name_or_path, num_labels=num_labels)
+        config = LukeConfig.from_pretrained(
+            args.model_name_or_path, num_labels=num_labels
+        )
     else:
         logger.warning("You are instantiating a new config instance from scratch.")
 
-    tokenizer_name_or_path = args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
+    tokenizer_name_or_path = (
+        args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
+    )
     if not tokenizer_name_or_path:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
@@ -403,7 +465,9 @@ def main():
         all_original_entity_spans = []
 
         for labels, tokens, sentence_boundaries in zip(
-            examples[label_column_name], examples[text_column_name], examples["sentence_boundaries"]
+            examples[label_column_name],
+            examples[text_column_name],
+            examples["sentence_boundaries"],
         ):
             subword_lengths = [len(tokenizer.tokenize(token)) for token in tokens]
             total_subword_length = sum(subword_lengths)
@@ -433,7 +497,9 @@ def main():
                 text += word
                 word_end_char_positions.append(len(text))
                 text += " "
-                labels_positions[(word_start_char_positions[-1], word_end_char_positions[-1])] = label
+                labels_positions[
+                    (word_start_char_positions[-1], word_end_char_positions[-1])
+                ] = label
 
             text = text.rstrip()
             texts.append(text)
@@ -444,10 +510,16 @@ def main():
             for word_start in range(len(sentence_words)):
                 for word_end in range(word_start, len(sentence_words)):
                     if (
-                        sum(sentence_subword_lengths[word_start:word_end]) <= tokenizer.max_mention_length
+                        sum(sentence_subword_lengths[word_start:word_end])
+                        <= tokenizer.max_mention_length
                         and len(entity_spans) < tokenizer.max_entity_length
                     ):
-                        entity_spans.append((word_start_char_positions[word_start], word_end_char_positions[word_end]))
+                        entity_spans.append(
+                            (
+                                word_start_char_positions[word_start],
+                                word_end_char_positions[word_end],
+                            )
+                        )
                         original_entity_spans.append((word_start, word_end + 1))
                         if (
                             word_start_char_positions[word_start],
@@ -455,7 +527,10 @@ def main():
                         ) in labels_positions:
                             labels_entity_spans.append(
                                 labels_positions[
-                                    (word_start_char_positions[word_start], word_end_char_positions[word_end])
+                                    (
+                                        word_start_char_positions[word_start],
+                                        word_end_char_positions[word_end],
+                                    )
                                 ]
                             )
                         else:
@@ -488,18 +563,31 @@ def main():
 
         if padding == "max_length":
             tokenized_inputs["labels"] = padding_tensor(
-                examples["labels_entity_spans"], -100, tokenizer.padding_side, tokenizer.max_entity_length
+                examples["labels_entity_spans"],
+                -100,
+                tokenizer.padding_side,
+                tokenizer.max_entity_length,
             )
             tokenized_inputs["original_entity_spans"] = padding_tensor(
-                examples["original_entity_spans"], (-1, -1), tokenizer.padding_side, tokenizer.max_entity_length
+                examples["original_entity_spans"],
+                (-1, -1),
+                tokenizer.padding_side,
+                tokenizer.max_entity_length,
             )
             tokenized_inputs[label_column_name] = padding_tensor(
-                examples[label_column_name], -1, tokenizer.padding_side, tokenizer.max_entity_length
+                examples[label_column_name],
+                -1,
+                tokenizer.padding_side,
+                tokenizer.max_entity_length,
             )
         else:
-            tokenized_inputs["labels"] = [ex[: tokenizer.max_entity_length] for ex in examples["labels_entity_spans"]]
+            tokenized_inputs["labels"] = [
+                ex[: tokenizer.max_entity_length]
+                for ex in examples["labels_entity_spans"]
+            ]
             tokenized_inputs["original_entity_spans"] = [
-                ex[: tokenizer.max_entity_length] for ex in examples["original_entity_spans"]
+                ex[: tokenizer.max_entity_length]
+                for ex in examples["original_entity_spans"]
             ]
             tokenized_inputs[label_column_name] = [
                 ex[: tokenizer.max_entity_length] for ex in examples[label_column_name]
@@ -549,23 +637,40 @@ def main():
             pad_to_multiple_of = 8
         else:
             pad_to_multiple_of = None
-        data_collator = DataCollatorForLukeTokenClassification(tokenizer, pad_to_multiple_of=pad_to_multiple_of)
+        data_collator = DataCollatorForLukeTokenClassification(
+            tokenizer, pad_to_multiple_of=pad_to_multiple_of
+        )
 
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset,
+        shuffle=True,
+        collate_fn=data_collator,
+        batch_size=args.per_device_train_batch_size,
     )
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataloader = DataLoader(
+        eval_dataset,
+        collate_fn=data_collator,
+        batch_size=args.per_device_eval_batch_size,
+    )
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
     no_decay = ["bias", "LayerNorm.weight"]
     optimizer_grouped_parameters = [
         {
-            "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)
+            ],
             "weight_decay": args.weight_decay,
         },
         {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "params": [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
             "weight_decay": 0.0,
         },
     ]
@@ -584,11 +689,15 @@ def main():
     # shorter in multiprocess)
 
     # Scheduler and math around the number of training steps.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(
+        len(train_dataloader) / args.gradient_accumulation_steps
+    )
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     else:
-        args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
+        args.num_train_epochs = math.ceil(
+            args.max_train_steps / num_update_steps_per_epoch
+        )
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
@@ -604,7 +713,9 @@ def main():
         true_predictions = []
         true_labels = []
 
-        for output, original_spans, tags in zip(outputs.logits, original_entity_spans, ner_tags):
+        for output, original_spans, tags in zip(
+            outputs.logits, original_entity_spans, ner_tags
+        ):
             true_tags = [val for val in tags if val != -1]
             true_original_spans = [val for val in original_spans if val != (-1, -1)]
             max_indices = torch.argmax(output, axis=1)
@@ -618,10 +729,14 @@ def main():
             predicted_sequence = [label_list[0]] * len(true_tags)
 
             for _, span, label in sorted(predictions, key=lambda o: o[0], reverse=True):
-                if all(o == label_list[0] for o in predicted_sequence[span[0] : span[1]]):
+                if all(
+                    o == label_list[0] for o in predicted_sequence[span[0] : span[1]]
+                ):
                     predicted_sequence[span[0]] = label
                     if span[1] - span[0] > 1:
-                        predicted_sequence[span[0] + 1 : span[1]] = [label] * (span[1] - span[0] - 1)
+                        predicted_sequence[span[0] + 1 : span[1]] = [label] * (
+                            span[1] - span[0] - 1
+                        )
 
             true_predictions.append(predicted_sequence)
             true_labels.append([label_list[tag_id] for tag_id in true_tags])
@@ -649,17 +764,27 @@ def main():
             }
 
     # Train!
-    total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+    total_batch_size = (
+        args.per_device_train_batch_size
+        * accelerator.num_processes
+        * args.gradient_accumulation_steps
+    )
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
     logger.info(f"  Num Epochs = {args.num_train_epochs}")
-    logger.info(f"  Instantaneous batch size per device = {args.per_device_train_batch_size}")
-    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(
+        f"  Instantaneous batch size per device = {args.per_device_train_batch_size}"
+    )
+    logger.info(
+        f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}"
+    )
     logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
     logger.info(f"  Total optimization steps = {args.max_train_steps}")
     # Only show the progress bar once on each machine.
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
+    progress_bar = tqdm(
+        range(args.max_train_steps), disable=not accelerator.is_local_main_process
+    )
     completed_steps = 0
 
     for epoch in range(args.num_train_epochs):
@@ -670,7 +795,10 @@ def main():
             loss = outputs.loss
             loss = loss / args.gradient_accumulation_steps
             accelerator.backward(loss)
-            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+            if (
+                step % args.gradient_accumulation_steps == 0
+                or step == len(train_dataloader) - 1
+            ):
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -686,7 +814,9 @@ def main():
             with torch.no_grad():
                 outputs = model(**batch)
 
-            preds, refs = get_luke_labels(outputs, batch[label_column_name], original_entity_spans)
+            preds, refs = get_luke_labels(
+                outputs, batch[label_column_name], original_entity_spans
+            )
 
             metric.add_batch(
                 predictions=preds,
@@ -699,11 +829,15 @@ def main():
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
-            unwrapped_model.save_pretrained(args.output_dir, save_function=accelerator.save)
+            unwrapped_model.save_pretrained(
+                args.output_dir, save_function=accelerator.save
+            )
             if accelerator.is_main_process:
                 tokenizer.save_pretrained(args.output_dir)
                 repo.push_to_hub(
-                    commit_message=f"Training in progress epoch {epoch}", blocking=False, auto_lfs_prune=True
+                    commit_message=f"Training in progress epoch {epoch}",
+                    blocking=False,
+                    auto_lfs_prune=True,
                 )
 
     if args.output_dir is not None:

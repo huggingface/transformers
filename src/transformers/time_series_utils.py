@@ -33,11 +33,16 @@ from torch.distributions import (
 
 
 class AffineTransformed(TransformedDistribution):
-    def __init__(self, base_distribution: Distribution, loc=None, scale=None, event_dim=0):
+    def __init__(
+        self, base_distribution: Distribution, loc=None, scale=None, event_dim=0
+    ):
         self.scale = 1.0 if scale is None else scale
         self.loc = 0.0 if loc is None else loc
 
-        super().__init__(base_distribution, [AffineTransform(loc=self.loc, scale=self.scale, event_dim=event_dim)])
+        super().__init__(
+            base_distribution,
+            [AffineTransform(loc=self.loc, scale=self.scale, event_dim=event_dim)],
+        )
 
     @property
     def mean(self):
@@ -63,11 +68,17 @@ class AffineTransformed(TransformedDistribution):
 
 class ParameterProjection(nn.Module):
     def __init__(
-        self, in_features: int, args_dim: Dict[str, int], domain_map: Callable[..., Tuple[torch.Tensor]], **kwargs
+        self,
+        in_features: int,
+        args_dim: Dict[str, int],
+        domain_map: Callable[..., Tuple[torch.Tensor]],
+        **kwargs
     ) -> None:
         super().__init__(**kwargs)
         self.args_dim = args_dim
-        self.proj = nn.ModuleList([nn.Linear(in_features, dim) for dim in args_dim.values()])
+        self.proj = nn.ModuleList(
+            [nn.Linear(in_features, dim) for dim in args_dim.values()]
+        )
         self.domain_map = domain_map
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
@@ -110,7 +121,9 @@ class DistributionOutput:
         if loc is None and scale is None:
             return distr
         else:
-            return AffineTransformed(distr, loc=loc, scale=scale, event_dim=self.event_dim)
+            return AffineTransformed(
+                distr, loc=loc, scale=scale, event_dim=self.event_dim
+            )
 
     @property
     def event_shape(self) -> Tuple:
@@ -209,13 +222,18 @@ class NegativeBinomialOutput(DistributionOutput):
         if self.dim == 1:
             return self.distribution_class(total_count=total_count, logits=logits)
         else:
-            return Independent(self.distribution_class(total_count=total_count, logits=logits), 1)
+            return Independent(
+                self.distribution_class(total_count=total_count, logits=logits), 1
+            )
 
     # Overwrites the parent class method. We cannot scale using the affine
     # transformation since negative binomial should return integers. Instead
     # we scale the parameters.
     def distribution(
-        self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
+        self,
+        distr_args,
+        loc: Optional[torch.Tensor] = None,
+        scale: Optional[torch.Tensor] = None,
     ) -> Distribution:
         total_count, logits = distr_args
 

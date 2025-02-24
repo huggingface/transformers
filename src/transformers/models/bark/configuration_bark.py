@@ -101,7 +101,9 @@ class BarkSubModelConfig(PretrainedConfig):
 
 
 @add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkSemanticConfig", model="BarkSemanticModel"),
+    BARK_SUBMODELCONFIG_START_DOCSTRING.format(
+        config="BarkSemanticConfig", model="BarkSemanticModel"
+    ),
     """
     Example:
 
@@ -124,7 +126,9 @@ class BarkSemanticConfig(BarkSubModelConfig):
 
 
 @add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkCoarseConfig", model="BarkCoarseModel"),
+    BARK_SUBMODELCONFIG_START_DOCSTRING.format(
+        config="BarkCoarseConfig", model="BarkCoarseModel"
+    ),
     """
     Example:
 
@@ -147,7 +151,9 @@ class BarkCoarseConfig(BarkSubModelConfig):
 
 
 @add_start_docstrings(
-    BARK_SUBMODELCONFIG_START_DOCSTRING.format(config="BarkFineConfig", model="BarkFineModel"),
+    BARK_SUBMODELCONFIG_START_DOCSTRING.format(
+        config="BarkFineConfig", model="BarkFineModel"
+    ),
     """
         n_codes_total (`int`, *optional*, defaults to 8):
             The total number of audio codebooks predicted. Used in the fine acoustics sub-model.
@@ -173,7 +179,9 @@ class BarkFineConfig(BarkSubModelConfig):
     model_type = "fine_acoustics"
     base_config_key = "fine_acoustics_config"
 
-    def __init__(self, tie_word_embeddings=True, n_codes_total=8, n_codes_given=1, **kwargs):
+    def __init__(
+        self, tie_word_embeddings=True, n_codes_total=8, n_codes_given=1, **kwargs
+    ):
         self.n_codes_total = n_codes_total
         self.n_codes_given = n_codes_given
 
@@ -252,24 +260,34 @@ class BarkConfig(PretrainedConfig):
     ):
         if semantic_config is None:
             semantic_config = {}
-            logger.info("semantic_config is None. initializing the semantic model with default values.")
+            logger.info(
+                "semantic_config is None. initializing the semantic model with default values."
+            )
 
         if coarse_acoustics_config is None:
             coarse_acoustics_config = {}
-            logger.info("coarse_acoustics_config is None. initializing the coarse model with default values.")
+            logger.info(
+                "coarse_acoustics_config is None. initializing the coarse model with default values."
+            )
 
         if fine_acoustics_config is None:
             fine_acoustics_config = {}
-            logger.info("fine_acoustics_config is None. initializing the fine model with default values.")
+            logger.info(
+                "fine_acoustics_config is None. initializing the fine model with default values."
+            )
 
         if codec_config is None:
             codec_config = {}
-            logger.info("codec_config is None. initializing the codec model with default values.")
+            logger.info(
+                "codec_config is None. initializing the codec model with default values."
+            )
 
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        codec_model_type = codec_config["model_type"] if "model_type" in codec_config else "encodec"
+        codec_model_type = (
+            codec_config["model_type"] if "model_type" in codec_config else "encodec"
+        )
         self.codec_config = CONFIG_MAPPING[codec_model_type](**codec_config)
 
         self.initializer_range = initializer_range

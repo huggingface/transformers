@@ -19,7 +19,18 @@ import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 from packaging import version
 
@@ -96,7 +107,8 @@ def _parse_type_hint(hint: str) -> Dict:
             return _get_json_schema_type(hint)
         except KeyError:
             raise TypeHintParsingException(
-                "Couldn't parse this type hint, likely due to a custom class or object: ", hint
+                "Couldn't parse this type hint, likely due to a custom class or object: ",
+                hint,
             )
 
     elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
@@ -149,7 +161,9 @@ def _parse_type_hint(hint: str) -> Dict:
             out["additionalProperties"] = _parse_type_hint(args[1])
         return out
 
-    raise TypeHintParsingException("Couldn't parse this type hint, likely due to a custom class or object: ", hint)
+    raise TypeHintParsingException(
+        "Couldn't parse this type hint, likely due to a custom class or object: ", hint
+    )
 
 
 def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
@@ -158,7 +172,9 @@ def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
     required = []
     for param_name, param in signature.parameters.items():
         if param.annotation == inspect.Parameter.empty:
-            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+            raise TypeHintParsingException(
+                f"Argument {param.name} is missing a type hint in function {func.__name__}"
+            )
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
@@ -173,7 +189,9 @@ def _convert_type_hints_to_json_schema(func: Callable) -> Dict:
     return schema
 
 
-def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
+def parse_google_format_docstring(
+    docstring: str,
+) -> Tuple[Optional[str], Optional[Dict], Optional[str]]:
     """
     Parses a Google-style docstring to extract the function description,
     argument descriptions, and return description.
@@ -197,9 +215,13 @@ def parse_google_format_docstring(docstring: str) -> Tuple[Optional[str], Option
 
     # Parsing the arguments into a dictionary
     if docstring_args is not None:
-        docstring_args = "\n".join([line for line in docstring_args.split("\n") if line.strip()])  # Remove blank lines
+        docstring_args = "\n".join(
+            [line for line in docstring_args.split("\n") if line.strip()]
+        )  # Remove blank lines
         matches = args_split_re.findall(docstring_args)
-        args_dict = {match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches}
+        args_dict = {
+            match[0]: re.sub(r"\s*\n+\s*", " ", match[1].strip()) for match in matches
+        }
     else:
         args_dict = {}
 
@@ -323,7 +345,9 @@ def get_json_schema(func: Callable) -> Dict:
 
     json_schema = _convert_type_hints_to_json_schema(func)
     if (return_dict := json_schema["properties"].pop("return", None)) is not None:
-        if return_doc is not None:  # We allow a missing return docstring since most templates ignore it
+        if (
+            return_doc is not None
+        ):  # We allow a missing return docstring since most templates ignore it
             return_dict["description"] = return_doc
     for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
@@ -344,11 +368,18 @@ def get_json_schema(func: Callable) -> Dict:
 
 
 def _render_with_assistant_indices(
-    compiled_template, messages, tools, documents, add_generation_prompt, **template_kwargs
+    compiled_template,
+    messages,
+    tools,
+    documents,
+    add_generation_prompt,
+    **template_kwargs,
 ):
     rendered_blocks = []
     generation_indices = []
-    with compiled_template.environment.activate_tracker(rendered_blocks, generation_indices):
+    with compiled_template.environment.activate_tracker(
+        rendered_blocks, generation_indices
+    ):
         for block in compiled_template.generate(
             messages=messages,
             tools=tools,
@@ -382,10 +413,14 @@ def _compile_jinja_template(chat_template):
         def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
             lineno = next(parser.stream).lineno
             body = parser.parse_statements(["name:endgeneration"], drop_needle=True)
-            return jinja2.nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)
+            return jinja2.nodes.CallBlock(
+                self.call_method("_generation_support"), [], [], body
+            ).set_lineno(lineno)
 
         @jinja2.pass_eval_context
-        def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
+        def _generation_support(
+            self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro
+        ) -> str:
             rv = caller()
             if self.is_active():
                 # Only track generation indices if the tracker is active
@@ -398,10 +433,14 @@ def _compile_jinja_template(chat_template):
             return self._rendered_blocks or self._generation_indices
 
         @contextmanager
-        def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
+        def activate_tracker(
+            self, rendered_blocks: List[int], generation_indices: List[int]
+        ):
             try:
                 if self.is_active():
-                    raise ValueError("AssistantTracker should not be reused before closed")
+                    raise ValueError(
+                        "AssistantTracker should not be reused before closed"
+                    )
                 self._rendered_blocks = rendered_blocks
                 self._generation_indices = generation_indices
 
@@ -412,7 +451,8 @@ def _compile_jinja_template(chat_template):
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
         raise ImportError(
-            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
+            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is "
+            f"{jinja2.__version__}."
         )
 
     def raise_exception(message):
@@ -421,13 +461,21 @@ def _compile_jinja_template(chat_template):
     def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
         # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
         # We also expose some options like custom indents and separators
-        return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
+        return json.dumps(
+            x,
+            ensure_ascii=ensure_ascii,
+            indent=indent,
+            separators=separators,
+            sort_keys=sort_keys,
+        )
 
     def strftime_now(format):
         return datetime.now().strftime(format)
 
     jinja_env = ImmutableSandboxedEnvironment(
-        trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
+        trim_blocks=True,
+        lstrip_blocks=True,
+        extensions=[AssistantTracker, jinja2.ext.loopcontrols],
     )
     jinja_env.filters["tojson"] = tojson
     jinja_env.globals["raise_exception"] = raise_exception

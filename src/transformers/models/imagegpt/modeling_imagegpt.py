@@ -33,7 +33,11 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...pytorch_utils import (
+    Conv1D,
+    find_pruneable_heads_and_indices,
+    prune_conv1d_layer,
+)
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -84,7 +88,14 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
+            n
+            in [
+                "adam_v",
+                "adam_m",
+                "AdamWeightDecayOptimizer",
+                "AdamWeightDecayOptimizer_1",
+                "global_step",
+            ]
             for n in name
         ) or name[-1] in ["_step"]:
             logger.info("Skipping {}".format("/".join(name)))
@@ -125,7 +136,13 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
 
-        if len(name) > 1 and name[1] == "attn" or name[-1] == "wtet" or name[-1] == "sos" or name[-1] == "wte":
+        if (
+            len(name) > 1
+            and name[1] == "attn"
+            or name[-1] == "wtet"
+            or name[-1] == "sos"
+            or name[-1] == "wte"
+        ):
             pass  # array is used to initialize only part of the pointer so sizes won't match
         else:
             try:
@@ -137,13 +154,17 @@ def load_tf_weights_in_imagegpt(model, config, imagegpt_checkpoint_path):
         logger.info("Initialize PyTorch weight {}".format(name))
 
         if name[-1] == "q_proj":
-            pointer.data[:, : config.n_embd] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
+            pointer.data[:, : config.n_embd] = torch.from_numpy(
+                array.reshape(config.n_embd, config.n_embd)
+            ).T
         elif name[-1] == "k_proj":
             pointer.data[:, config.n_embd : 2 * config.n_embd] = torch.from_numpy(
                 array.reshape(config.n_embd, config.n_embd)
             ).T
         elif name[-1] == "v_proj":
-            pointer.data[:, 2 * config.n_embd :] = torch.from_numpy(array.reshape(config.n_embd, config.n_embd)).T
+            pointer.data[:, 2 * config.n_embd :] = torch.from_numpy(
+                array.reshape(config.n_embd, config.n_embd)
+            ).T
         elif len(name) == 3 and name[1] == "attn" and name[2] == "c_proj":
             pointer.data = torch.from_numpy(array.reshape(config.n_embd, config.n_embd))
         elif name[-1] == "wtet":
@@ -166,21 +187,28 @@ class ImageGPTLayerNorm(nn.Module):
 
     def forward(self, tensor: torch.Tensor) -> torch.Tensor:
         # input is not mean centered
-        tensor = tensor / torch.sqrt(torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps)
+        tensor = tensor / torch.sqrt(
+            torch.mean(torch.square(tensor), axis=-1, keepdim=True) + self.eps
+        )
         tensor = tensor * self.weight
         return tensor
 
 
 class ImageGPTAttention(nn.Module):
-    def __init__(self, config, is_cross_attention: Optional[bool] = False, layer_idx: Optional[int] = None):
+    def __init__(
+        self,
+        config,
+        is_cross_attention: Optional[bool] = False,
+        layer_idx: Optional[int] = None,
+    ):
         super().__init__()
 
         max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ),
+            torch.tril(
+                torch.ones((max_positions, max_positions), dtype=torch.bool)
+            ).view(1, 1, max_positions, max_positions),
             persistent=False,
         )
         self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
@@ -218,15 +246,21 @@ class ImageGPTAttention(nn.Module):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
-        index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.num_heads, self.head_dim, self.pruned_heads
+        )
+        index_attn = torch.cat(
+            [index, index + self.split_size, index + (2 * self.split_size)]
+        )
 
         # Prune conv1d layers
         self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
         self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
 
         # Update hyper params
-        self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
+        self.split_size = (self.split_size // self.num_heads) * (
+            self.num_heads - len(heads)
+        )
         self.num_heads = self.num_heads - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
@@ -243,11 +277,15 @@ class ImageGPTAttention(nn.Module):
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            causal_mask = self.bias[
+                :, :, key_length - query_length : key_length, :key_length
+            ]
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(
+                attn_weights.device
+            )
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -268,13 +306,21 @@ class ImageGPTAttention(nn.Module):
 
         return attn_output, attn_weights
 
-    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
+    def _upcast_and_reordered_attn(
+        self, query, key, value, attention_mask=None, head_mask=None
+    ):
         # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
         bsz, num_heads, q_seq_len, dk = query.size()
         _, _, k_seq_len, _ = key.size()
 
         # Preallocate attn_weights for `baddbmm`
-        attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
+        attn_weights = torch.empty(
+            bsz * num_heads,
+            q_seq_len,
+            k_seq_len,
+            dtype=torch.float32,
+            device=query.device,
+        )
 
         # Compute Scale Factor
         scale_factor = 1.0
@@ -286,18 +332,26 @@ class ImageGPTAttention(nn.Module):
 
         # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
         with autocast(enabled=False):
-            q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-            attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
+            q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(
+                -1, dk, k_seq_len
+            )
+            attn_weights = torch.baddbmm(
+                attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor
+            )
             attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
 
         if not self.is_cross_attention:
             # if only "normal" attention layer implements causal mask
             query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+            causal_mask = self.bias[
+                :, :, key_length - query_length : key_length, :key_length
+            ]
             mask_value = torch.finfo(attn_weights.dtype).min
             # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
             # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(
+                attn_weights.device
+            )
             attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
         if attention_mask is not None:
@@ -308,7 +362,9 @@ class ImageGPTAttention(nn.Module):
 
         # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
         if attn_weights.dtype != torch.float32:
-            raise RuntimeError("Error with upcasting, attn_weights does not have dtype torch.float32")
+            raise RuntimeError(
+                "Error with upcasting, attn_weights does not have dtype torch.float32"
+            )
         attn_weights = attn_weights.type(value.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
@@ -355,7 +411,9 @@ class ImageGPTAttention(nn.Module):
                 )
 
             query = self.q_attn(hidden_states)
-            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
+            key, value = self.c_attn(encoder_hidden_states).split(
+                self.split_size, dim=2
+            )
             attention_mask = encoder_attention_mask
         else:
             query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
@@ -375,9 +433,13 @@ class ImageGPTAttention(nn.Module):
             present = None
 
         if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._upcast_and_reordered_attn(
+                query, key, value, attention_mask, head_mask
+            )
         else:
-            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
+            attn_output, attn_weights = self._attn(
+                query, key, value, attention_mask, head_mask
+            )
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.c_proj(attn_output)
@@ -418,8 +480,12 @@ class ImageGPTBlock(nn.Module):
         self.ln_2 = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
         if config.add_cross_attention:
-            self.crossattention = ImageGPTAttention(config, is_cross_attention=True, layer_idx=layer_idx)
-            self.ln_cross_attn = ImageGPTLayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+            self.crossattention = ImageGPTAttention(
+                config, is_cross_attention=True, layer_idx=layer_idx
+            )
+            self.ln_cross_attn = ImageGPTLayerNorm(
+                hidden_size, eps=config.layer_norm_epsilon
+            )
 
         self.mlp = ImageGPTMLP(inner_dim, config)
 
@@ -469,7 +535,9 @@ class ImageGPTBlock(nn.Module):
             attn_output = cross_attn_outputs[0]
             # residual connection
             hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
+            outputs = (
+                outputs + cross_attn_outputs[2:]
+            )  # add cross attentions if we output attention weights
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)
@@ -522,7 +590,13 @@ class ImageGPTPreTrainedModel(PreTrainedModel):
         for name, p in module.named_parameters():
             if "c_proj" in name and "weight" in name:
                 # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+                p.data.normal_(
+                    mean=0.0,
+                    std=(
+                        self.config.initializer_range
+                        / math.sqrt(2 * self.config.n_layer)
+                    ),
+                )
 
 
 IMAGEGPT_START_DOCSTRING = r"""
@@ -618,7 +692,12 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
 
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([ImageGPTBlock(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList(
+            [
+                ImageGPTBlock(config, layer_idx=i)
+                for i in range(config.num_hidden_layers)
+            ]
+        )
         self.ln_f = ImageGPTLayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         # Model parallel
@@ -642,7 +721,10 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
             self.h[layer].attn.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -699,15 +781,25 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
             input_ids = kwargs.pop("pixel_values")
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -730,7 +822,12 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
-            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+            position_ids = torch.arange(
+                past_length,
+                input_shape[-1] + past_length,
+                dtype=torch.long,
+                device=device,
+            )
             position_ids = position_ids.unsqueeze(0)
 
         # ImageGPTAttention mask.
@@ -756,7 +853,9 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.add_cross_attention and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_batch_size, encoder_sequence_length, _ = (
+                encoder_hidden_states.size()
+            )
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
@@ -792,7 +891,9 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         presents = () if use_cache else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.add_cross_attention else None
+        )
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
             # Model parallel
@@ -800,7 +901,9 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 torch.cuda.set_device(hidden_states.device)
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if layer_past is not None:
-                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
+                    layer_past = tuple(
+                        past_state.to(hidden_states.device) for past_state in layer_past
+                    )
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(hidden_states.device)
@@ -838,9 +941,13 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
                 presents = presents + (outputs[1],)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                all_self_attentions = all_self_attentions + (
+                    outputs[2 if use_cache else 1],
+                )
                 if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
+                    all_cross_attentions = all_cross_attentions + (
+                        outputs[3 if use_cache else 2],
+                    )
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
@@ -858,7 +965,13 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, presents, all_hidden_states, all_self_attentions, all_cross_attentions]
+                for v in [
+                    hidden_states,
+                    presents,
+                    all_hidden_states,
+                    all_self_attentions,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
 
@@ -899,7 +1012,9 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -975,7 +1090,9 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
 
             input_ids = kwargs.pop("pixel_values")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1003,7 +1120,9 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = loss_fct(
+                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1)
+            )
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
@@ -1028,7 +1147,10 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel, GenerationMixin):
         beam_idx at every generation step.
         """
         return tuple(
-            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            tuple(
+                past_state.index_select(0, beam_idx.to(past_state.device))
+                for past_state in layer_past
+            )
             for layer_past in past_key_values
         )
 
@@ -1051,7 +1173,9 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(IMAGEGPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=SequenceClassifierOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1107,7 +1231,9 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
             input_ids = kwargs.pop("pixel_values")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1133,7 +1259,9 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"

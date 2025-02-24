@@ -25,7 +25,11 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrImageProcessor, RTDetrV2Config, RTDetrV2ForObjectDetection
+from transformers import (
+    RTDetrImageProcessor,
+    RTDetrV2Config,
+    RTDetrV2ForObjectDetection,
+)
 from transformers.utils import logging
 
 
@@ -39,7 +43,9 @@ def get_rt_detr_v2_config(model_name: str) -> RTDetrV2Config:
     config.num_labels = 80
     repo_id = "huggingface/label-files"
     filename = "coco-detection-mmdet-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -177,35 +183,59 @@ def read_in_q_k_v(state_dict, config):
     # first: transformer encoder
     for i in range(config.encoder_layers):
         # read in weights + bias of input projection layer (in PyTorch's MultiHeadAttention, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"{prefix}encoder.encoder.{i}.layers.0.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.weight"] = in_proj_weight[
-            :encoder_hidden_dim, :
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.bias"] = in_proj_bias[:encoder_hidden_dim]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.weight"] = in_proj_weight[
-            encoder_hidden_dim : 2 * encoder_hidden_dim, :
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.bias"] = in_proj_bias[
-            encoder_hidden_dim : 2 * encoder_hidden_dim
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.weight"] = in_proj_weight[
-            -encoder_hidden_dim:, :
-        ]
-        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.bias"] = in_proj_bias[-encoder_hidden_dim:]
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.weight"] = (
+            in_proj_weight[:encoder_hidden_dim, :]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.q_proj.bias"] = (
+            in_proj_bias[:encoder_hidden_dim]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.weight"] = (
+            in_proj_weight[encoder_hidden_dim : 2 * encoder_hidden_dim, :]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.k_proj.bias"] = (
+            in_proj_bias[encoder_hidden_dim : 2 * encoder_hidden_dim]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.weight"] = (
+            in_proj_weight[-encoder_hidden_dim:, :]
+        )
+        state_dict[f"model.encoder.encoder.{i}.layers.0.self_attn.v_proj.bias"] = (
+            in_proj_bias[-encoder_hidden_dim:]
+        )
     # next: transformer decoder (which is a bit more complex because it also includes cross-attention)
     for i in range(config.decoder_layers):
         # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(
+            f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight"
+        )
+        in_proj_bias = state_dict.pop(
+            f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias"
+        )
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = in_proj_weight[256:512, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[256:512]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = in_proj_weight[-256:, :]
-        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[-256:]
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = (
+            in_proj_weight[:256, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[
+            :256
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.weight"] = (
+            in_proj_weight[256:512, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.k_proj.bias"] = in_proj_bias[
+            256:512
+        ]
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.weight"] = (
+            in_proj_weight[-256:, :]
+        )
+        state_dict[f"model.decoder.layers.{i}.self_attn.v_proj.bias"] = in_proj_bias[
+            -256:
+        ]
 
 
 # We will verify our results on an image of cute cats
@@ -233,9 +263,9 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
         "rtdetr_v2_r101vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r101vd_6x_coco_from_paddle.pth",
     }
     logger.info(f"Converting model {model_name}...")
-    state_dict = torch.hub.load_state_dict_from_url(model_name_to_checkpoint_url[model_name], map_location="cpu")[
-        "ema"
-    ]["module"]
+    state_dict = torch.hub.load_state_dict_from_url(
+        model_name_to_checkpoint_url[model_name], map_location="cpu"
+    )["ema"]["module"]
     # rename keys
     state_dict = convert_old_keys_to_new_keys(state_dict)
     for key in state_dict.copy().keys():
@@ -268,7 +298,9 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     # preprocess image
     transformations = transforms.Compose(
         [
-            transforms.Resize([640, 640], interpolation=transforms.InterpolationMode.BILINEAR),
+            transforms.Resize(
+                [640, 640], interpolation=transforms.InterpolationMode.BILINEAR
+            ),
             transforms.ToTensor(),
         ]
     )
@@ -289,36 +321,76 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
 
     if model_name == "rtdetr_v2_r18vd":
         expected_slice_logits = torch.tensor(
-            [[-3.7045, -5.1913, -6.1787], [-4.0106, -9.3450, -5.2043], [-4.1287, -4.7463, -5.8634]]
+            [
+                [-3.7045, -5.1913, -6.1787],
+                [-4.0106, -9.3450, -5.2043],
+                [-4.1287, -4.7463, -5.8634],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.2582, 0.5497, 0.4764], [0.1684, 0.1985, 0.2120], [0.7665, 0.4146, 0.4669]]
+            [
+                [0.2582, 0.5497, 0.4764],
+                [0.1684, 0.1985, 0.2120],
+                [0.7665, 0.4146, 0.4669],
+            ]
         )
     elif model_name == "rtdetr_v2_r34vd":
         expected_slice_logits = torch.tensor(
-            [[-4.6108, -5.9453, -3.8505], [-3.8702, -6.1136, -5.5677], [-3.7790, -6.4538, -5.9449]]
+            [
+                [-4.6108, -5.9453, -3.8505],
+                [-3.8702, -6.1136, -5.5677],
+                [-3.7790, -6.4538, -5.9449],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
+            [
+                [0.1691, 0.1984, 0.2118],
+                [0.2594, 0.5506, 0.4736],
+                [0.7669, 0.4136, 0.4654],
+            ]
         )
     elif model_name == "rtdetr_v2_r50vd":
         expected_slice_logits = torch.tensor(
-            [[-4.7881, -4.6754, -6.1624], [-5.4441, -6.6486, -4.3840], [-3.5455, -4.9318, -6.3544]]
+            [
+                [-4.7881, -4.6754, -6.1624],
+                [-5.4441, -6.6486, -4.3840],
+                [-3.5455, -4.9318, -6.3544],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.2588, 0.5487, 0.4747], [0.5497, 0.2760, 0.0573], [0.7688, 0.4133, 0.4634]]
+            [
+                [0.2588, 0.5487, 0.4747],
+                [0.5497, 0.2760, 0.0573],
+                [0.7688, 0.4133, 0.4634],
+            ]
         )
     elif model_name == "rtdetr_v2_r101vd":
         expected_slice_logits = torch.tensor(
-            [[-4.6162, -4.9189, -4.6656], [-4.4701, -4.4997, -4.9659], [-5.6641, -7.9000, -5.0725]]
+            [
+                [-4.6162, -4.9189, -4.6656],
+                [-4.4701, -4.4997, -4.9659],
+                [-5.6641, -7.9000, -5.0725],
+            ]
         )
         expected_slice_boxes = torch.tensor(
-            [[0.7707, 0.4124, 0.4585], [0.2589, 0.5492, 0.4735], [0.1688, 0.1993, 0.2108]]
+            [
+                [0.7707, 0.4124, 0.4585],
+                [0.2589, 0.5492, 0.4735],
+                [0.1688, 0.1993, 0.2108],
+            ]
         )
     else:
         raise ValueError(f"Unknown rt_detr_v2_name: {model_name}")
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
-    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
+    assert torch.allclose(
+        outputs.logits[0, :3, :3],
+        expected_slice_logits.to(outputs.logits.device),
+        atol=1e-4,
+    )
+    assert torch.allclose(
+        outputs.pred_boxes[0, :3, :3],
+        expected_slice_boxes.to(outputs.pred_boxes.device),
+        atol=1e-3,
+    )
 
     if output_dir is not None:
         Path(output_dir).mkdir(exist_ok=True)
@@ -352,12 +424,23 @@ if __name__ == "__main__":
         type=str,
         help="model_name of the checkpoint you'd like to convert.",
     )
-    parser.add_argument("--output_dir", default=None, type=str, help="Location to write HF model and image processor")
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the model to the hub or not.")
+    parser.add_argument(
+        "--output_dir",
+        default=None,
+        type=str,
+        help="Location to write HF model and image processor",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether to push the model to the hub or not.",
+    )
     parser.add_argument(
         "--repo_id",
         type=str,
         help="repo_id where the model will be pushed to.",
     )
     args = parser.parse_args()
-    write_model_and_image_processor(args.model_name, args.output_dir, args.push_to_hub, args.repo_id)
+    write_model_and_image_processor(
+        args.model_name, args.output_dir, args.push_to_hub, args.repo_id
+    )

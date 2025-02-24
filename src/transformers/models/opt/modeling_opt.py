@@ -146,17 +146,26 @@ class OPTAttention(nn.Module):
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
-        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
+        value_states = value_states.view(
+            bsz, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
         if past_key_value is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                key_states,
+                value_states,
+                self.layer_idx,
+                {"cache_position": cache_position},
             )
 
         attn_weights = torch.matmul(query_states, key_states.transpose(3, 2))
@@ -165,7 +174,9 @@ class OPTAttention(nn.Module):
             attn_weights = attn_weights + causal_mask
 
         # upcast to fp32 if the weights are in fp16. Please see https://github.com/huggingface/transformers/pull/17437
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.softmax(
+            attn_weights, dim=-1, dtype=torch.float32
+        ).to(query_states.dtype)
 
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
@@ -175,7 +186,9 @@ class OPTAttention(nn.Module):
                 )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
         attn_output = torch.matmul(attn_probs, value_states)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -222,13 +235,20 @@ class OptFlashAttention2(OPTAttention):
 
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
+        value_states = value_states.view(
+            bsz, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
         if past_key_value is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                key_states,
+                value_states,
+                self.layer_idx,
+                {"cache_position": cache_position},
             )
 
         attn_dropout = self.dropout if self.training else 0.0
@@ -273,7 +293,9 @@ class OptFlashAttention2(OPTAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
-        attn_weights_reshaped = attn_output.reshape(bsz, query_length, self.num_heads * self.head_dim)
+        attn_weights_reshaped = attn_output.reshape(
+            bsz, query_length, self.num_heads * self.head_dim
+        )
         attn_output = self.out_proj(attn_weights_reshaped)
 
         if not output_attentions:
@@ -317,17 +339,26 @@ class OPTSdpaAttention(OPTAttention):
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
-        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
+        value_states = value_states.view(
+            bsz, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
         if past_key_value is not None:
             # save all key/value_states to cache to be re-used for fast auto-regressive generation
             key_states, value_states = past_key_value.update(
-                key_states, value_states, self.layer_idx, {"cache_position": cache_position}
+                key_states,
+                value_states,
+                self.layer_idx,
+                {"cache_position": cache_position},
             )
 
         causal_mask = attention_mask
@@ -366,7 +397,9 @@ class OPTDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = OPT_ATTENTION_CLASSES[config._attn_implementation](
+            config=config, layer_idx=layer_idx
+        )
 
         self.do_layer_norm_before = config.do_layer_norm_before
         self.dropout = config.dropout
@@ -377,7 +410,9 @@ class OPTDecoderLayer(nn.Module):
         )
         self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim, bias=config.enable_bias)
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim, bias=config.enable_bias)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine)
+        self.final_layer_norm = nn.LayerNorm(
+            self.embed_dim, elementwise_affine=config.layer_norm_elementwise_affine
+        )
 
     def forward(
         self,
@@ -389,7 +424,9 @@ class OPTDecoderLayer(nn.Module):
         use_cache: Optional[bool] = False,
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -424,7 +461,9 @@ class OPTDecoderLayer(nn.Module):
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
         hidden_states = residual + hidden_states
 
         # 350m applies layer norm AFTER attention
@@ -444,7 +483,9 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = self.activation_fn(hidden_states)
 
         hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.dropout, training=self.training
+        )
 
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
 
@@ -594,16 +635,24 @@ class OPTDecoder(OPTPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.word_embed_proj_dim, self.padding_idx)
-        self.embed_positions = OPTLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size, config.word_embed_proj_dim, self.padding_idx
+        )
+        self.embed_positions = OPTLearnedPositionalEmbedding(
+            config.max_position_embeddings, config.hidden_size
+        )
 
         if config.word_embed_proj_dim != config.hidden_size:
-            self.project_out = nn.Linear(config.hidden_size, config.word_embed_proj_dim, bias=False)
+            self.project_out = nn.Linear(
+                config.hidden_size, config.word_embed_proj_dim, bias=False
+            )
         else:
             self.project_out = None
 
         if config.word_embed_proj_dim != config.hidden_size:
-            self.project_in = nn.Linear(config.word_embed_proj_dim, config.hidden_size, bias=False)
+            self.project_in = nn.Linear(
+                config.word_embed_proj_dim, config.hidden_size, bias=False
+            )
         else:
             self.project_in = None
 
@@ -612,12 +661,18 @@ class OPTDecoder(OPTPreTrainedModel):
         # see https://github.com/facebookresearch/metaseq/pull/164
         if config.do_layer_norm_before and not config._remove_final_layer_norm:
             self.final_layer_norm = nn.LayerNorm(
-                config.hidden_size, elementwise_affine=config.layer_norm_elementwise_affine
+                config.hidden_size,
+                elementwise_affine=config.layer_norm_elementwise_affine,
             )
         else:
             self.final_layer_norm = None
 
-        self.layers = nn.ModuleList([OPTDecoderLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [
+                OPTDecoderLayer(config, layer_idx=i)
+                for i in range(config.num_hidden_layers)
+            ]
+        )
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -646,11 +701,17 @@ class OPTDecoder(OPTPreTrainedModel):
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
         # to infer the attention mask.
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
+        if (
+            self.config._attn_implementation == "sdpa"
+            and not using_static_cache
+            and not output_attentions
+        ):
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -691,7 +752,9 @@ class OPTDecoder(OPTPreTrainedModel):
             # using left padding. This is required by F.scaled_dot_product_attention memory-efficient attention path.
             # Details: https://github.com/pytorch/pytorch/issues/110213
             min_dtype = torch.finfo(dtype).min
-            causal_mask = AttentionMaskConverter._unmask_unattended(causal_mask, min_dtype)
+            causal_mask = AttentionMaskConverter._unmask_unattended(
+                causal_mask, min_dtype
+            )
 
         return causal_mask
 
@@ -735,22 +798,29 @@ class OPTDecoder(OPTPreTrainedModel):
         else:
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
-                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+                (sequence_length, target_length),
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
-            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask *= torch.arange(
+                target_length, device=device
+            ) > cache_position.reshape(-1, 1)
             causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
             if attention_mask is not None:
-                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                causal_mask = (
+                    causal_mask.clone()
+                )  # copy to contiguous memory for in-place edit
                 mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(
-                    causal_mask.device
-                )
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[
+                    :, None, None, :
+                ].to(causal_mask.device)
                 padding_mask = padding_mask == 0
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    padding_mask, min_dtype
-                )
+                causal_mask[:, :, :, :mask_length] = causal_mask[
+                    :, :, :, :mask_length
+                ].masked_fill(padding_mask, min_dtype)
 
         return causal_mask
 
@@ -824,16 +894,26 @@ class OPTDecoder(OPTPreTrainedModel):
                 this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
                 the complete sequence length.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -858,18 +938,28 @@ class OPTDecoder(OPTPreTrainedModel):
                     "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
                 )
 
-        past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        past_seen_tokens = (
+            past_key_values.get_seq_length() if past_key_values is not None else 0
+        )
         if cache_position is None:
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if attention_mask is None:
             seq_length = past_seen_tokens + inputs_embeds.shape[1]
-            attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
+            attention_mask = torch.ones(
+                inputs_embeds.shape[0], seq_length, device=inputs_embeds.device
+            )
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         # embed positions
@@ -880,7 +970,9 @@ class OPTDecoder(OPTPreTrainedModel):
             # cut positions if `past_seen_tokens` is > 0
             position_ids = position_ids[:, past_seen_tokens:]
 
-        pos_embeds = self.embed_positions(attention_mask, past_seen_tokens, position_ids=position_ids)
+        pos_embeds = self.embed_positions(
+            attention_mask, past_seen_tokens, position_ids=position_ids
+        )
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
@@ -958,7 +1050,11 @@ class OPTDecoder(OPTPreTrainedModel):
             next_cache = next_cache.to_legacy_cache()
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns]
+                if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
@@ -1008,12 +1104,20 @@ class OPTModel(OPTPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.Tensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -1049,7 +1153,9 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         self.model = OPTModel(config)
 
         # the lm_head weight is automatically tied to the embed tokens weight
-        self.lm_head = nn.Linear(config.word_embed_proj_dim, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.word_embed_proj_dim, config.vocab_size, bias=False
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1072,7 +1178,9 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model.decoder
 
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1172,11 +1280,19 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious. I'm just a little bit of a weirdo."
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model.decoder(
@@ -1223,7 +1339,10 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                tuple(
+                    past_state.index_select(0, beam_idx.to(past_state.device))
+                    for past_state in layer_past
+                ),
             )
         return reordered_past
 
@@ -1281,7 +1400,9 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.model(
             input_ids,
@@ -1304,12 +1425,16 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
         if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+            raise ValueError(
+                "Cannot handle batch sizes > 1 if no padding token is defined."
+            )
         if self.config.pad_token_id is None:
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(
+                logits.device, torch.int32
+            )
             token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
@@ -1319,14 +1444,18 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
                 "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
             )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+        pooled_logits = logits[
+            torch.arange(batch_size, device=logits.device), last_non_pad_token
+        ]
 
         loss = None
         if labels is not None:
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -1339,7 +1468,9 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
                     loss = loss_fct(pooled_logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(
+                    pooled_logits.view(-1, self.num_labels), labels.view(-1)
+                )
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(pooled_logits, labels)
@@ -1379,7 +1510,9 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1438,7 +1571,9 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         >>> predicted
         ' a nice puppet'
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         transformer_outputs = self.model(
             input_ids,

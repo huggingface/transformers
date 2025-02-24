@@ -71,9 +71,19 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
             additional_special_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
-        elif extra_ids > 0 and additional_special_tokens is not None and len(additional_special_tokens) > 0:
+        elif (
+            extra_ids > 0
+            and additional_special_tokens is not None
+            and len(additional_special_tokens) > 0
+        ):
             # Check that we have the right number of extra_id special tokens
-            extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))
+            extra_tokens = len(
+                set(
+                    filter(
+                        lambda x: bool("extra_id" in str(x)), additional_special_tokens
+                    )
+                )
+            )
             if extra_tokens != extra_ids:
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
@@ -81,10 +91,22 @@ class ByT5Tokenizer(PreTrainedTokenizer):
                     " extra_ids tokens"
                 )
 
-        pad_token = AddedToken(pad_token, lstrip=True, rstrip=True) if isinstance(pad_token, str) else pad_token
+        pad_token = (
+            AddedToken(pad_token, lstrip=True, rstrip=True)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
         # we force left and right stripping for backward compatibility. The byt5tests depend on this.
-        eos_token = AddedToken(eos_token, lstrip=True, rstrip=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=True, rstrip=True) if isinstance(unk_token, str) else unk_token
+        eos_token = (
+            AddedToken(eos_token, lstrip=True, rstrip=True)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=True, rstrip=True)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
         # unk token needs to be in the vocab with correct index
         self._added_tokens_decoder = {0: pad_token, 1: eos_token, 2: unk_token}
         self.offset = len(self._added_tokens_decoder)
@@ -103,12 +125,18 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         return self._utf_vocab_size
 
     def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
+        vocab = {
+            self.convert_ids_to_tokens(i): i
+            for i in range(self.vocab_size + self.offset)
+        }
         vocab.update(self.added_tokens_encoder)
         return vocab
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -127,7 +155,9 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         """
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         # normal case: some special tokens
@@ -229,7 +259,9 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         return string
 
     # ByT5Tokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         return ()
 
 

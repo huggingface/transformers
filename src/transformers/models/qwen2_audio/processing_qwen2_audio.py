@@ -63,14 +63,26 @@ class Qwen2AudioProcessor(ProcessorMixin):
     ):
         if chat_template is None:
             chat_template = self.default_chat_template
-        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
-        self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
-        self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
+        self.audio_token = (
+            tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        )
+        self.audio_bos_token = (
+            tokenizer.audio_bos_token
+            if hasattr(tokenizer, "audio_bos_token")
+            else audio_bos_token
+        )
+        self.audio_eos_token = (
+            tokenizer.audio_eos_token
+            if hasattr(tokenizer, "audio_eos_token")
+            else audio_eos_token
+        )
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audios: Union[np.ndarray, List[np.ndarray]] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         sampling_rate: Optional[int] = None,
@@ -108,7 +120,9 @@ class Qwen2AudioProcessor(ProcessorMixin):
         elif isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise ValueError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
 
         # ensure we have as much audios as audio tokens
         num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
@@ -120,7 +134,11 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
         if audios is not None:
             audio_inputs = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_attention_mask=True, padding="max_length", **kwargs
+                audios,
+                sampling_rate=sampling_rate,
+                return_attention_mask=True,
+                padding="max_length",
+                **kwargs,
             )
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
@@ -142,17 +160,27 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     audio_token_end_idx = audio_token_start_idx + len(self.audio_token)
 
                     has_bos = (
-                        sample[audio_token_start_idx - len(self.audio_bos_token) : audio_token_start_idx]
+                        sample[
+                            audio_token_start_idx
+                            - len(self.audio_bos_token) : audio_token_start_idx
+                        ]
                         == self.audio_bos_token
                     )
                     has_eos = (
-                        sample[audio_token_end_idx : audio_token_end_idx + len(self.audio_eos_token)]
+                        sample[
+                            audio_token_end_idx : audio_token_end_idx
+                            + len(self.audio_eos_token)
+                        ]
                         == self.audio_eos_token
                     )
 
                     # Check if this audio token is surrounded by bos/eos tokens
                     if not has_bos and not has_eos:
-                        expanded_audio_token = self.audio_bos_token + expanded_audio_token + self.audio_eos_token
+                        expanded_audio_token = (
+                            self.audio_bos_token
+                            + expanded_audio_token
+                            + self.audio_eos_token
+                        )
 
                     replace_str.append(expanded_audio_token)
                     sample = sample.replace(self.audio_token, "<placeholder>", 1)
@@ -187,7 +215,13 @@ class Qwen2AudioProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names + ["feature_attention_mask"]))
+        return list(
+            dict.fromkeys(
+                tokenizer_input_names
+                + feature_extractor_input_names
+                + ["feature_attention_mask"]
+            )
+        )
 
     @property
     def default_chat_template(self):

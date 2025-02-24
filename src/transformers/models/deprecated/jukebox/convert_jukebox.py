@@ -63,7 +63,12 @@ def replace_key(key):
     if "prime_prior" in key:
         key = key.replace("prime_prior", "encoder")
 
-    if ".emb." in key and "total" not in key and "absolute" not in key and "relative" not in key:
+    if (
+        ".emb." in key
+        and "total" not in key
+        and "absolute" not in key
+        and "relative" not in key
+    ):
         key = key.replace(".emb.", ".")
 
     if key.endswith("k"):  # replace vqvae.X.k with vqvae.X.codebook
@@ -97,23 +102,35 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
     new_dict = {}
     import re
 
-    re_encoder_block_conv_in = re.compile(r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)")
+    re_encoder_block_conv_in = re.compile(
+        r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)"
+    )
     re_encoder_block_resnet = re.compile(
         r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
     )
-    re_encoder_block_proj_out = re.compile(r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)")
+    re_encoder_block_proj_out = re.compile(
+        r"encoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)"
+    )
 
-    re_decoder_block_conv_out = re.compile(r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)")
+    re_decoder_block_conv_out = re.compile(
+        r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).(bias|weight)"
+    )
     re_decoder_block_resnet = re.compile(
         r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
     )
-    re_decoder_block_proj_in = re.compile(r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)")
+    re_decoder_block_proj_in = re.compile(
+        r"decoders.(\d*).level_blocks.(\d*).model.(\d*).(bias|weight)"
+    )
 
-    re_prior_cond_conv_out = re.compile(r"conditioner_blocks.(\d*).cond.model.(\d*).(\d).(bias|weight)")
+    re_prior_cond_conv_out = re.compile(
+        r"conditioner_blocks.(\d*).cond.model.(\d*).(\d).(bias|weight)"
+    )
     re_prior_cond_resnet = re.compile(
         r"conditioner_blocks.(\d*).cond.model.(\d*).(\d).model.(\d*).model.(\d*).(bias|weight)"
     )
-    re_prior_cond_proj_in = re.compile(r"conditioner_blocks.(\d*).cond.model.(\d*).(bias|weight)")
+    re_prior_cond_proj_in = re.compile(
+        r"conditioner_blocks.(\d*).cond.model.(\d*).(bias|weight)"
+    )
 
     for original_key, value in state_dict.items():
         # rename vqvae.encoder keys
@@ -137,7 +154,9 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
         elif re_encoder_block_proj_out.fullmatch(original_key):
             regex_match = re_encoder_block_proj_out.match(original_key)
             groups = regex_match.groups()
-            re_new_key = f"encoders.{groups[0]}.level_blocks.{groups[1]}.proj_out.{groups[-1]}"
+            re_new_key = (
+                f"encoders.{groups[0]}.level_blocks.{groups[1]}.proj_out.{groups[-1]}"
+            )
             key = re_encoder_block_proj_out.sub(re_new_key, original_key)
 
         # rename vqvae.decoder keys
@@ -161,7 +180,9 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
         elif re_decoder_block_proj_in.fullmatch(original_key):
             regex_match = re_decoder_block_proj_in.match(original_key)
             groups = regex_match.groups()
-            re_new_key = f"decoders.{groups[0]}.level_blocks.{groups[1]}.proj_in.{groups[-1]}"
+            re_new_key = (
+                f"decoders.{groups[0]}.level_blocks.{groups[1]}.proj_in.{groups[-1]}"
+            )
             key = re_decoder_block_proj_in.sub(re_new_key, original_key)
 
         # rename prior cond.model to upsampler.upsample_block and resnet
@@ -200,7 +221,9 @@ def fix_jukebox_keys(state_dict, model_state_dict, key_prefix, mapping):
         # handle missmatched shape
         elif value.shape != model_state_dict[f"{key_prefix}.{key}"].shape:
             val = model_state_dict[f"{key_prefix}.{key}"]
-            print(f"{original_key}-> {key} : \nshape {val.shape} and { value.shape}, do not match")
+            print(
+                f"{original_key}-> {key} : \nshape {val.shape} and { value.shape}, do not match"
+            )
             key = original_key
 
         mapping[key] = original_key
@@ -218,7 +241,9 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         if not os.path.isfile(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}"):
             r = requests.get(f"{PREFIX}{file}", allow_redirects=True)
             os.makedirs(f"{pytorch_dump_folder_path}/", exist_ok=True)
-            open(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}", "wb").write(r.content)
+            open(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}", "wb").write(
+                r.content
+            )
 
     model_to_convert = MODEL_MAPPING[model_name.split("/")[-1]]
 
@@ -228,7 +253,9 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     weight_dict = []
     mapping = {}
     for i, dict_name in enumerate(model_to_convert):
-        old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name.split('/')[-1]}")["model"]
+        old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name.split('/')[-1]}")[
+            "model"
+        ]
 
         new_dic = {}
         for k in old_dic.keys():

@@ -32,7 +32,11 @@ from transformers import (
     EfficientFormerForImageClassificationWithTeacher,
     EfficientFormerImageProcessor,
 )
-from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, PILImageResampling
+from transformers.image_utils import (
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    PILImageResampling,
+)
 
 
 def rename_key(old_name, num_meta4D_last_stage):
@@ -58,15 +62,21 @@ def rename_key(old_name, num_meta4D_last_stage):
             match = re.search(r"\d\.\d.", old_name).group()
         if int(match[0]) < 6:
             trimmed_name = old_name.replace(match, "")
-            trimmed_name = trimmed_name.replace("network", match[0] + ".meta4D_layers.blocks." + match[2:-1])
+            trimmed_name = trimmed_name.replace(
+                "network", match[0] + ".meta4D_layers.blocks." + match[2:-1]
+            )
             new_name = "intermediate_stages." + trimmed_name
         else:
             trimmed_name = old_name.replace(match, "")
             if int(match[2]) < num_meta4D_last_stage:
-                trimmed_name = trimmed_name.replace("network", "meta4D_layers.blocks." + match[2])
+                trimmed_name = trimmed_name.replace(
+                    "network", "meta4D_layers.blocks." + match[2]
+                )
             else:
                 layer_index = str(int(match[2]) - num_meta4D_last_stage)
-                trimmed_name = trimmed_name.replace("network", "meta3D_layers.blocks." + layer_index)
+                trimmed_name = trimmed_name.replace(
+                    "network", "meta3D_layers.blocks." + layer_index
+                )
                 if "norm1" in old_name:
                     trimmed_name = trimmed_name.replace("norm1", "layernorm1")
                 elif "norm2" in old_name:
@@ -121,7 +131,10 @@ def prepare_img():
 
 
 def convert_efficientformer_checkpoint(
-    checkpoint_path: Path, efficientformer_config_file: Path, pytorch_dump_path: Path, push_to_hub: bool
+    checkpoint_path: Path,
+    efficientformer_config_file: Path,
+    pytorch_dump_path: Path,
+    push_to_hub: bool,
 ):
     orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     config = EfficientFormerConfig.from_json_file(efficientformer_config_file)
@@ -171,19 +184,52 @@ def convert_efficientformer_checkpoint(
 
     if "l1" in model_name:
         expected_logits = torch.Tensor(
-            [-0.1312, 0.4353, -1.0499, -0.5124, 0.4183, -0.6793, -1.3777, -0.0893, -0.7358, -2.4328]
+            [
+                -0.1312,
+                0.4353,
+                -1.0499,
+                -0.5124,
+                0.4183,
+                -0.6793,
+                -1.3777,
+                -0.0893,
+                -0.7358,
+                -2.4328,
+            ]
         )
         assert torch.allclose(logits[0, :10], expected_logits, atol=1e-3)
         assert logits.shape == expected_shape
     elif "l3" in model_name:
         expected_logits = torch.Tensor(
-            [-1.3150, -1.5456, -1.2556, -0.8496, -0.7127, -0.7897, -0.9728, -0.3052, 0.3751, -0.3127]
+            [
+                -1.3150,
+                -1.5456,
+                -1.2556,
+                -0.8496,
+                -0.7127,
+                -0.7897,
+                -0.9728,
+                -0.3052,
+                0.3751,
+                -0.3127,
+            ]
         )
         assert torch.allclose(logits[0, :10], expected_logits, atol=1e-3)
         assert logits.shape == expected_shape
     elif "l7" in model_name:
         expected_logits = torch.Tensor(
-            [-1.0283, -1.4131, -0.5644, -1.3115, -0.5785, -1.2049, -0.7528, 0.1992, -0.3822, -0.0878]
+            [
+                -1.0283,
+                -1.4131,
+                -0.5644,
+                -1.3115,
+                -0.5785,
+                -1.2049,
+                -0.7528,
+                0.1992,
+                -0.3822,
+                -0.0878,
+            ]
         )
         assert logits.shape == expected_shape
     else:
@@ -231,10 +277,18 @@ if __name__ == "__main__":
         help="The json file for EfficientFormer model config.",
     )
     parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
 
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push model and image processor to the hub",
+    )
     parser.add_argument(
         "--no-push_to_hub",
         dest="push_to_hub",

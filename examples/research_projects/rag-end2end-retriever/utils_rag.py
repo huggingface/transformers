@@ -18,8 +18,19 @@ from torch.utils.data import Dataset
 from transformers import BartTokenizer, RagTokenizer, T5Tokenizer
 
 
-def encode_line(tokenizer, line, max_length, padding_side, pad_to_max_length=True, return_tensors="pt"):
-    extra_kw = {"add_prefix_space": True} if isinstance(tokenizer, BartTokenizer) and not line.startswith(" ") else {}
+def encode_line(
+    tokenizer,
+    line,
+    max_length,
+    padding_side,
+    pad_to_max_length=True,
+    return_tensors="pt",
+):
+    extra_kw = (
+        {"add_prefix_space": True}
+        if isinstance(tokenizer, BartTokenizer) and not line.startswith(" ")
+        else {}
+    )
     tokenizer.padding_side = padding_side
     return tokenizer(
         [line],
@@ -77,7 +88,9 @@ class Seq2SeqDataset(Dataset):
 
     def __getitem__(self, index) -> Dict[str, torch.Tensor]:
         index = index + 1  # linecache starts at 1
-        source_line = self.prefix + linecache.getline(str(self.src_file), index).rstrip("\n")
+        source_line = self.prefix + linecache.getline(str(self.src_file), index).rstrip(
+            "\n"
+        )
         tgt_line = linecache.getline(str(self.tgt_file), index).rstrip("\n")
         assert source_line, f"empty source line for index {index}"
         assert tgt_line, f"empty tgt line for index {index}"
@@ -89,12 +102,22 @@ class Seq2SeqDataset(Dataset):
 
         # Pad source and target to the right
         source_tokenizer = (
-            self.tokenizer.question_encoder if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer
+            self.tokenizer.question_encoder
+            if isinstance(self.tokenizer, RagTokenizer)
+            else self.tokenizer
         )
-        target_tokenizer = self.tokenizer.generator if isinstance(self.tokenizer, RagTokenizer) else self.tokenizer
+        target_tokenizer = (
+            self.tokenizer.generator
+            if isinstance(self.tokenizer, RagTokenizer)
+            else self.tokenizer
+        )
 
-        source_inputs = encode_line(source_tokenizer, source_line, self.max_source_length, "right")
-        target_inputs = encode_line(target_tokenizer, tgt_line, self.max_target_length, "right")
+        source_inputs = encode_line(
+            source_tokenizer, source_line, self.max_source_length, "right"
+        )
+        target_inputs = encode_line(
+            target_tokenizer, tgt_line, self.max_target_length, "right"
+        )
 
         source_ids = source_inputs["input_ids"].squeeze()
         target_ids = target_inputs["input_ids"].squeeze()
@@ -124,7 +147,9 @@ class Seq2SeqDataset(Dataset):
             else self.tokenizer.pad_token_id
         )
         y = trim_batch(target_ids, tgt_pad_token_id)
-        source_ids, source_mask = trim_batch(input_ids, src_pad_token_id, attention_mask=masks)
+        source_ids, source_mask = trim_batch(
+            input_ids, src_pad_token_id, attention_mask=masks
+        )
         batch = {
             "input_ids": source_ids,
             "attention_mask": source_mask,

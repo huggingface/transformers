@@ -51,7 +51,10 @@ from transformers.trainer_utils import set_seed  # noqa
 
 set_seed(42)
 
-models = {"base": "patrickvonplaten/wav2vec2_tiny_random", "robust": "patrickvonplaten/wav2vec2_tiny_random_robust"}
+models = {
+    "base": "patrickvonplaten/wav2vec2_tiny_random",
+    "robust": "patrickvonplaten/wav2vec2_tiny_random_robust",
+}
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"

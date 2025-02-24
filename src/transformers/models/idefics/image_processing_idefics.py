@@ -123,7 +123,11 @@ class IdeficsImageProcessor(BaseImageProcessor):
 
         """
         image_size = image_size if image_size is not None else self.image_size
-        image_num_channels = image_num_channels if image_num_channels is not None else self.image_num_channels
+        image_num_channels = (
+            image_num_channels
+            if image_num_channels is not None
+            else self.image_num_channels
+        )
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         size = (image_size, image_size)
@@ -162,8 +166,12 @@ class IdeficsImageProcessor(BaseImageProcessor):
         images = [resize(x, size, resample=PILImageResampling.BICUBIC) for x in images]
         images = [self.rescale(image=image, scale=1 / 255) for image in images]
         images = [self.normalize(x, mean=image_mean, std=image_std) for x in images]
-        images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
-        images = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)["pixel_values"]
+        images = [
+            to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images
+        ]
+        images = BatchFeature(
+            data={"pixel_values": images}, tensor_type=return_tensors
+        )["pixel_values"]
 
         return images
 

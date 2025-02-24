@@ -63,7 +63,9 @@ def convert_state_dict_to_hf(state_dict):
     old_state_dict_keys = set(state_dict.keys())
 
     # Flattened list of weights to merge. We keep these in the original state dict to merge them later
-    original_weights_to_merge = [w for weights in WEIGHTS_TO_MERGE_MAPPING for w in weights[0]]
+    original_weights_to_merge = [
+        w for weights in WEIGHTS_TO_MERGE_MAPPING for w in weights[0]
+    ]
 
     # for key, value in state_dict.items():
     for old_key in old_state_dict_keys:
@@ -94,7 +96,9 @@ def merge_weights(state_dict, new_state_dict):
     for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
         for weight_to_merge in weights_to_merge:
             print(weight_to_merge)
-            assert weight_to_merge in state_dict, f"Weight {weight_to_merge} is missing in the state dict"
+            assert (
+                weight_to_merge in state_dict
+            ), f"Weight {weight_to_merge} is missing in the state dict"
 
             weight = state_dict.pop(weight_to_merge)
             if new_weight_name not in new_state_dict:
@@ -104,7 +108,9 @@ def merge_weights(state_dict, new_state_dict):
 
             old_weight_names.remove(weight_to_merge)
 
-        new_state_dict[new_weight_name] = torch.cat(new_state_dict[new_weight_name], dim=0)
+        new_state_dict[new_weight_name] = torch.cat(
+            new_state_dict[new_weight_name], dim=0
+        )
 
     # Remove the weights that were merged
     for weights_to_merge, new_weight_name in WEIGHTS_TO_MERGE_MAPPING:
@@ -129,7 +135,9 @@ def get_config(checkpoint):
     if "embed_dim" in vision_config:
         vision_config["hidden_size"] = vision_config.pop("embed_dim")
 
-    config_json["vocab_size"] = config_json.pop("vocab_size") + config_json.pop("additional_vocab_size")
+    config_json["vocab_size"] = config_json.pop("vocab_size") + config_json.pop(
+        "additional_vocab_size"
+    )
 
     image_token_id = config_json.pop("image_token_id", config_json["vocab_size"] - 2)
     use_cache = config_json.pop("use_cache", True)
@@ -207,7 +215,9 @@ def main():
         help="If set, the model will be pushed to the hub after conversion.",
     )
     args = parser.parse_args()
-    convert_idefics3_hub_to_hf(args.original_model_id, args.output_hub_path, args.push_to_hub)
+    convert_idefics3_hub_to_hf(
+        args.original_model_id, args.output_hub_path, args.push_to_hub
+    )
 
 
 if __name__ == "__main__":

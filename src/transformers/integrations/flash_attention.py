@@ -42,7 +42,11 @@ def flash_attention_forward(
         elif hasattr(module.config, "_pre_quantization_dtype"):
             target_dtype = module.config._pre_quantization_dtype
         else:
-            target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+            target_dtype = next(
+                layer
+                for layer in module.modules()
+                if isinstance(layer, torch.nn.Linear)
+            ).weight.dtype
 
     # FA2 always relies on the value set in the module, so remove it if present in kwargs to avoid passing it twice
     kwargs.pop("is_causal", None)

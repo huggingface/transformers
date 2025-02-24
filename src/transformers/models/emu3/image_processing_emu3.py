@@ -57,7 +57,11 @@ def make_batched_images(images) -> List[List[ImageInput]]:
     Returns:
         list: A list of images.
     """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+    if (
+        isinstance(images, (list, tuple))
+        and isinstance(images[0], (list, tuple))
+        and is_valid_image(images[0][0])
+    ):
         return [img for img_list in images for img in img_list]
 
     elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
@@ -70,7 +74,11 @@ def make_batched_images(images) -> List[List[ImageInput]]:
 
 
 def smart_resize(
-    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
+    height: int,
+    width: int,
+    factor: int = 28,
+    min_pixels: int = 56 * 56,
+    max_pixels: int = 14 * 14 * 4 * 1280,
 ):
     """Rescales the image so that the following conditions are met:
 
@@ -82,7 +90,9 @@ def smart_resize(
 
     """
     if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
+        raise ValueError(
+            f"height:{height} or width:{width} must be larger than factor:{factor}"
+        )
     elif max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
@@ -243,18 +253,28 @@ class Emu3ImageProcessor(BaseImageProcessor):
                     max_pixels=self.max_pixels,
                 )
                 image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+                    image,
+                    size=(resized_height, resized_width),
+                    resample=resample,
+                    input_data_format=input_data_format,
                 )
 
             if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image, scale=rescale_factor, input_data_format=input_data_format
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            image = to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
             processed_images.append(image)
 
         images = np.array(processed_images)
@@ -375,11 +395,15 @@ class Emu3ImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
         do_pad = do_pad if do_pad is not None else self.do_pad
 
         if images is not None:
@@ -424,7 +448,8 @@ class Emu3ImageProcessor(BaseImageProcessor):
             pixel_values = np.array(pixel_values)
 
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_sizes": image_sizes},
+            tensor_type=return_tensors,
         )
 
     def postprocess(
@@ -467,7 +492,9 @@ class Emu3ImageProcessor(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
+        rescale_factor = (
+            1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -485,15 +512,22 @@ class Emu3ImageProcessor(BaseImageProcessor):
             image = to_numpy_array(image)
             if do_normalize:
                 image = self.unnormalize(
-                    image=image, image_mean=image_mean, image_std=image_std, input_data_format=input_data_format
+                    image=image,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    input_data_format=input_data_format,
                 )
 
             if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image, scale=rescale_factor, input_data_format=input_data_format
+                )
                 image = image.clip(0, 255).astype(np.uint8)
 
             if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
-                image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
+                image = to_channel_dimension_format(
+                    image, ChannelDimension.LAST, input_channel_dim=input_data_format
+                )
                 pixel_values.append(Image.fromarray(image))
             else:
                 pixel_values.extend(image)
@@ -531,20 +565,27 @@ class Emu3ImageProcessor(BaseImageProcessor):
 
         if isinstance(image_mean, Iterable):
             if len(image_mean) != num_channels:
-                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(image_mean)}")
+                raise ValueError(
+                    f"mean must have {num_channels} elements if it is an iterable, got {len(image_mean)}"
+                )
         else:
             image_mean = [image_mean] * num_channels
 
         if isinstance(image_std, Iterable):
             if len(image_std) != num_channels:
-                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(image_std)}")
+                raise ValueError(
+                    f"std must have {num_channels} elements if it is an iterable, got {len(image_std)}"
+                )
         else:
             image_std = [image_std] * num_channels
 
         rev_image_mean = tuple(-mean / std for mean, std in zip(image_mean, image_std))
         rev_image_std = tuple(1 / std for std in image_std)
         image = self.normalize(
-            image=image, mean=rev_image_mean, std=rev_image_std, input_data_format=input_data_format
+            image=image,
+            mean=rev_image_mean,
+            std=rev_image_std,
+            input_data_format=input_data_format,
         )
         return image
 

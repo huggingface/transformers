@@ -96,7 +96,12 @@ class XCLIPTextConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -294,7 +299,11 @@ class XCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in text_config
+                    and value != text_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -321,12 +330,17 @@ class XCLIPConfig(PretrainedConfig):
             # convert keys to string instead of integer
             if "id2label" in _vision_config_dict:
                 _vision_config_dict["id2label"] = {
-                    str(key): value for key, value in _vision_config_dict["id2label"].items()
+                    str(key): value
+                    for key, value in _vision_config_dict["id2label"].items()
                 }
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in vision_config
+                    and value != vision_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -346,11 +360,15 @@ class XCLIPConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `XCLIPTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `XCLIPTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `XCLIPVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. initializing the `XCLIPVisionConfig` with default values."
+            )
 
         self.text_config = XCLIPTextConfig(**text_config)
         self.vision_config = XCLIPVisionConfig(**vision_config)
@@ -366,7 +384,9 @@ class XCLIPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: XCLIPTextConfig, vision_config: XCLIPVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: XCLIPTextConfig, vision_config: XCLIPVisionConfig, **kwargs
+    ):
         r"""
         Instantiate a [`XCLIPConfig`] (or a derived class) from xclip text model configuration and xclip vision model
         configuration.
@@ -375,7 +395,11 @@ class XCLIPConfig(PretrainedConfig):
             [`XCLIPConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["XCLIPConfig", "XCLIPTextConfig", "XCLIPVisionConfig"]

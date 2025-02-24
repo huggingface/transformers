@@ -46,7 +46,12 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_vision_available,
+    logging,
+)
 
 
 if is_vision_available():
@@ -58,7 +63,9 @@ logger = logging.get_logger(__name__)
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
+def get_all_supported_aspect_ratios(
+    min_image_tiles: int, max_image_tiles: int
+) -> List[Tuple[int, int]]:
     """
     Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
 
@@ -106,7 +113,9 @@ def get_optimal_tiled_canvas(
     more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
     excessive tiling.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+    possible_tile_arrangements = get_all_supported_aspect_ratios(
+        min_image_tiles, max_image_tiles
+    )
 
     original_height, original_width = original_image_size
     target_tile_height, target_tile_width = target_tile_size
@@ -232,7 +241,9 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+            )
         output_size = (size["height"], size["width"])
         return resize(
             image,
@@ -310,11 +321,15 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -355,27 +370,46 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
-        encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        encoded_outputs = BatchFeature(
+            data={"pixel_values": images}, tensor_type=return_tensors
+        )
 
         return encoded_outputs
 
@@ -423,10 +457,16 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             image = to_pil_image(image, do_rescale=do_rescale)
 
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
-        original_height, original_width = original_size["height"], original_size["width"]
+        original_height, original_width = (
+            original_size["height"],
+            original_size["width"],
+        )
         # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+            (original_height, original_width),
+            (patch_size_height, patch_size_width),
+            min_patches,
+            max_patches,
         )
 
         # calculate the target width and height
@@ -463,16 +503,24 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
                 # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
                 # so we need to add it back if necessary.
                 processed_image = (
-                    np.expand_dims(processed_image, axis=-1) if processed_image.ndim == 2 else processed_image
+                    np.expand_dims(processed_image, axis=-1)
+                    if processed_image.ndim == 2
+                    else processed_image
                 )
                 # The image is always in channels last format after converting from a PIL image
                 if data_format is not None:
                     processed_image = to_channel_dimension_format(
-                        processed_image, data_format, input_channel_dim=ChannelDimension.LAST
+                        processed_image,
+                        data_format,
+                        input_channel_dim=ChannelDimension.LAST,
                     )
                 # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
                 # rescale it back to the original range.
-                processed_image = self.rescale(processed_image, 1 / 255) if do_rescale else processed_image
+                processed_image = (
+                    self.rescale(processed_image, 1 / 255)
+                    if do_rescale
+                    else processed_image
+                )
                 processed_images_numpy.append(processed_image)
             processed_images = processed_images_numpy
 

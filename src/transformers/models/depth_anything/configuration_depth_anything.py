@@ -111,7 +111,9 @@ class DepthAnythingConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone."
+            )
             backbone_config = CONFIG_MAPPING["dinov2"](
                 image_size=518,
                 hidden_size=384,
@@ -147,7 +149,9 @@ class DepthAnythingConfig(PretrainedConfig):
         self.head_in_index = head_in_index
         self.head_hidden_size = head_hidden_size
         if depth_estimation_type not in ["relative", "metric"]:
-            raise ValueError("depth_estimation_type must be one of ['relative', 'metric']")
+            raise ValueError(
+                "depth_estimation_type must be one of ['relative', 'metric']"
+            )
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
 

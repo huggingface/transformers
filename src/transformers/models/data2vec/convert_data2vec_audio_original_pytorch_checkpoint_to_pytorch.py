@@ -23,11 +23,18 @@ import torch
 from datasets import load_dataset
 
 from transformers import Wav2Vec2Processor, logging
-from transformers.models.data2vec.configuration_data2vec_audio import Data2VecAudioConfig
+from transformers.models.data2vec.configuration_data2vec_audio import (
+    Data2VecAudioConfig,
+)
 
 # Copied from https://github.com/pytorch/fairseq/blob/main/examples/data2vec/models/data2vec_audio.py
-from transformers.models.data2vec.data2vec_audio import Data2VecAudioModel as Dummy  # noqa: F401
-from transformers.models.data2vec.modeling_data2vec_audio import Data2VecAudioForCTC, Data2VecAudioModel
+from transformers.models.data2vec.data2vec_audio import (
+    Data2VecAudioModel as Dummy,
+)  # noqa: F401
+from transformers.models.data2vec.modeling_data2vec_audio import (
+    Data2VecAudioForCTC,
+    Data2VecAudioModel,
+)
 
 
 logging.set_verbosity_info()
@@ -80,7 +87,9 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     else:
         hf_pointer.data = value
 
-    logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
+    logger.info(
+        f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}."
+    )
 
 
 def recursively_load_weights(fairseq_model, hf_model, is_headless):
@@ -116,7 +125,11 @@ def recursively_load_weights(fairseq_model, hf_model, is_headless):
         else:
             for key, mapped_key in MAPPING.items():
                 if not is_headless:
-                    mapped_key = "data2vec_audio." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
+                    mapped_key = (
+                        "data2vec_audio." + mapped_key
+                        if mapped_key not in TOP_LEVEL_KEYS
+                        else mapped_key
+                    )
                 if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
                     is_used = True
                     if "*" in mapped_key:
@@ -151,7 +164,9 @@ def set_weights(full_name, module, fsq_value, hf_weight_path):
     hf_value = hf_weight.data
 
     if fsq_value.shape != hf_value.shape:
-        raise ValueError(f"{full_name} has size {fsq_value.shape}, but {hf_value.shape} was found.")
+        raise ValueError(
+            f"{full_name} has size {fsq_value.shape}, but {hf_value.shape} was found."
+        )
     hf_weight.data = fsq_value
     logger.info(f"{full_name} was correctly initialized from {hf_weight_path}.")
 
@@ -171,7 +186,12 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights):
         unused_weights.append(full_name)
         return
 
-    set_weights(full_name, feature_extractor, value, f"conv_layers.{layer_id}.{layer_type}.{weight_type}")
+    set_weights(
+        full_name,
+        feature_extractor,
+        value,
+        f"conv_layers.{layer_id}.{layer_type}.{weight_type}",
+    )
 
 
 def load_pos_conv_layer(full_name, value, pos_conv_embeddings, unused_weights):
@@ -187,12 +207,21 @@ def load_pos_conv_layer(full_name, value, pos_conv_embeddings, unused_weights):
     else:
         layer_type = "conv"
 
-    set_weights(full_name, pos_conv_embeddings, value, f"layers.{layer_id}.{layer_type}.{weight_type}")
+    set_weights(
+        full_name,
+        pos_conv_embeddings,
+        value,
+        f"layers.{layer_id}.{layer_type}.{weight_type}",
+    )
 
 
 @torch.no_grad()
 def convert_wav2vec2_checkpoint(
-    checkpoint_path, pytorch_dump_folder_path, config_path=None, dict_path=None, is_finetuned=True
+    checkpoint_path,
+    pytorch_dump_folder_path,
+    config_path=None,
+    dict_path=None,
+    is_finetuned=True,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
@@ -208,8 +237,12 @@ def convert_wav2vec2_checkpoint(
         data2vec_checkpoint_dir = os.path.dirname(checkpoint_path)
 
         state_dict = torch.load(checkpoint_path)
-        state_dict["model"]["final_proj.weight"] = state_dict["model"].pop("final_proj.0.weight")
-        state_dict["model"]["final_proj.bias"] = state_dict["model"].pop("final_proj.0.bias")
+        state_dict["model"]["final_proj.weight"] = state_dict["model"].pop(
+            "final_proj.0.weight"
+        )
+        state_dict["model"]["final_proj.bias"] = state_dict["model"].pop(
+            "final_proj.0.bias"
+        )
         converted_ckpt = os.path.join(data2vec_checkpoint_dir, "converted.pt")
         torch.save(state_dict, converted_ckpt)
     else:
@@ -226,7 +259,12 @@ def convert_wav2vec2_checkpoint(
 
     processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-lv60")
 
-    ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+    ds = load_dataset(
+        "patrickvonplaten/librispeech_asr_dummy",
+        "clean",
+        split="validation",
+        trust_remote_code=True,
+    )
     input_audio = [x["array"] for x in ds[:4]["audio"]]
 
     inputs = processor(input_audio, return_tensors="pt", padding=True)
@@ -239,9 +277,12 @@ def convert_wav2vec2_checkpoint(
     hf_wav2vec.eval()
     model.eval()
     if is_finetuned:
-        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)[
-            "encoder_out"
-        ].transpose(0, 1)
+        their_output = model(
+            source=input_values,
+            padding_mask=(1 - attention_mask),
+            mask=False,
+            features_only=True,
+        )["encoder_out"].transpose(0, 1)
         our_output = hf_wav2vec(input_values, attention_mask=attention_mask)["logits"]
 
         pred_ids = torch.argmax(our_output, dim=-1)
@@ -249,10 +290,15 @@ def convert_wav2vec2_checkpoint(
 
         print(f"Expected Output: {ds[:4]['text']}, Pred: {output_string}")
     else:
-        their_output = model(source=input_values, padding_mask=(1 - attention_mask), mask=False, features_only=True)[
-            "layer_results"
-        ][-1][0].transpose(0, 1)
-        our_output = hf_wav2vec(input_values, attention_mask=attention_mask)["last_hidden_state"]
+        their_output = model(
+            source=input_values,
+            padding_mask=(1 - attention_mask),
+            mask=False,
+            features_only=True,
+        )["layer_results"][-1][0].transpose(0, 1)
+        our_output = hf_wav2vec(input_values, attention_mask=attention_mask)[
+            "last_hidden_state"
+        ]
 
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
@@ -272,14 +318,34 @@ def convert_wav2vec2_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
-    parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint"
+    )
+    parser.add_argument(
+        "--dict_path", default=None, type=str, help="Path to dict of fine-tuned model"
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--not_finetuned",
+        action="store_true",
+        help="Whether the model to convert is a fine-tuned model or not",
     )
     args = parser.parse_args()
     convert_wav2vec2_checkpoint(
-        args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path, args.dict_path, not args.not_finetuned
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.config_path,
+        args.dict_path,
+        not args.not_finetuned,
     )

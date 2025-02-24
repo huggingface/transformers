@@ -23,7 +23,10 @@ from typing import Dict, Optional, Union
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
@@ -114,7 +117,9 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES)
+FEATURE_EXTRACTOR_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, FEATURE_EXTRACTOR_MAPPING_NAMES
+)
 
 
 def feature_extractor_class_from_name(class_name: str):
@@ -217,7 +222,9 @@ def get_feature_extractor_config(
             FutureWarning,
         )
         if token is not None:
-            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+            raise ValueError(
+                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+            )
         token = use_auth_token
 
     resolved_config_file = get_file_from_repo(
@@ -344,7 +351,9 @@ class AutoFeatureExtractor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(
+            pretrained_model_name_or_path, **kwargs
+        )
         feature_extractor_class = config_dict.get("feature_extractor_type", None)
         feature_extractor_auto_map = None
         if "AutoFeatureExtractor" in config_dict.get("auto_map", {}):
@@ -354,20 +363,33 @@ class AutoFeatureExtractor:
         if feature_extractor_class is None and feature_extractor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
                 )
             # It could be in `config.feature_extractor_type``
             feature_extractor_class = getattr(config, "feature_extractor_type", None)
-            if hasattr(config, "auto_map") and "AutoFeatureExtractor" in config.auto_map:
+            if (
+                hasattr(config, "auto_map")
+                and "AutoFeatureExtractor" in config.auto_map
+            ):
                 feature_extractor_auto_map = config.auto_map["AutoFeatureExtractor"]
 
         if feature_extractor_class is not None:
-            feature_extractor_class = feature_extractor_class_from_name(feature_extractor_class)
+            feature_extractor_class = feature_extractor_class_from_name(
+                feature_extractor_class
+            )
 
         has_remote_code = feature_extractor_auto_map is not None
-        has_local_code = feature_extractor_class is not None or type(config) in FEATURE_EXTRACTOR_MAPPING
+        has_local_code = (
+            feature_extractor_class is not None
+            or type(config) in FEATURE_EXTRACTOR_MAPPING
+        )
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code,
+            has_remote_code,
         )
 
         if has_remote_code and trust_remote_code:
@@ -401,4 +423,6 @@ class AutoFeatureExtractor:
                 The configuration corresponding to the model to register.
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
-        FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
+        FEATURE_EXTRACTOR_MAPPING.register(
+            config_class, feature_extractor_class, exist_ok=exist_ok
+        )

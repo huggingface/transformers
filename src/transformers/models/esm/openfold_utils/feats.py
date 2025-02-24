@@ -25,7 +25,9 @@ from .tensor_utils import batched_gather
 
 
 @overload
-def pseudo_beta_fn(aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: None) -> torch.Tensor: ...
+def pseudo_beta_fn(
+    aatype: torch.Tensor, all_atom_positions: torch.Tensor, all_atom_masks: None
+) -> torch.Tensor: ...
 
 
 @overload
@@ -55,7 +57,9 @@ def pseudo_beta_fn(aatype, all_atom_positions, all_atom_masks):
         return pseudo_beta
 
 
-def atom14_to_atom37(atom14: torch.Tensor, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+def atom14_to_atom37(
+    atom14: torch.Tensor, batch: Dict[str, torch.Tensor]
+) -> torch.Tensor:
     atom37_data = batched_gather(
         atom14,
         batch["residx_atom37_to_atom14"],
@@ -77,7 +81,9 @@ def build_template_angle_feat(template_feats: Dict[str, torch.Tensor]) -> torch.
         [
             nn.functional.one_hot(template_aatype, 22),
             torsion_angles_sin_cos.reshape(*torsion_angles_sin_cos.shape[:-2], 14),
-            alt_torsion_angles_sin_cos.reshape(*alt_torsion_angles_sin_cos.shape[:-2], 14),
+            alt_torsion_angles_sin_cos.reshape(
+                *alt_torsion_angles_sin_cos.shape[:-2], 14
+            ),
             torsion_angles_mask,
         ],
         dim=-1,
@@ -100,7 +106,9 @@ def build_template_pair_feat(
 
     # Compute distogram (this seems to differ slightly from Alg. 5)
     tpb = batch["template_pseudo_beta"]
-    dgram = torch.sum((tpb[..., None, :] - tpb[..., None, :, :]) ** 2, dim=-1, keepdim=True)
+    dgram = torch.sum(
+        (tpb[..., None, :] - tpb[..., None, :, :]) ** 2, dim=-1, keepdim=True
+    )
     lower = torch.linspace(min_bin, max_bin, no_bins, device=tpb.device) ** 2
     upper = torch.cat([lower[1:], lower.new_tensor([inf])], dim=-1)
     dgram = ((dgram > lower) * (dgram < upper)).type(dgram.dtype)
@@ -113,8 +121,14 @@ def build_template_pair_feat(
     )
 
     n_res = batch["template_aatype"].shape[-1]
-    to_concat.append(aatype_one_hot[..., None, :, :].expand(*aatype_one_hot.shape[:-2], n_res, -1, -1))
-    to_concat.append(aatype_one_hot[..., None, :].expand(*aatype_one_hot.shape[:-2], -1, n_res, -1))
+    to_concat.append(
+        aatype_one_hot[..., None, :, :].expand(
+            *aatype_one_hot.shape[:-2], n_res, -1, -1
+        )
+    )
+    to_concat.append(
+        aatype_one_hot[..., None, :].expand(*aatype_one_hot.shape[:-2], -1, n_res, -1)
+    )
 
     n, ca, c = [rc.atom_order[a] for a in ["N", "CA", "C"]]
     rigids = Rigid.make_transform_from_reference(

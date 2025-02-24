@@ -100,8 +100,12 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
         size = get_size_dict(size)
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 224, "width": 224}
+        )
+        crop_size = get_size_dict(
+            crop_size, default_to_square=True, param_name="crop_size"
+        )
 
         self.do_resize = do_resize
         self.do_rescale = do_rescale
@@ -111,7 +115,9 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         self.size = size
         self.resample = resample
         self.rescale_factor = rescale_factor
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self._valid_processor_keys = [
             "images",
@@ -164,15 +170,25 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
 
         if "shortest_edge" in size:
             size = get_resize_output_image_size(
-                image, size=size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+                image,
+                size=size["shortest_edge"],
+                default_to_square=False,
+                input_data_format=input_data_format,
             )
             # size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError(f"Size must contain 'height' and 'width' keys or 'shortest_edge' key. Got {size.keys()}")
+            raise ValueError(
+                f"Size must contain 'height' and 'width' keys or 'shortest_edge' key. Got {size.keys()}"
+            )
         return resize(
-            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
+            image,
+            size=size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
 
     def preprocess(
@@ -244,18 +260,27 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
+        crop_size = get_size_dict(
+            crop_size, param_name="crop_size", default_to_square=True
+        )
         resample = resample if resample is not None else self.resample
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
         size = size if size is not None else self.size
         size_dict = get_size_dict(size)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=self._valid_processor_keys,
+        )
 
         if not is_batched(images):
             images = [images]
@@ -292,29 +317,49 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
 
         if do_resize:
             images = [
-                self.resize(image=image, size=size_dict, resample=resample, input_data_format=input_data_format)
+                self.resize(
+                    image=image,
+                    size=size_dict,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_center_crop:
             images = [
-                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
+                self.center_crop(
+                    image=image, size=crop_size, input_data_format=input_data_format
+                )
+                for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}

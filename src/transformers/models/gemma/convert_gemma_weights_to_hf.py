@@ -65,14 +65,23 @@ CONFIG_MAPPING = {"2B": gemma_2b_config, "7B": gemma_7b_config}
 LAYER_NAME_MAPPING = {"embedder.weight": "model.embed_tokens.weight"}
 
 
-def write_model(save_path, input_base_path, config, safe_serialization=True, push_to_hub=False, dtype=torch.float32):
+def write_model(
+    save_path,
+    input_base_path,
+    config,
+    safe_serialization=True,
+    push_to_hub=False,
+    dtype=torch.float32,
+):
     num_attn_heads = config.num_attention_heads
     hidden_size = config.hidden_size
     num_kv_heads = config.num_key_value_heads
     head_dim = config.head_dim
 
     print(f"Fetching all parameters from the checkpoint at '{input_base_path}'")
-    model_state_dict = torch.load(input_base_path, map_location="cpu")["model_state_dict"]
+    model_state_dict = torch.load(input_base_path, map_location="cpu")[
+        "model_state_dict"
+    ]
     model_state_dict.pop("freqs_cis")
 
     state_dict = {}
@@ -81,7 +90,9 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
             if num_kv_heads == 1:
                 v = v.reshape(num_attn_heads + num_kv_heads * 2, head_dim, hidden_size)
                 q_proj = v[:num_attn_heads, ...]
-                k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(num_kv_heads, 1, 1)
+                k_proj = v[num_attn_heads : num_attn_heads + num_kv_heads, ...].repeat(
+                    num_kv_heads, 1, 1
+                )
                 v_proj = v[-num_kv_heads:, ...].repeat(num_kv_heads, 1, 1)
 
                 state_dict[k.replace("qkv_proj", "q_proj")] = q_proj.reshape(
@@ -120,14 +131,18 @@ def write_model(save_path, input_base_path, config, safe_serialization=True, pus
 
     if push_to_hub:
         print(f"pushing the model to {save_path}")
-        model.push_to_hub(save_path, safe_serialization=safe_serialization, private=True)
+        model.push_to_hub(
+            save_path, safe_serialization=safe_serialization, private=True
+        )
     else:
         model.save_pretrained(save_path, safe_serialization=safe_serialization)
 
 
 def write_tokenizer(input_tokenizer_path, save_path, push_to_hub=False):
     # Initialize the tokenizer based on the `spm` model
-    tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
+    tokenizer_class = (
+        GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
+    )
     print(f"Saving a {tokenizer_class.__name__} to {save_path}.")
     tokenizer = tokenizer_class(input_tokenizer_path)
     if push_to_hub:
@@ -185,7 +200,9 @@ def main():
 
     if args.convert_tokenizer:
         if args.tokenizer_checkpoint is None:
-            raise ValueError("Path to the tokenizer is required when passing --convert_tokenizer")
+            raise ValueError(
+                "Path to the tokenizer is required when passing --convert_tokenizer"
+            )
 
         spm_path = os.path.join(args.tokenizer_checkpoint)
         write_tokenizer(spm_path, args.output_dir, args.push_to_hub)

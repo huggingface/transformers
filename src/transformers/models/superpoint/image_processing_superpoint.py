@@ -51,11 +51,15 @@ def is_grayscale(
     if input_data_format == ChannelDimension.FIRST:
         if image.shape[0] == 1:
             return True
-        return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+        return np.all(image[0, ...] == image[1, ...]) and np.all(
+            image[1, ...] == image[2, ...]
+        )
     elif input_data_format == ChannelDimension.LAST:
         if image.shape[-1] == 1:
             return True
-        return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
+        return np.all(image[..., 0] == image[..., 1]) and np.all(
+            image[..., 1] == image[..., 2]
+        )
 
 
 def convert_to_grayscale(
@@ -82,10 +86,14 @@ def convert_to_grayscale(
         if is_grayscale(image, input_data_format=input_data_format):
             return image
         if input_data_format == ChannelDimension.FIRST:
-            gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            gray_image = (
+                image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            )
             gray_image = np.stack([gray_image] * 3, axis=0)
         elif input_data_format == ChannelDimension.LAST:
-            gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            gray_image = (
+                image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            )
             gray_image = np.stack([gray_image] * 3, axis=-1)
         return gray_image
 
@@ -232,7 +240,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
 
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_grayscale = do_grayscale if do_grayscale is not None else self.do_grayscale
 
         size = size if size is not None else self.size
@@ -266,11 +276,18 @@ class SuperPointImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
-            images = [self.resize(image=image, size=size, input_data_format=input_data_format) for image in images]
+            images = [
+                self.resize(image=image, size=size, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
@@ -279,10 +296,16 @@ class SuperPointImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         if do_grayscale:
-            images = [convert_to_grayscale(image, input_data_format=input_data_format) for image in images]
+            images = [
+                convert_to_grayscale(image, input_data_format=input_data_format)
+                for image in images
+            ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}
@@ -290,7 +313,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_keypoint_detection(
-        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, List[Tuple]]
+        self,
+        outputs: "SuperPointKeypointDescriptionOutput",
+        target_sizes: Union[TensorType, List[Tuple]],
     ) -> List[Dict[str, "torch.Tensor"]]:
         """
         Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
@@ -308,7 +333,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
             to target_sizes, scores and descriptors for an image in the batch as predicted by the model.
         """
         if len(outputs.mask) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the mask"
+            )
 
         if isinstance(target_sizes, List):
             image_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
@@ -334,7 +361,9 @@ class SuperPointImageProcessor(BaseImageProcessor):
             keypoints = keypoints[indices]
             scores = scores[indices]
             descriptors = descriptors[indices]
-            results.append({"keypoints": keypoints, "scores": scores, "descriptors": descriptors})
+            results.append(
+                {"keypoints": keypoints, "scores": scores, "descriptors": descriptors}
+            )
 
         return results
 

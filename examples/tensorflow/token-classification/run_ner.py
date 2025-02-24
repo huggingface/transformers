@@ -48,7 +48,10 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/tensorflow/token-classification/requirements.txt")
+require_version(
+    "datasets>=1.8.0",
+    "To fix: pip install -r examples/tensorflow/token-classification/requirements.txt",
+)
 
 
 # region Command-line arguments
@@ -59,21 +62,33 @@ class ModelArguments:
     """
 
     model_name_or_path: str = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={
+            "help": "Path to pretrained model or model identifier from huggingface.co/models"
+        }
     )
     config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained config name or path if not the same as model_name"
+        },
     )
     tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
+        default=None,
+        metadata={
+            "help": "Pretrained tokenizer name or path if not the same as model_name"
+        },
     )
     cache_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+        metadata={
+            "help": "Where do you want to store the pretrained models downloaded from huggingface.co"
+        },
     )
     model_revision: str = field(
         default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "The specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     token: str = field(
         default=None,
@@ -102,38 +117,58 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
+    task_name: Optional[str] = field(
+        default="ner", metadata={"help": "The name of the task (ner, pos...)."}
+    )
     dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
     dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+        default=None,
+        metadata={
+            "help": "The configuration name of the dataset to use (via the datasets library)."
+        },
     )
     train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
+        default=None,
+        metadata={"help": "The input training data file (a csv or JSON file)."},
     )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."
+        },
     )
     test_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+        metadata={
+            "help": "An optional input test data file to predict on (a csv or JSON file)."
+        },
     )
     text_column_name: Optional[str] = field(
-        default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
+        default=None,
+        metadata={
+            "help": "The column name of text to input in the file (a csv or JSON file)."
+        },
     )
     label_column_name: Optional[str] = field(
-        default=None, metadata={"help": "The column name of label to input in the file (a csv or JSON file)."}
+        default=None,
+        metadata={
+            "help": "The column name of label to input in the file (a csv or JSON file)."
+        },
     )
     overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+        default=False,
+        metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_length: Optional[int] = field(default=256, metadata={"help": "Max length (in tokens) for truncation/padding"})
+    max_length: Optional[int] = field(
+        default=256, metadata={"help": "Max length (in tokens) for truncation/padding"}
+    )
     pad_to_max_length: bool = field(
         default=False,
         metadata={
@@ -182,19 +217,33 @@ class DataTrainingArguments:
     )
     return_entity_level_metrics: bool = field(
         default=False,
-        metadata={"help": "Whether to return all the entity levels during evaluation or just the overall ones."},
+        metadata={
+            "help": "Whether to return all the entity levels during evaluation or just the overall ones."
+        },
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+        ):
+            raise ValueError(
+                "Need either a dataset name or a training/validation file."
+            )
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`train_file` should be a csv or a json file."
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+                assert extension in [
+                    "csv",
+                    "json",
+                ], "`validation_file` should be a csv or a json file."
         self.task_name = self.task_name.lower()
 
 
@@ -203,7 +252,9 @@ class DataTrainingArguments:
 
 def main():
     # region Argument Parsing
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TFTrainingArguments))
+    parser = HfArgumentParser(
+        (ModelArguments, DataTrainingArguments, TFTrainingArguments)
+    )
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
@@ -320,7 +371,11 @@ def main():
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
-    tokenizer_name_or_path = model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path
+    tokenizer_name_or_path = (
+        model_args.tokenizer_name
+        if model_args.tokenizer_name
+        else model_args.model_name_or_path
+    )
     if not tokenizer_name_or_path:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script. "
@@ -376,7 +431,11 @@ def main():
                 # For the other tokens in a word, we set the label to either the current label or -100, depending on
                 # the label_all_tokens flag.
                 else:
-                    label_ids.append(label_to_id[label[word_idx]] if data_args.label_all_tokens else -100)
+                    label_ids.append(
+                        label_to_id[label[word_idx]]
+                        if data_args.label_all_tokens
+                        else -100
+                    )
                 previous_word_idx = word_idx
 
             labels.append(label_ids)
@@ -418,7 +477,9 @@ def main():
         else:
             logger.info("Training new model from scratch")
             model = TFAutoModelForTokenClassification.from_config(
-                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+                config,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
             )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
@@ -440,12 +501,18 @@ def main():
 
         # We need the DataCollatorForTokenClassification here, as we need to correctly pad labels as
         # well as inputs.
-        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="np")
+        collate_fn = DataCollatorForTokenClassification(
+            tokenizer=tokenizer, return_tensors="np"
+        )
         num_replicas = training_args.strategy.num_replicas_in_sync
-        total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
+        total_train_batch_size = (
+            training_args.per_device_train_batch_size * num_replicas
+        )
 
         dataset_options = tf.data.Options()
-        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        dataset_options.experimental_distribute.auto_shard_policy = (
+            tf.data.experimental.AutoShardPolicy.OFF
+        )
 
         # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
         # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
@@ -540,16 +607,23 @@ def main():
         model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             if data_args.dataset_name is not None:
-                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
+                push_to_hub_model_id = (
+                    f"{model_name}-finetuned-{data_args.dataset_name}"
+                )
             else:
                 push_to_hub_model_id = f"{model_name}-finetuned-token-classification"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "token-classification"}
+        model_card_kwargs = {
+            "finetuned_from": model_args.model_name_or_path,
+            "tasks": "token-classification",
+        }
         if data_args.dataset_name is not None:
             model_card_kwargs["dataset_tags"] = data_args.dataset_name
             if data_args.dataset_config_name is not None:
                 model_card_kwargs["dataset_args"] = data_args.dataset_config_name
-                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+                model_card_kwargs["dataset"] = (
+                    f"{data_args.dataset_name} {data_args.dataset_config_name}"
+                )
             else:
                 model_card_kwargs["dataset"] = data_args.dataset_name
 
@@ -571,7 +645,9 @@ def main():
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {len(train_dataset)}")
         logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
-        logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+        logger.info(
+            f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}"
+        )
         logger.info(f"  Total train batch size = {total_train_batch_size}")
         # Only show the progress bar once on each machine.
 
@@ -589,7 +665,9 @@ def main():
         # length from predict().
 
         try:
-            predictions = model.predict(tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size)["logits"]
+            predictions = model.predict(
+                tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size
+            )["logits"]
         except tf.python.framework.errors_impl.InvalidArgumentError:
             raise ValueError(
                 "Concatenating predictions failed! If your version of TensorFlow is 2.8.0 or older "
@@ -622,7 +700,9 @@ def main():
             logger.info(f"{key}: {val:.4f}")
 
         if training_args.output_dir is not None:
-            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            output_eval_file = os.path.join(
+                training_args.output_dir, "all_results.json"
+            )
             with open(output_eval_file, "w") as writer:
                 writer.write(json.dumps(eval_metric))
         # endregion

@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Masked BERT model configuration. It replicates the class `~transformers.BertConfig`
-and adapts it to the specificities of MaskedBert (`pruning_method`, `mask_init` and `mask_scale`."""
+and adapts it to the specificities of MaskedBert (`pruning_method`, `mask_init` and `mask_scale`.
+"""
 
 import logging
 

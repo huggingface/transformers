@@ -59,7 +59,9 @@ class TrOCRProcessor(ProcessorMixin):
             )
             feature_extractor = kwargs.pop("feature_extractor")
 
-        image_processor = image_processor if image_processor is not None else feature_extractor
+        image_processor = (
+            image_processor if image_processor is not None else feature_extractor
+        )
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -72,7 +74,9 @@ class TrOCRProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[TrOCRProcessorKwargs],
@@ -88,7 +92,9 @@ class TrOCRProcessor(ProcessorMixin):
             return self.current_processor(images, **kwargs)
 
         if images is None and text is None:
-            raise ValueError("You need to specify either an `images` or `text` input to process.")
+            raise ValueError(
+                "You need to specify either an `images` or `text` input to process."
+            )
 
         output_kwargs = self._merge_kwargs(
             TrOCRProcessorKwargs,

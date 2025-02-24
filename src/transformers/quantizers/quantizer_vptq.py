@@ -19,7 +19,12 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_accelerate_available, is_torch_available, is_vptq_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_torch_available,
+    is_vptq_available,
+    logging,
+)
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -43,10 +48,14 @@ class VptqHfQuantizer(HfQuantizer):
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
-            raise ImportError("Using `vptq` quantization requires Accelerate: `pip install accelerate`")
+            raise ImportError(
+                "Using `vptq` quantization requires Accelerate: `pip install accelerate`"
+            )
 
         if not is_vptq_available():
-            raise ImportError("Using `vptq` quantization requires VPTQ>=0.0.4: `pip install -U vptq`")
+            raise ImportError(
+                "Using `vptq` quantization requires VPTQ>=0.0.4: `pip install -U vptq`"
+            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
@@ -58,11 +67,17 @@ class VptqHfQuantizer(HfQuantizer):
             else:
                 import vptq
 
-                device_availability = getattr(vptq, "device_availability", lambda device: False)
+                device_availability = getattr(
+                    vptq, "device_availability", lambda device: False
+                )
                 if device_availability("cpu") is True:
-                    raise RuntimeError("No GPU found. Please wait for the next release of VPTQ to use CPU inference")
+                    raise RuntimeError(
+                        "No GPU found. Please wait for the next release of VPTQ to use CPU inference"
+                    )
                 torch_dtype = torch.float32
-                logger.info("No GPU found. Assuming VPTQ inference on CPU and loading the model in `torch.float32`.")
+                logger.info(
+                    "No GPU found. Assuming VPTQ inference on CPU and loading the model in `torch.float32`."
+                )
         return torch_dtype
 
     def _process_model_before_weight_loading(

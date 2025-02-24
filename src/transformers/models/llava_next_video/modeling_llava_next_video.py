@@ -101,8 +101,12 @@ class LlavaNextVideoPooler(nn.Module):
 
         mode = config.spatial_pool_mode
         stride = config.spatial_pool_stride
-        out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
+        out_channels = getattr(
+            config, "spatial_pool_out_channels", config.vision_config.hidden_size
+        )
+        self.image_size = (
+            config.vision_config.image_size // config.vision_config.patch_size
+        ) ** 2
 
         if mode == "average":
             self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
@@ -116,14 +120,20 @@ class LlavaNextVideoPooler(nn.Module):
                 stride=stride,
             )
         else:
-            raise ValueError(f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]")
+            raise ValueError(
+                f"Unknown pooling mode: {mode}. Has to be one of [`average`, `max`, `conv`]"
+            )
 
     def forward(self, image_features):
-        ori_width = int(math.sqrt(image_features.shape[1] * self.image_size // self.image_size))
+        ori_width = int(
+            math.sqrt(image_features.shape[1] * self.image_size // self.image_size)
+        )
         ori_height = int(ori_width * self.image_size // self.image_size)
 
         batch_size, _, dim = image_features.shape
-        image_features_spatial = image_features.view(batch_size, ori_height, ori_height, dim).permute(0, 3, 1, 2)
+        image_features_spatial = image_features.view(
+            batch_size, ori_height, ori_height, dim
+        ).permute(0, 3, 1, 2)
         image_features_spatial_pool = self.pool(image_features_spatial)
 
         return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
@@ -189,7 +199,11 @@ class LlavaNextVideoMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaNextVideoConfig):
         super().__init__()
         # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+        num_feature_layers = (
+            1
+            if isinstance(config.vision_feature_layer, int)
+            else len(config.vision_feature_layer)
+        )
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * num_feature_layers,
             config.text_config.hidden_size,
@@ -197,7 +211,9 @@ class LlavaNextVideoMultiModalProjector(nn.Module):
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+            config.text_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=config.multimodal_projector_bias,
         )
 
     def forward(self, image_features):
@@ -260,7 +276,9 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
+            raise TypeError(
+                f"image_size invalid type {type(image_size)} with value {image_size}"
+            )
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
@@ -398,7 +416,9 @@ LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING = r"""
     """The LLAVA-NeXT model which consists of a vision backbone and a language model.""",
     LLAVA_NEXT_VIDEO_START_DOCSTRING,
 )
-class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, GenerationMixin):
+class LlavaNextVideoForConditionalGeneration(
+    LlavaNextVideoPreTrainedModel, GenerationMixin
+):
     def __init__(
         self,
         config: LlavaNextVideoConfig,
@@ -408,14 +428,20 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
 
         self.multi_modal_projector = LlavaNextVideoMultiModalProjector(config)
         embed_std = 1 / math.sqrt(config.text_config.hidden_size)
-        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
+        self.image_newline = nn.Parameter(
+            torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std
+        )
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in self.language_model._tied_weights_keys
+            ]
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        )
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
@@ -448,7 +474,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+    def pack_image_features(
+        self,
+        image_features,
+        image_sizes,
+        vision_feature_select_strategy,
+        image_newline=None,
+    ):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
@@ -472,7 +504,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             if image_feature.shape[0] > 1:
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
-                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
+                height = width = (
+                    self.config.vision_config.image_size
+                    // self.config.vision_config.patch_size
+                )
 
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
@@ -481,7 +516,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                 )
 
                 if (
-                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
+                    np.prod(image_feature.shape)
+                    % (num_patch_height * num_patch_width * height * width)
+                    != 0
                     and vision_feature_select_strategy == "default"
                 ):
                     logger.warning_once(
@@ -490,7 +527,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                         " visual encoder that does not have CLS."
                     )
 
-                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                image_feature = image_feature.view(
+                    num_patch_height, num_patch_width, height, width, -1
+                )
                 image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                 image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                 image_feature = unpad_image(image_feature, image_sizes[image_idx])
@@ -509,11 +548,15 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             else:
                 image_feature = image_feature[0]
                 if image_newline is not None:
-                    image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
+                    image_feature = torch.cat(
+                        (image_feature, image_newline[None].to(image_feature)), dim=0
+                    )
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
         image_features = torch.cat(new_image_features, dim=0)
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
+        feature_lens = torch.tensor(
+            feature_lens, dtype=torch.long, device=image_features.device
+        )
         return image_features, feature_lens
 
     def get_image_features(
@@ -553,11 +596,16 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         ]
         if pixel_values.dim() == 5:
             # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
+            _pixel_values_list = [
+                pix_val[:num_patch]
+                for pix_val, num_patch in zip(pixel_values, image_num_patches)
+            ]
             pixel_values = torch.cat(_pixel_values_list, dim=0)
         elif pixel_values.dim() != 4:
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
+            raise ValueError(
+                f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions"
+            )
 
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         # If we have one vision feature layer, return the corresponding hidden states,
@@ -565,7 +613,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         if isinstance(vision_feature_layer, int):
             selected_image_feature = image_features.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [
+                image_features.hidden_states[layer_idx]
+                for layer_idx in vision_feature_layer
+            ]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
@@ -578,7 +629,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_VIDEO_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=LlavaNextVideoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=LlavaNextVideoCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -677,13 +730,23 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         "USER: \nWhat's the content of the image? ASSISTANT: The image shows a red stop sign on a pole, with a traditional Chinese archway (...)"
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         self.vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+            vision_feature_layer
+            if vision_feature_layer is not None
+            else self.config.vision_feature_layer
         )
         self.vision_feature_select_strategy = (
             vision_feature_select_strategy
@@ -692,9 +755,13 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
-        if (pixel_values is not None or pixel_values_videos is not None) and inputs_embeds is not None:
+        if (
+            pixel_values is not None or pixel_values_videos is not None
+        ) and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both `pixel_values`/`pixel_values_videos` and `inputs_embeds` at the same time, "
                 "and must specify either one"
@@ -717,16 +784,27 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                 image_newline=self.image_newline,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(
+                -1
+            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            if (
+                not is_torchdynamo_compiling()
+                and inputs_embeds[special_image_mask].numel() != image_features.numel()
+            ):
                 n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            image_features = image_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
 
         if pixel_values_videos is not None and pixel_values_videos.size(0) > 0:
             video_features = self.get_video_features(
@@ -737,18 +815,33 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]
             video_features = torch.cat(video_features, dim=0)
-            video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
+            video_feature_lens = torch.tensor(
+                video_feature_lens, dtype=torch.long, device=video_features.device
+            )
 
-            special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
-                n_video_tokens = (input_ids == self.config.video_token_index).sum().item()
+            special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(
+                -1
+            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            if (
+                not is_torchdynamo_compiling()
+                and inputs_embeds[special_image_mask].numel() != video_features.numel()
+            ):
+                n_video_tokens = (
+                    (input_ids == self.config.video_token_index).sum().item()
+                )
                 n_video_features = video_features.shape[0]
                 raise ValueError(
                     f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
                 )
-            video_features = video_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, video_features)
+            video_features = video_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, video_features
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -772,16 +865,23 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:
@@ -795,7 +895,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
-            video_hidden_states=video_features if pixel_values_videos is not None else None,
+            video_hidden_states=(
+                video_features if pixel_values_videos is not None else None
+            ),
         )
 
     def prepare_inputs_for_generation(
@@ -856,7 +958,9 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             and are of shape `(num_videos, video_length, embed_dim)`).
         """
         batch_size, frames, channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.reshape(batch_size * frames, channels, height, width)
+        pixel_values = pixel_values.reshape(
+            batch_size * frames, channels, height, width
+        )
         video_features = self.vision_tower(pixel_values, output_hidden_states=True)
 
         # If we have one vision feature layer, return the corresponding hidden states,
@@ -864,7 +968,10 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         if isinstance(vision_feature_layer, int):
             selected_video_features = video_features.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [video_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [
+                video_features.hidden_states[layer_idx]
+                for layer_idx in vision_feature_layer
+            ]
             selected_video_features = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":

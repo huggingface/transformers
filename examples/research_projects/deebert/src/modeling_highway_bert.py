@@ -2,7 +2,10 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
+from transformers.file_utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+)
 from transformers.models.bert.modeling_bert import (
     BERT_INPUTS_DOCSTRING,
     BERT_START_DOCSTRING,
@@ -26,8 +29,12 @@ class DeeBertEncoder(nn.Module):
         super().__init__()
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
-        self.highway = nn.ModuleList([BertHighway(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [BertLayer(config) for _ in range(config.num_hidden_layers)]
+        )
+        self.highway = nn.ModuleList(
+            [BertHighway(config) for _ in range(config.num_hidden_layers)]
+        )
 
         self.early_exit_entropy = [-1 for _ in range(config.num_hidden_layers)]
 
@@ -60,7 +67,11 @@ class DeeBertEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], encoder_hidden_states, encoder_attention_mask
+                hidden_states,
+                attention_mask,
+                head_mask[i],
+                encoder_hidden_states,
+                encoder_attention_mask,
             )
             hidden_states = layer_outputs[0]
 
@@ -79,11 +90,15 @@ class DeeBertEncoder(nn.Module):
             if not self.training:
                 highway_logits = highway_exit[0]
                 highway_entropy = entropy(highway_logits)
-                highway_exit = highway_exit + (highway_entropy,)  # logits, hidden_states(?), entropy
+                highway_exit = highway_exit + (
+                    highway_entropy,
+                )  # logits, hidden_states(?), entropy
                 all_highway_exits = all_highway_exits + (highway_exit,)
 
                 if highway_entropy < self.early_exit_entropy[i]:
-                    new_output = (highway_logits,) + current_outputs[1:] + (all_highway_exits,)
+                    new_output = (
+                        (highway_logits,) + current_outputs[1:] + (all_highway_exits,)
+                    )
                     raise HighwayException(new_output, i + 1)
             else:
                 all_highway_exits = all_highway_exits + (highway_exit,)
@@ -176,7 +191,9 @@ class DeeBertModel(BertPreTrainedModel):
                 Each tuple is again, a tuple of length 2 - the first entry is logits and the second entry is hidden states.
         """
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
@@ -195,7 +212,9 @@ class DeeBertModel(BertPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape, device
+        )
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -207,7 +226,9 @@ class DeeBertModel(BertPreTrainedModel):
         encoder_extended_attention_mask = encoder_extended_attention_mask.to(
             dtype=next(self.parameters()).dtype
         )  # fp16 compatibility
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
+        encoder_extended_attention_mask = (
+            1.0 - encoder_extended_attention_mask
+        ) * -10000.0
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -217,7 +238,10 @@ class DeeBertModel(BertPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -232,7 +256,9 @@ class DeeBertModel(BertPreTrainedModel):
         outputs = (
             sequence_output,
             pooled_output,
-        ) + encoder_outputs[1:]  # add hidden_states and attentions if they are here
+        ) + encoder_outputs[
+            1:
+        ]  # add hidden_states and attentions if they are here
         return outputs  # sequence_output, pooled_output, (hidden_states), (attentions), highway exits
 
 
@@ -347,7 +373,9 @@ class DeeBertForSequenceClassification(BertPreTrainedModel):
 
             pooled_output = self.dropout(pooled_output)
             logits = self.classifier(pooled_output)
-            outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+            outputs = (logits,) + outputs[
+                2:
+            ]  # add hidden states and attention if they are here
         except HighwayException as e:
             outputs = e.message
             exit_layer = e.exit_layer
@@ -379,7 +407,9 @@ class DeeBertForSequenceClassification(BertPreTrainedModel):
                     highway_loss = loss_fct(highway_logits.view(-1), labels.view(-1))
                 else:
                     loss_fct = CrossEntropyLoss()
-                    highway_loss = loss_fct(highway_logits.view(-1, self.num_labels), labels.view(-1))
+                    highway_loss = loss_fct(
+                        highway_logits.view(-1, self.num_labels), labels.view(-1)
+                    )
                 highway_losses.append(highway_loss)
 
             if train_highway:

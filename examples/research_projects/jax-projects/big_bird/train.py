@@ -3,7 +3,15 @@ from dataclasses import replace
 
 import jax
 import wandb
-from bigbird_flax import Args, DataCollator, FlaxBigBirdForNaturalQuestions, Trainer, build_tx, train_step, val_step
+from bigbird_flax import (
+    Args,
+    DataCollator,
+    FlaxBigBirdForNaturalQuestions,
+    Trainer,
+    build_tx,
+    train_step,
+    val_step,
+)
 from datasets import load_dataset
 from flax import jax_utils
 
@@ -42,7 +50,9 @@ if __name__ == "__main__":
     print(val_dataset)
 
     model = FlaxBigBirdForNaturalQuestions.from_pretrained(
-        args.model_id, block_size=args.block_size, num_random_blocks=args.num_random_blocks
+        args.model_id,
+        block_size=args.block_size,
+        num_random_blocks=args.num_random_blocks,
     )
     tokenizer = BigBirdTokenizerFast.from_pretrained(args.model_id)
     data_collator = DataCollator(pad_id=tokenizer.pad_token_id, max_length=4096)
@@ -67,7 +77,9 @@ if __name__ == "__main__":
     )
 
     ckpt_dir = None
-    state = trainer.create_state(model, tx, num_train_steps=tx_args["num_train_steps"], ckpt_dir=ckpt_dir)
+    state = trainer.create_state(
+        model, tx, num_train_steps=tx_args["num_train_steps"], ckpt_dir=ckpt_dir
+    )
     try:
         trainer.train(state, tr_dataset, val_dataset)
     except KeyboardInterrupt:

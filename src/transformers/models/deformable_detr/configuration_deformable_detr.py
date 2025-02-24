@@ -202,12 +202,16 @@ class DeformableDetrConfig(PretrainedConfig):
             backbone_kwargs = {}
             if dilation:
                 backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [2, 3, 4] if num_feature_levels > 1 else [4]
+            backbone_kwargs["out_indices"] = (
+                [2, 3, 4] if num_feature_levels > 1 else [4]
+            )
             backbone_kwargs["in_chans"] = num_channels
         # Backwards compatibility
         elif not use_timm_backbone and backbone in (None, "resnet50"):
             if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+                logger.info(
+                    "`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone."
+                )
                 backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
             elif isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")

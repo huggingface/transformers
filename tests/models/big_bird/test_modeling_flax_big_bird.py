@@ -17,7 +17,11 @@ import unittest
 from transformers import BigBirdConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
-from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_flax_common import (
+    FlaxModelTesterMixin,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_flax_available():
@@ -100,7 +104,9 @@ class FlaxBigBirdModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         config = BigBirdConfig(
             vocab_size=self.vocab_size,
@@ -200,7 +206,9 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 @jax.jit
                 def model_jitted(input_ids, attention_mask=None, **kwargs):
-                    return model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+                    return model(
+                        input_ids=input_ids, attention_mask=attention_mask, **kwargs
+                    )
 
                 with self.subTest("JIT Enabled"):
                     jitted_outputs = model_jitted(**prepared_inputs_dict).to_tuple()

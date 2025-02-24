@@ -51,7 +51,9 @@ class StoppingCriteria(ABC):
     """
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
+    ) -> torch.BoolTensor:
         raise NotImplementedError("StoppingCriteria needs to be subclassed")
 
 
@@ -72,16 +74,24 @@ class MaxLengthCriteria(StoppingCriteria):
         self.max_position_embeddings = max_position_embeddings
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
+    ) -> torch.BoolTensor:
         cur_len = input_ids.shape[-1]
         is_done = cur_len >= self.max_length
-        if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
+        if (
+            self.max_position_embeddings is not None
+            and not is_done
+            and cur_len >= self.max_position_embeddings
+        ):
             logger.warning_once(
                 "This is a friendly reminder - the current text generation call will exceed the model's predefined "
                 f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
                 "exceptions, performance degradation, or nothing at all."
             )
-        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
+        return torch.full(
+            (input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool
+        )
 
 
 class MaxTimeCriteria(StoppingCriteria):
@@ -99,12 +109,18 @@ class MaxTimeCriteria(StoppingCriteria):
 
     def __init__(self, max_time: float, initial_timestamp: Optional[float] = None):
         self.max_time = max_time
-        self.initial_timestamp = time.time() if initial_timestamp is None else initial_timestamp
+        self.initial_timestamp = (
+            time.time() if initial_timestamp is None else initial_timestamp
+        )
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
+    ) -> torch.BoolTensor:
         is_done = time.time() - self.initial_timestamp > self.max_time
-        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
+        return torch.full(
+            (input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool
+        )
 
 
 class StopStringCriteria(StoppingCriteria):
@@ -238,39 +254,61 @@ class StopStringCriteria(StoppingCriteria):
     ```
     """
 
-    def __init__(self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]):
+    def __init__(
+        self, tokenizer: PreTrainedTokenizerBase, stop_strings: Union[str, List[str]]
+    ):
         if isinstance(stop_strings, str):
             stop_strings = [stop_strings]
         self.stop_strings: Tuple[str, ...] = tuple(stop_strings)
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
-        self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
-            token_list, token_indices, tokenizer
+        self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = (
+            self.clean_and_embed_tokens_with_cache(token_list, token_indices, tokenizer)
         )
 
-        self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
+        self.maximum_token_len = max(
+            [len(stop_string) for stop_string in self.stop_strings]
+        )
         self.num_stop_strings = len(self.stop_strings)
-        self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
+        self.target_lens = torch.tensor(
+            [len(stop_string) for stop_string in stop_strings], dtype=torch.int32
+        )
 
     def clean_and_embed_tokens_with_cache(self, token_list, token_indices, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
-        if (token_list, token_indices, self.stop_strings) in STOP_STRING_EMBEDDING_CACHE:
-            embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[
-                (token_list, token_indices, self.stop_strings)
-            ]
-            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, self.stop_strings))
-        else:
-            clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(tokenizer)
-            embedding_vec, max_valid_positions, max_valid_end_lens = self._stop_string_create_embedding_vec(
-                clean_token_list, clean_token_indices, self.stop_strings
+        if (
+            token_list,
+            token_indices,
+            self.stop_strings,
+        ) in STOP_STRING_EMBEDDING_CACHE:
+            embedding_vec, max_valid_positions, max_valid_end_lens = (
+                STOP_STRING_EMBEDDING_CACHE[
+                    (token_list, token_indices, self.stop_strings)
+                ]
             )
-            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, self.stop_strings)] = (
+            STOP_STRING_EMBEDDING_CACHE.move_to_end(
+                (token_list, token_indices, self.stop_strings)
+            )
+        else:
+            clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(
+                tokenizer
+            )
+            embedding_vec, max_valid_positions, max_valid_end_lens = (
+                self._stop_string_create_embedding_vec(
+                    clean_token_list, clean_token_indices, self.stop_strings
+                )
+            )
+            STOP_STRING_EMBEDDING_CACHE[
+                (token_list, token_indices, self.stop_strings)
+            ] = (
                 embedding_vec,
                 max_valid_positions,
                 max_valid_end_lens,
             )
             if len(STOP_STRING_EMBEDDING_CACHE) > 8:
-                STOP_STRING_EMBEDDING_CACHE.popitem(last=False)  # Pop from the start, the least recently used item
+                STOP_STRING_EMBEDDING_CACHE.popitem(
+                    last=False
+                )  # Pop from the start, the least recently used item
         return embedding_vec, max_valid_positions, max_valid_end_lens
 
     @staticmethod
@@ -289,7 +327,9 @@ class StopStringCriteria(StoppingCriteria):
         tokens_base = [tokenizer._convert_id_to_token(tok) for tok in sentence_base]
         for token, token_idx in vocab.items():
             token_string = tokenizer.convert_tokens_to_string(tokens_base + [token])
-            token_string = token_string[token_string.index(static_prefix) + len(static_prefix) :]
+            token_string = token_string[
+                token_string.index(static_prefix) + len(static_prefix) :
+            ]
             clean_token_list.append(token_string)
             clean_token_indices.append(token_idx)
         return tuple(clean_token_list), tuple(clean_token_indices)
@@ -336,19 +376,32 @@ class StopStringCriteria(StoppingCriteria):
         return token_valid_positions, token_end_overlaps
 
     @staticmethod
-    def _stop_string_create_embedding_vec(token_list, token_indices, stop_strings) -> Dict[str, torch.tensor]:
+    def _stop_string_create_embedding_vec(
+        token_list, token_indices, stop_strings
+    ) -> Dict[str, torch.tensor]:
         """This function precomputes everything needed for the run-time checks in StopStringCriteria, and packs
         them into an embedding tensor that can be accessed with pure tensor operations. For the specifics of the values
-        that are precomputed and what they are used for, please refer to the StopStringCriteria docstring!"""
-        token_valid_positions, token_end_overlaps = StopStringCriteria._stop_string_get_matching_positions(
-            token_list, token_indices, stop_strings
+        that are precomputed and what they are used for, please refer to the StopStringCriteria docstring!
+        """
+        token_valid_positions, token_end_overlaps = (
+            StopStringCriteria._stop_string_get_matching_positions(
+                token_list, token_indices, stop_strings
+            )
         )
-        all_valid_positions = [len(val) for positions in token_valid_positions.values() for val in positions.values()]
+        all_valid_positions = [
+            len(val)
+            for positions in token_valid_positions.values()
+            for val in positions.values()
+        ]
         # In some cases, tokens may have no valid internal positions (such as single-character stop strings), so
         # we need a fallback to handle this case
         max_valid_positions = max(all_valid_positions) if all_valid_positions else 1
         # There should always be at least one valid end_len, however, so no fallback needed here
-        valid_end_lens = [len(val) for positions in token_end_overlaps.values() for val in positions.values()]
+        valid_end_lens = [
+            len(val)
+            for positions in token_end_overlaps.values()
+            for val in positions.values()
+        ]
         if not valid_end_lens:
             raise ValueError(
                 "Stop string preprocessing was unable to identify tokens matching one or more of the "
@@ -359,7 +412,9 @@ class StopStringCriteria(StoppingCriteria):
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
         # We use +2 instead of +1 so we can have a dummy entry at the end. We will clamp all token values
         # over the max to this, ensuring they do not contribute to stop string matching.
-        gather_vec = np.full((max(token_indices) + 2, vec_size), dtype=np.int32, fill_value=-1)
+        gather_vec = np.full(
+            (max(token_indices) + 2, vec_size), dtype=np.int32, fill_value=-1
+        )
 
         for i, stop_string in enumerate(stop_strings):
             positions = token_valid_positions[stop_string]
@@ -368,14 +423,16 @@ class StopStringCriteria(StoppingCriteria):
             # Since this is lots of very small assignments of lists, we build it with numpy rather
             # than torch for speed + simplicity, then convert to torch at the end
             for token_idx, valid_positions in positions.items():
-                gather_vec[token_idx, max_valid_positions * i : max_valid_positions * i + len(valid_positions)] = (
-                    valid_positions
-                )
+                gather_vec[
+                    token_idx,
+                    max_valid_positions * i : max_valid_positions * i
+                    + len(valid_positions),
+                ] = valid_positions
             for token_idx, possible_end_lens in end_lens.items():
                 gather_vec[
                     token_idx,
-                    max_valid_positions * len(stop_strings) + max_valid_end_lens * i : max_valid_positions
-                    * len(stop_strings)
+                    max_valid_positions * len(stop_strings)
+                    + max_valid_end_lens * i : max_valid_positions * len(stop_strings)
                     + max_valid_end_lens * i
                     + len(possible_end_lens),
                 ] = possible_end_lens
@@ -387,7 +444,9 @@ class StopStringCriteria(StoppingCriteria):
         return gather_vec, max_valid_positions, max_valid_end_lens
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.Tensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
+    ) -> torch.Tensor:
         self.embedding_vec = self.embedding_vec.to(input_ids.device)
         self.target_lens = self.target_lens.to(input_ids.device)
         # The maximum length we need to consider is 1 token per character. Note that input_ids can also be
@@ -407,23 +466,27 @@ class StopStringCriteria(StoppingCriteria):
         embedded = F.embedding(flipped_ids, self.embedding_vec)
 
         # Now we split the embedding vector. valid_positions is the positions in the stop string the token can fit
-        valid_positions = embedded[:, 1:, : max_valid_positions * self.num_stop_strings].unflatten(
-            -1, (self.num_stop_strings, -1)
-        )
+        valid_positions = embedded[
+            :, 1:, : max_valid_positions * self.num_stop_strings
+        ].unflatten(-1, (self.num_stop_strings, -1))
         # end_lengths is the number of characters from the string, counting from the end, that the token
         # contains. It can have multiple values if the same token can overlap different end lengths
-        end_lengths = embedded[:, :1, max_valid_positions * self.num_stop_strings : -1].unflatten(
-            -1, (self.num_stop_strings, -1)
-        )
+        end_lengths = embedded[
+            :, :1, max_valid_positions * self.num_stop_strings : -1
+        ].unflatten(-1, (self.num_stop_strings, -1))
         # Lengths is the total length of each token. Unlike the others, it always has a single value
-        lengths = embedded[:, 1:, None, -1:]  # Insert a dummy dimension for stop_strings even though lengths are const
+        lengths = embedded[
+            :, 1:, None, -1:
+        ]  # Insert a dummy dimension for stop_strings even though lengths are const
 
         # Concatenate lengths onto each possible end_lengths value
         lengths = lengths.expand((-1, -1, end_lengths.shape[-2], end_lengths.shape[-1]))
         lengths_with_ends = torch.cat([end_lengths, lengths], dim=1)
 
         # cumsum() to get the number of matched characters in the stop string after each token
-        cumsum = lengths_with_ends.cumsum(dim=1)  # B x maximum_token_len x num_stop_strings x max_valid_end_lens
+        cumsum = lengths_with_ends.cumsum(
+            dim=1
+        )  # B x maximum_token_len x num_stop_strings x max_valid_end_lens
 
         # The calculation above assumes that all tokens are in valid positions. Now we mask the ones that are not.
         # First, tokens match the start of the string if they have a positive value in the end_lengths vector
@@ -431,7 +494,9 @@ class StopStringCriteria(StoppingCriteria):
 
         # Tokens continue the string if the cumsum() so far is one of the valid positions for that token
         # Note that we're actually tracking one cumsum() for for each possible end_length
-        later_match = torch.any(cumsum[:, :-1, :, None] == valid_positions[:, :, :, :, None], axis=-2)
+        later_match = torch.any(
+            cumsum[:, :-1, :, None] == valid_positions[:, :, :, :, None], axis=-2
+        )
 
         # The match vector is a boolean vector that indicates which positions have valid tokens
         match = torch.cat([initial_match, later_match], dim=1)
@@ -442,7 +507,9 @@ class StopStringCriteria(StoppingCriteria):
 
         # The string is matched if we reached a cumsum equal to or greater than the length of the string
         # before hitting the mask
-        string_matches = torch.amax(cumsum * mask, dim=(1, -1)) >= self.target_lens[None, :]
+        string_matches = (
+            torch.amax(cumsum * mask, dim=(1, -1)) >= self.target_lens[None, :]
+        )
 
         # We return a per-sample vector that is True if any stop string is matched for that sample
         return torch.any(string_matches, dim=-1)
@@ -466,7 +533,9 @@ class EosTokenCriteria(StoppingCriteria):
         self.eos_token_id = eos_token_id
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
+    ) -> torch.BoolTensor:
         self.eos_token_id = self.eos_token_id.to(input_ids.device)
         is_done = isin_mps_friendly(input_ids[:, -1], self.eos_token_id)
         return is_done
@@ -485,7 +554,9 @@ class ConfidenceCriteria(StoppingCriteria):
     def __init__(self, assistant_confidence_threshold):
         self.assistant_confidence_threshold = assistant_confidence_threshold
 
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
+    ) -> torch.BoolTensor:
         probs = scores[-1].softmax(-1)
         p = probs[0, input_ids[0, -1]].item()
         if p < self.assistant_confidence_threshold:
@@ -495,8 +566,12 @@ class ConfidenceCriteria(StoppingCriteria):
 
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
-        is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool)
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs
+    ) -> torch.BoolTensor:
+        is_done = torch.full(
+            (input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool
+        )
         for criteria in self:
             is_done = is_done | criteria(input_ids, scores, **kwargs)
         return is_done
@@ -509,11 +584,16 @@ class StoppingCriteriaList(list):
         return None
 
 
-def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int) -> StoppingCriteriaList:
+def validate_stopping_criteria(
+    stopping_criteria: StoppingCriteriaList, max_length: int
+) -> StoppingCriteriaList:
     stopping_max_length = stopping_criteria.max_length
     new_stopping_criteria = deepcopy(stopping_criteria)
     if stopping_max_length is not None and stopping_max_length != max_length:
-        warnings.warn("You set different `max_length` for stopping criteria and `max_length` parameter", UserWarning)
+        warnings.warn(
+            "You set different `max_length` for stopping criteria and `max_length` parameter",
+            UserWarning,
+        )
     elif stopping_max_length is None:
         new_stopping_criteria.append(MaxLengthCriteria(max_length=max_length))
     return new_stopping_criteria

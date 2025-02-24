@@ -48,9 +48,14 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             - a [`~generation.GenerationConfig`] object.
     """
 
-    sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})
+    sortish_sampler: bool = field(
+        default=False, metadata={"help": "Whether to use SortishSampler or not."}
+    )
     predict_with_generate: bool = field(
-        default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
+        default=False,
+        metadata={
+            "help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."
+        },
     )
     generation_max_length: Optional[int] = field(
         default=None,

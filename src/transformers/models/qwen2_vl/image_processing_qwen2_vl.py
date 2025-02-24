@@ -54,7 +54,11 @@ logger = logging.get_logger(__name__)
 
 
 def smart_resize(
-    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
+    height: int,
+    width: int,
+    factor: int = 28,
+    min_pixels: int = 56 * 56,
+    max_pixels: int = 14 * 14 * 4 * 1280,
 ):
     """Rescales the image so that the following conditions are met:
 
@@ -66,7 +70,9 @@ def smart_resize(
 
     """
     if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
+        raise ValueError(
+            f"height:{height} or width:{width} must be larger than factor:{factor}"
+        )
     elif max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
@@ -117,7 +123,12 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "pixel_values_videos",
+        "video_grid_thw",
+    ]
 
     def __init__(
         self,
@@ -231,29 +242,44 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                     max_pixels=self.max_pixels,
                 )
                 image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+                    image,
+                    size=(resized_height, resized_width),
+                    resample=resample,
+                    input_data_format=input_data_format,
                 )
 
             if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image, scale=rescale_factor, input_data_format=input_data_format
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            image = to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
             processed_images.append(image)
 
         patches = np.array(processed_images)
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
         if patches.shape[0] % self.temporal_patch_size != 0:
-            repeats = np.repeat(patches[-1][np.newaxis], self.temporal_patch_size - 1, axis=0)
+            repeats = np.repeat(
+                patches[-1][np.newaxis], self.temporal_patch_size - 1, axis=0
+            )
             patches = np.concatenate([patches, repeats], axis=0)
         channel = patches.shape[1]
         grid_t = patches.shape[0] // self.temporal_patch_size
-        grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
+        grid_h, grid_w = (
+            resized_height // self.patch_size,
+            resized_width // self.patch_size,
+        )
         patches = patches.reshape(
             grid_t,
             self.temporal_patch_size,
@@ -267,7 +293,8 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         )
         patches = patches.transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
         flatten_patches = patches.reshape(
-            grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
+            grid_t * grid_h * grid_w,
+            channel * self.temporal_patch_size * self.patch_size * self.patch_size,
         )
 
         return flatten_patches, (grid_t, grid_h, grid_w)
@@ -342,11 +369,15 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         if images is not None:
             images = make_flat_list_of_images(images)
@@ -411,7 +442,10 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
                 vision_grid_thws.append(video_grid_thw)
             pixel_values = np.array(pixel_values)
             vision_grid_thws = np.array(vision_grid_thws)
-            data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
+            data = {
+                "pixel_values_videos": pixel_values,
+                "video_grid_thw": vision_grid_thws,
+            }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

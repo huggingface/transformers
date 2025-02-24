@@ -84,7 +84,9 @@ class TFMPNetEmbeddings(keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape=None):
@@ -118,12 +120,16 @@ class TFMPNetEmbeddings(keras.layers.Layer):
             input_ids: tf.Tensor
         Returns: tf.Tensor
         """
-        mask = tf.cast(tf.math.not_equal(input_ids, self.padding_idx), dtype=input_ids.dtype)
+        mask = tf.cast(
+            tf.math.not_equal(input_ids, self.padding_idx), dtype=input_ids.dtype
+        )
         incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
 
-    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, training=False):
+    def call(
+        self, input_ids=None, position_ids=None, inputs_embeds=None, training=False
+    ):
         """
         Applies embedding based on inputs tensor.
 
@@ -141,13 +147,21 @@ class TFMPNetEmbeddings(keras.layers.Layer):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = self.create_position_ids_from_input_ids(input_ids=input_ids)
+                position_ids = self.create_position_ids_from_input_ids(
+                    input_ids=input_ids
+                )
             else:
                 position_ids = tf.expand_dims(
-                    tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1), axis=0
+                    tf.range(
+                        start=self.padding_idx + 1,
+                        limit=input_shape[-1] + self.padding_idx + 1,
+                    ),
+                    axis=0,
                 )
 
-        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.gather(
+            params=self.position_embeddings, indices=position_ids
+        )
         final_embeddings = inputs_embeds + position_embeds
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -201,27 +215,45 @@ class TFMPNetSelfAttention(keras.layers.Layer):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.q = keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="q"
+            self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="q",
         )
         self.k = keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="k"
+            self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="k",
         )
         self.v = keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="v"
+            self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="v",
         )
         self.o = keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="o"
+            config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="o",
         )
         self.dropout = keras.layers.Dropout(config.attention_probs_dropout_prob)
         self.config = config
 
     def transpose_for_scores(self, x, batch_size):
         # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
-        x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
+        x = tf.reshape(
+            x, (batch_size, -1, self.num_attention_heads, self.attention_head_size)
+        )
 
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, position_bias=None, training=False):
+    def call(
+        self,
+        hidden_states,
+        attention_mask,
+        head_mask,
+        output_attentions,
+        position_bias=None,
+        training=False,
+    ):
         batch_size = shape_list(hidden_states)[0]
 
         q = self.q(hidden_states)
@@ -281,19 +313,36 @@ class TFMPNetAttention(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.attn = TFMPNetSelfAttention(config, name="attn")
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.config = config
 
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, input_tensor, attention_mask, head_mask, output_attentions, position_bias=None, training=False):
+    def call(
+        self,
+        input_tensor,
+        attention_mask,
+        head_mask,
+        output_attentions,
+        position_bias=None,
+        training=False,
+    ):
         self_outputs = self.attn(
-            input_tensor, attention_mask, head_mask, output_attentions, position_bias=position_bias, training=training
+            input_tensor,
+            attention_mask,
+            head_mask,
+            output_attentions,
+            position_bias=position_bias,
+            training=training,
         )
         attention_output = self.LayerNorm(self.dropout(self_outputs[0]) + input_tensor)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
     def build(self, input_shape=None):
@@ -314,7 +363,9 @@ class TFMPNetIntermediate(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.intermediate_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
 
         if isinstance(config.hidden_act, str):
@@ -344,13 +395,19 @@ class TFMPNetOutput(keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
-        self.LayerNorm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.LayerNorm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="LayerNorm"
+        )
         self.dropout = keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.config = config
 
-    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+    def call(
+        self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False
+    ) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -377,15 +434,32 @@ class TFMPNetLayer(keras.layers.Layer):
         self.intermediate = TFMPNetIntermediate(config, name="intermediate")
         self.out = TFMPNetOutput(config, name="output")
 
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, position_bias=None, training=False):
+    def call(
+        self,
+        hidden_states,
+        attention_mask,
+        head_mask,
+        output_attentions,
+        position_bias=None,
+        training=False,
+    ):
         self_attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, output_attentions, position_bias=position_bias, training=training
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions,
+            position_bias=position_bias,
+            training=training,
         )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.out(intermediate_output, attention_output, training=training)
+        layer_output = self.out(
+            intermediate_output, attention_output, training=training
+        )
         outputs = (layer_output,) + outputs  # add attentions if we output them
 
         return outputs
@@ -416,7 +490,10 @@ class TFMPNetEncoder(keras.layers.Layer):
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.initializer_range = config.initializer_range
 
-        self.layer = [TFMPNetLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+        self.layer = [
+            TFMPNetLayer(config, name=f"layer_._{i}")
+            for i in range(config.num_hidden_layers)
+        ]
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
 
     def build(self, input_shape=None):
@@ -470,10 +547,16 @@ class TFMPNetEncoder(keras.layers.Layer):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_attentions]
+                if v is not None
+            )
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
     @staticmethod
@@ -490,7 +573,9 @@ class TFMPNetEncoder(keras.layers.Layer):
         is_small = tf.math.less(n, max_exact)
 
         val_if_large = max_exact + tf.cast(
-            tf.math.log(n / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact),
+            tf.math.log(n / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact),
             dtype=relative_position.dtype,
         )
 
@@ -516,8 +601,12 @@ class TFMPNetEncoder(keras.layers.Layer):
             relative_position,
             num_buckets=self.relative_attention_num_buckets,
         )
-        values = tf.gather(self.relative_attention_bias, rp_bucket)  # shape (qlen, klen, num_heads)
-        values = tf.expand_dims(tf.transpose(values, [2, 0, 1]), axis=0)  # shape (1, num_heads, qlen, klen)
+        values = tf.gather(
+            self.relative_attention_bias, rp_bucket
+        )  # shape (qlen, klen, num_heads)
+        values = tf.expand_dims(
+            tf.transpose(values, [2, 0, 1]), axis=0
+        )  # shape (1, num_heads, qlen, klen)
         return values
 
 
@@ -570,7 +659,9 @@ class TFMPNetMainLayer(keras.layers.Layer):
         training=False,
     ):
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             input_shape = shape_list(input_ids)
         elif inputs_embeds is not None:
@@ -593,17 +684,23 @@ class TFMPNetMainLayer(keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = tf.reshape(attention_mask, (input_shape[0], 1, 1, input_shape[1]))
+        extended_attention_mask = tf.reshape(
+            attention_mask, (input_shape[0], 1, 1, input_shape[1])
+        )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = tf.cast(extended_attention_mask, embedding_output.dtype)
+        extended_attention_mask = tf.cast(
+            extended_attention_mask, embedding_output.dtype
+        )
         one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
         ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
+        extended_attention_mask = tf.multiply(
+            tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst
+        )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -756,7 +853,9 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
@@ -805,9 +904,13 @@ class TFMPNetLMHead(keras.layers.Layer):
         self.config = config
         self.hidden_size = config.hidden_size
         self.dense = keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
-        self.layer_norm = keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.layer_norm = keras.layers.LayerNormalization(
+            epsilon=config.layer_norm_eps, name="layer_norm"
+        )
         self.act = get_tf_activation("gelu")
 
         # The output weights are the same as the input embeddings, but there is
@@ -815,7 +918,12 @@ class TFMPNetLMHead(keras.layers.Layer):
         self.decoder = input_embeddings
 
     def build(self, input_shape=None):
-        self.bias = self.add_weight(shape=(self.config.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.bias = self.add_weight(
+            shape=(self.config.vocab_size,),
+            initializer="zeros",
+            trainable=True,
+            name="bias",
+        )
 
         if self.built:
             return
@@ -849,14 +957,20 @@ class TFMPNetLMHead(keras.layers.Layer):
         # project back to size of vocabulary with bias
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.decoder.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size])
+        hidden_states = tf.matmul(
+            a=hidden_states, b=self.decoder.weight, transpose_b=True
+        )
+        hidden_states = tf.reshape(
+            tensor=hidden_states, shape=[-1, seq_length, self.config.vocab_size]
+        )
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
 
 
-@add_start_docstrings("""MPNet Model with a `language modeling` head on top.""", MPNET_START_DOCSTRING)
+@add_start_docstrings(
+    """MPNet Model with a `language modeling` head on top.""", MPNET_START_DOCSTRING
+)
 class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
@@ -870,11 +984,16 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         return self.lm_head
 
     def get_prefix_bias_name(self):
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        warnings.warn(
+            "The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.",
+            FutureWarning,
+        )
         return self.name + "/" + self.lm_head.name
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
@@ -913,7 +1032,9 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
 
-        loss = None if labels is None else self.hf_compute_loss(labels, prediction_scores)
+        loss = (
+            None if labels is None else self.hf_compute_loss(labels, prediction_scores)
+        )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -951,7 +1072,9 @@ class TFMPNetClassificationHead(keras.layers.Layer):
         )
         self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.out_proj = keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="out_proj",
         )
         self.config = config
 
@@ -982,7 +1105,9 @@ class TFMPNetClassificationHead(keras.layers.Layer):
     """,
     MPNET_START_DOCSTRING,
 )
-class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassificationLoss):
+class TFMPNetForSequenceClassification(
+    TFMPNetPreTrainedModel, TFSequenceClassificationLoss
+):
     _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
@@ -993,7 +1118,9 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         self.classifier = TFMPNetClassificationHead(config, name="classifier")
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
@@ -1072,12 +1199,16 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = keras.layers.Dense(
-            1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            1,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
         )
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
@@ -1108,9 +1239,19 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
             num_choices = shape_list(inputs_embeds)[1]
             seq_length = shape_list(inputs_embeds)[2]
 
-        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        flat_input_ids = (
+            tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
+        )
+        flat_attention_mask = (
+            tf.reshape(attention_mask, (-1, seq_length))
+            if attention_mask is not None
+            else None
+        )
+        flat_position_ids = (
+            tf.reshape(position_ids, (-1, seq_length))
+            if position_ids is not None
+            else None
+        )
         flat_inputs_embeds = (
             tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
             if inputs_embeds is not None
@@ -1173,12 +1314,16 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.dropout = keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
         )
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
@@ -1258,12 +1403,16 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
 
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.qa_outputs = keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="qa_outputs",
         )
         self.config = config
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,

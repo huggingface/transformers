@@ -98,7 +98,9 @@ def image_size_to_num_patches(image_size, grid_pinpoints, patch_size: int):
     # ! VERY IMPORTANT if image_size is tensor, must convert to into tuple, otherwise it will cause wrong calculate
     if not isinstance(image_size, (list, tuple)):
         if not isinstance(image_size, (torch.Tensor, np.ndarray)):
-            raise TypeError(f"image_size invalid type {type(image_size)} with value {image_size}")
+            raise TypeError(
+                f"image_size invalid type {type(image_size)} with value {image_size}"
+            )
         image_size = image_size.tolist()
 
     best_resolution = select_best_resolution(image_size, grid_pinpoints)
@@ -197,7 +199,11 @@ class LlavaNextMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaNextConfig):
         super().__init__()
         # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+        num_feature_layers = (
+            1
+            if isinstance(config.vision_feature_layer, int)
+            else len(config.vision_feature_layer)
+        )
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * num_feature_layers,
             config.text_config.hidden_size,
@@ -205,7 +211,9 @@ class LlavaNextMultiModalProjector(nn.Module):
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+            config.text_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=config.multimodal_projector_bias,
         )
 
     def forward(self, image_features):
@@ -363,14 +371,20 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
 
         self.multi_modal_projector = LlavaNextMultiModalProjector(config)
         embed_std = 1 / math.sqrt(config.text_config.hidden_size)
-        self.image_newline = nn.Parameter(torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std)
+        self.image_newline = nn.Parameter(
+            torch.randn(config.text_config.hidden_size, dtype=self.dtype) * embed_std
+        )
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in self.language_model._tied_weights_keys
+            ]
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        )
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
 
@@ -408,7 +422,13 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
+    def pack_image_features(
+        self,
+        image_features,
+        image_sizes,
+        vision_feature_select_strategy,
+        image_newline=None,
+    ):
         """
         Reshape, unpad and then pack each image_feature into a single image_features tensor containing all visual vectors.
 
@@ -432,7 +452,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             if image_feature.shape[0] > 1:
                 base_image_feature = image_feature[0]
                 image_feature = image_feature[1:]
-                height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
+                height = width = (
+                    self.config.vision_config.image_size
+                    // self.config.vision_config.patch_size
+                )
 
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
@@ -441,7 +464,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 )
 
                 if (
-                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
+                    np.prod(image_feature.shape)
+                    % (num_patch_height * num_patch_width * height * width)
+                    != 0
                     and vision_feature_select_strategy == "default"
                 ):
                     logger.warning_once(
@@ -450,7 +475,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                         " visual encoder that does not have CLS."
                     )
 
-                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                image_feature = image_feature.view(
+                    num_patch_height, num_patch_width, height, width, -1
+                )
                 image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                 image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                 image_feature = unpad_image(image_feature, image_sizes[image_idx])
@@ -469,11 +496,15 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             else:
                 image_feature = image_feature[0]
                 if image_newline is not None:
-                    image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
+                    image_feature = torch.cat(
+                        (image_feature, image_newline[None].to(image_feature)), dim=0
+                    )
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
         image_features = torch.cat(new_image_features, dim=0)
-        feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features.device)
+        feature_lens = torch.tensor(
+            feature_lens, dtype=torch.long, device=image_features.device
+        )
         return image_features, feature_lens
 
     def get_image_features(
@@ -513,11 +544,16 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         ]
         if pixel_values.dim() == 5:
             # stacked if input is (batch_size, num_patches, num_channels, height, width)
-            _pixel_values_list = [pix_val[:num_patch] for pix_val, num_patch in zip(pixel_values, image_num_patches)]
+            _pixel_values_list = [
+                pix_val[:num_patch]
+                for pix_val, num_patch in zip(pixel_values, image_num_patches)
+            ]
             pixel_values = torch.cat(_pixel_values_list, dim=0)
         elif pixel_values.dim() != 4:
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
-            raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
+            raise ValueError(
+                f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions"
+            )
 
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
         # If we have one vision feature layer, return the corresponding hidden states,
@@ -525,7 +561,10 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         if isinstance(vision_feature_layer, int):
             selected_image_feature = image_features.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [
+                image_features.hidden_states[layer_idx]
+                for layer_idx in vision_feature_layer
+            ]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
@@ -539,7 +578,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(LLAVA_NEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=LlavaNextCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=LlavaNextCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -598,13 +639,23 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         "[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot (...)"
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+            vision_feature_layer
+            if vision_feature_layer is not None
+            else self.config.vision_feature_layer
         )
         vision_feature_select_strategy = (
             vision_feature_select_strategy
@@ -613,7 +664,9 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -639,16 +692,27 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 image_newline=self.image_newline,
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(
+                -1
+            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            if (
+                not is_torchdynamo_compiling()
+                and inputs_embeds[special_image_mask].numel() != image_features.numel()
+            ):
                 n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            image_features = image_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -672,16 +736,23 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:

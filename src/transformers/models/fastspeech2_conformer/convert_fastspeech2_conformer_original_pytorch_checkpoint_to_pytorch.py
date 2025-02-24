@@ -107,13 +107,17 @@ def convert_espnet_state_dict_to_hf(state_dict):
         if "tts.generator.text2mel." in key:
             new_key = key.replace("tts.generator.text2mel.", "")
             if "postnet" in key:
-                new_key = new_key.replace("postnet.postnet", "speech_decoder_postnet.layers")
+                new_key = new_key.replace(
+                    "postnet.postnet", "speech_decoder_postnet.layers"
+                )
                 new_key = new_key.replace(".0.weight", ".conv.weight")
                 new_key = new_key.replace(".1.weight", ".batch_norm.weight")
                 new_key = new_key.replace(".1.bias", ".batch_norm.bias")
                 new_key = new_key.replace(".1.running_mean", ".batch_norm.running_mean")
                 new_key = new_key.replace(".1.running_var", ".batch_norm.running_var")
-                new_key = new_key.replace(".1.num_batches_tracked", ".batch_norm.num_batches_tracked")
+                new_key = new_key.replace(
+                    ".1.num_batches_tracked", ".batch_norm.num_batches_tracked"
+                )
             if "feat_out" in key:
                 if "weight" in key:
                     new_key = "speech_decoder_postnet.feat_out.weight"
@@ -129,7 +133,9 @@ def convert_espnet_state_dict_to_hf(state_dict):
                 new_key = new_key.replace(".conv", ".conv_layers")
                 pattern = r"(\d)\.(\d)"
                 replacement = (
-                    r"\1.conv" if ("2.weight" not in new_key) and ("2.bias" not in new_key) else r"\1.layer_norm"
+                    r"\1.conv"
+                    if ("2.weight" not in new_key) and ("2.bias" not in new_key)
+                    else r"\1.layer_norm"
                 )
                 new_key = re.sub(pattern, replacement, new_key)
             if "pitch_embed" in key or "energy_embed" in key:
@@ -178,7 +184,9 @@ def convert_FastSpeech2ConformerModel_checkpoint(
         with open(vocab_file, "w") as f:
             json.dump(vocab, f)
         should_strip_spaces = "no_space" in tokenizer_name
-        tokenizer = FastSpeech2ConformerTokenizer(str(vocab_file), should_strip_spaces=should_strip_spaces)
+        tokenizer = FastSpeech2ConformerTokenizer(
+            str(vocab_file), should_strip_spaces=should_strip_spaces
+        )
 
     tokenizer.save_pretrained(pytorch_dump_folder_path)
 
@@ -190,15 +198,32 @@ def convert_FastSpeech2ConformerModel_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
     parser.add_argument(
-        "--yaml_config_path", required=True, default=None, type=str, help="Path to config.yaml of model to convert"
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to original checkpoint",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--yaml_config_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to config.yaml of model to convert",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()

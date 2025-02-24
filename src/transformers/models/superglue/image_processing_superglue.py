@@ -57,11 +57,15 @@ def is_grayscale(
     if input_data_format == ChannelDimension.FIRST:
         if image.shape[0] == 1:
             return True
-        return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+        return np.all(image[0, ...] == image[1, ...]) and np.all(
+            image[1, ...] == image[2, ...]
+        )
     elif input_data_format == ChannelDimension.LAST:
         if image.shape[-1] == 1:
             return True
-        return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
+        return np.all(image[..., 0] == image[..., 1]) and np.all(
+            image[..., 1] == image[..., 2]
+        )
 
 
 # Copied from transformers.models.superpoint.image_processing_superpoint.convert_to_grayscale
@@ -89,10 +93,14 @@ def convert_to_grayscale(
         if is_grayscale(image, input_data_format=input_data_format):
             return image
         if input_data_format == ChannelDimension.FIRST:
-            gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            gray_image = (
+                image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
+            )
             gray_image = np.stack([gray_image] * 3, axis=0)
         elif input_data_format == ChannelDimension.LAST:
-            gray_image = image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            gray_image = (
+                image[..., 0] * 0.2989 + image[..., 1] * 0.5870 + image[..., 2] * 0.1140
+            )
             gray_image = np.stack([gray_image] * 3, axis=-1)
         return gray_image
 
@@ -115,7 +123,9 @@ def validate_and_format_image_pairs(images: ImageInput):
     def _is_valid_image(image):
         """images is a PIL Image or a 3D array."""
         return is_pil_image(image) or (
-            is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
+            is_valid_image(image)
+            and get_image_type(image) != ImageType.PIL
+            and len(image.shape) == 3
         )
 
     if isinstance(images, list):
@@ -278,7 +288,9 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_grayscale = do_grayscale if do_grayscale is not None else self.do_grayscale
 
         size = size if size is not None else self.size
@@ -317,15 +329,26 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_grayscale:
                 image = convert_to_grayscale(image, input_data_format=input_data_format)
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            image = to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
             all_images.append(image)
 
         # Convert back the flattened list of images into a list of pairs of images.
@@ -358,9 +381,13 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             of the pair, the matching scores and the matching indices.
         """
         if outputs.mask.shape[0] != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the mask"
+            )
         if not all(len(target_size) == 2 for target_size in target_sizes):
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
+            raise ValueError(
+                "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+            )
 
         if isinstance(target_sizes, List):
             image_pair_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
@@ -377,7 +404,10 @@ class SuperGlueImageProcessor(BaseImageProcessor):
 
         results = []
         for mask_pair, keypoints_pair, matches, scores in zip(
-            outputs.mask, keypoints, outputs.matches[:, 0], outputs.matching_scores[:, 0]
+            outputs.mask,
+            keypoints,
+            outputs.matches[:, 0],
+            outputs.matching_scores[:, 0],
         ):
             mask0 = mask_pair[0] > 0
             mask1 = mask_pair[1] > 0

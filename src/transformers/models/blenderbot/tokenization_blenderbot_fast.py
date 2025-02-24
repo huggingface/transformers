@@ -161,7 +161,9 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         )
 
         tokenizer_component = "post_processor"
-        tokenizer_component_instance = getattr(self.backend_tokenizer, tokenizer_component, None)
+        tokenizer_component_instance = getattr(
+            self.backend_tokenizer, tokenizer_component, None
+        )
         if tokenizer_component_instance:
             state = json.loads(tokenizer_component_instance.__getstate__())
 
@@ -211,7 +213,11 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         """
         # Mask token behave like a normal word, i.e. include the space before it
         # So we set lstrip to True
-        value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
+        value = (
+            AddedToken(value, lstrip=True, rstrip=False)
+            if isinstance(value, str)
+            else value
+        )
         self._mask_token = value
 
     # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast._batch_encode_plus with Roberta->Blenderbot, RoBERTa->Blenderbot
@@ -236,7 +242,9 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.save_vocabulary with Roberta->Blenderbot, RoBERTa->Blenderbot
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
@@ -264,7 +272,9 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
-    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A Blenderbot sequence has the following format:

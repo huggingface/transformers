@@ -21,7 +21,13 @@ from transformers import CanineConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    global_rng,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -105,13 +111,25 @@ class CanineModelTester:
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return CanineConfig(
@@ -130,18 +148,37 @@ class CanineModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = CanineModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = CanineForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -153,46 +190,91 @@ class CanineModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = CanineForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = CanineForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_multiple_choice(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_choices = self.num_choices
         model = CanineForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = (
+            input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_token_type_ids = (
+            token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_input_mask = (
+            input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
         result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -205,7 +287,11 @@ class CanineModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -241,7 +327,9 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = CanineModelTester(self)
         # we set has_text_modality to False as the config has no vocab_size attribute
-        self.config_tester = ConfigTester(self, config_class=CanineConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=CanineConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -260,7 +348,9 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -295,7 +385,10 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     # for CANINE since the seq length is downsampled
                     self.assertListEqual(
                         list(hidden_states[i].shape[-2:]),
-                        [seq_length // config.downsampling_rate, self.model_tester.hidden_size],
+                        [
+                            seq_length // config.downsampling_rate,
+                            self.model_tester.hidden_size,
+                        ],
                     )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -364,7 +457,9 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers + 2)
+            self.assertEqual(
+                len(self_attentions), self.model_tester.num_hidden_layers + 2
+            )
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, seq_len],
@@ -379,19 +474,27 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
                         return
                     else:
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
@@ -413,30 +516,57 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            check_equivalence(model, tuple_inputs, dict_inputs, {"output_attentions": True})
-
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(
-                model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
+                model, tuple_inputs, dict_inputs, {"output_attentions": True}
+            )
+
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_hidden_states": True}
+            )
+
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model, tuple_inputs, dict_inputs, {"output_attentions": True}
+            )
+
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            check_equivalence(
+                model,
+                tuple_inputs,
+                dict_inputs,
+                {"output_hidden_states": True, "output_attentions": True},
             )
 
     def test_headmasking(self):
@@ -477,7 +607,9 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             multihead_outputs = head_mask.grad
 
             self.assertIsNotNone(multihead_outputs)
-            self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
+            self.assertEqual(
+                len(multihead_outputs), self.model_tester.num_hidden_layers
+            )
 
             def check_attentions_validity(attentions):
                 # Remove Nan
@@ -489,10 +621,18 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     t.masked_fill(torch.isnan(t), 0.0) for t in attentions
                 ]  # remove them (the test is less complete)
 
-                self.assertAlmostEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
-                self.assertNotEqual(attentions[1][..., -1, :, :].flatten().sum().item(), 0.0)
-                self.assertAlmostEqual(attentions[-2][..., -2, :, :].flatten().sum().item(), 0.0)
-                self.assertNotEqual(attentions[-2][..., -1, :, :].flatten().sum().item(), 0.0)
+                self.assertAlmostEqual(
+                    attentions[1][..., 0, :, :].flatten().sum().item(), 0.0
+                )
+                self.assertNotEqual(
+                    attentions[1][..., -1, :, :].flatten().sum().item(), 0.0
+                )
+                self.assertAlmostEqual(
+                    attentions[-2][..., -2, :, :].flatten().sum().item(), 0.0
+                )
+                self.assertNotEqual(
+                    attentions[-2][..., -1, :, :].flatten().sum().item(), 0.0
+                )
 
             check_attentions_validity(outputs.attentions)
 
@@ -562,7 +702,9 @@ class CanineModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-2, atol=1e-2
+        )
 
         # verify pooled output
         expected_shape = torch.Size((1, 768))
@@ -570,4 +712,6 @@ class CanineModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.884311497, -0.529064834, 0.723164916])
 
-        torch.testing.assert_close(outputs.pooler_output[0, :3], expected_slice, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(
+            outputs.pooler_output[0, :3], expected_slice, rtol=1e-2, atol=1e-2
+        )

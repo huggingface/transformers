@@ -19,7 +19,12 @@ from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict, select_best_resolution
+from ...image_processing_utils import (
+    BaseImageProcessor,
+    BatchFeature,
+    get_size_dict,
+    select_best_resolution,
+)
 from ...image_transforms import (
     PaddingMode,
     convert_to_rgb,
@@ -53,7 +58,9 @@ if is_vision_available():
     from PIL import Image
 
 
-def divide_to_patches(image: np.array, patch_size: int, input_data_format) -> List[np.array]:
+def divide_to_patches(
+    image: np.array, patch_size: int, input_data_format
+) -> List[np.array]:
     """
     Divides an image into patches of a specified size.
 
@@ -90,17 +97,25 @@ def expand_to_square(image: np.array, background_color, input_data_format) -> np
     if width == height:
         return image
     elif width > height:
-        result = np.ones((width, width, image.shape[2]), dtype=image.dtype) * background_color
+        result = (
+            np.ones((width, width, image.shape[2]), dtype=image.dtype)
+            * background_color
+        )
         result[(width - height) // 2 : (width - height) // 2 + height, :] = image
         return result
     else:
-        result = np.ones((height, height, image.shape[2]), dtype=image.dtype) * background_color
+        result = (
+            np.ones((height, height, image.shape[2]), dtype=image.dtype)
+            * background_color
+        )
         result[:, (height - width) // 2 : (height - width) // 2 + width] = image
         return result
 
 
 def _get_patch_output_size(image, target_resolution, input_data_format):
-    original_height, original_width = get_image_size(image, channel_dim=input_data_format)
+    original_height, original_width = get_image_size(
+        image, channel_dim=input_data_format
+    )
     target_height, target_width = target_resolution
 
     scale_w = target_width / original_width
@@ -190,8 +205,12 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             if image_grid_pinpoints is not None
             else [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
         )
-        crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
-        crop_size = get_size_dict(crop_size, default_to_square=True, param_name="crop_size")
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 224, "width": 224}
+        )
+        crop_size = get_size_dict(
+            crop_size, default_to_square=True, param_name="crop_size"
+        )
 
         self.do_resize = do_resize
         self.size = size
@@ -240,7 +259,9 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "Size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -307,12 +328,16 @@ class LlavaNextImageProcessor(BaseImageProcessor):
 
         # call the general `pad` if padding on `height/width`, otherwise it's the `num_patched` dim
         if isinstance(padding, int) or len(padding) != 4:
-            return pad(image, padding, mode, constant_values, data_format, input_data_format)
+            return pad(
+                image, padding, mode, constant_values, data_format, input_data_format
+            )
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
         if mode == PaddingMode.CONSTANT:
-            image = np.pad(image, padding, mode="constant", constant_values=constant_values)
+            image = np.pad(
+                image, padding, mode="constant", constant_values=constant_values
+            )
         elif mode == PaddingMode.REFLECT:
             image = np.pad(image, padding, mode="reflect")
         elif mode == PaddingMode.REPLICATE:
@@ -322,7 +347,9 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         else:
             raise ValueError(f"Invalid padding mode: {mode}")
         image = (
-            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+            to_channel_dimension_format(image, data_format, input_data_format)
+            if data_format is not None
+            else image
         )
         return image
 
@@ -389,29 +416,49 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_resize:
-                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
 
             if do_center_crop:
-                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+                image = self.center_crop(
+                    image=image, size=crop_size, input_data_format=input_data_format
+                )
 
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
             all_images.append(image)
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
             for image in all_images
         ]
 
         return images
 
     def _resize_for_patching(
-        self, image: np.array, target_resolution: tuple, resample, input_data_format: ChannelDimension
+        self,
+        image: np.array,
+        target_resolution: tuple,
+        resample,
+        input_data_format: ChannelDimension,
     ) -> np.array:
         """
         Resizes an image to a target resolution while maintaining aspect ratio.
@@ -429,21 +476,33 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         Returns:
             np.array: The resized and padded image.
         """
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = _get_patch_output_size(
+            image, target_resolution, input_data_format
+        )
 
         # Resize the image
-        resized_image = resize(image, (new_height, new_width), resample=resample, input_data_format=input_data_format)
+        resized_image = resize(
+            image,
+            (new_height, new_width),
+            resample=resample,
+            input_data_format=input_data_format,
+        )
 
         return resized_image
 
     def _pad_for_patching(
-        self, image: np.array, target_resolution: tuple, input_data_format: ChannelDimension
+        self,
+        image: np.array,
+        target_resolution: tuple,
+        input_data_format: ChannelDimension,
     ) -> np.array:
         """
         Pad an image to a target resolution while maintaining aspect ratio.
         """
         target_height, target_width = target_resolution
-        new_height, new_width = _get_patch_output_size(image, target_resolution, input_data_format)
+        new_height, new_width = _get_patch_output_size(
+            image, target_resolution, input_data_format
+        )
 
         paste_x = (target_width - new_width) // 2
         paste_y = (target_height - new_height) // 2
@@ -492,15 +551,24 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         image_size = get_image_size(image, channel_dim=input_data_format)
         best_resolution = select_best_resolution(image_size, possible_resolutions)
         resized_image = self._resize_for_patching(
-            image, best_resolution, resample=resample, input_data_format=input_data_format
+            image,
+            best_resolution,
+            resample=resample,
+            input_data_format=input_data_format,
         )
-        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=input_data_format)
+        padded_image = self._pad_for_patching(
+            resized_image, best_resolution, input_data_format=input_data_format
+        )
 
-        patches = divide_to_patches(padded_image, patch_size=patch_size, input_data_format=input_data_format)
+        patches = divide_to_patches(
+            padded_image, patch_size=patch_size, input_data_format=input_data_format
+        )
 
         # make sure that all patches are in the input data format
         patches = [
-            to_channel_dimension_format(patch, channel_dim=data_format, input_channel_dim=input_data_format)
+            to_channel_dimension_format(
+                patch, channel_dim=data_format, input_channel_dim=input_data_format
+            )
             for patch in patches
         ]
 
@@ -634,18 +702,30 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, param_name="size", default_to_square=False)
-        image_grid_pinpoints = image_grid_pinpoints if image_grid_pinpoints is not None else self.image_grid_pinpoints
+        image_grid_pinpoints = (
+            image_grid_pinpoints
+            if image_grid_pinpoints is not None
+            else self.image_grid_pinpoints
+        )
         resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size", default_to_square=True)
+        crop_size = get_size_dict(
+            crop_size, param_name="crop_size", default_to_square=True
+        )
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         images = make_flat_list_of_images(images)
 
@@ -685,16 +765,23 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(images[0])
 
         new_images = []
-        image_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
+        image_sizes = [
+            get_image_size(image, channel_dim=input_data_format) for image in images
+        ]
         for image in images:
             # convert image into a list of patches
             # we intentially use the same data format as the input data format
             image_patches = self.get_image_patches(
                 image,
                 image_grid_pinpoints,
-                size=(size["shortest_edge"], size["shortest_edge"])
-                if "shortest_edge" in size
-                else (min(size["height"], size["width"]), min(size["height"], size["width"])),
+                size=(
+                    (size["shortest_edge"], size["shortest_edge"])
+                    if "shortest_edge" in size
+                    else (
+                        min(size["height"], size["width"]),
+                        min(size["height"], size["width"]),
+                    )
+                ),
                 patch_size=crop_size["height"],
                 resample=resample,
                 data_format=input_data_format,
@@ -724,7 +811,8 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             processed_images = self._pad_for_batching(new_images)
 
         return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
+            data={"pixel_values": processed_images, "image_sizes": image_sizes},
+            tensor_type=return_tensors,
         )
 
 

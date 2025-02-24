@@ -23,9 +23,17 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+    ImageClassifierOutputWithNoAttention,
+)
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_poolformer import PoolFormerConfig
 
 
@@ -44,7 +52,9 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -57,8 +67,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -84,13 +98,31 @@ class PoolFormerEmbeddings(nn.Module):
     Construct Patch Embeddings.
     """
 
-    def __init__(self, hidden_size, num_channels, patch_size, stride, padding, norm_layer=None):
+    def __init__(
+        self, hidden_size, num_channels, patch_size, stride, padding, norm_layer=None
+    ):
         super().__init__()
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
-        padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
+        patch_size = (
+            patch_size
+            if isinstance(patch_size, collections.abc.Iterable)
+            else (patch_size, patch_size)
+        )
+        stride = (
+            stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
+        )
+        padding = (
+            padding
+            if isinstance(padding, collections.abc.Iterable)
+            else (padding, padding)
+        )
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=padding)
+        self.projection = nn.Conv2d(
+            num_channels,
+            hidden_size,
+            kernel_size=patch_size,
+            stride=stride,
+            padding=padding,
+        )
         self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
     def forward(self, pixel_values):
@@ -111,7 +143,9 @@ class PoolFormerGroupNorm(nn.GroupNorm):
 class PoolFormerPooling(nn.Module):
     def __init__(self, pool_size):
         super().__init__()
-        self.pool = nn.AvgPool2d(pool_size, stride=1, padding=pool_size // 2, count_include_pad=False)
+        self.pool = nn.AvgPool2d(
+            pool_size, stride=1, padding=pool_size // 2, count_include_pad=False
+        )
 
     def forward(self, hidden_states):
         return self.pool(hidden_states) - hidden_states
@@ -141,22 +175,30 @@ class PoolFormerOutput(nn.Module):
 class PoolFormerLayer(nn.Module):
     """This corresponds to the 'PoolFormerBlock' class in the original implementation."""
 
-    def __init__(self, config, num_channels, pool_size, hidden_size, intermediate_size, drop_path):
+    def __init__(
+        self, config, num_channels, pool_size, hidden_size, intermediate_size, drop_path
+    ):
         super().__init__()
         self.pooling = PoolFormerPooling(pool_size)
-        self.output = PoolFormerOutput(config, drop_path, hidden_size, intermediate_size)
+        self.output = PoolFormerOutput(
+            config, drop_path, hidden_size, intermediate_size
+        )
         self.before_norm = PoolFormerGroupNorm(num_channels)
         self.after_norm = PoolFormerGroupNorm(num_channels)
 
         # Useful for training neural nets
-        self.drop_path = PoolFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = (
+            PoolFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        )
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
             self.layer_scale_1 = nn.Parameter(
-                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+                config.layer_scale_init_value * torch.ones((num_channels)),
+                requires_grad=True,
             )
             self.layer_scale_2 = nn.Parameter(
-                config.layer_scale_init_value * torch.ones((num_channels)), requires_grad=True
+                config.layer_scale_init_value * torch.ones((num_channels)),
+                requires_grad=True,
             )
 
     def forward(self, hidden_states):
@@ -176,7 +218,9 @@ class PoolFormerLayer(nn.Module):
             return outputs
 
         else:
-            pooling_output = self.drop_path(self.pooling(self.before_norm(hidden_states)))
+            pooling_output = self.drop_path(
+                self.pooling(self.before_norm(hidden_states))
+            )
             # First residual connection
             hidden_states = pooling_output + hidden_states
             outputs = ()
@@ -194,7 +238,10 @@ class PoolFormerEncoder(nn.Module):
         super().__init__()
         self.config = config
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))
+        ]
 
         # patch embeddings
         embeddings = []
@@ -204,7 +251,9 @@ class PoolFormerEncoder(nn.Module):
                     patch_size=config.patch_sizes[i],
                     stride=config.strides[i],
                     padding=config.padding[i],
-                    num_channels=config.num_channels if i == 0 else config.hidden_sizes[i - 1],
+                    num_channels=(
+                        config.num_channels if i == 0 else config.hidden_sizes[i - 1]
+                    ),
                     hidden_size=config.hidden_sizes[i],
                 )
             )
@@ -225,7 +274,9 @@ class PoolFormerEncoder(nn.Module):
                         num_channels=config.hidden_sizes[i],
                         pool_size=config.pool_size,
                         hidden_size=config.hidden_sizes[i],
-                        intermediate_size=int(config.hidden_sizes[i] * config.mlp_ratio),
+                        intermediate_size=int(
+                            config.hidden_sizes[i] * config.mlp_ratio
+                        ),
                         drop_path=dpr[cur + j],
                     )
                 )
@@ -252,7 +303,9 @@ class PoolFormerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states
+        )
 
 
 class PoolFormerPreTrainedModel(PreTrainedModel):
@@ -328,9 +381,13 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -377,7 +434,9 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         self.norm = PoolFormerGroupNorm(config.hidden_sizes[-1])
         # Classifier head
         self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -403,7 +462,9 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.poolformer(
             pixel_values,
@@ -420,7 +481,9 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -442,7 +505,13 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )
 
 
-__all__ = ["PoolFormerForImageClassification", "PoolFormerModel", "PoolFormerPreTrainedModel"]
+__all__ = [
+    "PoolFormerForImageClassification",
+    "PoolFormerModel",
+    "PoolFormerPreTrainedModel",
+]

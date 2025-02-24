@@ -127,15 +127,21 @@ class BigBirdPegasusModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(
             3,
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = self.get_config()
-        inputs_dict = prepare_bigbird_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_bigbird_pegasus_inputs_dict(
+            config, input_ids, decoder_input_ids
+        )
         return config, inputs_dict
 
     def get_config(self):
@@ -183,20 +189,28 @@ class BigBirdPegasusModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        )
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = BigBirdPegasusModel(config=config).to(torch_device).eval()
@@ -210,11 +224,14 @@ class BigBirdPegasusModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = BigBirdPegasusEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        encoder_last_hidden_state_2 = encoder(
+            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
+        )[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -228,18 +245,25 @@ class BigBirdPegasusModelTester:
             encoder_attention_mask=inputs_dict["attention_mask"],
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
     def create_and_check_model(self, config, inputs_dict):
         model = BigBirdPegasusModel(config=config).to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         decoder_input_ids = inputs_dict["decoder_input_ids"]
         result = model(input_ids, decoder_input_ids=decoder_input_ids, use_cache=True)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
 
 @require_torch
-class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class BigBirdPegasusModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             BigBirdPegasusModel,
@@ -284,7 +308,10 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         feature_extractor_name,
         processor_name,
     ):
-        if pipeline_test_case_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+        if (
+            pipeline_test_case_name == "QAPipelineTests"
+            and not tokenizer_name.endswith("Fast")
+        ):
             return True
 
         return False
@@ -303,12 +330,16 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -330,7 +361,9 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     def test_retain_grad_hidden_states_attentions(self):
         if self.model_tester.attention_type == "block_sparse":
             # this test can't pass since attention matrix (which is getting returned) can't have gradients (& just 0 at many locations)
-            self.skipTest(reason="Cannot pass since returned attention matrix can't have gradients")
+            self.skipTest(
+                reason="Cannot pass since returned attention matrix can't have gradients"
+            )
         super().test_retain_grad_hidden_states_attentions()
 
     # BigBirdPegasusForSequenceClassification does not support inputs_embeds
@@ -375,7 +408,9 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
         model.half()
         model.generate(**input_dict)
-        model.generate(**input_dict, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            **input_dict, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
     @slow
     def test_batched_forward_original_full(self):
@@ -406,43 +441,73 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             dtype=torch.long,
         )
 
-        input_ids = torch.tensor([sample_with_padding, sample_without_padding], device=torch_device, dtype=torch.long)
+        input_ids = torch.tensor(
+            [sample_with_padding, sample_without_padding],
+            device=torch_device,
+            dtype=torch.long,
+        )
         labels = torch.tensor(
-            [target_ids_without_padding, target_ids_with_padding], device=torch_device, dtype=torch.long
+            [target_ids_without_padding, target_ids_with_padding],
+            device=torch_device,
+            dtype=torch.long,
         )
 
         with torch.no_grad():
-            logits_batched = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).logits
+            logits_batched = model(
+                input_ids=input_ids, attention_mask=attention_mask, labels=labels
+            ).logits
 
         with torch.no_grad():
-            logits_single_first = model(input_ids=input_ids[:1, :-chunk_length], labels=labels[:1]).logits
+            logits_single_first = model(
+                input_ids=input_ids[:1, :-chunk_length], labels=labels[:1]
+            ).logits
 
-        torch.testing.assert_close(logits_batched[0, -3:], logits_single_first[0, -3:], rtol=tolerance, atol=tolerance)
+        torch.testing.assert_close(
+            logits_batched[0, -3:],
+            logits_single_first[0, -3:],
+            rtol=tolerance,
+            atol=tolerance,
+        )
 
         with torch.no_grad():
-            logits_single_second = model(input_ids=input_ids[1:], labels=labels[1:, :-4]).logits
+            logits_single_second = model(
+                input_ids=input_ids[1:], labels=labels[1:, :-4]
+            ).logits
 
-        torch.testing.assert_close(logits_batched[1, :3], logits_single_second[0, :3], rtol=tolerance, atol=tolerance)
+        torch.testing.assert_close(
+            logits_batched[1, :3],
+            logits_single_second[0, :3],
+            rtol=tolerance,
+            atol=tolerance,
+        )
 
     def test_auto_padding(self):
         ids = [[7, 6, 9] * 65]
         config, _ = self.model_tester.prepare_config_and_inputs()
         input_ids = torch.tensor(ids, device=torch_device, dtype=torch.long)
         attention_mask = input_ids.new_ones(input_ids.shape)
-        decoder_input_ids = torch.tensor([[33, 5, 8] * 3], device=torch_device, dtype=torch.long)
+        decoder_input_ids = torch.tensor(
+            [[33, 5, 8] * 3], device=torch_device, dtype=torch.long
+        )
 
         config.block_size = 8
         model = BigBirdPegasusForConditionalGeneration(config).eval().to(torch_device)
-        output1 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)[
-            "logits"
-        ]
+        output1 = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+        )["logits"]
 
         ids = [[7, 6, 9] * 65 + [0] * 5]
         input_ids = torch.tensor(ids, device=torch_device, dtype=torch.long)
-        attention_mask = torch.tensor([[1] * 3 * 65 + [0] * 5], device=torch_device, dtype=torch.long)
-        output2 = model(input_ids=input_ids, attention_mask=attention_mask, decoder_input_ids=decoder_input_ids)[
-            "logits"
-        ]
+        attention_mask = torch.tensor(
+            [[1] * 3 * 65 + [0] * 5], device=torch_device, dtype=torch.long
+        )
+        output2 = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+        )["logits"]
 
         torch.testing.assert_close(output1, output2, rtol=1e-5, atol=1e-5)
 
@@ -523,11 +588,16 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
         # fmt: on
         torch.testing.assert_close(
-            prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
+            prediction_logits[0, 4:8, 128:156],
+            expected_prediction_logits_slice,
+            rtol=1e-4,
+            atol=1e-4,
         )
 
     def test_inference_full_attn(self):
-        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="original_full")
+        model = BigBirdPegasusForConditionalGeneration.from_pretrained(
+            MODEL_ID, attention_type="original_full"
+        )
         model.to(torch_device)
 
         input_ids = self._get_dummy_input_ids()
@@ -544,12 +614,17 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
         torch.testing.assert_close(
-            prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
+            prediction_logits[0, 4:8, 128:156],
+            expected_prediction_logits_slice,
+            rtol=1e-4,
+            atol=1e-4,
         )
 
     def test_seq_to_seq_generation(self):
         MODEL_ID = "google/bigbird-pegasus-large-arxiv"
-        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID).to(torch_device)
+        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID).to(
+            torch_device
+        )
         tokenizer = PegasusTokenizer.from_pretrained(MODEL_ID)
 
         ARTICLE_LEP = r"""the lep experiments at the resonance of @xmath1-boson have tested the standard model ( sm ) at quantum level , measuring the @xmath1-decay into fermion pairs with an accuracy of one part in ten thousands . the good agreement of the lep data with the sm predictions have severely constrained the behavior of new physics at the @xmath1-pole . taking these achievements into account one can imagine that the physics of @xmath1-boson will again play the central role in the frontier of particle physics if the next generation @xmath1 factory comes true with the generated @xmath1 events several orders of magnitude higher than that of the lep . this factory can be realized in the gigaz option of the international linear collider ( ilc)@xcite . the ilc is a proposed electron - positron collider with tunable energy ranging from @xmath12 to @xmath13 and polarized beams in its first phase , and the gigaz option corresponds to its operation on top of the resonance of @xmath1 boson by adding a bypass to its main beam line . given the high luminosity , @xmath14 , and the cross section at the resonance of @xmath1 boson , @xmath15 , about @xmath16 @xmath1 events can be generated in an operational year of @xmath17 of gigaz , which implies that the expected sensitivity to the branching ratio of @xmath1-decay can be improved from @xmath18 at the lep to @xmath19 at the gigaz@xcite . in light of this , the @xmath1-boson properties , especially its exotic or rare decays which are widely believed to be sensitive to new physics , should be investigated comprehensively to evaluate their potential in probing new physics .    among the rare @xmath1-decays , the flavor changing ( fc ) processes were most extensively studied to explore the flavor texture in new physics @xcite , and it was found that , although these processes are severely suppressed in the sm , their branching ratios in new physics models can be greatly enhanced to @xmath19 for lepton flavor violation decays @xcite and @xmath20 for quark flavor violation decays @xcite . besides the fc processes , the @xmath1-decay into light higgs boson(s ) is another type of rare process that was widely studied , e.g. the decay @xmath21 ( @xmath22 ) with the particle @xmath0 denoting a light higgs boson was studied in @xcite , the decay @xmath23 was studied in the two higgs doublet model ( 2hdm)@xcite and the minimal supersymmetric standard model ( mssm)@xcite , and the decay @xmath4 was studied in a model independent way @xcite , in 2hdm@xcite and also in mssm@xcite . these studies indicate that , in contrast with the kinematic forbidden of these decays in the sm , the rates of these decays can be as large as @xmath18 in new physics models , which lie within the expected sensitivity of the gigaz . in this work , we extend the previous studies of these decays to some new models and investigate these decays altogether . we are motivated by some recent studies on the singlet extension of the mssm , such as the next - to - minimal supersymmetric standard model ( nmssm ) @xcite and the nearly minimal supersymmetric standard model ( nmssm ) @xcite , where a light cp - odd higgs boson @xmath0 with singlet - dominant component may naturally arise from the spontaneous breaking of some approximate global symmetry like @xmath24 or peccei - quuin symmetry @xcite . these non - minimal supersymmetric models can not only avoid the @xmath25-problem , but also alleviate the little hierarchy by having such a light higgs boson @xmath0 @xcite . we are also motivated by that , with the latest experiments , the properties of the light higgs boson are more stringently constrained than before . so it is worth updating the previous studies . so far there is no model - independent lower bound on the lightest higgs boson mass . in the sm , it must be heavier than @xmath26 gev , obtained from the null observation of the higgs boson at lep experiments . however , due to the more complex structure of the higgs sector in the extensions of the sm , this lower bound can be significantly relaxed according to recent studies , e.g. , for the cp - odd higgs boson @xmath0 we have @xmath27 gev in the nmssm @xcite , @xmath28 gev in the nmssm @xcite , and @xmath29 gev in the lepton - specific 2hdm ( l2hdm ) @xcite . with such a light cp - odd higgs boson , the z - decay into one or more @xmath0 is open up . noting that the decay @xmath30 is forbidden due to bose symmetry , we in this work study the rare @xmath1-decays @xmath6 ( @xmath22 ) , @xmath31 and @xmath4 in a comparative way for four models , namely the type - ii 2hdm@xcite , the l2hdm @xcite , the nmssm and the nmssm . in our study , we examine carefully the constraints on the light @xmath0 from many latest experimental results . this work is organized as follows . in sec . ii we briefly describe the four new physics models . in sec . iii we present the calculations of the rare @xmath1-decays . in sec . iv we list the constraints on the four new physics models . in sec . v we show the numerical results for the branching ratios of the rare @xmath1-decays in various models . finally , the conclusion is given in sec . as the most economical way , the sm utilizes one higgs doublet to break the electroweak symmetry . as a result , the sm predicts only one physical higgs boson with its properties totally determined by two free parameters . in new physics models , the higgs sector is usually extended by adding higgs doublets and/or singlets , and consequently , more physical higgs bosons are predicted along with more free parameters involved in . the general 2hdm contains two @xmath32 doublet higgs fields @xmath33 and @xmath34 , and with the assumption of cp - conserving , its scalar potential can be parameterized as@xcite : @xmath35,\end{aligned}\ ] ] where @xmath36 ( @xmath37 ) are free dimensionless parameters , and @xmath38 ( @xmath39 ) are the parameters with mass dimension . after the electroweak symmetry breaking , the spectrum of this higgs sector includes three massless goldstone modes , which become the longitudinal modes of @xmath40 and @xmath1 bosons , and five massive physical states : two cp - even higgs bosons @xmath41 and @xmath42 , one neutral cp - odd higgs particle @xmath0 and a pair of charged higgs bosons @xmath43 . noting the constraint @xmath44 with @xmath45 and @xmath46 denoting the vacuum expectation values ( vev ) of @xmath33 and @xmath34 respectively , we choose @xmath47 as the input parameters with @xmath48 , and @xmath49 being the mixing angle that diagonalizes the mass matrix of the cp - even higgs fields . the difference between the type - ii 2hdm and the l2hdm comes from the yukawa coupling of the higgs bosons to quark / lepton . in the type - ii 2hdm , one higgs doublet @xmath34 generates the masses of up - type quarks and the other doublet @xmath33 generates the masses of down - type quarks and charged leptons ; while in the l2hdm one higgs doublet @xmath33 couples only to leptons and the other doublet @xmath34 couples only to quarks . so the yukawa interactions of @xmath0 to fermions in these two models are given by @xcite @xmath50 with @xmath51 denoting generation index . obviously , in the type - ii 2hdm the @xmath52 coupling and the @xmath53 coupling can be simultaneously enhanced by @xmath54 , while in the l2hdm only the @xmath53 coupling is enhanced by @xmath55 . the structures of the nmssm and the nmssm are described by their superpotentials and corresponding soft - breaking terms , which are given by @xcite @xmath56 where @xmath57 is the superpotential of the mssm without the @xmath25 term , @xmath58 and @xmath59 are higgs doublet and singlet superfields with @xmath60 and @xmath61 being their scalar component respectively , @xmath62 , @xmath63 , @xmath64 , @xmath65 , @xmath66 and @xmath67 are soft breaking parameters , and @xmath68 and @xmath69 are coefficients of the higgs self interactions .    with the superpotentials and the soft - breaking terms , one can get the higgs potentials of the nmssm and the nmssm respectively . like the 2hdm , the higgs bosons with same cp property will mix and the mass eigenstates are obtained by diagonalizing the corresponding mass matrices : @xmath70 where the fields on the right hands of the equations are component fields of @xmath71 , @xmath72 and @xmath61 defined by @xmath73 @xmath74 and @xmath75 are respectively the cp - even and cp - odd neutral higgs bosons , @xmath76 and @xmath77 are goldstone bosons eaten by @xmath1 and @xmath78 , and @xmath79 is the charged higgs boson . so both the nmssm and nmssm predict three cp - even higgs bosons , two cp - odd higgs bosons and one pair of charged higgs bosons . in general , the lighter cp - odd higgs @xmath0 in these model is the mixture of the singlet field @xmath80 and the doublet field combination , @xmath81 , i.e. @xmath82 and its couplings to down - type quarks are then proportional to @xmath83 . so for singlet dominated @xmath0 , @xmath84 is small and the couplings are suppressed . as a comparison , the interactions of @xmath0 with the squarks are given by@xcite @xmath85 i.e. the interaction does not vanish when @xmath86 approaches zero . just like the 2hdm where we use the vevs of the higgs fields as fundamental parameters , we choose @xmath68 , @xmath69 , @xmath87 , @xmath88 , @xmath66 and @xmath89 as input parameters for the nmssm@xcite and @xmath68 , @xmath54 , @xmath88 , @xmath65 , @xmath90 and @xmath91 as input parameters for the nmssm@xcite . about the nmssm and the nmssm , three points should be noted . the first is for the two models , there is no explicit @xmath92term , and the effective @xmath25 parameter ( @xmath93 ) is generated when the scalar component of @xmath59 develops a vev . the second is , the nmssm is actually same as the nmssm with @xmath94@xcite , because the tadpole terms @xmath95 and its soft breaking term @xmath96 in the nmssm do not induce any interactions , except for the tree - level higgs boson masses and the minimization conditions . and the last is despite of the similarities , the nmssm has its own peculiarity , which comes from its neutralino sector . in the basis @xmath97 , its neutralino mass matrix is given by @xcite @xmath98 where @xmath99 and @xmath100 are @xmath101 and @xmath102 gaugino masses respectively , @xmath103 , @xmath104 , @xmath105 and @xmath106 . after diagonalizing this matrix one can get the mass eigenstate of the lightest neutralino @xmath107 with mass taking the following form @xcite @xmath108 this expression implies that @xmath107 must be lighter than about @xmath109 gev for @xmath110 ( from lower bound on chargnio mass ) and @xmath111 ( perturbativity bound ) . like the other supersymmetric models , @xmath107 as the lightest sparticle acts as the dark matter in the universe , but due to its singlino - dominated nature , it is difficult to annihilate sufficiently to get the correct density in the current universe . so the relic density of @xmath107 plays a crucial way in selecting the model parameters . for example , as shown in @xcite , for @xmath112 , there is no way to get the correct relic density , and for the other cases , @xmath107 mainly annihilates by exchanging @xmath1 boson for @xmath113 , or by exchanging a light cp - odd higgs boson @xmath0 with mass satisfying the relation @xmath114 for @xmath115 . for the annihilation , @xmath54 and @xmath25 are required to be less than 10 and @xmath116 respectively because through eq.([mass - exp ] ) a large @xmath87 or @xmath25 will suppress @xmath117 to make the annihilation more difficult . the properties of the lightest cp - odd higgs boson @xmath0 , such as its mass and couplings , are also limited tightly since @xmath0 plays an important role in @xmath107 annihilation . the phenomenology of the nmssm is also rather special , and this was discussed in detail in @xcite . in the type - ii 2hdm , l2hdm , nmssm and nmssm , the rare @xmath1-decays @xmath118 ( @xmath22 ) , @xmath3 and @xmath4 may proceed by the feynman diagrams shown in fig.[fig1 ] , fig.[fig2 ] and fig.[fig3 ] respectively . for these diagrams , the intermediate state @xmath119 represents all possible cp - even higgs bosons in the corresponding model , i.e. @xmath41 and @xmath42 in type - ii 2hdm and l2hdm and @xmath41 , @xmath42 and @xmath120 in nmssm and nmssm . in order to take into account the possible resonance effects of @xmath119 in fig.[fig1](c ) for @xmath2 and fig.[fig3 ] ( a ) for @xmath11 , we have calculated all the decay modes of @xmath119 and properly included the width effect in its propagator . as to the decay @xmath121 , two points should be noted . one is , unlike the decays @xmath6 and @xmath11 , this process proceeds only through loops mediated by quarks / leptons in the type - ii 2hdm and l2hdm , and additionally by sparticles in the nmssm and nmssm . so in most cases its rate should be much smaller than the other two . the other is due to cp - invariance , loops mediated by squarks / sleptons give no contribution to the decay@xcite . in actual calculation , this is reflected by the fact that the coupling coefficient of @xmath122 differs from that of @xmath123 by a minus sign ( see eq.([asqsq ] ) ) , and as a result , the squark - mediated contributions to @xmath121 are completely canceled out .    with regard to the rare decay @xmath11 , we have more explanations . in the lowest order , this decay proceeds by the diagram shown in fig.[fig3 ] ( a ) , and hence one may think that , as a rough estimate , it is enough to only consider the contributions from fig.[fig3](a ) . however , we note that in some cases of the type - ii 2hdm and l2hdm , due to the cancelation of the contributions from different @xmath119 in fig.[fig3 ] ( a ) and also due to the potentially largeness of @xmath124 couplings ( i.e. larger than the electroweak scale @xmath125 ) , the radiative correction from the higgs - mediated loops may dominate over the tree level contribution even when the tree level prediction of the rate , @xmath126 , exceeds @xmath20 . on the other hand , we find the contribution from quark / lepton - mediated loops can be safely neglected if @xmath127 in the type - ii 2hdm and the l2hdm . in the nmssm and the nmssm , besides the corrections from the higgs- and quark / lepton - mediated loops , loops involving sparticles such as squarks , charginos and neutralinos can also contribute to the decay . we numerically checked that the contributions from squarks and charginos can be safely neglected if @xmath127 . we also calculated part of potentially large neutralino correction ( note that there are totally about @xmath128 diagrams for such correction ! ) and found they can be neglected too . since considering all the radiative corrections will make our numerical calculation rather slow , we only include the most important correction , namely that from higgs - mediated loops , in presenting our results for the four models . one can intuitively understand the relative smallness of the sparticle contribution to @xmath11 as follows . first consider the squark contribution which is induced by the @xmath129 interaction ( @xmath130 denotes the squark in chirality state ) and the @xmath131 interaction through box diagrams . because the @xmath132 interaction conserves the chirality of the squarks while the @xmath133 interaction violates the chirality , to get non - zero contribution to @xmath11 from the squark loops , at least four chiral flippings are needed , with three of them provided by @xmath131 interaction and the rest provided by the left - right squark mixing . this means that , if one calculates the amplitude in the chirality basis with the mass insertion method , the amplitude is suppressed by the mixing factor @xmath134 with @xmath135 being the off diagonal element in squark mass matrix . next consider the chargino / neutralino contributions . since for a light @xmath0 , its doublet component , parameterized by @xmath84 in eq.([mixing ] ) , is usually small , the couplings of @xmath0 with the sparticles will never be tremendously large@xcite . so the chargino / neutralino contributions are not important too . in our calculation of the decays , we work in the mass eigenstates of sparticles instead of in the chirality basis . for the type - ii 2hdm and the l2hdm , we consider the following constraints @xcite :    * theoretical constraints on @xmath136 from perturbativity , unitarity and requirements that the scalar potential is finit at large field values and contains no flat directions @xcite , which imply that @xmath137 * the constraints from the lep search for neutral higgs bosons . we compute the signals from the higgs - strahlung production @xmath138 ( @xmath139 ) with @xmath140 @xcite and from the associated production @xmath141 with @xmath142 @xcite , and compare them with the corresponding lep data which have been inputted into our code . we also consider the constraints from @xmath138 by looking for a peak of @xmath143 recoil mass distribution of @xmath1-boson @xcite and the constraint of @xmath144 mev when @xmath145 @xcite . + these constraints limit the quantities such as @xmath146 \times br ( h_i \to \bar{b } b ) $ ] on the @xmath147 plane with the the subscript @xmath148 denoting the coupling coefficient of the @xmath149 interaction . they also impose a model - dependent lower bound on @xmath150 , e.g. , @xmath151 for the type - ii 2hdm ( from our scan results ) , @xmath152 for the l2hdm@xcite , and @xmath153 for the nmssm @xcite . these bounds are significantly lower than that of the sm , i.e. @xmath154 , partially because in new physics models , unconventional decay modes of @xmath155 such as @xmath156 are open up . as to the nmssm , another specific reason for allowing a significantly lighter cp - even higgs boson is that the boson may be singlet - dominated in this model . + with regard to the lightest cp - odd higgs boson @xmath0 , we checked that there is no lower bound on its mass so long as the @xmath157 interaction is weak or @xmath155 is sufficiently heavy . * the constraints from the lep search for a light higgs boson via the yukawa process @xmath158 with @xmath22 and @xmath61 denoting a scalar @xcite . these constraints can limit the @xmath159 coupling versus @xmath160 in new physics models . * the constraints from the cleo - iii limit on @xmath161 and the latest babar limits on @xmath162 . these constraints will put very tight constraints on the @xmath163 coupling for @xmath164 . in our analysis , we use the results of fig.8 in the second paper of @xcite to excluded the unfavored points . * the constraints from @xmath165 couplings . since the higgs sector can give sizable higher order corrections to @xmath165 couplings , we calculate them to one loop level and require the corrected @xmath165 couplings to lie within the @xmath166 range of their fitted value . the sm predictions for the couplings at @xmath1-pole are given by @xmath167 and @xmath168 @xcite , and the fitted values are given by @xmath169 and @xmath170 , respectively@xcite . we adopt the formula in @xcite to the 2hdm in our calculation . * the constraints from @xmath171 leptonic decay . we require the new physics correction to the branching ratio @xmath172 to be in the range of @xmath173 @xcite . we use the formula in @xcite in our calculation . + about the constraints ( 5 ) and ( 6 ) , two points should be noted . one is all higgs bosons are involved in the constraints by entering the self energy of @xmath171 lepton , the @xmath174 vertex correction or the @xmath175 vertex correction , and also the box diagrams for @xmath176@xcite . since the yukawa couplings of the higgs bosons to @xmath171 lepton get enhanced by @xmath54 and so do the corrections , @xmath54 must be upper bounded for given spectrum of the higgs sector . generally speaking , the lighter @xmath0 is , the more tightly @xmath54 is limited@xcite . the other point is in the type - ii 2hdm , @xmath177 , b - physics observables as well as @xmath178 decays discussed above can constraint the model in a tighter way than the constraints ( 5 ) and ( 6 ) since the yukawa couplings of @xmath171 lepton and @xmath179 quark are simultaneously enhanced by @xmath54 . but for the l2hdm , because only the yukawa couplings of @xmath171 lepton get enhanced ( see eq.[yukawa ] ) , the constraints ( 5 ) and ( 6 ) are more important in limiting @xmath54 . * indirect constraints from the precision electroweak observables such as @xmath180 , @xmath181 and @xmath182 , or their combinations @xmath183 @xcite . we require @xmath184 to be compatible with the lep / sld data at @xmath185 confidence level@xcite . we also require new physics prediction of @xmath186 is within the @xmath187 range of its experimental value . the latest results for @xmath188 are @xmath189 ( measured value ) and @xmath190 ( sm prediction ) for @xmath191 gev @xcite . in our code , we adopt the formula for these observables presented in @xcite to the type - ii 2hdm and the l2hdm respectively . + in calculating @xmath180 , @xmath181 and @xmath182 , we note that these observables get dominant contributions from the self energies of the gauge bosons @xmath1 , @xmath192 and @xmath193 . since there is no @xmath194 coupling or @xmath195 coupling , @xmath0 must be associated with the other higgs bosons to contribute to the self energies . so by the uv convergence of these quantities , one can infer that , for the case of a light @xmath0 and @xmath196 , these quantities depend on the spectrum of the higgs sector in a way like @xmath197 at leading order , which implies that a light @xmath0 can still survive the constraints from the precision electroweak observables given the splitting between @xmath150 and @xmath198 is moderate@xcite . * the constraints from b physics observables such as the branching ratios for @xmath199 , @xmath200 and @xmath201 , and the mass differences @xmath202 and @xmath203 . we require their theoretical predications to agree with the corresponding experimental values at @xmath187 level . + in the type - ii 2hdm and the l2hdm , only the charged higgs boson contributes to these observables by loops , so one can expect that @xmath198 versus @xmath54 is to be limited . combined analysis of the limits in the type - ii 2hdm has been done by the ckmfitter group , and the lower bound of @xmath204 as a function of @xmath87 was given in fig.11 of @xcite . this analysis indicates that @xmath198 must be heavier than @xmath205 at @xmath185 c.l . regardless the value of @xmath54 . in this work , we use the results of fig.11 in @xcite to exclude the unfavored points . as for the l2hdm , b physics actually can not put any constraints@xcite because in this model the couplings of the charged higgs boson to quarks are proportional to @xmath206 and in the case of large @xmath54 which we are interested in , they are suppressed . in our analysis of the l2hdm , we impose the lep bound on @xmath198 , i.e. @xmath207@xcite . * the constraints from the muon anomalous magnetic moment @xmath208 . now both the theoretical prediction and the experimental measured value of @xmath208 have reached a remarkable precision , but a significant deviation still exists : @xmath209 @xcite . in the 2hdm , @xmath208 gets additional contributions from the one - loop diagrams induced by the higgs bosons and also from the two - loop barr - zee diagrams mediated by @xmath0 and @xmath155@xcite . if the higgs bosons are much heavier than @xmath25 lepton mass , the contributions from the barr - zee diagrams are more important , and to efficiently alleviate the discrepancy of @xmath208 , one needs a light @xmath0 along with its enhanced couplings to @xmath25 lepton and also to heavy fermions such as bottom quark and @xmath171 lepton to push up the effects of the barr - zee diagram@xcite . the cp - even higgs bosons are usually preferred to be heavy since their contributions to @xmath208 are negative . + in the type - ii 2hdm , because @xmath54 is tightly constrained by the process @xmath210 at the lep@xcite and the @xmath178 decay@xcite , the barr - zee diagram contribution is insufficient to enhance @xmath208 to @xmath187 range around its measured value@xcite . so in our analysis , we require the type - ii 2hdm to explain @xmath208 at @xmath211 level . while for the l2hdm , @xmath54 is less constrained compared with the type - ii 2hdm , and the barr - zee diagram involving the @xmath171-loop is capable to push up greatly the theoretical prediction of @xmath208@xcite . therefore , we require the l2hdm to explain the discrepancy at @xmath187 level . + unlike the other constraints discussed above , the @xmath208 constraint will put a two - sided bound on @xmath54 since on the one hand , it needs a large @xmath54 to enhance the barr - zee contribution , but on the other hand , too large @xmath54 will result in an unacceptable large @xmath208 . * since this paper concentrates on a light @xmath0 , the decay @xmath212 is open up with a possible large decay width . we require the width of any higgs boson to be smaller than its mass to avoid a too fat higgs boson@xcite . we checked that for the scenario characterized by @xmath213 , the coefficient of @xmath214 interaction is usually larger than the electroweak scale @xmath125 , and consequently a large decay width is resulted . for the nmssm and nmssm , the above constraints become more complicated because in these models , not only more higgs bosons are involved in , but also sparticles enter the constraints . so it is not easy to understand some of the constraints intuitively . take the process @xmath199 as an example . in the supersymmetric models , besides the charged higgs contribution , chargino loops , gluino loops as well as neutralino loops also contribute to the process@xcite , and depending on the susy parameters , any of these contributions may become dominated over or be canceled by other contributions . as a result , although the charged higgs affects the process in the same way as that in the type - ii 2hdm , charged higgs as light as @xmath215 is still allowed even for @xmath216@xcite .    since among the constraints , @xmath208 is rather peculiar in that it needs new physics to explain the discrepancy between @xmath217 and @xmath218 , we discuss more about its dependence on susy parameters . in the nmssm and the nmssm , @xmath208 receives contributions from higgs loops and neutralino / chargino loops . for the higgs contribution , it is quite similar to that of the type - ii 2hdm except that more higgs bosons are involved in@xcite . for the neutralino / chargino contribution , in the light bino limit ( i.e. @xmath219 ) , it can be approximated by@xcite @xmath220 for @xmath221 with @xmath222 being smuon mass . so combining the two contributions together , one can learn that a light @xmath0 along with large @xmath54 and/or light smuon with moderate @xmath87 are favored to dilute the discrepancy .    because more parameters are involved in the constraints on the supersymmetric models , we consider following additional constraints to further limit their parameters :    * direct bounds on sparticle masses from the lep1 , the lep2 and the tevatron experiments @xcite . * the lep1 bound on invisible z decay @xmath223 ; the lep2 bound on neutralino production @xmath224 and @xmath225@xcite . * dark matter constraints from the wmap relic density 0.0975 @xmath226 0.1213 @xcite . note that among the above constraints , the constraint ( 2 ) on higgs sector and the constraint ( c ) on neutralino sector are very important . this is because in the supersymmetric models , the sm - like higgs is upper bounded by about @xmath227 at tree level and by about @xmath228 at loop level , and that the relic density restricts the lsp annihilation cross section in a certain narrow range .    in our analysis of the nmssm , we calculate the constraints ( 3 ) and ( 5 - 7 ) by ourselves and utilize the code nmssmtools @xcite to implement the rest constraints . we also extend nmssmtools to the nmssm to implement the constraints . for the extension , the most difficult thing we faced is how to adapt the code micromegas@xcite to the nmssm case . we solve this problem by noting the following facts :    * as we mentioned before , the nmssm is actually same as the nmssm with the trilinear singlet term setting to zero . so we can utilize the model file of the nmssm as the input of the micromegas and set @xmath229 . * since in the nmssm , the lsp is too light to annihilate into higgs pairs , there is no need to reconstruct the effective higgs potential to calculate precisely the annihilation channel @xmath230 with @xmath61 denoting any of higgs bosons@xcite . we thank the authors of the nmssmtools for helpful discussion on this issue when we finish such extension@xcite . with the above constraints , we perform four independent random scans over the parameter space of the type - ii 2hdm , the l2hdm , the nmssm and the nmssm respectively . we vary the parameters in following ranges : @xmath231 for the type - ii 2hdm , @xmath232 for the l2hdm , @xmath233 for the nmssm , and @xmath234 for the nmssm .    in performing the scans , we note that for the nmssm and the nmssm , some constraints also rely on the gaugino masses and the soft breaking parameters in the squark sector and the slepton sector . since these parameters affect little on the properties of @xmath0 , we fix them to reduce the number of free parameters in our scan . for the squark sector , we adopt the @xmath235 scenario which assumes that the soft mass parameters for the third generation squarks are degenerate : @xmath236 800 gev , and that the trilinear couplings of the third generation squarks are also degenerate , @xmath237 with @xmath238 . for the slepton sector , we assume all the soft - breaking masses and trilinear parameters to be 100 gev . this setting is necessary for the nmssm since this model is difficult to explain the muon anomalous moment at @xmath239 level for heavy sleptons@xcite . finally , we assume the grand unification relation @xmath240 for the gaugino masses with @xmath241 being fine structure constants of the different gauge group .    with large number of random points in the scans , we finally get about @xmath242 , @xmath243 , @xmath244 and @xmath242 samples for the type - ii 2hdm , the l2hdm , the nmssm and the nmssm respectively which survive the constraints and satisfy @xmath245 . analyzing the properties of the @xmath0 indicates that for most of the surviving points in the nmssm and the nmssm , its dominant component is the singlet field ( numerically speaking , @xmath246 ) so that its couplings to the sm fermions are suppressed@xcite . our analysis also indicates that the main decay products of @xmath0 are @xmath247 for the l2hdm@xcite , @xmath248 ( dominant ) and @xmath247 ( subdominant ) for the type - ii 2hdm , the nmssm and the nmssm , and in some rare cases , neutralino pairs in the nmssm@xcite .    in fig.[fig4 ] , we project the surviving samples on the @xmath249 plane . this figure shows that the allowed range of @xmath54 is from @xmath250 to @xmath251 in the type - ii 2hdm , and from @xmath252 to @xmath253 in the l2hdm . just as we introduced before , the lower bounds of @xmath254 come from the fact that we require the models to explain the muon anomalous moment , while the upper bound is due to we have imposed the constraint from the lep process @xmath255 , which have limited the upper reach of the @xmath256 coupling for light @xmath61 @xcite(for the dependence of @xmath256 coupling on @xmath54 , see sec . this figure also indicates that for the nmssm and the nmssm , @xmath54 is upper bounded by @xmath257 . for the nmssm , this is because large @xmath87 can suppress the dark matter mass to make its annihilation difficult ( see @xcite and also sec . ii ) , but for the nmssm , this is because we choose a light slepton mass so that large @xmath54 can enhance @xmath208 too significantly to be experimentally unacceptable . we checked that for the slepton mass as heavy as @xmath258 , @xmath259 is still allowed for the nmssm .    in fig.[fig5 ] and fig.[fig6 ] , we show the branching ratios of @xmath260 and @xmath261 respectively . fig.[fig5 ] indicates , among the four models , the type - ii 2hdm predicts the largest ratio for @xmath260 with its value varying from @xmath262 to @xmath263 . the underlying reason is in the type - ii 2hdm , the @xmath264 coupling is enhanced by @xmath54 ( see fig.[fig4 ] ) , while in the other three model , the coupling is suppressed either by @xmath265 or by the singlet component of the @xmath0 . fig.[fig6 ] shows that the l2hdm predicts the largest rate for @xmath266 with its value reaching @xmath5 in optimum case , and for the other three models , the ratio of @xmath261 is at least about one order smaller than that of @xmath267 . this feature can be easily understood from the @xmath268 coupling introduced in sect . we emphasize that , if the nature prefers a light @xmath0 , @xmath260 and/or @xmath269 in the type - ii 2hdm and the l2hdm will be observable at the gigaz . then by the rates of the two decays , one can determine whether the type - ii 2hdm or the l2hdm is the right theory . on the other hand , if both decays are observed with small rates or fail to be observed , the singlet extensions of the mssm are favored .    in fig.[fig7 ] , we show the rate of @xmath3 as the function of @xmath270 . this figure indicates that the branching ratio of @xmath121 can reach @xmath271 , @xmath272 , @xmath273 and @xmath274 for the optimal cases of the type - ii 2hdm , the l2hdm , the nmssm and the nmssm respectively , which implies that the decay @xmath121 will never be observable at the gigaz if the studied model is chosen by nature . the reason for the smallness is , as we pointed out before , that the decay @xmath121 proceeds only at loop level . comparing the optimum cases of the type - ii 2hdm , the nmssm and the nmssm shown in fig.5 - 7 , one may find that the relation @xmath275 holds for any of the decays . this is because the decays are all induced by the yukawa couplings with similar structure for the models . in the supersymmetric models , the large singlet component of the light @xmath0 is to suppress the yukawa couplings , and the @xmath0 in the nmssm has more singlet component than that in the nmssm . next we consider the decay @xmath11 , which , unlike the above decays , depends on the higgs self interactions . in fig.[fig8 ] we plot its rate as a function of @xmath270 and this figure indicates that the @xmath276 may be the largest among the ratios of the exotic @xmath1 decays , reaching @xmath277 in the optimum cases of the type - ii 2hdm , the l2hdm and the nmssm . the underlying reason is , in some cases , the intermediate state @xmath119 in fig.[fig3 ] ( a ) may be on - shell . in fact , we find this is one of the main differences between the nmssm and the nmssm , that is , in the nmssm , @xmath119 in fig.[fig3 ] ( a ) may be on - shell ( corresponds to the points with large @xmath278 ) while in the nmssm , this seems impossible . so we conclude that the decay @xmath11 may serve as an alternative channel to test new physics models , especially it may be used to distinguish the nmssm from the nmssm if the supersymmetry is found at the lhc and the @xmath11 is observed at the gigaz with large rate . before we end our discussion , we note that in the nmssm , the higgs boson @xmath0 may be lighter than @xmath279 without conflicting with low energy data from @xmath178 decays and the other observables ( see fig.[fig4]-[fig8 ] ) . in this case , @xmath0 is axion - like as pointed out in @xcite . we checked that , among the rare @xmath1 decays discussed in this paper , the largest branching ratio comes from @xmath280 which can reach @xmath281 . since in this case , the decay product of @xmath0 is highly collinear muon pair , detecting the decay @xmath280 may need some knowledge about detectors , which is beyond our discussion . in this paper , we studied the rare @xmath1-decays @xmath2 ( @xmath7 ) , @xmath282 and @xmath4 in the type - ii 2hdm , lepton - specific 2hdm , nmssm and nmssm , which predict a light cp - odd higgs boson @xmath0 . in the parameter space allowed by current experiments , the branching ratio can be as large as @xmath5 for @xmath118 , @xmath8 for @xmath3 and @xmath9 for @xmath4 , which implies that the decays @xmath2 and @xmath283 may be accessible at the gigaz option . since different models predict different size of branching ratios , these decays can be used to distinguish different model through the measurement of these rare decays . this work was supported in part by hastit under grant no . 2009hastit004 , by the national natural science foundation of china ( nnsfc ) under grant nos . 10821504 , 10725526 , 10635030 , 10775039 , 11075045 and by the project of knowledge innovation program ( pkip ) of chinese academy of sciences under grant no . .        for some reviews , see , e.g. , m.  a.  perez , g.  tavares - velasco and j.  j.  toscano , int . j.  mod . a * 19 * , 159 ( 2004 ) ; j. m. yang , arxiv:1006.2594 . j.  i.  illana , m.  masip , 67 , 035004 ( 2003 ) ; j. cao , z. xiong , j. m. yang , 32 , 245 ( 2004 ) . d. atwood _ et al_. , 66 , 093005 ( 2002 ) . j. kalinowski , and s. pokorski , 219 , 116 ( 1989 ) ; a. djouadi , p. m. zerwas and j. zunft , 259 , 175 ( 1991 ) ; a. djouadi , j. kalinowski , and p. m. zerwas , z. phys . c * 54 * , 255 ( 1992 ) . m. krawczyk , _ et al . _ , 19 , 463 ( 2001 ) ; 8 , 495 ( 1999 ) . j. f. gunion , g. gamberini and s. f. novaes , 38 , 3481 ( 1988 ) ; thomas j. weiler and tzu - chiang yuan , 318 , 337 ( 1989 ) ; a. djouadi , _ et al . _ , 1 , 163 ( 1998)[hep - ph/9701342 ] . d.  chang and w.  y.  keung , phys . lett .  * 77 * , 3732 ( 1996 ) . e.  keith and e.  ma , 57 , 2017 ( 1998 ) ; m.  a.  perez , g.  tavares - velasco and j.  j. toscano , int . j.  mod.phys . a * 19 * , 159 ( 2004 ) . f.  larios , g.  tavares - velasco and c. p.  yuan , 64 , 055004 ( 2001 ) ; 66 , 075006 ( 2002 ) . a. djouadi , _ et al . _ , 10 , 27 ( 1999 ) [ hep - ph/9903229 ] . for a detailed introduction of the nmssm , see f.  franke and h. fraas , int . j.  mod . a * 12 * ( 1997 ) 479 ; for a recent review of the nmssm , see for example , u. ellwanger , c. hugonie , and a. m. teixeira , arxiv : 0910.1785 . see , e.g. , j.  r.  ellis , j.  f.  gunion , h.  e.  haber , l.  roszkowski and f.  zwirner , phys .  rev . d * 39 * ( 1989 ) 844 ; m.  drees , int . j.  mod . phys .  a * 4 * ( 1989 ) 3635 ; u.  ellwanger , m.  rausch de traubenberg and c.  a.  savoy , phys . b * 315 * ( 1993 ) 331 ; nucl . b * 492 * ( 1997 ) 21 ; d.j . miller , r. nevzorov , p.m. zerwas , 681 , 3 ( 2004 ) .    c.  panagiotakopoulos , k.  tamvakis , 446 , 224 ( 1999 ) ; 469 , 145 ( 1999 ) ; c. panagiotakopoulos , a. pilaftsis , 63 , 055003 ( 2001 ) ; a.  dedes , _ et al . _ , 63 , 055009 ( 2001 ) ; a.  menon , _ et al . _ , 70 , 035005 ( 2004 ) ; v.  barger , _ et al . _ , 630 , 85 ( 2005 ) . c.  balazs , _ et al . _ , 0706 , 066 ( 2007 ) . b. a. dobrescu , k. t. matchev , 0009 , 031 ( 2000 ) ; a. arhrib , k. cheung , t. j. hou , k. w. song , hep - ph/0611211 ; 0703 , 073 ( 2007 ) ; x. g. he , j. tandean , and g. valencia , 98 , 081802 ( 2007 ) ; 0806 , 002 ( 2008 ) ; f. domingo _ et al_. , 0901 , 061 ( 2009 ) ; gudrun hiller , 70 , 034018 ( 2004 ) ; r. dermisek , and john f. gunion , 75 , 075019 ( 2007 ) ; 79 , 055014 ( 2009 ) ; 81 , 055001 ( 2010 ) ; r. dermisek , john f. gunion , and b. mcelrath , 76 , 051105 ( 2007 ) ; z. heng , _ et al_. , 77 , 095012 ( 2008 ) ; a. belyaev _ et al_. , 81 , 075021 ( 2010 ) ; d. das and u.  ellwanger , arxiv:1007.1151 [ hep - ph ] . s.  andreas , o.  lebedev , s.  ramos - sanchez and a.  ringwald , arxiv:1005.3978 [ hep - ph ] . j.  f.  gunion , jhep * 0908 * , 032 ( 2009 ) ; r. dermisek and j.  f.  gunion , phys .  rev . d * 81 * , 075003 ( 2010 ) . r.  dermisek and j.  f. gunion , phys . lett .   * 95 * , 041801 ( 2005 ) ; phys . d * 73 * , 111701 ( 2006 ) . j. cao , h. e. logan , j. m. yang , 79 , 091701 ( 2009 ) . j. cao , p. wan , l. wu , j. m. yang , 80 , 071701 ( 2009 ) . j. f. gunion and h. e. haber , 67 , 075019 ( 2003 ) . r.  m.  barnett , _ et al . _ , phys . b * 136 * , 191 ( 1984 ) ; r.  m.  barnett , g.  senjanovic and d.  wyler , phys . d * 30 * , 1529 ( 1984 ) ; y.  grossman , nucl . b * 426 * , 355 ( 1994 ) . h.  s.  goh , l.  j.  hall and p. kumar , jhep * 0905 * , 097 ( 2009 ) ; a.  g. akeroyd and w.  j.  stirling , nucl . b * 447 * , 3 ( 1995 ) ; a.  g.  akeroyd , phys . b * 377 * , 95 ( 1996 ) ; h.  e.  logan and d.  maclennan , phys .  rev . d * 79 * , 115022 ( 2009 ) ; m. aoki , _ et al . _ , arxiv:0902.4665 [ hep - ph ] . v.  barger , p.  langacker , h.  s.  lee and g. shaughnessy , phys . d * 73 * , 115010 ( 2006 ) . s. hesselbach , _ et . _ , arxiv:0810.0511v2 [ hep - ph ] . de vivie and p.  janot [ aleph collaboration ] , pa13 - 027 contribution to the international conference on high energy physics , warsaw , poland , 2531 july 1996 ; j. kurowska , o.  grajek and p.  zalewski [ delphi collaboration ] , cern - open-99 - 385 . [ aleph collaboration and delphi collaboration and l3 collaboration ] , phys . rept .   * 427 * , 257 ( 2006 ) . j.  cao and j.  m.  yang , jhep * 0812 * , 006 ( 2008 ) . m.  krawczyk and d.  temes , eur . j.   c * 44 * , 435 ( 2005 ) . g.  altarelli and r.  barbieri , 253 , 161 ( 1991 ) ; m. e. peskin , t. takeuchi , 46 , 381 ( 1992 ) . c. amsler , _ et al . _ , ( particle data group ) , 667 , 1 ( 2008 ) . o. deschamps , s.  descotes - genon , s.  monteil , v.  niess , s.  tjampens and v.  tisserand , arxiv:0907.5135 [ hep - ph ] . s.  su and b. thomas , phys . d * 79 * , 095014 ( 2009 ) . g. abbiendi , _ et al . _ , eur .  phys . j.   c * 32 * , 453 ( 2004 ) . m.  davier , _ et al . _ , 66 , 1 ( 2010 ) . k.  cheung , _ et al . _ , phys . d * 64 * , 111301 ( 2001 ) . k.  cheung and o.  c.  w. kong , phys . d * 68 * , 053003 ( 2003 ) . t. besmer , c. greub , t.hurth , 609 , 359 ( 2001 ) ; f. borzumati , _ et al . _ , 62 , 075005(2000 ) . j.  cao , k.  i.  hikasa , w.  wang , j.  m.  yang and l.  x.  yu , phys . d * 82 * , 051701 ( 2010 ) [ arxiv:1006.4811 [ hep - ph ] ] . j.  f.  gunion , _ et . d * 73 * , 015011 ( 2006 ) . martin and j.  d.  wells , phys . d * 64 * , 035003 ( 2001 ) . j.  abdallah _ et al . _ , eur . j.   c * 31 * , 421 ( 2004 ) ; g.  abbiendi _ et al . _ , eur . j. c * 35 * , 1 ( 2004 ) . j.  dunkley _ et al . _ [ wmap collaboration ] , astrophys . j.  suppl . * 180 * , 306 ( 2009 ) [ arxiv:0803.0586 [ astro - ph ] ] . u. ellwanger _ et al . _ , 02 , 066 ( 2005 ) . g.  belanger , f.  boudjema , a.  pukhov and a.  semenov , comput . commun .   * 174 * , 577 ( 2006 ) ; comput . phys .  commun . * 176 * , 367 ( 2007 ) . g.  belanger , f.  boudjema , c. hugonie , a.  pukhov and a.  semenov , jcap * 0509 * , 001 ( 2005 ) ."""
@@ -588,7 +663,9 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         )
 
         generated = tokenizer.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
+            hypotheses_batch.tolist(),
+            clean_up_tokenization_spaces=True,
+            skip_special_tokens=True,
         )
 
         self.assertTrue(generated == [EXPECTED_LEP, EXPECTED_MAGNET])
@@ -660,15 +737,21 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         self.num_random_blocks = num_random_blocks
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], vocab_size=2
+            )
 
         lm_labels = None
         if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+            lm_labels = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], self.vocab_size
+            )
 
         config = BigBirdPegasusConfig(
             vocab_size=self.vocab_size,
@@ -723,15 +806,21 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-3
+        )
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
@@ -749,36 +838,51 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)[
+            "past_key_values"
+        ]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, 1), config.vocab_size
+        ).squeeze(-1)
         input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
 
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.ones(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
         # big bird has extremely high logits which requires
         # such a high error tolerance here
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=5e-1)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=5e-1
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -789,15 +893,23 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 
 
 @require_torch
-class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
+class BigBirdPegasusStandaloneDecoderModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM)
+        if is_torch_available()
+        else ()
+    )
     test_pruning = False
     is_encoder_decoder = False
 
     def setUp(
         self,
     ):
-        self.model_tester = BigBirdPegasusStandaloneDecoderModelTester(self, is_training=False)
+        self.model_tester = BigBirdPegasusStandaloneDecoderModelTester(
+            self, is_training=False
+        )
         self.config_tester = ConfigTester(self, config_class=BigBirdPegasusConfig)
 
     def test_config(self):
@@ -809,7 +921,9 @@ class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTeste
 
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     @unittest.skip("Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):

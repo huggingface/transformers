@@ -34,7 +34,12 @@ from huggingface_hub import hf_hub_download
 from torch import Tensor
 from vissl.models.model_helpers import get_trunk_forward_outputs
 
-from transformers import AutoImageProcessor, RegNetConfig, RegNetForImageClassification, RegNetModel
+from transformers import (
+    AutoImageProcessor,
+    RegNetConfig,
+    RegNetForImageClassification,
+    RegNetModel,
+)
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import logging
 
@@ -51,14 +56,20 @@ class Tracker:
     name2module: Dict[str, nn.Module] = field(default_factory=OrderedDict)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor, name: str):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        has_not_submodules = (
+            len(list(m.modules())) == 1
+            or isinstance(m, nn.Conv2d)
+            or isinstance(m, nn.BatchNorm2d)
+        )
         if has_not_submodules:
             self.traced.append(m)
             self.name2module[name] = m
 
     def __call__(self, x: Tensor):
         for name, m in self.module.named_modules():
-            self.handles.append(m.register_forward_hook(partial(self._forward_hook, name=name)))
+            self.handles.append(
+                m.register_forward_hook(partial(self._forward_hook, name=name))
+            )
         self.module(x)
         [x.remove() for x in self.handles]
         return self
@@ -66,7 +77,11 @@ class Tracker:
     @property
     def parametrized(self):
         # check the len of the state_dict keys to see if we have learnable params
-        return {k: v for k, v in self.name2module.items() if len(list(v.state_dict().keys())) > 0}
+        return {
+            k: v
+            for k, v in self.name2module.items()
+            if len(list(v.state_dict().keys())) > 0
+        }
 
 
 class FakeRegNetVisslWrapper(nn.Module):
@@ -103,7 +118,12 @@ class FakeRegNetParams(RegNetParams):
     """
 
     def get_expanded_params(self):
-        return [(8, 2, 2, 8, 1.0), (8, 2, 7, 8, 1.0), (8, 2, 17, 8, 1.0), (8, 2, 1, 8, 1.0)]
+        return [
+            (8, 2, 2, 8, 1.0),
+            (8, 2, 7, 8, 1.0),
+            (8, 2, 17, 8, 1.0),
+            (8, 2, 1, 8, 1.0),
+        ]
 
 
 def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
@@ -112,14 +132,18 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
     """
 
     # create our model (with small weights)
-    our_config = RegNetConfig(depths=[2, 7, 17, 1], hidden_sizes=[8, 8, 8, 8], groups_width=8)
+    our_config = RegNetConfig(
+        depths=[2, 7, 17, 1], hidden_sizes=[8, 8, 8, 8], groups_width=8
+    )
     if "in1k" in model_name:
         our_model = RegNetForImageClassification(our_config)
     else:
         our_model = RegNetModel(our_config)
     # create from model (with small weights)
     from_model = FakeRegNetVisslWrapper(
-        RegNet(FakeRegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52))
+        RegNet(
+            FakeRegNetParams(depth=27, group_width=1010, w_0=1744, w_a=620.83, w_m=2.52)
+        )
     )
 
     with torch.no_grad():
@@ -148,7 +172,9 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
     src_state_dict = to_params_dict(src_traced)
     dst_state_dict = to_params_dict(dest_traced)
 
-    for (src_key, src_param), (dest_key, dest_param) in zip(src_state_dict.items(), dst_state_dict.items()):
+    for (src_key, src_param), (dest_key, dest_param) in zip(
+        src_state_dict.items(), dst_state_dict.items()
+    ):
         from_to_ours_keys[src_key] = dest_key
         logger.info(f"{src_key} -> {dest_key}")
     # if "in1k" was in the model_name it means it must have a classification head (was finetuned)
@@ -159,33 +185,45 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
     return from_to_ours_keys
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
+def convert_weights_and_push(
+    save_directory: Path, model_name: str = None, push_to_hub: bool = True
+):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
     num_labels = num_labels
-    id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
+    id2label = json.loads(
+        Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text()
+    )
     id2label = {int(k): v for k, v in id2label.items()}
 
     id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
-    ImageNetPreTrainedConfig = partial(RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
+    ImageNetPreTrainedConfig = partial(
+        RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id
+    )
 
     names_to_config = {
         "regnet-y-10b-seer": ImageNetPreTrainedConfig(
-            depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
+            depths=[2, 7, 17, 1],
+            hidden_sizes=[2020, 4040, 11110, 28280],
+            groups_width=1010,
         ),
         # finetuned on imagenet
         "regnet-y-10b-seer-in1k": ImageNetPreTrainedConfig(
-            depths=[2, 7, 17, 1], hidden_sizes=[2020, 4040, 11110, 28280], groups_width=1010
+            depths=[2, 7, 17, 1],
+            hidden_sizes=[2020, 4040, 11110, 28280],
+            groups_width=1010,
         ),
     }
 
     # add seer weights logic
     def load_using_classy_vision(checkpoint_url: str) -> Tuple[Dict, Dict]:
-        files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
+        files = torch.hub.load_state_dict_from_url(
+            checkpoint_url, model_dir=str(save_directory), map_location="cpu"
+        )
         # check if we have a head, if yes add it
         model_state_dict = files["classy_state_dict"]["base_model"]["model"]
         return model_state_dict["trunk"], model_state_dict["heads"]
@@ -226,7 +264,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
             converted_state_dict[dest_key] = from_state_dict[key]
             not_used_keys.remove(key)
         # check that all keys have been updated
-        assert len(not_used_keys) == 0, f"Some keys where not used {','.join(not_used_keys)}"
+        assert (
+            len(not_used_keys) == 0
+        ), f"Some keys where not used {','.join(not_used_keys)}"
 
         logger.info(f"The following keys were not used: {','.join(not_used_keys)}")
 
@@ -262,7 +302,9 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
         )
         size = 384
         # we can use the convnext one
-        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
+        image_processor = AutoImageProcessor.from_pretrained(
+            "facebook/convnext-base-224-22k-1k", size=size
+        )
         image_processor.push_to_hub(
             repo_path_or_name=save_directory / model_name,
             commit_message="Add image processor",
@@ -301,4 +343,6 @@ if __name__ == "__main__":
 
     pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
     pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
-    convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_weights_and_push(
+        pytorch_dump_folder_path, args.model_name, args.push_to_hub
+    )

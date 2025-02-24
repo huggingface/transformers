@@ -9,11 +9,19 @@ from .utils import cached_file, http_user_agent, logging
 logger = logging.get_logger(__name__)
 
 
-def previous_pr(api: HfApi, model_id: str, pr_title: str, token: str) -> Optional["Discussion"]:
+def previous_pr(
+    api: HfApi, model_id: str, pr_title: str, token: str
+) -> Optional["Discussion"]:
     main_commit = api.list_repo_commits(model_id, token=token)[0].commit_id
     for discussion in get_repo_discussions(repo_id=model_id, token=token):
-        if discussion.title == pr_title and discussion.status == "open" and discussion.is_pull_request:
-            commits = api.list_repo_commits(model_id, revision=discussion.git_reference, token=token)
+        if (
+            discussion.title == pr_title
+            and discussion.status == "open"
+            and discussion.is_pull_request
+        ):
+            commits = api.list_repo_commits(
+                model_id, revision=discussion.git_reference, token=token
+            )
 
             if main_commit == commits[1].commit_id:
                 return discussion
@@ -78,10 +86,19 @@ def get_conversion_pr_reference(api: HfApi, model_id: str, **kwargs):
     return sha
 
 
-def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_conversion=False, **cached_file_kwargs):
+def auto_conversion(
+    pretrained_model_name_or_path: str,
+    ignore_errors_during_conversion=False,
+    **cached_file_kwargs,
+):
     try:
-        api = HfApi(token=cached_file_kwargs.get("token"), headers={"user-agent": http_user_agent()})
-        sha = get_conversion_pr_reference(api, pretrained_model_name_or_path, **cached_file_kwargs)
+        api = HfApi(
+            token=cached_file_kwargs.get("token"),
+            headers={"user-agent": http_user_agent()},
+        )
+        sha = get_conversion_pr_reference(
+            api, pretrained_model_name_or_path, **cached_file_kwargs
+        )
 
         if sha is None:
             return None, None
@@ -98,7 +115,9 @@ def auto_conversion(pretrained_model_name_or_path: str, ignore_errors_during_con
         )
         filename = "model.safetensors.index.json" if sharded else "model.safetensors"
 
-        resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
+        resolved_archive_file = cached_file(
+            pretrained_model_name_or_path, filename, **cached_file_kwargs
+        )
         return resolved_archive_file, sha, sharded
     except Exception as e:
         if not ignore_errors_during_conversion:

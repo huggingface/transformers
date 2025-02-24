@@ -5,7 +5,12 @@ import imageio
 import torch
 import torchvision
 import wandb
-from img_processing import custom_to_pil, loop_post_process, preprocess, preprocess_vqgan
+from img_processing import (
+    custom_to_pil,
+    loop_post_process,
+    preprocess,
+    preprocess_vqgan,
+)
 from loaders import load_vqgan
 from PIL import Image
 from torch import nn
@@ -21,12 +26,16 @@ class ProcessorGradientFlow:
     We call the original processor to get the text embeddings, but use our own image processing to keep images as torch tensors.
     """
 
-    def __init__(self, device: str = "cpu", clip_model: str = "openai/clip-vit-large-patch14") -> None:
+    def __init__(
+        self, device: str = "cpu", clip_model: str = "openai/clip-vit-large-patch14"
+    ) -> None:
         self.device = device
         self.tokenizer = CLIPTokenizerFast.from_pretrained(clip_model)
         self.image_mean = [0.48145466, 0.4578275, 0.40821073]
         self.image_std = [0.26862954, 0.26130258, 0.27577711]
-        self.normalize = torchvision.transforms.Normalize(self.image_mean, self.image_std)
+        self.normalize = torchvision.transforms.Normalize(
+            self.image_mean, self.image_std
+        )
         self.resize = torchvision.transforms.Resize(224)
         self.center_crop = torchvision.transforms.CenterCrop(224)
 
@@ -71,7 +80,9 @@ class VQGAN_CLIP(nn.Module):
         if vqgan:
             self.vqgan = vqgan
         else:
-            self.vqgan = load_vqgan(self.device, conf_path=vqgan_config, ckpt_path=vqgan_checkpoint)
+            self.vqgan = load_vqgan(
+                self.device, conf_path=vqgan_config, ckpt_path=vqgan_checkpoint
+            )
         self.vqgan.eval()
         if clip:
             self.clip = clip
@@ -88,7 +99,9 @@ class VQGAN_CLIP(nn.Module):
         self.quantize = quantize
         self.latent_dim = self.vqgan.decoder.z_shape
 
-    def make_animation(self, input_path=None, output_path=None, total_duration=5, extend_frames=True):
+    def make_animation(
+        self, input_path=None, output_path=None, total_duration=5, extend_frames=True
+    ):
         """
         Make an animation from the intermediate images saved during generation.
         By default, uses the images from the most recent generation created by the generate function.
@@ -106,7 +119,9 @@ class VQGAN_CLIP(nn.Module):
                 " function?)"
             )
         if len(paths) == 1:
-            print("Only one image found in save path, (did you pass save_intermediate=True to the generate function?)")
+            print(
+                "Only one image found in save path, (did you pass save_intermediate=True to the generate function?)"
+            )
         frame_duration = total_duration / len(paths)
         durations = [frame_duration] * len(paths)
         if extend_frames:
@@ -139,7 +154,9 @@ class VQGAN_CLIP(nn.Module):
         return self.vqgan.decode(z_q)
 
     def _get_clip_similarity(self, prompts, image, weights=None):
-        clip_inputs = self.clip_preprocessor(text=prompts, images=image, return_tensors="pt", padding=True)
+        clip_inputs = self.clip_preprocessor(
+            text=prompts, images=image, return_tensors="pt", padding=True
+        )
         clip_outputs = self.clip(**clip_inputs)
         similarity_logits = clip_outputs.logits_per_image
         if weights is not None:
@@ -147,9 +164,13 @@ class VQGAN_CLIP(nn.Module):
         return similarity_logits.sum()
 
     def _get_clip_loss(self, pos_prompts, neg_prompts, image):
-        pos_logits = self._get_clip_similarity(pos_prompts["prompts"], image, weights=(1 / pos_prompts["weights"]))
+        pos_logits = self._get_clip_similarity(
+            pos_prompts["prompts"], image, weights=(1 / pos_prompts["weights"])
+        )
         if neg_prompts:
-            neg_logits = self._get_clip_similarity(neg_prompts["prompts"], image, weights=neg_prompts["weights"])
+            neg_logits = self._get_clip_similarity(
+                neg_prompts["prompts"], image, weights=neg_prompts["weights"]
+            )
         else:
             neg_logits = torch.tensor([1], device=self.device)
         loss = -torch.log(pos_logits) + torch.log(neg_logits)
@@ -255,14 +276,20 @@ class VQGAN_CLIP(nn.Module):
             show_pil(custom_to_pil(original_img))
 
         original_img = loop_post_process(original_img)
-        for iter, transformed_img in enumerate(self._optimize_CLIP(original_img, pos_prompts, neg_prompts)):
+        for iter, transformed_img in enumerate(
+            self._optimize_CLIP(original_img, pos_prompts, neg_prompts)
+        ):
             if show_intermediate:
                 show_pil(transformed_img)
             if save_intermediate:
-                transformed_img.save(os.path.join(self.save_path, f"iter_{iter:03d}.png"))
+                transformed_img.save(
+                    os.path.join(self.save_path, f"iter_{iter:03d}.png")
+                )
             if self.log:
                 wandb.log({"Image": wandb.Image(transformed_img)})
         if show_final:
             show_pil(transformed_img)
         if save_final:
-            transformed_img.save(os.path.join(self.save_path, f"iter_{iter:03d}_final.png"))
+            transformed_img.save(
+                os.path.join(self.save_path, f"iter_{iter:03d}_final.png")
+            )

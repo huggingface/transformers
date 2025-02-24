@@ -75,7 +75,9 @@ def get_resize_output_image_size(
 
         return x
 
-    output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
+    output_size = (
+        (output_size, output_size) if isinstance(output_size, int) else output_size
+    )
 
     input_height, input_width = get_image_size(input_image, input_data_format)
     output_height, output_width = output_size
@@ -93,7 +95,9 @@ def get_resize_output_image_size(
             # fit height
             scale_width = scale_height
 
-    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_height = constrain_to_multiple_of(
+        scale_height * input_height, multiple=multiple
+    )
     new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
 
     return (new_height, new_width)
@@ -165,7 +169,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         size = size if size is not None else {"height": 384, "width": 512}
         size = get_size_dict(size)
@@ -214,7 +220,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
+            raise ValueError(
+                f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}"
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -227,11 +235,18 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         height, width = output_size
 
         torch_image = torch.from_numpy(image).unsqueeze(0)
-        torch_image = torch_image.permute(0, 3, 1, 2) if input_data_format == "channels_last" else torch_image
+        torch_image = (
+            torch_image.permute(0, 3, 1, 2)
+            if input_data_format == "channels_last"
+            else torch_image
+        )
 
         # TODO support align_corners=True in image_transforms.resize
         requires_backends(self, "torch")
-        resample_to_mode = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
+        resample_to_mode = {
+            PILImageResampling.BILINEAR: "bilinear",
+            PILImageResampling.BICUBIC: "bicubic",
+        }
         mode = resample_to_mode[resample]
         resized_image = nn.functional.interpolate(
             torch_image, (int(height), int(width)), mode=mode, align_corners=True
@@ -374,11 +389,21 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size)
-        keep_aspect_ratio = keep_aspect_ratio if keep_aspect_ratio is not None else self.keep_aspect_ratio
-        ensure_multiple_of = ensure_multiple_of if ensure_multiple_of is not None else self.ensure_multiple_of
+        keep_aspect_ratio = (
+            keep_aspect_ratio
+            if keep_aspect_ratio is not None
+            else self.keep_aspect_ratio
+        )
+        ensure_multiple_of = (
+            ensure_multiple_of
+            if ensure_multiple_of is not None
+            else self.ensure_multiple_of
+        )
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -416,12 +441,19 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_pad:
-            images = [self.pad_image(image=image, input_data_format=input_data_format) for image in images]
+            images = [
+                self.pad_image(image=image, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_resize:
             images = [
@@ -438,12 +470,20 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}
@@ -486,8 +526,12 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         predicted_depth = outputs.predicted_depth
 
-        if (outputs_flipped is not None) and (predicted_depth.shape != outputs_flipped.predicted_depth.shape):
-            raise ValueError("Make sure that `outputs` and `outputs_flipped` have the same shape")
+        if (outputs_flipped is not None) and (
+            predicted_depth.shape != outputs_flipped.predicted_depth.shape
+        ):
+            raise ValueError(
+                "Make sure that `outputs` and `outputs_flipped` have the same shape"
+            )
 
         if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
             raise ValueError(
@@ -508,7 +552,9 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             )
 
         if outputs_flipped is not None:
-            predicted_depth = (predicted_depth + torch.flip(outputs_flipped.predicted_depth, dims=[-1])) / 2
+            predicted_depth = (
+                predicted_depth + torch.flip(outputs_flipped.predicted_depth, dims=[-1])
+            ) / 2
 
         predicted_depth = predicted_depth.unsqueeze(1)
 
@@ -521,9 +567,15 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         padding_factor_h = padding_factor_w = 3
 
         results = []
-        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
-        source_sizes = [None] * len(predicted_depth) if source_sizes is None else source_sizes
-        for depth, target_size, source_size in zip(predicted_depth, target_sizes, source_sizes):
+        target_sizes = (
+            [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        )
+        source_sizes = (
+            [None] * len(predicted_depth) if source_sizes is None else source_sizes
+        )
+        for depth, target_size, source_size in zip(
+            predicted_depth, target_sizes, source_sizes
+        ):
             # depth.shape = [1, H, W]
             if source_size is not None:
                 pad_h = pad_w = 0
@@ -549,7 +601,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             if target_size is not None:
                 target_size = [target_size[0], target_size[1]]
                 depth = nn.functional.interpolate(
-                    depth.unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
+                    depth.unsqueeze(1),
+                    size=target_size,
+                    mode="bicubic",
+                    align_corners=False,
                 )
             depth = depth.squeeze()
             # depth.shape = [H, W]

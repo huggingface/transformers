@@ -198,7 +198,9 @@ class OneFormerConfig(PretrainedConfig):
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is unset. Initializing the config with the default `Swin` backbone.")
+            logger.info(
+                "`backbone_config` is unset. Initializing the config with the default `Swin` backbone."
+            )
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
                 num_channels=3,

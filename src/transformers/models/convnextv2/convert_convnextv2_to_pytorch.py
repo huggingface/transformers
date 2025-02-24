@@ -25,7 +25,11 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ConvNextImageProcessor, ConvNextV2Config, ConvNextV2ForImageClassification
+from transformers import (
+    ConvNextImageProcessor,
+    ConvNextV2Config,
+    ConvNextV2ForImageClassification,
+)
 from transformers.image_utils import PILImageResampling
 from transformers.utils import logging
 
@@ -68,7 +72,9 @@ def get_convnextv2_config(checkpoint_url):
 
     repo_id = "huggingface/label-files"
     config.num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
 
     config.id2label = id2label
@@ -83,7 +89,9 @@ def rename_key(name):
     if "downsample_layers.0.0" in name:
         name = name.replace("downsample_layers.0.0", "embeddings.patch_embeddings")
     if "downsample_layers.0.1" in name:
-        name = name.replace("downsample_layers.0.1", "embeddings.norm")  # we rename to layernorm later on
+        name = name.replace(
+            "downsample_layers.0.1", "embeddings.norm"
+        )  # we rename to layernorm later on
     if "downsample_layers.1.0" in name:
         name = name.replace("downsample_layers.1.0", "stages.1.downsampling_layer.0")
     if "downsample_layers.1.1" in name:
@@ -141,7 +149,9 @@ def convert_preprocessor(checkpoint_url):
 
 
 @torch.no_grad()
-def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub):
+def convert_convnextv2_checkpoint(
+    checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub
+):
     """
     Copy/paste/tweak model's weights to our ConvNeXTV2 structure.
     """
@@ -174,41 +184,95 @@ def convert_convnextv2_checkpoint(checkpoint_url, pytorch_dump_folder_path, save
     logits = model(**inputs).logits
 
     # note: the logits below were obtained without center cropping
-    if checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_atto_1k_224_ema.pt":
+    if (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_atto_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.3930, 0.1747, -0.5246, 0.4177, 0.4295])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_femto_1k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_femto_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.1727, -0.5341, -0.7818, -0.4745, -0.6566])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_pico_1k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_pico_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.0333, 0.1563, -0.9137, 0.1054, 0.0381])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_nano_1k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_nano_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.1744, -0.1555, -0.0713, 0.0950, -0.1431])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_tiny_1k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_tiny_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([0.9996, 0.1966, -0.4386, -0.3472, 0.6661])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_base_1k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_base_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.2553, -0.6708, -0.1359, 0.2518, -0.2488])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_large_1k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_large_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.0673, -0.5627, -0.3753, -0.2722, 0.0178])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_huge_1k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im1k/convnextv2_huge_1k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.6377, -0.7458, -0.2150, 0.1184, -0.0597])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([1.0799, 0.2322, -0.8860, 1.0219, 0.6231])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_384_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_nano_22k_384_ema.pt"
+    ):
         expected_logits = torch.tensor([0.3766, 0.4917, -1.1426, 0.9942, 0.6024])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([0.4220, -0.6919, -0.4317, -0.2881, -0.6609])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_384_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_tiny_22k_384_ema.pt"
+    ):
         expected_logits = torch.tensor([0.1082, -0.8286, -0.5095, 0.4681, -0.8085])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.2419, -0.6221, 0.2176, -0.0980, -0.7527])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_384_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_384_ema.pt"
+    ):
         expected_logits = torch.tensor([0.0391, -0.4371, 0.3786, 0.1251, -0.2784])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_224_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_224_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.0504, 0.5636, -0.1729, -0.6507, -0.3949])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_384_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_large_22k_384_ema.pt"
+    ):
         expected_logits = torch.tensor([0.3560, 0.9486, 0.3149, -0.2667, -0.5138])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_384_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_384_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.2469, -0.4550, -0.5853, -0.0810, 0.0309])
-    elif checkpoint_url == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_512_ema.pt":
+    elif (
+        checkpoint_url
+        == "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_huge_22k_512_ema.pt"
+    ):
         expected_logits = torch.tensor([-0.3090, 0.0802, -0.0682, -0.1979, -0.2826])
     else:
         raise ValueError(f"Unknown URL: {checkpoint_url}")
@@ -278,9 +342,16 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument("--save_model", action="store_true", help="Save model to local")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Push model and image preprocessor to the hub",
+    )
 
     args = parser.parse_args()
     convert_convnextv2_checkpoint(
-        args.checkpoint_url, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub
+        args.checkpoint_url,
+        args.pytorch_dump_folder_path,
+        args.save_model,
+        args.push_to_hub,
     )

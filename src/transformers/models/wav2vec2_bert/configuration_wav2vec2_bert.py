@@ -230,7 +230,12 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         conformer_conv_dropout=0.1,
         **kwargs,
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        super().__init__(
+            **kwargs,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+        )
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
@@ -288,9 +293,13 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         self.adapter_stride = adapter_stride
         self.num_adapter_layers = num_adapter_layers
         self.adapter_act = adapter_act
-        self.output_hidden_size = output_hidden_size if output_hidden_size is not None else hidden_size
+        self.output_hidden_size = (
+            output_hidden_size if output_hidden_size is not None else hidden_size
+        )
         if use_intermediate_ffn_before_adapter and not add_adapter:
-            raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
+            raise ValueError(
+                "`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`."
+            )
         self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
 
         # SequenceClassification-specific parameter. Feel free to ignore for other classes.

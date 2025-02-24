@@ -42,7 +42,8 @@ class InterpreterError(ValueError):
 ERRORS = {
     name: getattr(builtins, name)
     for name in dir(builtins)
-    if isinstance(getattr(builtins, name), type) and issubclass(getattr(builtins, name), BaseException)
+    if isinstance(getattr(builtins, name), type)
+    and issubclass(getattr(builtins, name), BaseException)
 }
 
 
@@ -96,7 +97,9 @@ def evaluate_unaryop(expression, state, static_tools, custom_tools):
     elif isinstance(expression.op, ast.Invert):
         return ~operand
     else:
-        raise InterpreterError(f"Unary operation {expression.op.__class__.__name__} is not supported.")
+        raise InterpreterError(
+            f"Unary operation {expression.op.__class__.__name__} is not supported."
+        )
 
 
 def evaluate_lambda(lambda_expression, state, static_tools, custom_tools):
@@ -106,7 +109,9 @@ def evaluate_lambda(lambda_expression, state, static_tools, custom_tools):
         new_state = state.copy()
         for arg, value in zip(args, values):
             new_state[arg] = value
-        return evaluate_ast(lambda_expression.body, new_state, static_tools, custom_tools)
+        return evaluate_ast(
+            lambda_expression.body, new_state, static_tools, custom_tools
+        )
 
     return lambda_func
 
@@ -124,7 +129,9 @@ def evaluate_while(while_loop, state, static_tools, custom_tools):
                 break
         iterations += 1
         if iterations > max_iterations:
-            raise InterpreterError(f"Maximum number of {max_iterations} iterations in While loop exceeded")
+            raise InterpreterError(
+                f"Maximum number of {max_iterations} iterations in While loop exceeded"
+            )
     return None
 
 
@@ -132,7 +139,10 @@ def create_function(func_def, state, static_tools, custom_tools):
     def new_func(*args, **kwargs):
         func_state = state.copy()
         arg_names = [arg.arg for arg in func_def.args.args]
-        default_values = [evaluate_ast(d, state, static_tools, custom_tools) for d in func_def.args.defaults]
+        default_values = [
+            evaluate_ast(d, state, static_tools, custom_tools)
+            for d in func_def.args.defaults
+        ]
 
         # Apply default values
         defaults = dict(zip(arg_names[-len(default_values) :], default_values))
@@ -184,26 +194,39 @@ def create_class(class_name, class_bases, class_body):
 
 
 def evaluate_function_def(func_def, state, static_tools, custom_tools):
-    custom_tools[func_def.name] = create_function(func_def, state, static_tools, custom_tools)
+    custom_tools[func_def.name] = create_function(
+        func_def, state, static_tools, custom_tools
+    )
     return custom_tools[func_def.name]
 
 
 def evaluate_class_def(class_def, state, static_tools, custom_tools):
     class_name = class_def.name
-    bases = [evaluate_ast(base, state, static_tools, custom_tools) for base in class_def.bases]
+    bases = [
+        evaluate_ast(base, state, static_tools, custom_tools)
+        for base in class_def.bases
+    ]
     class_dict = {}
 
     for stmt in class_def.body:
         if isinstance(stmt, ast.FunctionDef):
-            class_dict[stmt.name] = evaluate_function_def(stmt, state, static_tools, custom_tools)
+            class_dict[stmt.name] = evaluate_function_def(
+                stmt, state, static_tools, custom_tools
+            )
         elif isinstance(stmt, ast.Assign):
             for target in stmt.targets:
                 if isinstance(target, ast.Name):
-                    class_dict[target.id] = evaluate_ast(stmt.value, state, static_tools, custom_tools)
+                    class_dict[target.id] = evaluate_ast(
+                        stmt.value, state, static_tools, custom_tools
+                    )
                 elif isinstance(target, ast.Attribute):
-                    class_dict[target.attr] = evaluate_ast(stmt.value, state, static_tools, custom_tools)
+                    class_dict[target.attr] = evaluate_ast(
+                        stmt.value, state, static_tools, custom_tools
+                    )
         else:
-            raise InterpreterError(f"Unsupported statement in class body: {stmt.__class__.__name__}")
+            raise InterpreterError(
+                f"Unsupported statement in class body: {stmt.__class__.__name__}"
+            )
 
     new_class = type(class_name, tuple(bases), class_dict)
     state[class_name] = new_class
@@ -227,7 +250,9 @@ def evaluate_augassign(expression, state, static_tools, custom_tools):
         elif isinstance(target, ast.List):
             return [get_current_value(elt) for elt in target.elts]
         else:
-            raise InterpreterError("AugAssign not supported for {type(target)} targets.")
+            raise InterpreterError(
+                "AugAssign not supported for {type(target)} targets."
+            )
 
     current_value = get_current_value(expression.target)
     value_to_add = evaluate_ast(expression.value, state, static_tools, custom_tools)
@@ -236,7 +261,9 @@ def evaluate_augassign(expression, state, static_tools, custom_tools):
     if isinstance(expression.op, ast.Add):
         if isinstance(current_value, list):
             if not isinstance(value_to_add, list):
-                raise InterpreterError(f"Cannot add non-list value {value_to_add} to a list.")
+                raise InterpreterError(
+                    f"Cannot add non-list value {value_to_add} to a list."
+                )
             updated_value = current_value + value_to_add
         else:
             updated_value = current_value + value_to_add
@@ -263,7 +290,9 @@ def evaluate_augassign(expression, state, static_tools, custom_tools):
     elif isinstance(expression.op, ast.RShift):
         updated_value = current_value >> value_to_add
     else:
-        raise InterpreterError(f"Operation {type(expression.op).__name__} is not supported.")
+        raise InterpreterError(
+            f"Operation {type(expression.op).__name__} is not supported."
+        )
 
     # Update the state
     set_value(expression.target, updated_value, state, static_tools, custom_tools)
@@ -315,7 +344,9 @@ def evaluate_binop(binop, state, static_tools, custom_tools):
     elif isinstance(binop.op, ast.RShift):
         return left_val >> right_val
     else:
-        raise NotImplementedError(f"Binary operation {type(binop.op).__name__} is not implemented.")
+        raise NotImplementedError(
+            f"Binary operation {type(binop.op).__name__} is not implemented."
+        )
 
 
 def evaluate_assign(assign, state, static_tools, custom_tools):
@@ -325,7 +356,9 @@ def evaluate_assign(assign, state, static_tools, custom_tools):
         set_value(target, result, state, static_tools, custom_tools)
     else:
         if len(assign.targets) != len(result):
-            raise InterpreterError(f"Assign failed: expected {len(result)} values but got {len(assign.targets)}.")
+            raise InterpreterError(
+                f"Assign failed: expected {len(result)} values but got {len(assign.targets)}."
+            )
         expanded_values = []
         for tgt in assign.targets:
             if isinstance(tgt, ast.Starred):
@@ -340,7 +373,9 @@ def evaluate_assign(assign, state, static_tools, custom_tools):
 def set_value(target, value, state, static_tools, custom_tools):
     if isinstance(target, ast.Name):
         if target.id in static_tools:
-            raise InterpreterError(f"Cannot assign to name '{target.id}': doing this would erase the existing tool!")
+            raise InterpreterError(
+                f"Cannot assign to name '{target.id}': doing this would erase the existing tool!"
+            )
         state[target.id] = value
     elif isinstance(target, ast.Tuple):
         if not isinstance(value, tuple):
@@ -403,9 +438,14 @@ def evaluate_call(call, state, static_tools, custom_tools):
         else:
             args.append(evaluate_ast(arg, state, static_tools, custom_tools))
 
-    kwargs = {keyword.arg: evaluate_ast(keyword.value, state, static_tools, custom_tools) for keyword in call.keywords}
+    kwargs = {
+        keyword.arg: evaluate_ast(keyword.value, state, static_tools, custom_tools)
+        for keyword in call.keywords
+    }
 
-    if isinstance(func, type) and len(func.__module__.split(".")) > 1:  # Check for user-defined classes
+    if (
+        isinstance(func, type) and len(func.__module__.split(".")) > 1
+    ):  # Check for user-defined classes
         # Instantiate the class using its constructor
         obj = func.__new__(func)  # Create a new instance of the class
         if hasattr(obj, "__init__"):  # Check if the class has an __init__ method
@@ -445,7 +485,9 @@ def evaluate_subscript(subscript, state, static_tools, custom_tools):
     value = evaluate_ast(subscript.value, state, static_tools, custom_tools)
 
     if isinstance(value, str) and isinstance(index, str):
-        raise InterpreterError("You're trying to subscript a string with a string index, which is impossible")
+        raise InterpreterError(
+            "You're trying to subscript a string with a string index, which is impossible"
+        )
     if isinstance(value, pd.core.indexing._LocIndexer):
         parent_object = value.obj
         return parent_object.loc[index]
@@ -457,11 +499,15 @@ def evaluate_subscript(subscript, state, static_tools, custom_tools):
         return value[index]
     elif isinstance(value, (list, tuple)):
         if not (-len(value) <= index < len(value)):
-            raise InterpreterError(f"Index {index} out of bounds for list of length {len(value)}")
+            raise InterpreterError(
+                f"Index {index} out of bounds for list of length {len(value)}"
+            )
         return value[int(index)]
     elif isinstance(value, str):
         if not (-len(value) <= index < len(value)):
-            raise InterpreterError(f"Index {index} out of bounds for string of length {len(value)}")
+            raise InterpreterError(
+                f"Index {index} out of bounds for string of length {len(value)}"
+            )
         return value[index]
     elif index in value:
         return value[index]
@@ -487,7 +533,10 @@ def evaluate_name(name, state, static_tools, custom_tools):
 
 def evaluate_condition(condition, state, static_tools, custom_tools):
     left = evaluate_ast(condition.left, state, static_tools, custom_tools)
-    comparators = [evaluate_ast(c, state, static_tools, custom_tools) for c in condition.comparators]
+    comparators = [
+        evaluate_ast(c, state, static_tools, custom_tools)
+        for c in condition.comparators
+    ]
     ops = [type(op) for op in condition.ops]
 
     result = True
@@ -565,9 +614,13 @@ def evaluate_for(for_loop, state, static_tools, custom_tools):
 def evaluate_listcomp(listcomp, state, static_tools, custom_tools):
     def inner_evaluate(generators, index, current_state):
         if index >= len(generators):
-            return [evaluate_ast(listcomp.elt, current_state, static_tools, custom_tools)]
+            return [
+                evaluate_ast(listcomp.elt, current_state, static_tools, custom_tools)
+            ]
         generator = generators[index]
-        iter_value = evaluate_ast(generator.iter, current_state, static_tools, custom_tools)
+        iter_value = evaluate_ast(
+            generator.iter, current_state, static_tools, custom_tools
+        )
         result = []
         for value in iter_value:
             new_state = current_state.copy()
@@ -576,7 +629,10 @@ def evaluate_listcomp(listcomp, state, static_tools, custom_tools):
                     new_state[elem.id] = value[idx]
             else:
                 new_state[generator.target.id] = value
-            if all(evaluate_ast(if_clause, new_state, static_tools, custom_tools) for if_clause in generator.ifs):
+            if all(
+                evaluate_ast(if_clause, new_state, static_tools, custom_tools)
+                for if_clause in generator.ifs
+            ):
                 result.extend(inner_evaluate(generators, index + 1, new_state))
         return result
 
@@ -590,7 +646,9 @@ def evaluate_try(try_node, state, static_tools, custom_tools):
     except Exception as e:
         matched = False
         for handler in try_node.handlers:
-            if handler.type is None or isinstance(e, evaluate_ast(handler.type, state, static_tools, custom_tools)):
+            if handler.type is None or isinstance(
+                e, evaluate_ast(handler.type, state, static_tools, custom_tools)
+            ):
                 matched = True
                 if handler.name:
                     state[handler.name] = e
@@ -642,7 +700,9 @@ def evaluate_assert(assert_node, state, static_tools, custom_tools):
 def evaluate_with(with_node, state, static_tools, custom_tools):
     contexts = []
     for item in with_node.items:
-        context_expr = evaluate_ast(item.context_expr, state, static_tools, custom_tools)
+        context_expr = evaluate_ast(
+            item.context_expr, state, static_tools, custom_tools
+        )
         if item.optional_vars:
             state[item.optional_vars.id] = context_expr.__enter__()
             contexts.append(state[item.optional_vars.id])
@@ -665,7 +725,9 @@ def evaluate_with(with_node, state, static_tools, custom_tools):
 def import_modules(expression, state, authorized_imports):
     def check_module_authorized(module_name):
         module_path = module_name.split(".")
-        module_subpaths = [".".join(module_path[:i]) for i in range(1, len(module_path) + 1)]
+        module_subpaths = [
+            ".".join(module_path[:i]) for i in range(1, len(module_path) + 1)
+        ]
         return any(subpath in authorized_imports for subpath in module_subpaths)
 
     if isinstance(expression, ast.Import):
@@ -680,7 +742,9 @@ def import_modules(expression, state, authorized_imports):
         return None
     elif isinstance(expression, ast.ImportFrom):
         if check_module_authorized(expression.module):
-            module = __import__(expression.module, fromlist=[alias.name for alias in expression.names])
+            module = __import__(
+                expression.module, fromlist=[alias.name for alias in expression.names]
+            )
             for alias in expression.names:
                 state[alias.asname or alias.name] = getattr(module, alias.name)
         else:
@@ -695,9 +759,14 @@ def evaluate_dictcomp(dictcomp, state, static_tools, custom_tools):
         for value in iter_value:
             new_state = state.copy()
             set_value(gen.target, value, new_state, static_tools, custom_tools)
-            if all(evaluate_ast(if_clause, new_state, static_tools, custom_tools) for if_clause in gen.ifs):
+            if all(
+                evaluate_ast(if_clause, new_state, static_tools, custom_tools)
+                for if_clause in gen.ifs
+            ):
                 key = evaluate_ast(dictcomp.key, new_state, static_tools, custom_tools)
-                val = evaluate_ast(dictcomp.value, new_state, static_tools, custom_tools)
+                val = evaluate_ast(
+                    dictcomp.value, new_state, static_tools, custom_tools
+                )
                 result[key] = val
     return result
 
@@ -748,7 +817,10 @@ def evaluate_ast(
         # Constant -> just return the value
         return expression.value
     elif isinstance(expression, ast.Tuple):
-        return tuple(evaluate_ast(elt, state, static_tools, custom_tools) for elt in expression.elts)
+        return tuple(
+            evaluate_ast(elt, state, static_tools, custom_tools)
+            for elt in expression.elts
+        )
     elif isinstance(expression, (ast.ListComp, ast.GeneratorExp)):
         return evaluate_listcomp(expression, state, static_tools, custom_tools)
     elif isinstance(expression, ast.UnaryOp):
@@ -774,8 +846,13 @@ def evaluate_ast(
         return evaluate_function_def(expression, state, static_tools, custom_tools)
     elif isinstance(expression, ast.Dict):
         # Dict -> evaluate all keys and values
-        keys = [evaluate_ast(k, state, static_tools, custom_tools) for k in expression.keys]
-        values = [evaluate_ast(v, state, static_tools, custom_tools) for v in expression.values]
+        keys = [
+            evaluate_ast(k, state, static_tools, custom_tools) for k in expression.keys
+        ]
+        values = [
+            evaluate_ast(v, state, static_tools, custom_tools)
+            for v in expression.values
+        ]
         return dict(zip(keys, values))
     elif isinstance(expression, ast.Expr):
         # Expression -> evaluate the content
@@ -792,10 +869,18 @@ def evaluate_ast(
     elif hasattr(ast, "Index") and isinstance(expression, ast.Index):
         return evaluate_ast(expression.value, state, static_tools, custom_tools)
     elif isinstance(expression, ast.JoinedStr):
-        return "".join([str(evaluate_ast(v, state, static_tools, custom_tools)) for v in expression.values])
+        return "".join(
+            [
+                str(evaluate_ast(v, state, static_tools, custom_tools))
+                for v in expression.values
+            ]
+        )
     elif isinstance(expression, ast.List):
         # List -> evaluate all elements
-        return [evaluate_ast(elt, state, static_tools, custom_tools) for elt in expression.elts]
+        return [
+            evaluate_ast(elt, state, static_tools, custom_tools)
+            for elt in expression.elts
+        ]
     elif isinstance(expression, ast.Name):
         # Name -> pick up the value in the state
         return evaluate_name(expression, state, static_tools, custom_tools)
@@ -813,13 +898,21 @@ def evaluate_ast(
         return getattr(value, expression.attr)
     elif isinstance(expression, ast.Slice):
         return slice(
-            evaluate_ast(expression.lower, state, static_tools, custom_tools)
-            if expression.lower is not None
-            else None,
-            evaluate_ast(expression.upper, state, static_tools, custom_tools)
-            if expression.upper is not None
-            else None,
-            evaluate_ast(expression.step, state, static_tools, custom_tools) if expression.step is not None else None,
+            (
+                evaluate_ast(expression.lower, state, static_tools, custom_tools)
+                if expression.lower is not None
+                else None
+            ),
+            (
+                evaluate_ast(expression.upper, state, static_tools, custom_tools)
+                if expression.upper is not None
+                else None
+            ),
+            (
+                evaluate_ast(expression.step, state, static_tools, custom_tools)
+                if expression.step is not None
+                else None
+            ),
         )
     elif isinstance(expression, ast.DictComp):
         return evaluate_dictcomp(expression, state, static_tools, custom_tools)
@@ -838,17 +931,24 @@ def evaluate_ast(
     elif isinstance(expression, ast.With):
         return evaluate_with(expression, state, static_tools, custom_tools)
     elif isinstance(expression, ast.Set):
-        return {evaluate_ast(elt, state, static_tools, custom_tools) for elt in expression.elts}
+        return {
+            evaluate_ast(elt, state, static_tools, custom_tools)
+            for elt in expression.elts
+        }
     elif isinstance(expression, ast.Return):
         raise ReturnException(
-            evaluate_ast(expression.value, state, static_tools, custom_tools) if expression.value else None
+            evaluate_ast(expression.value, state, static_tools, custom_tools)
+            if expression.value
+            else None
         )
     else:
         # For now we refuse anything else. Let's add things as we need them.
         raise InterpreterError(f"{expression.__class__.__name__} is not supported.")
 
 
-def truncate_print_outputs(print_outputs: str, max_len_outputs: int = MAX_LEN_OUTPUT) -> str:
+def truncate_print_outputs(
+    print_outputs: str, max_len_outputs: int = MAX_LEN_OUTPUT
+) -> str:
     if len(print_outputs) < max_len_outputs:
         return print_outputs
     else:
@@ -899,8 +999,12 @@ def evaluate_python_code(
     OPERATIONS_COUNT = 0
     try:
         for node in expression.body:
-            result = evaluate_ast(node, state, static_tools, custom_tools, authorized_imports)
-        state["print_outputs"] = truncate_print_outputs(PRINT_OUTPUTS, max_len_outputs=MAX_LEN_OUTPUT)
+            result = evaluate_ast(
+                node, state, static_tools, custom_tools, authorized_imports
+            )
+        state["print_outputs"] = truncate_print_outputs(
+            PRINT_OUTPUTS, max_len_outputs=MAX_LEN_OUTPUT
+        )
         return result
     except InterpreterError as e:
         msg = truncate_print_outputs(PRINT_OUTPUTS, max_len_outputs=MAX_LEN_OUTPUT)

@@ -40,7 +40,9 @@ class MessageRole(str, Enum):
         return [r.value for r in cls]
 
 
-def get_clean_message_list(message_list: List[Dict[str, str]], role_conversions: Dict[str, str] = {}):
+def get_clean_message_list(
+    message_list: List[Dict[str, str]], role_conversions: Dict[str, str] = {}
+):
     """
     Subsequent messages with the same role will be concatenated to a single message.
 
@@ -55,12 +57,17 @@ def get_clean_message_list(message_list: List[Dict[str, str]], role_conversions:
 
         role = message["role"]
         if role not in MessageRole.roles():
-            raise ValueError(f"Incorrect role {role}, only {MessageRole.roles()} are supported for now.")
+            raise ValueError(
+                f"Incorrect role {role}, only {MessageRole.roles()} are supported for now."
+            )
 
         if role in role_conversions:
             message["role"] = role_conversions[role]
 
-        if len(final_message_list) > 0 and message["role"] == final_message_list[-1]["role"]:
+        if (
+            len(final_message_list) > 0
+            and message["role"] == final_message_list[-1]["role"]
+        ):
             final_message_list[-1]["content"] += "\n=======\n" + message["content"]
         else:
             final_message_list.append(message)
@@ -82,8 +89,12 @@ class HfEngine:
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         except Exception as e:
-            logger.warning(f"Failed to load tokenizer for model {model_id}: {e}. Loading default tokenizer instead.")
-            self.tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-1.7B-Instruct")
+            logger.warning(
+                f"Failed to load tokenizer for model {model_id}: {e}. Loading default tokenizer instead."
+            )
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                "HuggingFaceTB/SmolLM2-1.7B-Instruct"
+            )
 
     def get_token_counts(self):
         return {
@@ -92,12 +103,18 @@ class HfEngine:
         }
 
     def generate(
-        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
+        self,
+        messages: List[Dict[str, str]],
+        stop_sequences: Optional[List[str]] = None,
+        grammar: Optional[str] = None,
     ):
         raise NotImplementedError
 
     def __call__(
-        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
+        self,
+        messages: List[Dict[str, str]],
+        stop_sequences: Optional[List[str]] = None,
+        grammar: Optional[str] = None,
     ) -> str:
         """Process the input messages and return the model's response.
 
@@ -128,11 +145,15 @@ class HfEngine:
             ```
         """
         if not isinstance(messages, List):
-            raise ValueError("Messages should be a list of dictionaries with 'role' and 'content' keys.")
+            raise ValueError(
+                "Messages should be a list of dictionaries with 'role' and 'content' keys."
+            )
         if stop_sequences is None:
             stop_sequences = []
         response = self.generate(messages, stop_sequences, grammar)
-        self.last_input_token_count = len(self.tokenizer.apply_chat_template(messages, tokenize=True))
+        self.last_input_token_count = len(
+            self.tokenizer.apply_chat_template(messages, tokenize=True)
+        )
         self.last_output_token_count = len(self.tokenizer.encode(response))
 
         # Remove stop sequences from LLM output
@@ -176,18 +197,28 @@ class HfApiEngine(HfEngine):
         self.max_tokens = max_tokens
 
     def generate(
-        self, messages: List[Dict[str, str]], stop_sequences: Optional[List[str]] = None, grammar: Optional[str] = None
+        self,
+        messages: List[Dict[str, str]],
+        stop_sequences: Optional[List[str]] = None,
+        grammar: Optional[str] = None,
     ) -> str:
         # Get clean message list
-        messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
+        messages = get_clean_message_list(
+            messages, role_conversions=llama_role_conversions
+        )
 
         # Send messages to the Hugging Face Inference API
         if grammar is not None:
             response = self.client.chat_completion(
-                messages, stop=stop_sequences, max_tokens=self.max_tokens, response_format=grammar
+                messages,
+                stop=stop_sequences,
+                max_tokens=self.max_tokens,
+                response_format=grammar,
             )
         else:
-            response = self.client.chat_completion(messages, stop=stop_sequences, max_tokens=self.max_tokens)
+            response = self.client.chat_completion(
+                messages, stop=stop_sequences, max_tokens=self.max_tokens
+            )
 
         response = response.choices[0].message.content
         return response
@@ -208,7 +239,9 @@ class TransformersEngine(HfEngine):
         max_length: int = 1500,
     ) -> str:
         # Get clean message list
-        messages = get_clean_message_list(messages, role_conversions=llama_role_conversions)
+        messages = get_clean_message_list(
+            messages, role_conversions=llama_role_conversions
+        )
 
         # Get LLM output
         if stop_sequences is not None and len(stop_sequences) > 0:

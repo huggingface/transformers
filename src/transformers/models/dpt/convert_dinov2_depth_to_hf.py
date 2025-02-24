@@ -25,7 +25,12 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
-from transformers import Dinov2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
+from transformers import (
+    Dinov2Config,
+    DPTConfig,
+    DPTForDepthEstimation,
+    DPTImageProcessor,
+)
 from transformers.utils import logging
 
 
@@ -37,22 +42,34 @@ def get_dpt_config(model_name):
     if "small" in model_name:
         # equivalent to stage 3, stage 6, stage 9, stage 12
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-small", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=False
+            "facebook/dinov2-small",
+            out_indices=[3, 6, 9, 12],
+            apply_layernorm=False,
+            reshape_hidden_states=False,
         )
         neck_hidden_sizes = [48, 96, 192, 384]
     elif "base" in model_name:
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-base", out_indices=[3, 6, 9, 12], apply_layernorm=False, reshape_hidden_states=False
+            "facebook/dinov2-base",
+            out_indices=[3, 6, 9, 12],
+            apply_layernorm=False,
+            reshape_hidden_states=False,
         )
         neck_hidden_sizes = [96, 192, 384, 768]
     elif "large" in model_name:
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-large", out_indices=[5, 12, 18, 24], apply_layernorm=False, reshape_hidden_states=False
+            "facebook/dinov2-large",
+            out_indices=[5, 12, 18, 24],
+            apply_layernorm=False,
+            reshape_hidden_states=False,
         )
         neck_hidden_sizes = [128, 256, 512, 1024]
     elif "giant" in model_name:
         backbone_config = Dinov2Config.from_pretrained(
-            "facebook/dinov2-giant", out_indices=[10, 20, 30, 40], apply_layernorm=False, reshape_hidden_states=False
+            "facebook/dinov2-giant",
+            out_indices=[10, 20, 30, 40],
+            apply_layernorm=False,
+            reshape_hidden_states=False,
         )
         neck_hidden_sizes = [192, 384, 768, 1536]
     else:
@@ -163,16 +180,24 @@ def read_in_q_k_v(state_dict, config):
         in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         hidden_size = config.backbone_config.hidden_size
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[:hidden_size]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            hidden_size : hidden_size * 2
-        ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-hidden_size:]
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = (
+            in_proj_weight[:hidden_size, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = (
+            in_proj_bias[:hidden_size]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = (
+            in_proj_weight[hidden_size : hidden_size * 2, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.bias"] = (
+            in_proj_bias[hidden_size : hidden_size * 2]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = (
+            in_proj_weight[-hidden_size:, :]
+        )
+        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = (
+            in_proj_bias[-hidden_size:]
+        )
 
 
 def rename_key(dct, old, new):
@@ -213,7 +238,11 @@ def get_original_pixel_values(image):
             return pad_size_left, pad_size_right
 
         def __call__(self, img):
-            pads = list(itertools.chain.from_iterable(self._get_pad(m) for m in img.shape[-2:][::-1]))
+            pads = list(
+                itertools.chain.from_iterable(
+                    self._get_pad(m) for m in img.shape[-2:][::-1]
+                )
+            )
             output = torch.nn.functional.pad(img, pads)
             return output
 
@@ -240,7 +269,9 @@ def get_original_pixel_values(image):
 
 
 @torch.no_grad()
-def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, verify_logits):
+def convert_dpt_checkpoint(
+    model_name, pytorch_dump_folder_path, push_to_hub, verify_logits
+):
     """
     Copy/paste/tweak model's weights to our DPT structure.
     """
@@ -251,7 +282,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     # load original DPT state_dict from URL
     print("URL:", checkpoint_url)
-    dpt_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["state_dict"]
+    dpt_state_dict = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu"
+    )["state_dict"]
     # rename keys
     rename_keys = create_rename_keys_dpt(config)
     for src, dest in rename_keys:
@@ -332,7 +365,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         if model_name == "dpt-dinov2-small-nyu":
             expected_shape = torch.Size([1, 576, 736])
             expected_slice = torch.tensor(
-                [[3.3576, 3.4741, 3.4345], [3.4324, 3.5012, 3.2775], [3.2560, 3.3563, 3.2354]]
+                [
+                    [3.3576, 3.4741, 3.4345],
+                    [3.4324, 3.5012, 3.2775],
+                    [3.2560, 3.3563, 3.2354],
+                ]
             )
 
         assert predicted_depth.shape == torch.Size(expected_shape)
@@ -380,4 +417,9 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_dpt_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.verify_logits)
+    convert_dpt_checkpoint(
+        args.model_name,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+        args.verify_logits,
+    )

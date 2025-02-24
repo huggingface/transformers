@@ -25,7 +25,11 @@ from .tokenization_clip import CLIPTokenizer
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer.json",
+}
 
 
 class CLIPTokenizerFast(PreTrainedTokenizerFast):
@@ -80,7 +84,9 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        if not isinstance(self.backend_tokenizer.pre_tokenizer, pre_tokenizers.Sequence):
+        if not isinstance(
+            self.backend_tokenizer.pre_tokenizer, pre_tokenizers.Sequence
+        ):
             raise ValueError(
                 "The `backend_tokenizer` provided does not match the expected format. The CLIP tokenizer has been"
                 " heavily modified from transformers version 4.17.0. You need to convert the tokenizer you are using"
@@ -154,9 +160,13 @@ class CLIPTokenizerFast(PreTrainedTokenizerFast):
 
         if token_ids_1 is None:
             return len(bos_token + token_ids_0 + eos_token) * [0]
-        return len(bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token) * [0]
+        return len(
+            bos_token + token_ids_0 + eos_token + eos_token + token_ids_1 + eos_token
+        ) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

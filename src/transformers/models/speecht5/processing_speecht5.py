@@ -75,20 +75,29 @@ class SpeechT5Processor(ProcessorMixin):
             raise ValueError(
                 "Cannot process both `audio_target` and `text_target` inputs. Did you mean `audio` or `text`?"
             )
-        if audio is None and audio_target is None and text is None and text_target is None:
+        if (
+            audio is None
+            and audio_target is None
+            and text is None
+            and text_target is None
+        ):
             raise ValueError(
                 "You need to specify either an `audio`, `audio_target`, `text`, or `text_target` input to process."
             )
 
         if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+            inputs = self.feature_extractor(
+                audio, *args, sampling_rate=sampling_rate, **kwargs
+            )
         elif text is not None:
             inputs = self.tokenizer(text, **kwargs)
         else:
             inputs = None
 
         if audio_target is not None:
-            targets = self.feature_extractor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
+            targets = self.feature_extractor(
+                audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs
+            )
             labels = targets["input_values"]
         elif text_target is not None:
             targets = self.tokenizer(text_target, **kwargs)
@@ -130,7 +139,9 @@ class SpeechT5Processor(ProcessorMixin):
         labels = kwargs.pop("labels", None)
 
         if input_values is not None and input_ids is not None:
-            raise ValueError("Cannot process both `input_values` and `input_ids` inputs.")
+            raise ValueError(
+                "Cannot process both `input_values` and `input_ids` inputs."
+            )
         if input_values is None and input_ids is None and labels is None:
             raise ValueError(
                 "You need to specify either an `input_values`, `input_ids`, or `labels` input to be padded."
@@ -144,12 +155,16 @@ class SpeechT5Processor(ProcessorMixin):
             inputs = None
 
         if labels is not None:
-            if "input_ids" in labels or (isinstance(labels, list) and "input_ids" in labels[0]):
+            if "input_ids" in labels or (
+                isinstance(labels, list) and "input_ids" in labels[0]
+            ):
                 targets = self.tokenizer.pad(labels, **kwargs)
                 labels = targets["input_ids"]
             else:
                 feature_size_hack = self.feature_extractor.feature_size
-                self.feature_extractor.feature_size = self.feature_extractor.num_mel_bins
+                self.feature_extractor.feature_size = (
+                    self.feature_extractor.num_mel_bins
+                )
                 targets = self.feature_extractor.pad(labels, *args, **kwargs)
                 self.feature_extractor.feature_size = feature_size_hack
                 labels = targets["input_values"]

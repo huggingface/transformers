@@ -61,7 +61,9 @@ if __name__ == "__main__":
         if json_config["tokenizer_class"] == "PreTrainedTokenizerFast":
             json_config["model_input_names"] = ["input_ids", "attention_mask"]
             tokenizer_config.unlink()
-            tokenizer_config.write_text(json.dumps(json_config, indent=2, sort_keys=True))
+            tokenizer_config.write_text(
+                json.dumps(json_config, indent=2, sort_keys=True)
+            )
 
     generation_config_path = args.checkpoint_dir / "generation_config.json"
     generation_dict = {
@@ -70,5 +72,7 @@ if __name__ == "__main__":
         "eos_token_id": eos_token_id,
         "transformers_version": "4.33.0.dev0",
     }
-    generation_config_path.write_text(json.dumps(generation_dict, indent=2, sort_keys=True))
+    generation_config_path.write_text(
+        json.dumps(generation_dict, indent=2, sort_keys=True)
+    )
     print("Done! Please double-check that the new checkpoint works as expected.")

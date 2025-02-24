@@ -27,7 +27,12 @@ from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.utils import add_end_docstrings
 
-from ...utils import is_levenshtein_available, is_nltk_available, logging, requires_backends
+from ...utils import (
+    is_levenshtein_available,
+    is_nltk_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_levenshtein_available():
@@ -68,9 +73,13 @@ def markdown_compatible(text: str) -> str:
     """
     # equation tag
     # Replace lines that start with a pattern like (decimal) \[some text\] with \[[some text] \tag{decimal}\].
-    text = re.sub(r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M)
+    text = re.sub(
+        r"^\(([\d.]+[a-zA-Z]?)\) \\\[(.+?)\\\]$", r"\[\2 \\tag{\1}\]", text, flags=re.M
+    )
     # Replace lines that start with a pattern like \[some text\] (decimal)  with \[[some text] \tag{decimal}\].
-    text = re.sub(r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M)
+    text = re.sub(
+        r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\)$", r"\[\1 \\tag{\2}\]", text, flags=re.M
+    )
     # Replace lines that start with a pattern like \[some text\] (digits) \[another text\]  with \[[some text] \tag{digits}\] [another text].
     text = re.sub(
         r"^\\\[(.+?)\\\] \(([\d.]+[a-zA-Z]?)\) (\\\[.+?\\\])$",
@@ -131,11 +140,16 @@ def normalize_list_like_lines(generation):
             if not rest:
                 continue
             # Infer current nesting level based on detected numbering
-            if re.match(r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.I | re.M):
+            if re.match(
+                r"^[\dixv]+((?:\.[\dixv])?)+$", potential_numeral, flags=re.I | re.M
+            ):
                 level = potential_numeral.count(".")
 
             replacement += (
-                ("\n" if i > 0 else "") + ("\t" * level) + (delim if i > 0 or line_no == 0 else delim1) + item.strip()
+                ("\n" if i > 0 else "")
+                + ("\t" * level)
+                + (delim if i > 0 or line_no == 0 else delim1)
+                + item.strip()
             )
 
         if line_no == len(lines) - 1:  # If this is the last line in the generation
@@ -192,7 +206,10 @@ def truncate_repetitions(text: str, min_len: int = 30) -> str:
         # check if there is a repetition at the end
         same = True
         for i in range(0, repetition_length):
-            if text_lower[text_length - repetition_length - i - 1] != text_lower[text_length - i - 1]:
+            if (
+                text_lower[text_length - repetition_length - i - 1]
+                != text_lower[text_length - i - 1]
+            ):
                 same = False
                 break
 
@@ -217,8 +234,12 @@ def truncate_repetitions(text: str, min_len: int = 30) -> str:
     # add until next punctuation and make sure last sentence is not repeating
     substituted_text_lower_out = substituted_text_lower
     while True:
-        sentence_end = find_next_punctuation(text_lower, len(substituted_text_lower_out))
-        sentence_start = find_next_punctuation(text_lower[::-1], len(substituted_text_lower_out))
+        sentence_end = find_next_punctuation(
+            text_lower, len(substituted_text_lower_out)
+        )
+        sentence_start = find_next_punctuation(
+            text_lower[::-1], len(substituted_text_lower_out)
+        )
         if sentence_end and sentence_start:
             sentence = text_lower[sentence_start:sentence_end]
             substituted_text_lower_out = text_lower[: sentence_end + 1]
@@ -277,7 +298,10 @@ def get_slices(lines, clean_lines):
             and len(clean_lines[j]) < 200
             and len(clean_lines[j]) > 3
             and not clean_lines[i].startswith("[MISSING_PAGE")
-            and (clean_lines[i] == clean_lines[j] or ratio(clean_lines[i], clean_lines[j]) > 0.9)
+            and (
+                clean_lines[i] == clean_lines[j]
+                or ratio(clean_lines[i], clean_lines[j]) > 0.9
+            )
         ):
             indices[i:j] = 1
     ids = np.where(indices)[0]
@@ -319,8 +343,13 @@ def remove_slice_from_lines(lines, clean_text, slice) -> str:
             break
         elif ratio(base, remove_numbers(lines[line_idx])) < 0.9:
             section[0] = line_idx + 1
-            potential_ref = remove_numbers(lines[max(0, line_idx - 1)].partition("* [")[-1])
-            if len(potential_ref) >= 0.75 * len(base) and ratio(base, potential_ref) < 0.9:
+            potential_ref = remove_numbers(
+                lines[max(0, line_idx - 1)].partition("* [")[-1]
+            )
+            if (
+                len(potential_ref) >= 0.75 * len(base)
+                and ratio(base, potential_ref) < 0.9
+            ):
                 section[0] = line_idx
             check_start_flag = True
             break
@@ -469,15 +498,25 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         """
         # remove obvious wrong tables
         for l in generation.split("\n"):
-            if l.count("\\begin{tabular}") > 15 or l.count("\\multicolumn") > 60 or l.count("&") > 400:
+            if (
+                l.count("\\begin{tabular}") > 15
+                or l.count("\\multicolumn") > 60
+                or l.count("&") > 400
+            ):
                 generation = generation.replace(l, "")
         # whitespace corrections
 
-        generation = generation.replace("\\begin{table} \\begin{tabular}", "\\begin{table}\n\\begin{tabular}")
-        generation = generation.replace("\\end{tabular} \\end{table}", "\\end{tabular}\n\\end{table}")
+        generation = generation.replace(
+            "\\begin{table} \\begin{tabular}", "\\begin{table}\n\\begin{tabular}"
+        )
+        generation = generation.replace(
+            "\\end{tabular} \\end{table}", "\\end{tabular}\n\\end{table}"
+        )
         generation = generation.replace("\\end{table} Tab", "\\end{table}\nTab")
 
-        generation = re.sub(r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.M)
+        generation = re.sub(
+            r"(^.+)\\begin{tab", r"\1\n\\begin{tab", generation, flags=re.M
+        )
 
         # Remove left-aligned empty LaTeX tabular blocks.
         generation = generation.replace(r"\begin{tabular}{l l}  & \\ \end{tabular}", "")
@@ -505,18 +544,28 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         generation = generation.replace("\n* [leftmargin=*]\n", "\n")
         # Remove lines with markdown headings starting with #, with numerals,
         # and possibly roman numerals with trailing spaces and newlines
-        generation = re.sub(r"^#+ (?:[\d+\.]+|[ixv\.]+)?\s*(?:$|\n\s*)", "", generation, flags=re.M)
+        generation = re.sub(
+            r"^#+ (?:[\d+\.]+|[ixv\.]+)?\s*(?:$|\n\s*)", "", generation, flags=re.M
+        )
         # most likely hallucinated titles
         lines = generation.split("\n")
-        if lines[-1].startswith("#") and lines[-1].lstrip("#").startswith(" ") and len(lines) > 1:
-            logger.info("Likely hallucinated title at the end of the page: " + lines[-1])
+        if (
+            lines[-1].startswith("#")
+            and lines[-1].lstrip("#").startswith(" ")
+            and len(lines) > 1
+        ):
+            logger.info(
+                "Likely hallucinated title at the end of the page: " + lines[-1]
+            )
             generation = "\n".join(lines[:-1])
         # obvious repetition detection
         generation = truncate_repetitions(generation)
         # Reference corrections
         generation = self.remove_hallucinated_references(generation)
         # Remove lines starting with asterisks and numbers like "*[1]" and followed by capital letters and periods (ie too long references)
-        generation = re.sub(r"^\* \[\d+\](\s?[A-W]\.+\s?){10,}.*$", "", generation, flags=re.M)
+        generation = re.sub(
+            r"^\* \[\d+\](\s?[A-W]\.+\s?){10,}.*$", "", generation, flags=re.M
+        )
         # Remove empty brackets after a reference number in brackets. *[12][]ABC will become *[12]ABC
         generation = re.sub(r"^(\* \[\d+\])\[\](.*)$", r"\1\2", generation, flags=re.M)
         # Remove single characters before or after 2 new lines
@@ -527,7 +576,9 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
             r"\1\(\2_{\3}\)\4",
             generation,
         )
-        generation = re.sub(r"([\s.,\d])_([a-zA-Z0-9])_([\s.,\d;])", r"\1\(\2\)\3", generation)
+        generation = re.sub(
+            r"([\s.,\d])_([a-zA-Z0-9])_([\s.,\d;])", r"\1\(\2\)\3", generation
+        )
         # footnote mistakes
         generation = re.sub(
             r"(\nFootnote .*?:) (?:footnotetext|thanks):\W*(.*(?:\n\n|$))",
@@ -610,9 +661,15 @@ class NougatTokenizerFast(PreTrainedTokenizerFast):
         if isinstance(generation, list):
             if num_workers is not None and isinstance(num_workers, int):
                 with Pool(num_workers) as p:
-                    return p.map(partial(self.post_process_single, fix_markdown=fix_markdown), generation)
+                    return p.map(
+                        partial(self.post_process_single, fix_markdown=fix_markdown),
+                        generation,
+                    )
             else:
-                return [self.post_process_single(s, fix_markdown=fix_markdown) for s in generation]
+                return [
+                    self.post_process_single(s, fix_markdown=fix_markdown)
+                    for s in generation
+                ]
         else:
             return self.post_process_single(generation, fix_markdown=fix_markdown)
 

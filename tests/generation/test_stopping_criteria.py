@@ -43,7 +43,10 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         vocab_size = 250
 
         input_ids = ids_tensor((batch_size, length), vocab_size)
-        scores = torch.ones((batch_size, length), device=torch_device, dtype=torch.float) / length
+        scores = (
+            torch.ones((batch_size, length), device=torch_device, dtype=torch.float)
+            / length
+        )
         return input_ids, scores
 
     def test_list_criteria(self):
@@ -99,7 +102,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         input_ids, scores = self._get_tensors(5)
         input_ids[:, -1] = 1
-        self.assertListEqual(criteria(input_ids, scores).tolist(), [False, False, False])
+        self.assertListEqual(
+            criteria(input_ids, scores).tolist(), [False, False, False]
+        )
 
     def test_confidence_criteria(self):
         criteria = ConfidenceCriteria(assistant_confidence_threshold=0.5)
@@ -122,7 +127,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 10)
 
         with self.assertWarns(UserWarning):
-            validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 11)
+            validate_stopping_criteria(
+                StoppingCriteriaList([MaxLengthCriteria(10)]), 11
+            )
 
         stopping_criteria = validate_stopping_criteria(StoppingCriteriaList(), 11)
 
@@ -154,8 +161,18 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
-        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
-        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        true_input_ids = tokenizer(
+            true_strings,
+            return_tensors="pt",
+            padding="longest",
+            add_special_tokens=False,
+        )
+        false_input_ids = tokenizer(
+            false_strings,
+            return_tensors="pt",
+            padding="longest",
+            add_special_tokens=False,
+        )
 
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
@@ -165,10 +182,22 @@ class StoppingCriteriaTestCase(unittest.TestCase):
             self.assertFalse(criteria(false_input_ids["input_ids"][i : i + 1], scores))
 
         # Now try it with a tokenizer where those are actually special tokens
-        tokenizer = AutoTokenizer.from_pretrained("cognitivecomputations/dolphin-2.5-mixtral-8x7b")
+        tokenizer = AutoTokenizer.from_pretrained(
+            "cognitivecomputations/dolphin-2.5-mixtral-8x7b"
+        )
         tokenizer.padding_side = "left"
-        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
-        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        true_input_ids = tokenizer(
+            true_strings,
+            return_tensors="pt",
+            padding="longest",
+            add_special_tokens=False,
+        )
+        false_input_ids = tokenizer(
+            false_strings,
+            return_tensors="pt",
+            padding="longest",
+            add_special_tokens=False,
+        )
 
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
         for i in range(len(true_strings)):
@@ -192,13 +221,21 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
         token_indices = list(range(len(token_list)))
-        all_token_valid_positions, all_token_end_overlaps = StopStringCriteria._stop_string_get_matching_positions(
-            token_list=token_list, token_indices=token_indices, stop_strings=[stop_string]
+        all_token_valid_positions, all_token_end_overlaps = (
+            StopStringCriteria._stop_string_get_matching_positions(
+                token_list=token_list,
+                token_indices=token_indices,
+                stop_strings=[stop_string],
+            )
         )
         valid_positions = {
-            token_list[idx]: positions for idx, positions in all_token_valid_positions[stop_string].items()
+            token_list[idx]: positions
+            for idx, positions in all_token_valid_positions[stop_string].items()
         }
-        end_overlaps = {token_list[idx]: overlaps for idx, overlaps in all_token_end_overlaps[stop_string].items()}
+        end_overlaps = {
+            token_list[idx]: overlaps
+            for idx, overlaps in all_token_end_overlaps[stop_string].items()
+        }
         self.assertEqual(valid_positions, {"s": [3], "last": [2]})
         self.assertEqual(end_overlaps, {"top": [3], "topper": [3], "p": [1]})
 
@@ -206,8 +243,12 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         stop_string = "stop"
         token_list = ["last", "top", "topper", "s", "p"]
         token_indices = list(range(len(token_list)))
-        embedding_vec, max_valid_positions, max_valid_end_lens = StopStringCriteria._stop_string_create_embedding_vec(
-            token_list=token_list, token_indices=token_indices, stop_strings=[stop_string]
+        embedding_vec, max_valid_positions, max_valid_end_lens = (
+            StopStringCriteria._stop_string_create_embedding_vec(
+                token_list=token_list,
+                token_indices=token_indices,
+                stop_strings=[stop_string],
+            )
         )
 
         # Positions inside the stop string where the token matches (excluding end overlaps)
@@ -230,8 +271,18 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
 
-        true_input_ids = tokenizer(true_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
-        false_input_ids = tokenizer(false_strings, return_tensors="pt", padding="longest", add_special_tokens=False)
+        true_input_ids = tokenizer(
+            true_strings,
+            return_tensors="pt",
+            padding="longest",
+            add_special_tokens=False,
+        )
+        false_input_ids = tokenizer(
+            false_strings,
+            return_tensors="pt",
+            padding="longest",
+            add_special_tokens=False,
+        )
 
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=stop_strings)
@@ -273,7 +324,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
-        inputs = tokenizer(text, return_tensors="pt", padding="longest", add_special_tokens=False)
+        inputs = tokenizer(
+            text, return_tensors="pt", padding="longest", add_special_tokens=False
+        )
 
         scores = None
         criteria = StoppingCriteriaList(
@@ -284,7 +337,12 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         )
 
         # trigger stopping when at leat one criteria is satisfied
-        self.assertListEqual(criteria(inputs["input_ids"], scores).tolist(), [True, False, False])
+        self.assertListEqual(
+            criteria(inputs["input_ids"], scores).tolist(), [True, False, False]
+        )
 
         # False when neither is satisfied
-        self.assertListEqual(criteria(inputs["input_ids"][:, :-1], scores).tolist(), [False, False, False])
+        self.assertListEqual(
+            criteria(inputs["input_ids"][:, :-1], scores).tolist(),
+            [False, False, False],
+        )

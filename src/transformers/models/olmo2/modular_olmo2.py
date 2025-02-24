@@ -177,8 +177,12 @@ ALL_LAYERNORM_LAYERS.append(Olmo2RMSNorm)
 class Olmo2Attention(OlmoAttention):
     def __init__(self, config: Olmo2Config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx=layer_idx)
-        self.q_norm = Olmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = Olmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.q_norm = Olmo2RMSNorm(
+            config.num_attention_heads * self.head_dim, config.rms_norm_eps
+        )
+        self.k_norm = Olmo2RMSNorm(
+            config.num_key_value_heads * self.head_dim, config.rms_norm_eps
+        )
 
     def forward(
         self,
@@ -201,22 +205,30 @@ class Olmo2Attention(OlmoAttention):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -240,8 +252,12 @@ class Olmo2Attention(OlmoAttention):
 class Olmo2DecoderLayer(OlmoDecoderLayer):
     def __init__(self, config: Olmo2Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
-        self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Olmo2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
+        self.post_feedforward_layernorm = Olmo2RMSNorm(
+            config.hidden_size, eps=config.rms_norm_eps
+        )
         self.self_attn = Olmo2Attention(config=config, layer_idx=layer_idx)
         del self.input_layernorm
 
@@ -254,9 +270,13 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         residual = hidden_states
 
         # Self Attention
@@ -294,7 +314,10 @@ class Olmo2Model(OlmoModel):
         super().__init__(config)
         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layers = nn.ModuleList(
-            [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                Olmo2DecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
 
 

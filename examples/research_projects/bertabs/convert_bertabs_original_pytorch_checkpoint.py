@@ -119,7 +119,12 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
 
     # failsafe to make sure the weights reset does not affect the
     # loaded weights.
-    assert torch.max(torch.abs(original.generator[0].weight - new_model.generator[0].weight)) == 0
+    assert (
+        torch.max(
+            torch.abs(original.generator[0].weight - new_model.generator[0].weight)
+        )
+        == 0
+    )
 
     # forward pass
     src = encoder_input_ids
@@ -134,30 +139,53 @@ def convert_bertabs_checkpoints(path_to_checkpoints, dump_path):
     # the beam search (where it combines softmax + linear layer). Since we already
     # apply the softmax in our generation process we only apply the linear layer here.
     # We make sure that the outputs of the full stack are identical
-    output_original_model = original(src, tgt, segs, clss, mask_src, mask_tgt, mask_cls)[0]
+    output_original_model = original(
+        src, tgt, segs, clss, mask_src, mask_tgt, mask_cls
+    )[0]
     output_original_generator = original.generator(output_original_model)
 
     output_converted_model = new_model(
-        encoder_input_ids, decoder_input_ids, token_type_ids, encoder_attention_mask, decoder_attention_mask
+        encoder_input_ids,
+        decoder_input_ids,
+        token_type_ids,
+        encoder_attention_mask,
+        decoder_attention_mask,
     )[0]
     output_converted_generator = new_model.generator(output_converted_model)
 
-    maximum_absolute_difference = torch.max(torch.abs(output_converted_model - output_original_model)).item()
-    print("Maximum absolute difference beween weights: {:.2f}".format(maximum_absolute_difference))
-    maximum_absolute_difference = torch.max(torch.abs(output_converted_generator - output_original_generator)).item()
-    print("Maximum absolute difference beween weights: {:.2f}".format(maximum_absolute_difference))
+    maximum_absolute_difference = torch.max(
+        torch.abs(output_converted_model - output_original_model)
+    ).item()
+    print(
+        "Maximum absolute difference beween weights: {:.2f}".format(
+            maximum_absolute_difference
+        )
+    )
+    maximum_absolute_difference = torch.max(
+        torch.abs(output_converted_generator - output_original_generator)
+    ).item()
+    print(
+        "Maximum absolute difference beween weights: {:.2f}".format(
+            maximum_absolute_difference
+        )
+    )
 
-    are_identical = torch.allclose(output_converted_model, output_original_model, atol=1e-3)
+    are_identical = torch.allclose(
+        output_converted_model, output_original_model, atol=1e-3
+    )
     if are_identical:
         logging.info("all weights are equal up to 1e-3")
     else:
-        raise ValueError("the weights are different. The new model is likely different from the original one.")
+        raise ValueError(
+            "the weights are different. The new model is likely different from the original one."
+        )
 
     # The model has been saved with torch.save(model) and this is bound to the exact
     # directory structure. We save the state_dict instead.
     logging.info("saving the model's state dictionary")
     torch.save(
-        new_model.state_dict(), "./bertabs-finetuned-cnndm-extractive-abstractive-summarization/pytorch_model.bin"
+        new_model.state_dict(),
+        "./bertabs-finetuned-cnndm-extractive-abstractive-summarization/pytorch_model.bin",
     )
 
 

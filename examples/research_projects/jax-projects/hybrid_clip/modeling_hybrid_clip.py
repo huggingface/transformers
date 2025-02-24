@@ -43,7 +43,9 @@ class FlaxHybridCLIPModule(nn.Module):
         self.vision_embed_dim = vision_config.hidden_size
 
         text_module = FLAX_MODEL_MAPPING[self.config.text_config.__class__].module_class
-        vision_module = FLAX_MODEL_MAPPING.get(self.config.vision_config.__class__, FlaxCLIPVisionModel).module_class
+        vision_module = FLAX_MODEL_MAPPING.get(
+            self.config.vision_config.__class__, FlaxCLIPVisionModel
+        ).module_class
 
         self.text_model = text_module(text_config, dtype=self.dtype)
         self.vision_model = vision_module(vision_config, dtype=self.dtype)
@@ -74,7 +76,9 @@ class FlaxHybridCLIPModule(nn.Module):
         output_hidden_states=None,
         return_dict=None,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -102,7 +106,9 @@ class FlaxHybridCLIPModule(nn.Module):
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
+        image_embeds = image_embeds / jnp.linalg.norm(
+            image_embeds, axis=-1, keepdims=True
+        )
         text_embeds = text_embeds / jnp.linalg.norm(text_embeds, axis=-1, keepdims=True)
 
         # cosine similarity as logits
@@ -111,7 +117,14 @@ class FlaxHybridCLIPModule(nn.Module):
         logits_per_image = logits_per_text.T
 
         if not return_dict:
-            return (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return (
+                logits_per_image,
+                logits_per_text,
+                text_embeds,
+                image_embeds,
+                text_outputs,
+                vision_outputs,
+            )
 
         return FlaxCLIPOutput(
             logits_per_image=logits_per_image,
@@ -136,15 +149,29 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         **kwargs,
     ):
         if input_shape is None:
-            input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))
+            input_shape = (
+                (1, 1),
+                (
+                    1,
+                    config.vision_config.image_size,
+                    config.vision_config.image_size,
+                    3,
+                ),
+            )
 
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+        super().__init__(
+            config, module, input_shape=input_shape, seed=seed, dtype=dtype
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensor
         input_ids = jnp.zeros(input_shape[0], dtype="i4")
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0])
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0]
+        )
         token_type_ids = jnp.ones_like(input_ids)
         attention_mask = jnp.ones_like(input_ids)
 
@@ -153,7 +180,9 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, input_ids, pixel_values, attention_mask, position_ids, token_type_ids)["params"]
+        return self.module.init(
+            rngs, input_ids, pixel_values, attention_mask, position_ids, token_type_ids
+        )["params"]
 
     def __call__(
         self,
@@ -169,14 +198,24 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if token_type_ids is None:
             token_type_ids = jnp.zeros_like(input_ids)
@@ -230,7 +269,9 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
             obtained by applying the projection layer to the pooled output of text model.
         """
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if token_type_ids is None:
             token_type_ids = jnp.zeros_like(input_ids)
@@ -243,7 +284,14 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        def _get_features(module, input_ids, attention_mask, position_ids, token_type_ids, deterministic):
+        def _get_features(
+            module,
+            input_ids,
+            attention_mask,
+            position_ids,
+            token_type_ids,
+            deterministic,
+        ):
             text_outputs = module.text_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -267,7 +315,11 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         )
 
     def get_image_features(
-        self, pixel_values, params: dict = None, dropout_rng: jax.random.PRNGKey = None, train=False
+        self,
+        pixel_values,
+        params: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        train=False,
     ):
         r"""
         Args:
@@ -287,7 +339,9 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
             rngs["dropout"] = dropout_rng
 
         def _get_features(module, pixel_values, deterministic):
-            vision_outputs = module.vision_model(pixel_values=pixel_values, deterministic=deterministic)
+            vision_outputs = module.vision_model(
+                pixel_values=pixel_values, deterministic=deterministic
+            )
             pooled_output = vision_outputs[1]  # pooled_output
             image_features = module.visual_projection(pooled_output)
             return image_features
@@ -358,11 +412,15 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
         """
 
         kwargs_text = {
-            argument[len("text_") :]: value for argument, value in kwargs.items() if argument.startswith("text_")
+            argument[len("text_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("text_")
         }
 
         kwargs_vision = {
-            argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")
+            argument[len("vision_") :]: value
+            for argument, value in kwargs.items()
+            if argument.startswith("vision_")
         }
 
         # remove text, vision kwargs from kwargs
@@ -385,7 +443,9 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 text_config = AutoConfig.from_pretrained(text_model_name_or_path)
                 kwargs_text["config"] = text_config
 
-            text_model = FlaxAutoModel.from_pretrained(text_model_name_or_path, *model_args, **kwargs_text)
+            text_model = FlaxAutoModel.from_pretrained(
+                text_model_name_or_path, *model_args, **kwargs_text
+            )
 
         vision_model = kwargs_vision.pop("model", None)
         if vision_model is None:
@@ -400,18 +460,26 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
                 vision_config = AutoConfig.from_pretrained(vision_model_name_or_path)
                 kwargs_vision["config"] = vision_config
 
-            vision_model = FlaxAutoModel.from_pretrained(vision_model_name_or_path, *model_args, **kwargs_vision)
+            vision_model = FlaxAutoModel.from_pretrained(
+                vision_model_name_or_path, *model_args, **kwargs_vision
+            )
 
         # instantiate config with corresponding kwargs
         dtype = kwargs.pop("dtype", jnp.float32)
-        config = HybridCLIPConfig.from_text_vision_configs(text_model.config, vision_model.config, **kwargs)
+        config = HybridCLIPConfig.from_text_vision_configs(
+            text_model.config, vision_model.config, **kwargs
+        )
 
         # init model
         model = cls(config, *model_args, dtype=dtype, **kwargs)
 
         if vision_config.model_type == "clip":
-            model.params["vision_model"]["vision_model"] = vision_model.params["vision_model"]
-            model.params["visual_projection"]["kernel"] = vision_model.params["visual_projection"]["kernel"]
+            model.params["vision_model"]["vision_model"] = vision_model.params[
+                "vision_model"
+            ]
+            model.params["visual_projection"]["kernel"] = vision_model.params[
+                "visual_projection"
+            ]["kernel"]
         else:
             model.params["vision_model"] = vision_model.params
 

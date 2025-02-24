@@ -168,7 +168,9 @@ class Mask2FormerConfig(PretrainedConfig):
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `Swin` backbone."
+            )
             backbone_config = CONFIG_MAPPING["swin"](
                 image_size=224,
                 num_channels=3,
@@ -194,7 +196,10 @@ class Mask2FormerConfig(PretrainedConfig):
             backbone_kwargs=backbone_kwargs,
         )
         # verify that the backbone is supported
-        if backbone_config is not None and backbone_config.model_type not in self.backbones_supported:
+        if (
+            backbone_config is not None
+            and backbone_config.model_type not in self.backbones_supported
+        ):
             logger.warning_once(
                 f"Backbone {backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
                 f"Supported model types: {','.join(self.backbones_supported)}"

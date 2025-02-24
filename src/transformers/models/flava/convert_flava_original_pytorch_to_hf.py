@@ -19,12 +19,17 @@ import os
 import torch
 
 from transformers import FlavaConfig, FlavaForPreTraining
-from transformers.models.flava.convert_dalle_to_flava_codebook import convert_dalle_checkpoint
+from transformers.models.flava.convert_dalle_to_flava_codebook import (
+    convert_dalle_checkpoint,
+)
 
 
 def count_parameters(state_dict):
     # encoder.embeddings are double copied in original FLAVA
-    return sum(param.float().sum() if "encoder.embeddings" not in key else 0 for key, param in state_dict.items())
+    return sum(
+        param.float().sum() if "encoder.embeddings" not in key else 0
+        for key, param in state_dict.items()
+    )
 
 
 def upgrade_state_dict(state_dict, codebook_state_dict):
@@ -45,7 +50,9 @@ def upgrade_state_dict(state_dict, codebook_state_dict):
         key = key.replace("mm_image_projection", "flava.image_to_mm_projection")
         key = key.replace("image_encoder.module", "flava.image_model")
         key = key.replace("text_encoder.module", "flava.text_model")
-        key = key.replace("mm_encoder.module.encoder.cls_token", "flava.multimodal_model.cls_token")
+        key = key.replace(
+            "mm_encoder.module.encoder.cls_token", "flava.multimodal_model.cls_token"
+        )
         key = key.replace("mm_encoder.module", "flava.multimodal_model")
         key = key.replace("text_projection", "flava.text_projection")
         key = key.replace("image_projection", "flava.image_projection")
@@ -59,7 +66,9 @@ def upgrade_state_dict(state_dict, codebook_state_dict):
 
 
 @torch.no_grad()
-def convert_flava_checkpoint(checkpoint_path, codebook_path, pytorch_dump_folder_path, config_path=None):
+def convert_flava_checkpoint(
+    checkpoint_path, codebook_path, pytorch_dump_folder_path, config_path=None
+):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
@@ -70,18 +79,24 @@ def convert_flava_checkpoint(checkpoint_path, codebook_path, pytorch_dump_folder
 
     hf_model = FlavaForPreTraining(config).eval()
 
-    codebook_state_dict = convert_dalle_checkpoint(codebook_path, None, save_checkpoint=False)
+    codebook_state_dict = convert_dalle_checkpoint(
+        codebook_path, None, save_checkpoint=False
+    )
 
     if os.path.exists(checkpoint_path):
         state_dict = torch.load(checkpoint_path, map_location="cpu")
     else:
-        state_dict = torch.hub.load_state_dict_from_url(checkpoint_path, map_location="cpu")
+        state_dict = torch.hub.load_state_dict_from_url(
+            checkpoint_path, map_location="cpu"
+        )
 
     hf_state_dict = upgrade_state_dict(state_dict, codebook_state_dict)
     hf_model.load_state_dict(hf_state_dict)
     hf_state_dict = hf_model.state_dict()
     hf_count = count_parameters(hf_state_dict)
-    state_dict_count = count_parameters(state_dict) + count_parameters(codebook_state_dict)
+    state_dict_count = count_parameters(state_dict) + count_parameters(
+        codebook_state_dict
+    )
 
     assert torch.allclose(hf_count, state_dict_count, atol=1e-3)
 
@@ -90,10 +105,32 @@ def convert_flava_checkpoint(checkpoint_path, codebook_path, pytorch_dump_folder
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to flava checkpoint")
-    parser.add_argument("--codebook_path", default=None, type=str, help="Path to flava codebook checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--checkpoint_path", default=None, type=str, help="Path to flava checkpoint"
+    )
+    parser.add_argument(
+        "--codebook_path",
+        default=None,
+        type=str,
+        help="Path to flava codebook checkpoint",
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
     args = parser.parse_args()
 
-    convert_flava_checkpoint(args.checkpoint_path, args.codebook_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_flava_checkpoint(
+        args.checkpoint_path,
+        args.codebook_path,
+        args.pytorch_dump_folder_path,
+        args.config_path,
+    )

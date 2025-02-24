@@ -107,18 +107,26 @@ class GPTNeoModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         mc_token_ids = None
         if self.use_mc_token_ids:
-            mc_token_ids = ids_tensor([self.batch_size, self.num_choices], self.seq_length)
+            mc_token_ids = ids_tensor(
+                [self.batch_size, self.num_choices], self.seq_length
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
@@ -157,7 +165,9 @@ class GPTNeoModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_gpt_neo_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt_neo_model(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = GPTNeoModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -166,11 +176,16 @@ class GPTNeoModelTester:
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
         # past_key_values is not implemented
         # self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_gpt_neo_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_gpt_neo_model_past(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = GPTNeoModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -178,7 +193,9 @@ class GPTNeoModelTester:
         # first forward pass
         outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
         outputs_use_cache_conf = model(input_ids, token_type_ids=token_type_ids)
-        outputs_no_past = model(input_ids, token_type_ids=token_type_ids, use_cache=False)
+        outputs_no_past = model(
+            input_ids, token_type_ids=token_type_ids, use_cache=False
+        )
 
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
@@ -193,18 +210,24 @@ class GPTNeoModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
 
-        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
+        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens, token_type_ids=next_token_types, past_key_values=past
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def create_and_check_gpt_neo_model_attention_mask_past(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
@@ -226,27 +249,42 @@ class GPTNeoModelTester:
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, 1), config.vocab_size
+        ).squeeze(-1)
         input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
 
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.ones(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
+        output_from_past = model(
+            next_tokens, past_key_values=past, attention_mask=attn_mask
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def create_and_check_gpt_neo_model_past_large_inputs(
         self, config, input_ids, input_mask, head_mask, token_type_ids, *args
@@ -256,7 +294,12 @@ class GPTNeoModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, token_type_ids=token_type_ids, attention_mask=input_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            token_type_ids=token_type_ids,
+            attention_mask=input_mask,
+            use_cache=True,
+        )
 
         output, past = outputs.to_tuple()
 
@@ -271,63 +314,122 @@ class GPTNeoModelTester:
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
         output_from_no_past = model(
-            next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
+            next_input_ids,
+            token_type_ids=next_token_type_ids,
+            attention_mask=next_attention_mask,
         )["last_hidden_state"]
         output_from_past = model(
-            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past_key_values=past
+            next_tokens,
+            token_type_ids=next_token_types,
+            attention_mask=next_attention_mask,
+            past_key_values=past,
         )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
         model = GPTNeoForCausalLM(config)
         model.to(torch_device)
         model.eval()
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_gpt_neo_for_question_answering(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        token_type_ids,
+        mc_token_ids,
+        sequence_labels,
+        *args
     ):
         config.num_labels = self.num_labels
         model = GPTNeoForQuestionAnswering(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def create_and_check_gpt_neo_for_sequence_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        token_type_ids,
+        mc_token_ids,
+        sequence_labels,
+        *args
     ):
         config.num_labels = self.num_labels
         model = GPTNeoForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_gpt_neo_for_token_classification(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        token_type_ids,
+        mc_token_ids,
+        sequence_labels,
+        *args
     ):
         config.num_labels = self.num_labels
         model = GPTNeoForTokenClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
+        self,
+        config,
+        input_ids,
+        input_mask,
+        head_mask,
+        token_type_ids,
+        *args,
+        gradient_checkpointing=False
     ):
         model = GPTNeoForCausalLM(config)
         if gradient_checkpointing:
@@ -336,7 +438,9 @@ class GPTNeoModelTester:
 
         result = model(input_ids, token_type_ids=token_type_ids, labels=input_ids)
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
         result.loss.backward()
 
     def prepare_config_and_inputs_for_common(self):
@@ -364,7 +468,9 @@ class GPTNeoModelTester:
 
 
 @require_torch
-class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTNeoModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             GPTNeoModel,
@@ -395,7 +501,9 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
         return inputs_dict
 
     def setUp(self):
@@ -415,11 +523,15 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_gpt_neo_model_att_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_neo_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_gpt_neo_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     def test_gpt_neo_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_neo_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_gpt_neo_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_gpt_neo_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -427,19 +539,27 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     def test_gpt_neo_question_answering_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_neo_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_gpt_neo_for_question_answering(
+            *config_and_inputs
+        )
 
     def test_gpt_neo_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_neo_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_gpt_neo_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_gpt_neo_token_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_gpt_neo_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_gpt_neo_for_token_classification(
+            *config_and_inputs
+        )
 
     def test_gpt_neo_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
+        self.model_tester.create_and_check_forward_and_backwards(
+            *config_and_inputs, gradient_checkpointing=True
+        )
 
     def _get_hidden_states(self):
         return torch.tensor(
@@ -467,14 +587,18 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         batch_size, seq_length, _ = hidden_states.shape
         mask_tokens = 2
-        attention_mask = torch.ones(batch_size, seq_length, device=torch_device, dtype=torch.long)
+        attention_mask = torch.ones(
+            batch_size, seq_length, device=torch_device, dtype=torch.long
+        )
         attention_mask[:, -mask_tokens:] = 0  # dont attend last mask_tokens
 
         attention_mask = attention_mask.view(batch_size, -1)
         attention_mask = attention_mask[:, None, None, :]
         attention_mask = (1.0 - attention_mask) * -10000.0
 
-        attn_probs = layer(hidden_states, attention_mask=attention_mask, output_attentions=True)[-1]
+        attn_probs = layer(
+            hidden_states, attention_mask=attention_mask, output_attentions=True
+        )[-1]
 
         # the last 2 tokens are masked, and should have 0 attn_probs
         self.assertTrue(torch.all(attn_probs[:, :, -mask_tokens:, -mask_tokens:] == 0))
@@ -490,7 +614,9 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
     @cached_property
     def model(self):
-        return GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B").to(torch_device)
+        return GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B").to(
+            torch_device
+        )
 
     @cached_property
     def tokenizer(self):
@@ -504,7 +630,9 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
                 model.gradient_checkpointing_enable()
             else:
                 model.gradient_checkpointing_disable()
-            input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
+            input_ids = torch.tensor(
+                [[464, 3290]], dtype=torch.long, device=torch_device
+            )  # The dog
             # The dog-eared copy of the book, which is a collection of essays by the late author,
             expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # fmt: skip
             output_ids = model.generate(input_ids, do_sample=False)
@@ -516,12 +644,16 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
         tokenizer = self.tokenizer
 
         torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
+        tokenized = tokenizer(
+            "Today is a nice day and", return_tensors="pt", return_token_type_ids=True
+        )
         input_ids = tokenized.input_ids.to(torch_device)
         output_ids = model.generate(input_ids, do_sample=True)
         output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_STR = "Today is a nice day and if you don’t get the memo here is what you can"
+        EXPECTED_OUTPUT_STR = (
+            "Today is a nice day and if you don’t get the memo here is what you can"
+        )
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
 
     @slow
@@ -549,15 +681,26 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
             attention_mask=inputs["attention_mask"].to(torch_device),
         )
 
-        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(
+            torch_device
+        )
         output_non_padded = model.generate(input_ids=inputs_non_padded)
 
-        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
-        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        num_paddings = (
+            inputs_non_padded.shape[-1]
+            - inputs["attention_mask"][-1].long().sum().cpu().item()
+        )
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(
+            torch_device
+        )
+        output_padded = model.generate(
+            input_ids=inputs_padded, max_length=model.config.max_length - num_paddings
+        )
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(
+            output_non_padded[0], skip_special_tokens=True
+        )
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
         expected_output_sentence = [
@@ -565,7 +708,9 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
             "Today, I am going to talk about the best way to get a job in the",
         ]
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
-        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
+        self.assertListEqual(
+            expected_output_sentence, [non_padded_sentence, padded_sentence]
+        )
 
     @slow
     def test_model_from_pretrained(self):

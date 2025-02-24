@@ -33,19 +33,31 @@ _CONFIG_FOR_DOC = "PhiConfig"
 class PhiAttention(LlamaAttention):
     def __init__(self, config: PhiConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.dense = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=True
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True
+        )
+        self.dense = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=True
+        )
         del self.o_proj
         self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
         self.qk_layernorm = config.qk_layernorm
         if self.qk_layernorm:
             self.q_layernorm = nn.LayerNorm(
-                config.hidden_size // config.num_attention_heads, eps=config.layer_norm_eps, elementwise_affine=True
+                config.hidden_size // config.num_attention_heads,
+                eps=config.layer_norm_eps,
+                elementwise_affine=True,
             )
             self.k_layernorm = nn.LayerNorm(
-                config.hidden_size // config.num_attention_heads, eps=config.layer_norm_eps, elementwise_affine=True
+                config.hidden_size // config.num_attention_heads,
+                eps=config.layer_norm_eps,
+                elementwise_affine=True,
             )
 
     def forward(
@@ -88,17 +100,23 @@ class PhiAttention(LlamaAttention):
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -125,7 +143,9 @@ class PhiDecoderLayer(nn.Module):
         super().__init__()
         self.self_attn = PhiAttention(config, layer_idx=layer_idx)
         self.mlp = PhiMLP(config)
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
     def forward(
@@ -137,9 +157,13 @@ class PhiDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        position_embeddings: Optional[
+            Tuple[torch.Tensor, torch.Tensor]
+        ] = None,  # necessary, but kept here for BC
         **kwargs,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]
+    ]:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -172,10 +196,15 @@ class PhiModel(LlamaModel):
     def __init__(self, config: PhiConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [
+                PhiDecoderLayer(config, layer_idx)
+                for layer_idx in range(config.num_hidden_layers)
+            ]
         )
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
-        self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.final_layernorm = nn.LayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps
+        )
         del self.norm
 
     def forward(
@@ -192,15 +221,25 @@ class PhiModel(LlamaModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -215,16 +254,24 @@ class PhiModel(LlamaModel):
             past_key_values = DynamicCache()
 
         if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = (
+                past_key_values.get_seq_length() if past_key_values is not None else 0
+            )
             cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+                past_seen_tokens,
+                past_seen_tokens + inputs_embeds.shape[1],
+                device=inputs_embeds.device,
             )
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
+            attention_mask,
+            inputs_embeds,
+            cache_position,
+            past_key_values,
+            output_attentions,
         )
 
         inputs_embeds = self.embed_dropout(inputs_embeds)  # diff with Llama

@@ -99,7 +99,12 @@ class SiglipTextConfig(PretrainedConfig):
         projection_size=None,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -110,7 +115,9 @@ class SiglipTextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
-        self.projection_size = projection_size if projection_size is not None else hidden_size
+        self.projection_size = (
+            projection_size if projection_size is not None else hidden_size
+        )
 
 
 class SiglipVisionConfig(PretrainedConfig):
@@ -242,11 +249,15 @@ class SiglipConfig(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `SiglipTextConfig` with default values.")
+            logger.info(
+                "`text_config` is `None`. Initializing the `SiglipTextConfig` with default values."
+            )
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. initializing the `SiglipVisionConfig` with default values.")
+            logger.info(
+                "`vision_config` is `None`. initializing the `SiglipVisionConfig` with default values."
+            )
 
         self.text_config = SiglipTextConfig(**text_config)
         self.vision_config = SiglipVisionConfig(**vision_config)
@@ -254,7 +265,9 @@ class SiglipConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: SiglipTextConfig, vision_config: SiglipVisionConfig, **kwargs):
+    def from_text_vision_configs(
+        cls, text_config: SiglipTextConfig, vision_config: SiglipVisionConfig, **kwargs
+    ):
         r"""
         Instantiate a [`SiglipConfig`] (or a derived class) from siglip text model configuration and siglip vision
         model configuration.
@@ -263,7 +276,11 @@ class SiglipConfig(PretrainedConfig):
             [`SiglipConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            vision_config=vision_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["SiglipConfig", "SiglipTextConfig", "SiglipVisionConfig"]

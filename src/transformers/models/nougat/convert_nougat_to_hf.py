@@ -71,7 +71,9 @@ def rename_key(name):
     if "decoder.model" in name:
         name = name.replace("decoder.model", "decoder")
     if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "embeddings.norm")
     if name.startswith("encoder"):
@@ -107,29 +109,36 @@ def convert_state_dict(orig_state_dict, model):
             key_split = key.split(".")
             layer_num = int(key_split[3])
             block_num = int(key_split[5])
-            dim = model.encoder.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
+            dim = (
+                model.encoder.encoder.layers[layer_num]
+                .blocks[block_num]
+                .attention.self.all_head_size
+            )
 
             if "weight" in key:
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
                 ] = val[:dim, :]
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = (
-                    val[dim : dim * 2, :]
-                )
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
+                ] = val[dim : dim * 2, :]
                 orig_state_dict[
                     f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
                 ] = val[-dim:, :]
             else:
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = (
-                    val[:dim]
-                )
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = (
-                    val[dim : dim * 2]
-                )
-                orig_state_dict[f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = (
-                    val[-dim:]
-                )
-        elif "attn_mask" in key or key in ["encoder.model.norm.weight", "encoder.model.norm.bias"]:
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"encoder.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
+                ] = val[-dim:]
+        elif "attn_mask" in key or key in [
+            "encoder.model.norm.weight",
+            "encoder.model.norm.bias",
+        ]:
             # HuggingFace implementation doesn't use attn_mask buffer
             # and model doesn't use final LayerNorms for the encoder
             pass
@@ -139,7 +148,9 @@ def convert_state_dict(orig_state_dict, model):
     return orig_state_dict
 
 
-def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_nougat_checkpoint(
+    model_tag, pytorch_dump_folder_path=None, push_to_hub=False
+):
     # load original model
     checkpoint_path = get_checkpoint(None, model_tag)
     original_model = NougatModel.from_pretrained(checkpoint_path)
@@ -157,7 +168,9 @@ def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_
     model.load_state_dict(new_state_dict)
 
     # verify results on PDF
-    filepath = hf_hub_download(repo_id="ysharma/nougat", filename="input/nougat.pdf", repo_type="space")
+    filepath = hf_hub_download(
+        repo_id="ysharma/nougat", filename="input/nougat.pdf", repo_type="space"
+    )
     images = rasterize_paper(pdf=filepath, return_pil=True)
     image = Image.open(images[0])
 
@@ -169,7 +182,10 @@ def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_
     tokenizer.unk_token = "<unk>"
     tokenizer.model_max_length = original_model.config.max_length
 
-    size = {"height": original_model.config.input_size[0], "width": original_model.config.input_size[1]}
+    size = {
+        "height": original_model.config.input_size[0],
+        "width": original_model.config.input_size[1],
+    }
     image_processor = NougatImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis,
         size=size,
@@ -204,7 +220,9 @@ def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_
     ).input_ids
     decoder_attention_mask = torch.ones_like(decoder_input_ids)
     original_logits = original_model(
-        image_tensors=pixel_values, decoder_input_ids=decoder_input_ids, attention_mask=decoder_attention_mask
+        image_tensors=pixel_values,
+        decoder_input_ids=decoder_input_ids,
+        attention_mask=decoder_attention_mask,
     ).logits
     logits = model(
         pixel_values,
@@ -232,9 +250,7 @@ def convert_nougat_checkpoint(model_tag, pytorch_dump_folder_path=None, push_to_
     if model_tag == "0.1.0-base":
         expected_generation = "# Nougat: Neural Optical Understanding for Academic Documents\n\nLukas Blecher\n\nCorrespondence to: lblec"
     elif model_tag == "0.1.0-small":
-        expected_generation = (
-            "# Nougat: Neural Optical Understanding for Academic Documents\n\nLukas Blecher\n\nCorrespondence to: lble"
-        )
+        expected_generation = "# Nougat: Neural Optical Understanding for Academic Documents\n\nLukas Blecher\n\nCorrespondence to: lble"
     else:
         raise ValueError(f"Unexpected model tag: {model_tag}")
 
@@ -279,4 +295,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_nougat_checkpoint(args.model_tag, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_nougat_checkpoint(
+        args.model_tag, args.pytorch_dump_folder_path, args.push_to_hub
+    )

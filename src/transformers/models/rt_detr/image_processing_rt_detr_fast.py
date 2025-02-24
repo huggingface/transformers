@@ -60,7 +60,9 @@ class RTDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
     pad_size: Optional[Dict[str, int]]
 
 
-class RTDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+class RTDetrFastImageProcessorPreprocessKwargs(
+    DefaultFastImageProcessorPreprocessKwargs
+):
     format: Optional[AnnotationFormat]
     annotations: Optional[Dict]
     do_convert_annotations: Optional[bool]
@@ -70,7 +72,10 @@ class RTDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreproce
     masks_path: Optional[Union[str, pathlib.Path]]
 
 
-SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
+SUPPORTED_ANNOTATION_FORMATS = (
+    AnnotationFormat.COCO_DETECTION,
+    AnnotationFormat.COCO_PANOPTIC,
+)
 
 
 def prepare_coco_detection_annotation(
@@ -105,7 +110,9 @@ def prepare_coco_detection_annotation(
     area = torch.as_tensor(area, dtype=torch.float32, device=image.device)
     iscrowd = torch.zeros_like(classes, dtype=torch.int64, device=image.device)
     # guard against no boxes via resizing
-    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(-1, 4)
+    boxes = torch.as_tensor(boxes, dtype=torch.float32, device=image.device).reshape(
+        -1, 4
+    )
     boxes[:, 2:] += boxes[:, :2]
     boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=image_width)
     boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=image_height)
@@ -118,7 +125,11 @@ def prepare_coco_detection_annotation(
         "boxes": boxes[keep],
         "area": area[keep],
         "iscrowd": iscrowd[keep],
-        "orig_size": torch.as_tensor([int(image_height), int(image_width)], dtype=torch.int64, device=image.device),
+        "orig_size": torch.as_tensor(
+            [int(image_height), int(image_width)],
+            dtype=torch.int64,
+            device=image.device,
+        ),
     }
 
     if keypoints:
@@ -173,8 +184,13 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
-        if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
-            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+        if (
+            do_convert_annotations is None
+            and getattr(self, "do_convert_annotations", None) is None
+        ):
+            self.do_convert_annotations = (
+                do_normalize if do_normalize is not None else self.do_normalize
+            )
 
         super().__init__(**kwargs)
 
@@ -193,9 +209,16 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         format = format if format is not None else self.format
 
         if format == AnnotationFormat.COCO_DETECTION:
-            return_segmentation_masks = False if return_segmentation_masks is None else return_segmentation_masks
+            return_segmentation_masks = (
+                False
+                if return_segmentation_masks is None
+                else return_segmentation_masks
+            )
             target = prepare_coco_detection_annotation(
-                image, target, return_segmentation_masks, input_data_format=input_data_format
+                image,
+                target,
+                return_segmentation_masks,
+                input_data_format=input_data_format,
             )
         else:
             raise ValueError(f"Format {format} is not supported.")
@@ -228,7 +251,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        )
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -238,7 +263,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 size["longest_edge"],
             )
         elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size["max_height"], size["max_width"])
+            new_size = get_image_size_for_max_height_width(
+                image.size()[-2:], size["max_height"], size["max_width"]
+            )
         elif size.height and size.width:
             new_size = (size["height"], size["width"])
         else:
@@ -278,8 +305,12 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             resample (`InterpolationMode`, defaults to `InterpolationMode.NEAREST`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST
-        ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.NEAREST
+        )
+        ratio_height, ratio_width = [
+            target / orig for target, orig in zip(target_size, orig_size)
+        ]
 
         new_annotation = {}
         new_annotation["size"] = target_size
@@ -288,7 +319,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             if key == "boxes":
                 boxes = value
                 scaled_boxes = boxes * torch.as_tensor(
-                    [ratio_width, ratio_height, ratio_width, ratio_height], dtype=torch.float32, device=boxes.device
+                    [ratio_width, ratio_height, ratio_width, ratio_height],
+                    dtype=torch.float32,
+                    device=boxes.device,
                 )
                 new_annotation["boxes"] = scaled_boxes
             elif key == "area":
@@ -297,7 +330,10 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["area"] = scaled_area
             elif key == "masks":
                 masks = value[:, None]
-                masks = [F.resize(mask, target_size, interpolation=interpolation) for mask in masks]
+                masks = [
+                    F.resize(mask, target_size, interpolation=interpolation)
+                    for mask in masks
+                ]
                 masks = torch.stack(masks).to(torch.float32)
                 masks = masks[:, 0] > threshold
                 new_annotation["masks"] = masks
@@ -308,7 +344,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
         return new_annotation
 
-    def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
+    def normalize_annotation(
+        self, annotation: Dict, image_size: Tuple[int, int]
+    ) -> Dict:
         image_height, image_width = image_size
         norm_annotation = {}
         for key, value in annotation.items():
@@ -316,7 +354,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 boxes = value
                 boxes = corners_to_center_format(boxes)
                 boxes /= torch.as_tensor(
-                    [image_width, image_height, image_width, image_height], dtype=torch.float32, device=boxes.device
+                    [image_width, image_height, image_width, image_height],
+                    dtype=torch.float32,
+                    device=boxes.device,
                 )
                 norm_annotation[key] = boxes
             else:
@@ -336,7 +376,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         """
         new_annotation = {}
         new_annotation["size"] = output_image_size
-        ratio_height, ratio_width = (input / output for output, input in zip(output_image_size, input_image_size))
+        ratio_height, ratio_width = (
+            input / output for output, input in zip(output_image_size, input_image_size)
+        )
 
         for key, value in annotation.items():
             if key == "masks":
@@ -350,7 +392,10 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["masks"] = masks
             elif key == "boxes" and update_bboxes:
                 boxes = value
-                boxes *= torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height], device=boxes.device)
+                boxes *= torch.as_tensor(
+                    [ratio_width, ratio_height, ratio_width, ratio_height],
+                    device=boxes.device,
+                )
                 new_annotation["boxes"] = boxes
             elif key == "size":
                 new_annotation["size"] = output_image_size
@@ -424,7 +469,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         """,
     )
     def preprocess(
-        self, images: ImageInput, **kwargs: Unpack[RTDetrFastImageProcessorPreprocessKwargs]
+        self,
+        images: ImageInput,
+        **kwargs: Unpack[RTDetrFastImageProcessorPreprocessKwargs],
     ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
@@ -470,7 +517,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         processed_images = []
         processed_annotations = []
         pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+        for image, annotation in zip(
+            images, annotations if annotations is not None else [None] * len(images)
+        ):
             # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
             if annotations is not None:
                 annotation = self.prepare_annotation(
@@ -483,7 +532,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 )
 
             if do_resize:
-                resized_image = self.resize(image, size=size, interpolation=interpolation)
+                resized_image = self.resize(
+                    image, size=size, interpolation=interpolation
+                )
                 if annotations is not None:
                     annotation = self.resize_annotation(
                         annotation,
@@ -494,14 +545,18 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
             if do_rescale and do_normalize:
                 # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
+                image = F.normalize(
+                    image.to(dtype=torch.float32), image_mean, image_std
+                )
             elif do_rescale:
                 image = image * rescale_factor
             elif do_normalize:
                 image = F.normalize(image, image_mean, image_std)
 
             if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
+                annotation = self.normalize_annotation(
+                    annotation, get_image_size(image, ChannelDimension.FIRST)
+                )
 
             processed_images.append(image)
             processed_annotations.append(annotation)
@@ -517,15 +572,22 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
 
             padded_images = []
             padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
+            for image, annotation in zip(
+                images, annotations if annotations is not None else [None] * len(images)
+            ):
                 # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
                 if padded_size == image.size()[-2:]:
                     padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
+                    pixel_masks.append(
+                        torch.ones(padded_size, dtype=torch.int64, device=image.device)
+                    )
                     padded_annotations.append(annotation)
                     continue
                 image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+                    image,
+                    padded_size,
+                    annotation=annotation,
+                    update_bboxes=do_convert_annotations,
                 )
                 padded_images.append(image)
                 padded_annotations.append(annotation)
@@ -538,7 +600,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
             encoded_inputs["labels"] = [
-                BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
+                BatchFeature(annotation, tensor_type=return_tensors)
+                for annotation in annotations
             ]
         return encoded_inputs
 
@@ -582,7 +645,9 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                 img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
             else:
                 img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                boxes.device
+            )
             boxes = boxes * scale_fct[:, None, :]
 
         num_top_queries = out_logits.shape[1]
@@ -593,14 +658,18 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
             scores, index = torch.topk(scores.flatten(1), num_top_queries, axis=-1)
             labels = index % num_classes
             index = index // num_classes
-            boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
+            boxes = boxes.gather(
+                dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1])
+            )
         else:
             scores = torch.nn.functional.softmax(out_logits)[:, :, :-1]
             scores, labels = scores.max(dim=-1)
             if scores.shape[1] > num_top_queries:
                 scores, index = torch.topk(scores, num_top_queries, dim=-1)
                 labels = torch.gather(labels, dim=1, index=index)
-                boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
+                boxes = torch.gather(
+                    boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1])
+                )
 
         results = []
         for score, label, box in zip(scores, labels, boxes):

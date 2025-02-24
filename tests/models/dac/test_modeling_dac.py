@@ -24,7 +24,12 @@ import numpy as np
 from datasets import Audio, load_dataset
 
 from transformers import AutoProcessor, DacConfig, DacModel
-from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    is_torch_available,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
@@ -75,7 +80,9 @@ class DacModelTester:
         self.codebook_loss_weight = codebook_loss_weight
 
     def prepare_config_and_inputs(self):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        input_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.intermediate_size], scale=1.0
+        )
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
         return config, inputs_dict
@@ -85,7 +92,9 @@ class DacModelTester:
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_model_class(self, model_class):
-        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        input_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.intermediate_size], scale=1.0
+        )
         config = self.get_config()
         inputs_dict = {"input_values": input_values}
 
@@ -111,7 +120,9 @@ class DacModelTester:
 
         input_values = inputs_dict["input_values"]
         result = model(input_values)
-        self.parent.assertEqual(result.audio_values.shape, (self.batch_size, self.intermediate_size))
+        self.parent.assertEqual(
+            result.audio_values.shape, (self.batch_size, self.intermediate_size)
+        )
 
 
 @require_torch
@@ -122,11 +133,15 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
-    pipeline_model_mapping = {"feature-extraction": DacModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": DacModel} if is_torch_available() else {}
+    )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
         if "output_attentions" in inputs_dict:
             inputs_dict.pop("output_attentions")
         if "output_hidden_states" in inputs_dict:
@@ -136,7 +151,11 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = DacModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=DacConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self,
+            config_class=DacConfig,
+            hidden_size=37,
+            common_properties=[],
+            has_text_modality=False,
         )
 
     def test_config(self):
@@ -147,7 +166,9 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     # TODO (ydshieh): Although we have a potential cause, it's still strange that this test fails all the time with large differences
-    @unittest.skip(reason="Might be caused by `indices` computed with `max()` in `decode_latents`")
+    @unittest.skip(
+        reason="Might be caused by `indices` computed with `max()` in `decode_latents`"
+    )
     def test_batching_equivalence(self):
         super().test_batching_equivalence()
 
@@ -162,25 +183,37 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             # Ignore copy
             expected_arg_names = ["input_values", "n_quantizers", "return_dict"]
-            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            self.assertListEqual(
+                arg_names[: len(expected_arg_names)], expected_arg_names
+            )
 
-    @unittest.skip("The DacModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(
+        "The DacModel is not transformers based, thus it does not have `inputs_embeds` logics"
+    )
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("The DacModel is not transformers based, thus it does not have `inputs_embeds` logics")
+    @unittest.skip(
+        "The DacModel is not transformers based, thus it does not have `inputs_embeds` logics"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip("The DacModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        "The DacModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip("The DacModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        "The DacModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_torchscript_output_attentions(self):
         pass
 
-    @unittest.skip("The DacModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        "The DacModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_torchscript_output_hidden_state(self):
         pass
 
@@ -234,10 +267,14 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     non_persistent_buffers[key] = loaded_model_state_dict[key]
 
             loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+                key: value
+                for key, value in loaded_model_state_dict.items()
+                if key not in non_persistent_buffers
             }
 
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+            self.assertEqual(
+                set(model_state_dict.keys()), set(loaded_model_state_dict.keys())
+            )
 
             model_buffers = list(model.buffers())
             for non_persistent_buffer in non_persistent_buffers.values():
@@ -274,11 +311,15 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # (Even with this call, there are still memory leak by ~0.04MB)
             self.clear_torch_jit_class_registry()
 
-    @unittest.skip("The DacModel is not transformers based, thus it does not have the usual `attention` logic")
+    @unittest.skip(
+        "The DacModel is not transformers based, thus it does not have the usual `attention` logic"
+    )
     def test_attention_outputs(self):
         pass
 
-    @unittest.skip("The DacModel is not transformers based, thus it does not have the usual `hidden_states` logic")
+    @unittest.skip(
+        "The DacModel is not transformers based, thus it does not have the usual `hidden_states` logic"
+    )
     def test_hidden_states_output(self):
         pass
 
@@ -329,12 +370,18 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -346,7 +393,9 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     else:
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
@@ -379,7 +428,9 @@ class DacModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            -1.0
+                            <= ((param.data.mean() * 1e9).round() / 1e9).item()
+                            <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
@@ -414,15 +465,23 @@ class DacIntegrationTest(unittest.TestCase):
             "projected_latents": 0.0682,
         }
 
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_name = "dac_16khz"
 
         model_id = "descript/{}".format(model_name)
-        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
+        model = (
+            DacModel.from_pretrained(model_id, force_download=True)
+            .to(torch_device)
+            .eval()
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[0]["audio"]["array"]
 
         inputs = processor(
@@ -434,18 +493,26 @@ class DacIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoder_outputs = model.encode(inputs["input_values"])
 
-            expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            expected_encoder_sums = torch.tensor(
+                list(expected_encoder_sums_dict.values()), dtype=torch.float32
+            )
+            encoder_outputs_mean = torch.tensor(
+                [v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()]
+            )
 
             # make sure audio encoded codes are correct
-            torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3
+            )
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
             input_values_enc_dec = model(inputs["input_values"])[1]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             arr = inputs["input_values"][0].cpu().numpy()
             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
@@ -463,19 +530,31 @@ class DacIntegrationTest(unittest.TestCase):
         expected_rmse = 0.0039
 
         expected_encoder_output_dict = {
-            "quantized_representation": torch.tensor([0.6257, 3.1245, 5.2514, 2.3160, 1.5774]),
+            "quantized_representation": torch.tensor(
+                [0.6257, 3.1245, 5.2514, 2.3160, 1.5774]
+            ),
             "audio_codes": torch.tensor([919, 919, 234, 777, 234]),
-            "projected_latents": torch.tensor([-4.7841, -5.0063, -4.5595, -5.0372, -5.4280]),
+            "projected_latents": torch.tensor(
+                [-4.7841, -5.0063, -4.5595, -5.0372, -5.4280]
+            ),
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_name = "dac_24khz"
 
         model_id = "descript/{}".format(model_name)
-        model = DacModel.from_pretrained(model_id, force_download=True).to(torch_device).eval()
+        model = (
+            DacModel.from_pretrained(model_id, force_download=True)
+            .to(torch_device)
+            .eval()
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[0]["audio"]["array"]
 
         inputs = processor(
@@ -487,9 +566,13 @@ class DacIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoder_outputs = model.encode(inputs["input_values"])
 
-            expected_quantized_representation = encoder_outputs["quantized_representation"][0, 0, :5].cpu()
+            expected_quantized_representation = encoder_outputs[
+                "quantized_representation"
+            ][0, 0, :5].cpu()
             expected_audio_codes = encoder_outputs["audio_codes"][0, 0, :5].cpu()
-            expected_projected_latents = encoder_outputs["projected_latents"][0, 0, :5].cpu()
+            expected_projected_latents = encoder_outputs["projected_latents"][
+                0, 0, :5
+            ].cpu()
 
             # make sure values are correct for audios slices
             self.assertTrue(
@@ -500,11 +583,17 @@ class DacIntegrationTest(unittest.TestCase):
                 )
             )
             self.assertTrue(
-                torch.allclose(expected_audio_codes, expected_encoder_output_dict["audio_codes"], atol=1e-3)
+                torch.allclose(
+                    expected_audio_codes,
+                    expected_encoder_output_dict["audio_codes"],
+                    atol=1e-3,
+                )
             )
             self.assertTrue(
                 torch.allclose(
-                    expected_projected_latents, expected_encoder_output_dict["projected_latents"], atol=1e-3
+                    expected_projected_latents,
+                    expected_encoder_output_dict["projected_latents"],
+                    atol=1e-3,
                 )
             )
 
@@ -512,13 +601,19 @@ class DacIntegrationTest(unittest.TestCase):
             input_values_dec = model.decode(quantized_representation)[0]
             input_values_enc_dec = model(inputs["input_values"])[1]
 
-            input_values_from_codes = model.decode(audio_codes=encoder_outputs.audio_codes)[0]
+            input_values_from_codes = model.decode(
+                audio_codes=encoder_outputs.audio_codes
+            )[0]
 
             # make sure decode from audio codes and quantized values give more or less the same results
-            torch.testing.assert_close(input_values_from_codes, input_values_dec, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                input_values_from_codes, input_values_dec, rtol=1e-5, atol=1e-5
+            )
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             arr = inputs["input_values"][0].cpu().numpy()
             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
@@ -541,7 +636,9 @@ class DacIntegrationTest(unittest.TestCase):
             "audio_codes": 509.6812,
             "projected_latents": -0.1054,
         }
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_name = "dac_44khz"
 
@@ -549,7 +646,9 @@ class DacIntegrationTest(unittest.TestCase):
         model = DacModel.from_pretrained(model_id).to(torch_device).eval()
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
         audio_sample = librispeech_dummy[0]["audio"]["array"]
 
         inputs = processor(
@@ -561,18 +660,26 @@ class DacIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoder_outputs = model.encode(inputs["input_values"])
 
-            expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            expected_encoder_sums = torch.tensor(
+                list(expected_encoder_sums_dict.values()), dtype=torch.float32
+            )
+            encoder_outputs_mean = torch.tensor(
+                [v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()]
+            )
 
             # make sure audio encoded codes are correct
-            torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3
+            )
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
             input_values_enc_dec = model(inputs["input_values"])[1]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             arr = inputs["input_values"][0].cpu().numpy()
             arr_enc_dec = input_values_enc_dec[0].cpu().numpy()
@@ -596,7 +703,9 @@ class DacIntegrationTest(unittest.TestCase):
             "projected_latents": 0.0237,
         }
 
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_name = "dac_16khz"
 
@@ -604,9 +713,14 @@ class DacIntegrationTest(unittest.TestCase):
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
 
-        audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
+        audio_samples = [
+            np.array([audio_sample["array"]])[0]
+            for audio_sample in librispeech_dummy[-2:]["audio"]
+        ]
 
         inputs = processor(
             raw_audio=audio_samples,
@@ -618,18 +732,26 @@ class DacIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoder_outputs = model.encode(inputs["input_values"])
 
-            expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().item() for v in encoder_outputs.to_tuple()])
+            expected_encoder_sums = torch.tensor(
+                list(expected_encoder_sums_dict.values()), dtype=torch.float32
+            )
+            encoder_outputs_mean = torch.tensor(
+                [v.float().mean().item() for v in encoder_outputs.to_tuple()]
+            )
 
             # make sure audio encoded codes are correct
-            torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3
+            )
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
             input_values_enc_dec = model(inputs["input_values"])[1]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             arr = inputs["input_values"].cpu().numpy()
             arr_enc_dec = input_values_enc_dec.cpu().numpy()
@@ -653,7 +775,9 @@ class DacIntegrationTest(unittest.TestCase):
             "projected_latents": -0.0076,
         }
 
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_name = "dac_24khz"
 
@@ -661,9 +785,14 @@ class DacIntegrationTest(unittest.TestCase):
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
 
-        audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
+        audio_samples = [
+            np.array([audio_sample["array"]])[0]
+            for audio_sample in librispeech_dummy[-2:]["audio"]
+        ]
 
         inputs = processor(
             raw_audio=audio_samples,
@@ -675,18 +804,26 @@ class DacIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoder_outputs = model.encode(inputs["input_values"])
 
-            expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            expected_encoder_sums = torch.tensor(
+                list(expected_encoder_sums_dict.values()), dtype=torch.float32
+            )
+            encoder_outputs_mean = torch.tensor(
+                [v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()]
+            )
 
             # make sure audio encoded codes are correct
-            torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3
+            )
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
             input_values_enc_dec = model(inputs["input_values"])[1]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             arr = inputs["input_values"].cpu().numpy()
             arr_enc_dec = input_values_enc_dec.cpu().numpy()
@@ -710,7 +847,9 @@ class DacIntegrationTest(unittest.TestCase):
             "projected_latents": -0.1194,
         }
 
-        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        librispeech_dummy = load_dataset(
+            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation"
+        )
 
         model_name = "dac_44khz"
 
@@ -718,9 +857,14 @@ class DacIntegrationTest(unittest.TestCase):
         model = DacModel.from_pretrained(model_id).to(torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
-        librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
+        librispeech_dummy = librispeech_dummy.cast_column(
+            "audio", Audio(sampling_rate=processor.sampling_rate)
+        )
 
-        audio_samples = [np.array([audio_sample["array"]])[0] for audio_sample in librispeech_dummy[-2:]["audio"]]
+        audio_samples = [
+            np.array([audio_sample["array"]])[0]
+            for audio_sample in librispeech_dummy[-2:]["audio"]
+        ]
 
         inputs = processor(
             raw_audio=audio_samples,
@@ -732,18 +876,26 @@ class DacIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             encoder_outputs = model.encode(inputs["input_values"])
 
-            expected_encoder_sums = torch.tensor(list(expected_encoder_sums_dict.values()), dtype=torch.float32)
-            encoder_outputs_mean = torch.tensor([v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()])
+            expected_encoder_sums = torch.tensor(
+                list(expected_encoder_sums_dict.values()), dtype=torch.float32
+            )
+            encoder_outputs_mean = torch.tensor(
+                [v.float().mean().cpu().item() for v in encoder_outputs.to_tuple()]
+            )
 
             # make sure audio encoded codes are correct
-            torch.testing.assert_close(encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                encoder_outputs_mean, expected_encoder_sums, rtol=1e-3, atol=1e-3
+            )
 
             _, quantized_representation, _, _ = encoder_outputs.to_tuple()
             input_values_dec = model.decode(quantized_representation)[0]
             input_values_enc_dec = model(inputs["input_values"])[1]
 
             # make sure forward and decode gives same result
-            torch.testing.assert_close(input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(
+                input_values_dec, input_values_enc_dec, rtol=1e-3, atol=1e-3
+            )
 
             arr = inputs["input_values"].cpu().numpy()
             arr_enc_dec = input_values_enc_dec.cpu().numpy()

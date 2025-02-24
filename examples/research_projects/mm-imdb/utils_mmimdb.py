@@ -26,7 +26,17 @@ from torch import nn
 from torch.utils.data import Dataset
 
 
-POOLING_BREAKDOWN = {1: (1, 1), 2: (2, 1), 3: (3, 1), 4: (2, 2), 5: (5, 1), 6: (3, 2), 7: (7, 1), 8: (4, 2), 9: (3, 3)}
+POOLING_BREAKDOWN = {
+    1: (1, 1),
+    2: (2, 1),
+    3: (3, 1),
+    4: (2, 2),
+    5: (5, 1),
+    6: (3, 2),
+    7: (7, 1),
+    8: (4, 2),
+    9: (3, 3),
+}
 
 
 class ImageEncoder(nn.Module):
@@ -60,14 +70,18 @@ class JsonlDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        sentence = torch.LongTensor(self.tokenizer.encode(self.data[index]["text"], add_special_tokens=True))
+        sentence = torch.LongTensor(
+            self.tokenizer.encode(self.data[index]["text"], add_special_tokens=True)
+        )
         start_token, sentence, end_token = sentence[0], sentence[1:-1], sentence[-1]
         sentence = sentence[: self.max_seq_length]
 
         label = torch.zeros(self.n_classes)
         label[[self.labels.index(tgt) for tgt in self.data[index]["label"]]] = 1
 
-        image = Image.open(os.path.join(self.data_dir, self.data[index]["img"])).convert("RGB")
+        image = Image.open(
+            os.path.join(self.data_dir, self.data[index]["img"])
+        ).convert("RGB")
         image = self.transforms(image)
 
         return {
@@ -101,7 +115,14 @@ def collate_fn(batch):
     img_start_token = torch.stack([row["image_start_token"] for row in batch])
     img_end_token = torch.stack([row["image_end_token"] for row in batch])
 
-    return text_tensor, mask_tensor, img_tensor, img_start_token, img_end_token, tgt_tensor
+    return (
+        text_tensor,
+        mask_tensor,
+        img_tensor,
+        img_start_token,
+        img_end_token,
+        tgt_tensor,
+    )
 
 
 def get_mmimdb_labels():

@@ -20,7 +20,12 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 from ..integrations import replace_with_spqr_linear
-from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
+from ..utils import (
+    is_accelerate_available,
+    is_spqr_available,
+    is_torch_available,
+    logging,
+)
 from ..utils.quantization_config import QuantizationConfigMixin
 
 
@@ -46,15 +51,21 @@ class SpQRHfQuantizer(HfQuantizer):
             raise RuntimeError("GPU is required to run SpQR quantized model.")
 
         if not is_accelerate_available():
-            raise ImportError("Using `spqr` quantization requires Accelerate: `pip install accelerate`")
+            raise ImportError(
+                "Using `spqr` quantization requires Accelerate: `pip install accelerate`"
+            )
 
         if not is_spqr_available():
-            raise ImportError("Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`")
+            raise ImportError(
+                "Using `spqr` quantization requires SpQR: `pip install spqr_quant[gpu]`"
+            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             torch_dtype = torch.float16
-            logger.info("Assuming SpQR inference on GPU and loading the model in `torch.float16`.")
+            logger.info(
+                "Assuming SpQR inference on GPU and loading the model in `torch.float16`."
+            )
         elif torch_dtype != torch.float16:
             raise ValueError(
                 "You cannot use any type other than torch.float16 for SpQR. Please either leave it None or set it to"

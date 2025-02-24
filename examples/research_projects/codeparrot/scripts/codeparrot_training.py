@@ -17,7 +17,13 @@ from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.datapipes.iter.combinatorics import ShufflerIterDataPipe
 
 import transformers
-from transformers import AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, get_scheduler, set_seed
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    HfArgumentParser,
+    get_scheduler,
+    set_seed,
+)
 
 
 class ConstantLengthDataset(IterableDataset):
@@ -127,18 +133,30 @@ def create_dataloaders(args):
     train_data = train_data.shuffle(buffer_size=args.shuffle_buffer, seed=args.seed)
     valid_data = load_dataset(args.dataset_name_valid, split="train", **ds_kwargs)
     train_dataset = ConstantLengthDataset(
-        tokenizer, train_data, infinite=True, seq_length=args.seq_length, tokenized=args.tokenized
+        tokenizer,
+        train_data,
+        infinite=True,
+        seq_length=args.seq_length,
+        tokenized=args.tokenized,
     )
     valid_dataset = ConstantLengthDataset(
-        tokenizer, valid_data, infinite=False, seq_length=args.seq_length, tokenized=args.tokenized
+        tokenizer,
+        valid_data,
+        infinite=False,
+        seq_length=args.seq_length,
+        tokenized=args.tokenized,
     )
     train_dataset = train_dataset.shuffle(buffer_size=args.shuffle_buffer)
-    train_dataloader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True)
+    train_dataloader = DataLoader(
+        train_dataset, batch_size=args.train_batch_size, shuffle=True
+    )
     eval_dataloader = DataLoader(valid_dataset, batch_size=args.valid_batch_size)
     return train_dataloader, eval_dataloader
 
 
-def get_grouped_params(model, args, no_decay=["bias", "ln_1.weight", "ln_2.weight", "ln_f.weight"]):
+def get_grouped_params(
+    model, args, no_decay=["bias", "ln_1.weight", "ln_2.weight", "ln_f.weight"]
+):
     params_with_wd, params_without_wd = [], []
     for n, p in model.named_parameters():
         if any(nd in n for nd in no_decay):
@@ -161,14 +179,27 @@ def compute_tflops(elapsed_time, accelerator, args):
     # TFLOPs formula (from Equation 3 in Section 5.1 of https://arxiv.org/pdf/2104.04473.pdf).
     config_model = accelerator.unwrap_model(model).config
     checkpoint_factor = 4 if args.gradient_checkpointing else 3
-    batch_size = args.train_batch_size * accelerator.state.num_processes * args.gradient_accumulation_steps
-    factor = 24 * checkpoint_factor * batch_size * args.seq_length * config_model.n_layer * (config_model.n_embd**2)
+    batch_size = (
+        args.train_batch_size
+        * accelerator.state.num_processes
+        * args.gradient_accumulation_steps
+    )
+    factor = (
+        24
+        * checkpoint_factor
+        * batch_size
+        * args.seq_length
+        * config_model.n_layer
+        * (config_model.n_embd**2)
+    )
     flops_per_iteration = factor * (
         1.0
         + (args.seq_length / (6.0 * config_model.n_embd))
         + (tokenizer.vocab_size / (16.0 * config_model.n_layer * config_model.n_embd))
     )
-    tflops = flops_per_iteration / (elapsed_time * accelerator.state.num_processes * (10**12))
+    tflops = flops_per_iteration / (
+        elapsed_time * accelerator.state.num_processes * (10**12)
+    )
     return tflops
 
 
@@ -253,9 +284,13 @@ if args.resume_from_checkpoint:
         path = os.path.basename(args.resume_from_checkpoint)
     else:
         # Get the most recent checkpoint
-        dirs = [f.name for f in os.scandir(args.save_dir) if f.is_dir() and "step" in str(f)]
+        dirs = [
+            f.name for f in os.scandir(args.save_dir) if f.is_dir() and "step" in str(f)
+        ]
         dirs.sort(key=os.path.getctime)
-        path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+        path = dirs[
+            -1
+        ]  # Sorts folders by date modified, most recent checkpoint is the last
     # Extract the step of the checkpoint to continue from there
     training_difference = os.path.splitext(path)[0]
     resume_step = int(training_difference.replace("step_", ""))
@@ -271,7 +306,9 @@ for step, batch in enumerate(train_dataloader, start=1):
     loss = model(batch, labels=batch, use_cache=False).loss
     avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
     loss_tracking += avg_loss.item() / args.gradient_accumulation_steps
-    log_metrics(step, {"samples": step * samples_per_step, "loss_per_step/train": loss.item()})
+    log_metrics(
+        step, {"samples": step * samples_per_step, "loss_per_step/train": loss.item()}
+    )
     loss = loss / args.gradient_accumulation_steps
     if step % args.gradient_accumulation_steps != 0:
         # Prevent backward from doing gradient all_reduce in every step

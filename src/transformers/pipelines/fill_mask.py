@@ -88,7 +88,9 @@ class FillMaskPipeline(Pipeline):
         if self.framework == "tf":
             masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
         elif self.framework == "pt":
-            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+            masked_index = torch.nonzero(
+                input_ids == self.tokenizer.mask_token_id, as_tuple=False
+            )
         else:
             raise ValueError("Unsupported framework")
         return masked_index
@@ -112,14 +114,20 @@ class FillMaskPipeline(Pipeline):
                 self._ensure_exactly_one_mask_token(input_ids)
 
     def preprocess(
-        self, inputs, return_tensors=None, tokenizer_kwargs=None, **preprocess_parameters
+        self,
+        inputs,
+        return_tensors=None,
+        tokenizer_kwargs=None,
+        **preprocess_parameters,
     ) -> Dict[str, GenericTensor]:
         if return_tensors is None:
             return_tensors = self.framework
         if tokenizer_kwargs is None:
             tokenizer_kwargs = {}
 
-        model_inputs = self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
+        model_inputs = self.tokenizer(
+            inputs, return_tensors=return_tensors, **tokenizer_kwargs
+        )
         self.ensure_exactly_one_mask_token(model_inputs)
         return model_inputs
 
@@ -136,7 +144,9 @@ class FillMaskPipeline(Pipeline):
         outputs = model_outputs["logits"]
 
         if self.framework == "tf":
-            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()[:, 0]
+            masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()[
+                :, 0
+            ]
 
             outputs = outputs.numpy()
 
@@ -149,7 +159,9 @@ class FillMaskPipeline(Pipeline):
             topk = tf.math.top_k(probs, k=top_k)
             values, predictions = topk.values.numpy(), topk.indices.numpy()
         else:
-            masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False).squeeze(-1)
+            masked_index = torch.nonzero(
+                input_ids == self.tokenizer.mask_token_id, as_tuple=False
+            ).squeeze(-1)
             # Fill mask pipeline supports only one ${mask_token} per sample
 
             logits = outputs[0, masked_index, :]
@@ -161,7 +173,9 @@ class FillMaskPipeline(Pipeline):
 
         result = []
         single_mask = values.shape[0] == 1
-        for i, (_values, _predictions) in enumerate(zip(values.tolist(), predictions.tolist())):
+        for i, (_values, _predictions) in enumerate(
+            zip(values.tolist(), predictions.tolist())
+        ):
             row = []
             for v, p in zip(_values, _predictions):
                 # Copy is important since we're going to modify this array in place
@@ -175,8 +189,15 @@ class FillMaskPipeline(Pipeline):
                 # Originally we skip special tokens to give readable output.
                 # For multi masks though, the other [MASK] would be removed otherwise
                 # making the output look odd, so we add them back
-                sequence = self.tokenizer.decode(tokens, skip_special_tokens=single_mask)
-                proposition = {"score": v, "token": p, "token_str": self.tokenizer.decode([p]), "sequence": sequence}
+                sequence = self.tokenizer.decode(
+                    tokens, skip_special_tokens=single_mask
+                )
+                proposition = {
+                    "score": v,
+                    "token": p,
+                    "token_str": self.tokenizer.decode([p]),
+                    "sequence": sequence,
+                }
                 row.append(proposition)
             result.append(row)
         if single_mask:
@@ -241,7 +262,9 @@ class FillMaskPipeline(Pipeline):
 
         if self.tokenizer.mask_token_id is None:
             raise PipelineException(
-                "fill-mask", self.model.base_model_prefix, "The tokenizer does not define a `mask_token`."
+                "fill-mask",
+                self.model.base_model_prefix,
+                "The tokenizer does not define a `mask_token`.",
             )
         return preprocess_params, {}, postprocess_params
 

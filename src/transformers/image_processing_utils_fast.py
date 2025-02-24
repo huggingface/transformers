@@ -264,12 +264,21 @@ class BaseImageProcessorFast(BaseImageProcessor):
         super().__init__(**kwargs)
         size = kwargs.pop("size", self.size)
         self.size = (
-            get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
+            get_size_dict(
+                size=size,
+                default_to_square=kwargs.pop(
+                    "default_to_square", self.default_to_square
+                ),
+            )
             if size is not None
             else None
         )
         crop_size = kwargs.pop("crop_size", self.crop_size)
-        self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
+        self.crop_size = (
+            get_size_dict(crop_size, param_name="crop_size")
+            if crop_size is not None
+            else None
+        )
         for key in self.valid_init_kwargs.__annotations__.keys():
             kwarg = kwargs.pop(key, None)
             if kwarg is not None:
@@ -299,7 +308,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = (
+            interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        )
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -316,7 +327,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 input_data_format=ChannelDimension.FIRST,
             )
         elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
+            new_size = get_image_size_for_max_height_width(
+                image.size()[-2:], size.max_height, size.max_width
+            )
         elif size.height and size.width:
             new_size = (size.height, size.width)
         else:
@@ -324,7 +337,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
-        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return F.resize(
+            image, new_size, interpolation=interpolation, antialias=antialias
+        )
 
     def rescale(
         self,
@@ -382,7 +397,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Rescale and normalize images.
         """
         if do_rescale and do_normalize:
-            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+            images = self.normalize(
+                images.to(dtype=torch.float32), image_mean, image_std
+            )
         elif do_rescale:
             images = images * rescale_factor
         elif do_normalize:
@@ -410,7 +427,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
             `torch.Tensor`: The center cropped image.
         """
         if size.height is None or size.width is None:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+            raise ValueError(
+                f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}"
+            )
         return F.center_crop(image, (size["height"], size["width"]))
 
     def convert_to_rgb(
@@ -540,11 +559,15 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
         if do_rescale and do_normalize:
             # Fused rescale and normalize
-            image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+            image_mean = torch.tensor(image_mean, device=device) * (
+                1.0 / rescale_factor
+            )
             image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
 
         interpolation = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
+            pil_torch_interpolation_mapping[resample]
+            if isinstance(resample, (PILImageResampling, int))
+            else resample
         )
 
         return image_mean, image_std, interpolation
@@ -556,7 +579,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         **kwargs: Unpack[DefaultFastImageProcessorPreprocessKwargs],
     ) -> BatchFeature:
         validate_kwargs(
-            captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys(),
         )
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.
@@ -569,7 +593,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
         device = kwargs.pop("device")
 
         images = self._prepare_input_images(
-            images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
+            images=images,
+            do_convert_rgb=do_convert_rgb,
+            input_data_format=input_data_format,
+            device=device,
         )
 
         # Pop kwargs that need further processing or won't be used in _preprocess
@@ -582,8 +609,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
         resample = kwargs.pop("resample")
 
         # Make hashable for cache
-        size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square)) if size is not None else None
-        crop_size = SizeDict(**get_size_dict(crop_size, param_name="crop_size")) if crop_size is not None else None
+        size = (
+            SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
+            if size is not None
+            else None
+        )
+        crop_size = (
+            SizeDict(**get_size_dict(crop_size, param_name="crop_size"))
+            if crop_size is not None
+            else None
+        )
         image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
@@ -593,7 +628,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
             resample=resample,
             image_mean=image_mean,
             image_std=image_std,
-            data_format=data_format if data_format is not None else ChannelDimension.FIRST,
+            data_format=(
+                data_format if data_format is not None else ChannelDimension.FIRST
+            ),
             device=images[0].device,
             do_resize=kwargs.get("do_resize"),
             do_center_crop=kwargs.get("do_center_crop"),
@@ -633,7 +670,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+                stacked_images = self.resize(
+                    image=stacked_images, size=size, interpolation=interpolation
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -646,14 +685,25 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                stacked_images,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
             )
             processed_images_grouped[shape] = stacked_images
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        processed_images = reorder_images(
+            processed_images_grouped, grouped_images_index
+        )
+        processed_images = (
+            torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        )
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors
+        )
 
     def to_dict(self):
         encoder_dict = super().to_dict()
@@ -662,7 +712,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
 
 class SemanticSegmentationMixin:
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: List[Tuple] = None
+    ):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -694,12 +746,17 @@ class SemanticSegmentationMixin:
 
             for idx in range(len(logits)):
                 resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                    logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
         else:
             semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
+            ]
 
         return semantic_segmentation

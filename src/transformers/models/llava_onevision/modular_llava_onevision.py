@@ -1,4 +1,6 @@
-from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
+from transformers.models.llava_next.image_processing_llava_next_fast import (
+    LlavaNextImageProcessorFast,
+)
 
 from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING
 from ...image_utils import (

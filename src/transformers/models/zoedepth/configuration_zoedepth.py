@@ -183,7 +183,9 @@ class ZoeDepthConfig(PretrainedConfig):
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `BEiT` backbone.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `BEiT` backbone."
+            )
             backbone_config = CONFIG_MAPPING["beit"](
                 image_size=384,
                 num_hidden_layers=24,
@@ -199,8 +201,14 @@ class ZoeDepthConfig(PretrainedConfig):
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        if (
+            backbone_kwargs is not None
+            and backbone_kwargs
+            and backbone_config is not None
+        ):
+            raise ValueError(
+                "You can't specify both `backbone_kwargs` and `backbone_config`."
+            )
 
         self.backbone_config = backbone_config
         self.backbone = backbone
@@ -231,7 +239,9 @@ class ZoeDepthConfig(PretrainedConfig):
         self.num_patch_transformer_layers = num_patch_transformer_layers
         self.patch_transformer_hidden_size = patch_transformer_hidden_size
         self.patch_transformer_intermediate_size = patch_transformer_intermediate_size
-        self.patch_transformer_num_attention_heads = patch_transformer_num_attention_heads
+        self.patch_transformer_num_attention_heads = (
+            patch_transformer_num_attention_heads
+        )
 
 
 __all__ = ["ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP", "ZoeDepthConfig"]

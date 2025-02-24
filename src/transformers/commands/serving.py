@@ -99,7 +99,8 @@ class ServeCommand(BaseTransformersCLICommand):
             parser: Root parser to register command-specific arguments
         """
         serve_parser = parser.add_parser(
-            "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."
+            "serve",
+            help="CLI tool to run inference requests through REST and GraphQL endpoints.",
         )
         serve_parser.add_argument(
             "--task",
@@ -107,12 +108,27 @@ class ServeCommand(BaseTransformersCLICommand):
             choices=get_supported_tasks(),
             help="The task to run the pipeline on",
         )
-        serve_parser.add_argument("--host", type=str, default="localhost", help="Interface the server will listen on.")
-        serve_parser.add_argument("--port", type=int, default=8888, help="Port the serving will listen to.")
-        serve_parser.add_argument("--workers", type=int, default=1, help="Number of http workers")
-        serve_parser.add_argument("--model", type=str, help="Model's name or path to stored model.")
-        serve_parser.add_argument("--config", type=str, help="Model's config name or path to stored model.")
-        serve_parser.add_argument("--tokenizer", type=str, help="Tokenizer name to use.")
+        serve_parser.add_argument(
+            "--host",
+            type=str,
+            default="localhost",
+            help="Interface the server will listen on.",
+        )
+        serve_parser.add_argument(
+            "--port", type=int, default=8888, help="Port the serving will listen to."
+        )
+        serve_parser.add_argument(
+            "--workers", type=int, default=1, help="Number of http workers"
+        )
+        serve_parser.add_argument(
+            "--model", type=str, help="Model's name or path to stored model."
+        )
+        serve_parser.add_argument(
+            "--config", type=str, help="Model's config name or path to stored model."
+        )
+        serve_parser.add_argument(
+            "--tokenizer", type=str, help="Tokenizer name to use."
+        )
         serve_parser.add_argument(
             "--device",
             type=int,
@@ -176,7 +192,11 @@ class ServeCommand(BaseTransformersCLICommand):
     def model_info(self):
         return ServeModelInfoResult(infos=vars(self._pipeline.model.config))
 
-    def tokenize(self, text_input: str = Body(None, embed=True), return_ids: bool = Body(False, embed=True)):
+    def tokenize(
+        self,
+        text_input: str = Body(None, embed=True),
+        return_ids: bool = Body(False, embed=True),
+    ):
         """
         Tokenize the provided input and eventually returns corresponding tokens id: - **text_input**: String to
         tokenize - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer
@@ -206,7 +226,9 @@ class ServeCommand(BaseTransformersCLICommand):
         Flag indicating to remove all leading/trailing spaces and intermediate ones.
         """
         try:
-            decoded_str = self._pipeline.tokenizer.decode(tokens_ids, skip_special_tokens, cleanup_tokenization_spaces)
+            decoded_str = self._pipeline.tokenizer.decode(
+                tokens_ids, skip_special_tokens, cleanup_tokenization_spaces
+            )
             return ServeDeTokenizeResult(model="", text=decoded_str)
         except Exception as e:
             raise HTTPException(status_code=500, detail={"model": "", "error": str(e)})

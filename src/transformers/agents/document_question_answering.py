@@ -47,7 +47,9 @@ class DocumentQuestionAnsweringTool(PipelineTool):
 
     def __init__(self, *args, **kwargs):
         if not is_vision_available():
-            raise ValueError("Pillow must be installed to use the DocumentQuestionAnsweringTool.")
+            raise ValueError(
+                "Pillow must be installed to use the DocumentQuestionAnsweringTool."
+            )
 
         super().__init__(*args, **kwargs)
 
@@ -83,7 +85,9 @@ class DocumentQuestionAnsweringTool(PipelineTool):
         sequence = self.pre_processor.batch_decode(outputs)[0]
         sequence = sequence.replace(self.pre_processor.tokenizer.eos_token, "")
         sequence = sequence.replace(self.pre_processor.tokenizer.pad_token, "")
-        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+        sequence = re.sub(
+            r"<.*?>", "", sequence, count=1
+        ).strip()  # remove first task start token
         sequence = self.pre_processor.token2json(sequence)
 
         return sequence["answer"]

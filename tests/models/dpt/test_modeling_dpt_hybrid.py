@@ -21,7 +21,12 @@ from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -90,11 +95,15 @@ class DPTModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -138,7 +147,10 @@ class DPTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -146,7 +158,10 @@ class DPTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
+        self.parent.assertEqual(
+            result.predicted_depth.shape,
+            (self.batch_size, self.image_size, self.image_size),
+        )
 
     def create_and_check_for_semantic_segmentation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -155,7 +170,8 @@ class DPTModelTester:
         model.eval()
         result = model(pixel_values, labels=labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size, self.image_size)
+            result.logits.shape,
+            (self.batch_size, self.num_labels, self.image_size, self.image_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -172,7 +188,11 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (DPTModel, DPTForDepthEstimation, DPTForSemanticSegmentation) if is_torch_available() else ()
+    all_model_classes = (
+        (DPTModel, DPTForDepthEstimation, DPTForSemanticSegmentation)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "depth-estimation": DPTForDepthEstimation,
@@ -190,7 +210,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = DPTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DPTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=DPTConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -225,7 +247,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if model_class.__name__ == "DPTForDepthEstimation":
                 continue
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.return_dict = True
 
             if model_class.__name__ in MODEL_MAPPING_NAMES.values():
@@ -234,7 +258,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -243,17 +269,24 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             if model_class.__name__ == "DPTForDepthEstimation":
                 continue
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
             config.use_cache = False
             config.return_dict = True
 
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                or not model_class.supports_gradient_checkpointing
+            ):
                 continue
             model = model_class(config)
             model.to(torch_device)
             model.gradient_checkpointing_enable()
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -279,7 +312,9 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             backbone_params = []
             for name, module in model.named_modules():
                 if module.__class__.__name__ == "DPTViTHybridEmbeddings":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    backbone_params = [
+                        f"{name}.{key}" for key in module.state_dict().keys()
+                    ]
                     break
 
             for name, param in model.named_parameters():
@@ -318,7 +353,9 @@ def prepare_img():
 class DPTModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
         image_processor = DPTImageProcessor.from_pretrained("Intel/dpt-hybrid-midas")
-        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas").to(torch_device)
+        model = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas").to(
+            torch_device
+        )
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -333,7 +370,18 @@ class DPTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[5.6437, 5.6146, 5.6511], [5.4371, 5.5649, 5.5958], [5.5215, 5.5184, 5.5293]]]
+            [
+                [
+                    [5.6437, 5.6146, 5.6511],
+                    [5.4371, 5.5649, 5.5958],
+                    [5.5215, 5.5184, 5.5293],
+                ]
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.predicted_depth[:3, :3, :3] / 100, expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.predicted_depth[:3, :3, :3] / 100,
+            expected_slice,
+            rtol=1e-4,
+            atol=1e-4,
+        )

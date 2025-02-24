@@ -94,11 +94,15 @@ with people, even a bishop, begging for his blessing. <eod> </s> <eos>"""
 
 def prepare_ctrl_input(args, _, tokenizer, prompt_text):
     if args.temperature > 0.7:
-        logger.info("CTRL typically works better with lower temperatures (and lower top_k).")
+        logger.info(
+            "CTRL typically works better with lower temperatures (and lower top_k)."
+        )
 
     encoded_prompt = tokenizer.encode(prompt_text, add_special_tokens=False)
     if not any(encoded_prompt[0] == x for x in tokenizer.control_codes.values()):
-        logger.info("WARNING! You are not starting your generation from a control code so you won't get good results")
+        logger.info(
+            "WARNING! You are not starting your generation from a control code so you won't get good results"
+        )
     return prompt_text
 
 
@@ -114,7 +118,11 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
         else:
             language = None
             while language not in available_languages:
-                language = input("Using XLM. Select language in " + str(list(available_languages)) + " >>> ")
+                language = input(
+                    "Using XLM. Select language in "
+                    + str(list(available_languages))
+                    + " >>> "
+                )
 
         model.config.lang_id = model.config.lang2id[language]
         # kwargs["language"] = tokenizer.lang2id[language]
@@ -129,13 +137,21 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
 
 
 def prepare_xlnet_input(args, _, tokenizer, prompt_text):
-    prefix = args.prefix if args.prefix else args.padding_text if args.padding_text else PREFIX
+    prefix = (
+        args.prefix
+        if args.prefix
+        else args.padding_text if args.padding_text else PREFIX
+    )
     prompt_text = prefix + prompt_text
     return prompt_text
 
 
 def prepare_transfoxl_input(args, _, tokenizer, prompt_text):
-    prefix = args.prefix if args.prefix else args.padding_text if args.padding_text else PREFIX
+    prefix = (
+        args.prefix
+        if args.prefix
+        else args.padding_text if args.padding_text else PREFIX
+    )
     prompt_text = prefix + prompt_text
     return prompt_text
 
@@ -182,20 +198,32 @@ def sparse_model_config(model_config):
     elif hasattr(model_config, "num_hidden_layers"):
         num_layer = model_config.num_hidden_layers
     else:
-        raise ValueError("Number of hidden layers couldn't be determined from the model config")
+        raise ValueError(
+            "Number of hidden layers couldn't be determined from the model config"
+        )
 
     return num_layer, num_head, num_embedding_size_per_head
 
 
 def generate_past_key_values(model, batch_size, seq_len):
-    num_block_layers, num_attention_heads, num_embedding_size_per_head = sparse_model_config(model.config)
+    num_block_layers, num_attention_heads, num_embedding_size_per_head = (
+        sparse_model_config(model.config)
+    )
     if model.config.model_type == "bloom":
         past_key_values = tuple(
             (
-                torch.empty(int(num_attention_heads * batch_size), num_embedding_size_per_head, seq_len)
+                torch.empty(
+                    int(num_attention_heads * batch_size),
+                    num_embedding_size_per_head,
+                    seq_len,
+                )
                 .to(model.dtype)
                 .to(model.device),
-                torch.empty(int(num_attention_heads * batch_size), seq_len, num_embedding_size_per_head)
+                torch.empty(
+                    int(num_attention_heads * batch_size),
+                    seq_len,
+                    num_embedding_size_per_head,
+                )
                 .to(model.dtype)
                 .to(model.device),
             )
@@ -204,10 +232,20 @@ def generate_past_key_values(model, batch_size, seq_len):
     else:
         past_key_values = tuple(
             (
-                torch.empty(batch_size, num_attention_heads, seq_len, num_embedding_size_per_head)
+                torch.empty(
+                    batch_size,
+                    num_attention_heads,
+                    seq_len,
+                    num_embedding_size_per_head,
+                )
                 .to(model.dtype)
                 .to(model.device),
-                torch.empty(batch_size, num_attention_heads, seq_len, num_embedding_size_per_head)
+                torch.empty(
+                    batch_size,
+                    num_attention_heads,
+                    seq_len,
+                    num_embedding_size_per_head,
+                )
                 .to(model.dtype)
                 .to(model.device),
             )
@@ -243,7 +281,9 @@ class _ModelFallbackWrapper(GenerationMixin):
 
     def __call__(self, *args, **kwargs):
         if kwargs["past_key_values"] is None and self._default.config.use_cache:
-            kwargs["past_key_values"] = generate_past_key_values(self._default, kwargs["input_ids"].shape[0], 0)
+            kwargs["past_key_values"] = generate_past_key_values(
+                self._default, kwargs["input_ids"].shape[0], 0
+            )
         kwargs.pop("position_ids", None)
         for k in list(kwargs.keys()):
             if kwargs[k] is None or isinstance(kwargs[k], bool):
@@ -264,10 +304,19 @@ class _ModelFallbackWrapper(GenerationMixin):
         return getattr(self._default, item)
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, inputs_embeds=None, use_cache=None, **kwargs
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        use_cache=None,
+        **kwargs,
     ):
         return self._default.prepare_inputs_for_generation(
-            input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, use_cache=use_cache, **kwargs
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
         )
 
     def _reorder_cache(
@@ -295,12 +344,18 @@ def main():
         default=None,
         type=str,
         required=True,
-        help="Path to pre-trained model or shortcut name selected in the list: " + ", ".join(MODEL_CLASSES.keys()),
+        help="Path to pre-trained model or shortcut name selected in the list: "
+        + ", ".join(MODEL_CLASSES.keys()),
     )
 
     parser.add_argument("--prompt", type=str, default="")
     parser.add_argument("--length", type=int, default=20)
-    parser.add_argument("--stop_token", type=str, default=None, help="Token at which text generation is stopped")
+    parser.add_argument(
+        "--stop_token",
+        type=str,
+        default=None,
+        help="Token at which text generation is stopped",
+    )
 
     parser.add_argument(
         "--temperature",
@@ -309,34 +364,63 @@ def main():
         help="temperature of 1.0 has no effect, lower tend toward greedy sampling",
     )
     parser.add_argument(
-        "--repetition_penalty", type=float, default=1.0, help="primarily useful for CTRL model; in that case, use 1.2"
+        "--repetition_penalty",
+        type=float,
+        default=1.0,
+        help="primarily useful for CTRL model; in that case, use 1.2",
     )
     parser.add_argument("--k", type=int, default=0)
     parser.add_argument("--p", type=float, default=0.9)
 
-    parser.add_argument("--prefix", type=str, default="", help="Text added prior to input.")
-    parser.add_argument("--padding_text", type=str, default="", help="Deprecated, the use of `--prefix` is preferred.")
-    parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
+    parser.add_argument(
+        "--prefix", type=str, default="", help="Text added prior to input."
+    )
+    parser.add_argument(
+        "--padding_text",
+        type=str,
+        default="",
+        help="Deprecated, the use of `--prefix` is preferred.",
+    )
+    parser.add_argument(
+        "--xlm_language",
+        type=str,
+        default="",
+        help="Optional language when used with the XLM model.",
+    )
 
-    parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
+    parser.add_argument(
+        "--seed", type=int, default=42, help="random seed for initialization"
+    )
     parser.add_argument(
         "--use_cpu",
         action="store_true",
-        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+        help="Whether or not to use cpu. If set to False, "
+        "we will use gpu/npu or mps device if available",
     )
-    parser.add_argument("--num_return_sequences", type=int, default=1, help="The number of samples to generate.")
+    parser.add_argument(
+        "--num_return_sequences",
+        type=int,
+        default=1,
+        help="The number of samples to generate.",
+    )
     parser.add_argument(
         "--fp16",
         action="store_true",
         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit",
     )
-    parser.add_argument("--jit", action="store_true", help="Whether or not to use jit trace to accelerate inference")
+    parser.add_argument(
+        "--jit",
+        action="store_true",
+        help="Whether or not to use jit trace to accelerate inference",
+    )
     args = parser.parse_args()
 
     # Initialize the distributed state.
     distributed_state = PartialState(cpu=args.use_cpu)
 
-    logger.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
+    logger.warning(
+        f"device: {distributed_state.device}, 16-bits inference: {args.fp16}"
+    )
 
     if args.seed is not None:
         set_seed(args.seed)
@@ -346,7 +430,9 @@ def main():
         args.model_type = args.model_type.lower()
         model_class, tokenizer_class = MODEL_CLASSES[args.model_type]
     except KeyError:
-        raise KeyError("the model {} you specified is not supported. You are welcome to add it and open a PR :)")
+        raise KeyError(
+            "the model {} you specified is not supported. You are welcome to add it and open a PR :)"
+        )
 
     tokenizer = tokenizer_class.from_pretrained(args.model_name_or_path)
     if tokenizer.pad_token is None:
@@ -359,7 +445,9 @@ def main():
     if args.fp16:
         model.half()
     max_seq_length = getattr(model.config, "max_position_embeddings", 0)
-    args.length = adjust_length_to_model(args.length, max_sequence_length=max_seq_length)
+    args.length = adjust_length_to_model(
+        args.length, max_sequence_length=max_seq_length
+    )
     logger.info(args)
 
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
@@ -376,11 +464,16 @@ def main():
             tokenizer_kwargs = {}
 
         encoded_prompt = tokenizer.encode(
-            preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", **tokenizer_kwargs
+            preprocessed_prompt_text,
+            add_special_tokens=False,
+            return_tensors="pt",
+            **tokenizer_kwargs,
         )
     else:
         prefix = args.prefix if args.prefix else args.padding_text
-        encoded_prompt = tokenizer.encode(prefix + prompt_text, add_special_tokens=False, return_tensors="pt")
+        encoded_prompt = tokenizer.encode(
+            prefix + prompt_text, add_special_tokens=False, return_tensors="pt"
+        )
     encoded_prompt = encoded_prompt.to(distributed_state.device)
 
     if encoded_prompt.size()[-1] == 0:
@@ -397,7 +490,11 @@ def main():
             sig = inspect.signature(model.forward)
         else:
             sig = inspect.signature(model.__call__)
-        jit_inputs = tuple(jit_inputs[key] for key in sig.parameters if jit_inputs.get(key, None) is not None)
+        jit_inputs = tuple(
+            jit_inputs[key]
+            for key in sig.parameters
+            if jit_inputs.get(key, None) is not None
+        )
         traced_model = torch.jit.trace(model, jit_inputs, strict=False)
         traced_model = torch.jit.freeze(traced_model.eval())
         traced_model(*jit_inputs)
@@ -434,7 +531,14 @@ def main():
 
         # Add the prompt at the beginning of the sequence. Remove the excess text that was used for pre-processing
         total_sequence = (
-            prompt_text + text[len(tokenizer.decode(encoded_prompt[0], clean_up_tokenization_spaces=True)) :]
+            prompt_text
+            + text[
+                len(
+                    tokenizer.decode(
+                        encoded_prompt[0], clean_up_tokenization_spaces=True
+                    )
+                ) :
+            ]
         )
 
         generated_sequences.append(total_sequence)

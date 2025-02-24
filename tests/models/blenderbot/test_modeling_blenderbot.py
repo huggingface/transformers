@@ -38,7 +38,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import BlenderbotForConditionalGeneration, BlenderbotModel, BlenderbotTokenizer
+    from transformers import (
+        BlenderbotForConditionalGeneration,
+        BlenderbotModel,
+        BlenderbotTokenizer,
+    )
     from transformers.models.blenderbot.modeling_blenderbot import (
         BlenderbotDecoder,
         BlenderbotEncoder,
@@ -61,11 +65,17 @@ def prepare_blenderbot_inputs_dict(
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     if head_mask is None:
-        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+        head_mask = torch.ones(
+            config.encoder_layers, config.encoder_attention_heads, device=torch_device
+        )
     if decoder_head_mask is None:
-        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        decoder_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
     if cross_attn_head_mask is None:
-        cross_attn_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
+        cross_attn_head_mask = torch.ones(
+            config.decoder_layers, config.decoder_attention_heads, device=torch_device
+        )
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -117,15 +127,21 @@ class BlenderbotModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        ).clamp(
             3,
         )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor(
+            [self.batch_size, self.seq_length], self.vocab_size
+        )
 
         config = self.get_config()
-        inputs_dict = prepare_blenderbot_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_blenderbot_inputs_dict(
+            config, input_ids, decoder_input_ids
+        )
         return config, inputs_dict
 
     def get_config(self):
@@ -163,7 +179,12 @@ class BlenderbotModelTester:
         head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+        outputs = model(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            use_cache=True,
+        )
 
         output, past_key_values = outputs.to_tuple()
 
@@ -175,20 +196,28 @@ class BlenderbotModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            past_key_values=past_key_values,
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = BlenderbotModel(config=config).to(torch_device).eval()
@@ -202,11 +231,14 @@ class BlenderbotModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = BlenderbotEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        encoder_last_hidden_state_2 = encoder(
+            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"]
+        )[0]
 
-        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item()
+            < 1e-3
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
@@ -220,12 +252,20 @@ class BlenderbotModelTester:
             encoder_attention_mask=inputs_dict["attention_mask"],
         )[0]
 
-        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+        self.parent.assertTrue(
+            (last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3
+        )
 
 
 @require_torch
-class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (BlenderbotModel, BlenderbotForConditionalGeneration) if is_torch_available() else ()
+class BlenderbotModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (BlenderbotModel, BlenderbotForConditionalGeneration)
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {
             "feature-extraction": BlenderbotModel,
@@ -256,12 +296,16 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
+                model2, info = model_class.from_pretrained(
+                    tmpdirname, output_loading_info=True
+                )
             self.assertEqual(info["missing_keys"], [])
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(
+            *config_and_inputs
+        )
 
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
@@ -275,7 +319,9 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model = BlenderbotForConditionalGeneration(config).eval().to(torch_device)
         model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(
+            num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3
+        )
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -310,11 +356,23 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generation_from_short_input_same_as_parlai_3B(self):
-        FASTER_GEN_KWARGS = {"num_beams": 1, "early_stopping": True, "min_length": 15, "max_length": 25}
-        TOK_DECODE_KW = {"skip_special_tokens": True, "clean_up_tokenization_spaces": True}
+        FASTER_GEN_KWARGS = {
+            "num_beams": 1,
+            "early_stopping": True,
+            "min_length": 15,
+            "max_length": 25,
+        }
+        TOK_DECODE_KW = {
+            "skip_special_tokens": True,
+            "clean_up_tokenization_spaces": True,
+        }
 
         backend_empty_cache(torch_device)
-        model = BlenderbotForConditionalGeneration.from_pretrained(self.ckpt).half().to(torch_device)
+        model = (
+            BlenderbotForConditionalGeneration.from_pretrained(self.ckpt)
+            .half()
+            .to(torch_device)
+        )
 
         src_text = ["Sam"]
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
@@ -322,7 +380,9 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         generated_utterances = model.generate(**model_inputs, **FASTER_GEN_KWARGS)
         tgt_text = 'Sam is a great name. It means "sun" in Gaelic.'
 
-        generated_txt = self.tokenizer.batch_decode(generated_utterances, **TOK_DECODE_KW)
+        generated_txt = self.tokenizer.batch_decode(
+            generated_utterances, **TOK_DECODE_KW
+        )
         assert generated_txt[0].strip() == tgt_text
 
         src_text = (
@@ -335,7 +395,10 @@ class Blenderbot3BIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(**model_inputs, **FASTER_GEN_KWARGS)[0]
         reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
 
-        assert "I think it's because we are so worried about what people think of us." == reply.strip()
+        assert (
+            "I think it's because we are so worried about what people think of us."
+            == reply.strip()
+        )
         del model
 
 
@@ -396,15 +459,21 @@ class BlenderbotStandaloneDecoderModelTester:
         self.decoder_attention_idx = 1
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+        input_ids = ids_tensor(
+            [self.batch_size, self.decoder_seq_length], self.vocab_size
+        )
 
         attention_mask = None
         if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+            attention_mask = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], vocab_size=2
+            )
 
         lm_labels = None
         if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+            lm_labels = ids_tensor(
+                [self.batch_size, self.decoder_seq_length], self.vocab_size
+            )
 
         config = BlenderbotConfig(
             vocab_size=self.vocab_size,
@@ -455,15 +524,21 @@ class BlenderbotStandaloneDecoderModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
 
         output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-3
+        )
 
     def create_and_check_decoder_model_attention_mask_past(
         self,
@@ -481,7 +556,9 @@ class BlenderbotStandaloneDecoderModelTester:
         attn_mask[:, half_seq_length:] = 0
 
         # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)[
+            "past_key_values"
+        ]
         #        past_key_values = model(input_ids, use_cache=True)["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
@@ -489,29 +566,42 @@ class BlenderbotStandaloneDecoderModelTester:
 
         # change a random masked slice from input_ids
         random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        random_other_next_tokens = ids_tensor(
+            (self.batch_size, 1), config.vocab_size
+        ).squeeze(-1)
         input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
 
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            [
+                attn_mask,
+                torch.ones(
+                    (attn_mask.shape[0], 1), dtype=torch.long, device=torch_device
+                ),
+            ],
             dim=1,
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[
             "last_hidden_state"
         ]
+        output_from_past = model(
+            next_tokens, past_key_values=past_key_values, attention_mask=attn_mask
+        )["last_hidden_state"]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, next_input_ids.shape[-1] - 1, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        assert torch.allclose(
+            output_from_past_slice, output_from_no_past_slice, atol=1e-3
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -530,15 +620,21 @@ class BlenderbotStandaloneDecoderModelTester:
 
 
 @require_torch
-class BlenderbotStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (BlenderbotDecoder, BlenderbotForCausalLM) if is_torch_available() else ()
+class BlenderbotStandaloneDecoderModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
+    all_model_classes = (
+        (BlenderbotDecoder, BlenderbotForCausalLM) if is_torch_available() else ()
+    )
     test_pruning = False
     is_encoder_decoder = False
 
     def setUp(
         self,
     ):
-        self.model_tester = BlenderbotStandaloneDecoderModelTester(self, is_training=False)
+        self.model_tester = BlenderbotStandaloneDecoderModelTester(
+            self, is_training=False
+        )
         self.config_tester = ConfigTester(self, config_class=BlenderbotConfig)
 
     def test_config(self):
@@ -550,7 +646,9 @@ class BlenderbotStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
 
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(
+            *config_and_inputs
+        )
 
     @unittest.skip(reason="decoder cannot keep gradients")
     def test_retain_grad_hidden_states_attentions(self):

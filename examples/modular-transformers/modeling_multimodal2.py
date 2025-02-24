@@ -57,7 +57,11 @@ class Multimodal2VisionAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -96,7 +100,10 @@ class Multimodal2VisionAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
                     f" {causal_attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + causal_attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if attention_mask is not None:
@@ -104,7 +111,10 @@ class Multimodal2VisionAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -114,12 +124,18 @@ class Multimodal2VisionAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -182,13 +198,23 @@ class Multimodal2VisionSdpaAttention(Multimodal2VisionAttention):
         key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = query_states.view(
+            bsz, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
+        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(
+            1, 2
+        )
+        value_states = value_states.view(
+            bsz, -1, self.num_heads, self.head_dim
+        ).transpose(1, 2)
 
         # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
         # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if not is_torch_greater_or_equal_than_2_2 and query_states.device.type == "cuda" and attn_mask is not None:
+        if (
+            not is_torch_greater_or_equal_than_2_2
+            and query_states.device.type == "cuda"
+            and attn_mask is not None
+        ):
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
@@ -245,9 +271,13 @@ class Multimodal2VisionFlashAttention2(Multimodal2VisionAttention):
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
         # therefore we just need to keep the original shape
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        query_states = query_states.view(
+            batch_size, q_len, self.num_heads, self.head_dim
+        )
         key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim)
-        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim)
+        value_states = value_states.view(
+            batch_size, q_len, self.num_heads, self.head_dim
+        )
 
         dropout_rate = self.dropout if self.training else 0.0
 
@@ -288,7 +318,9 @@ class Multimodal2VisionFlashAttention2(Multimodal2VisionAttention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim).contiguous()
+        attn_output = attn_output.reshape(
+            batch_size, q_len, self.embed_dim
+        ).contiguous()
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -323,7 +355,9 @@ class Multimodal2VisionEncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = MULTIMODAL2_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.self_attn = MULTIMODAL2_VISION_ATTENTION_CLASSES[
+            config._attn_implementation
+        ](config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = Multimodal2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
@@ -381,7 +415,12 @@ class Multimodal2VisionEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([Multimodal2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [
+                Multimodal2VisionEncoderLayer(config)
+                for _ in range(config.num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -422,11 +461,19 @@ class Multimodal2VisionEncoder(nn.Module):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -460,9 +507,15 @@ class Multimodal2VisionEncoder(nn.Module):
             encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, encoder_states, all_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
         )
 
 
@@ -487,9 +540,15 @@ class Multimodal2VisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+        self.register_buffer(
+            "position_ids",
+            torch.arange(self.num_positions).expand((1, -1)),
+            persistent=False,
+        )
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(
+        self, embeddings: torch.Tensor, height: int, width: int
+    ) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
         images. This method is also adapted to support torch.jit tracing.
@@ -504,7 +563,11 @@ class Multimodal2VisionEmbeddings(nn.Module):
         num_positions = position_embedding.shape[1] - 1
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+        if (
+            not torch.jit.is_tracing()
+            and num_patches == num_positions
+            and height == width
+        ):
             return self.position_embedding(self.position_ids)
 
         class_pos_embed = position_embedding[:, :1]
@@ -516,7 +579,9 @@ class Multimodal2VisionEmbeddings(nn.Module):
         new_width = width // self.patch_size
 
         sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.reshape(
+            1, sqrt_num_positions, sqrt_num_positions, dim
+        )
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
         patch_pos_embed = nn.functional.interpolate(
@@ -530,20 +595,29 @@ class Multimodal2VisionEmbeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+    def forward(
+        self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False
+    ) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
-        if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
+        if not interpolate_pos_encoding and (
+            height != self.image_size or width != self.image_size
+        ):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
+                f"Input image size ({height}*{width}) doesn't match model"
+                f" ({self.image_size}*{self.image_size})."
             )
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        patch_embeds = self.patch_embedding(
+            pixel_values.to(dtype=target_dtype)
+        )  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(
+                embeddings, height, width
+            )
         else:
             embeddings = embeddings + self.position_embedding(self.position_ids)
         return embeddings
@@ -579,7 +653,9 @@ class Multimodal2VisionTransformer(nn.Module):
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(MULTIMODAL2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Multimodal2VisionConfig)
+    @replace_return_docstrings(
+        output_type=BaseModelOutputWithPooling, config_class=Multimodal2VisionConfig
+    )
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -592,16 +668,26 @@ class Multimodal2VisionTransformer(nn.Module):
         Returns:
 
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.embeddings(
+            pixel_values, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -663,7 +749,9 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(MULTIMODAL2_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Multimodal2VisionConfig)
+    @replace_return_docstrings(
+        output_type=BaseModelOutputWithPooling, config_class=Multimodal2VisionConfig
+    )
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -694,7 +782,9 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         return self.vision_model(
             pixel_values=pixel_values,

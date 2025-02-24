@@ -21,7 +21,10 @@ import torch
 import torch.nn as nn
 
 from ....activations import ACT2FN
-from ....modeling_outputs import MoECausalLMOutputWithPast, MoEModelOutputWithPastAndCrossAttentions
+from ....modeling_outputs import (
+    MoECausalLMOutputWithPast,
+    MoEModelOutputWithPastAndCrossAttentions,
+)
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
     DUMMY_INPUTS,
@@ -65,7 +68,9 @@ def router_z_loss_func(router_logits: torch.Tensor) -> float:
     return torch.sum(z_loss) / (num_groups * tokens_per_group)
 
 
-def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
+def load_balancing_loss_func(
+    router_probs: torch.Tensor, expert_indices: torch.Tensor
+) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -101,7 +106,9 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
 
     router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
-    return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
+    return torch.mean(
+        tokens_per_group_and_expert * router_prob_per_group_and_expert
+    ) * (num_experts**2)
 
 
 class GPTSanJapaneseDenseActDense(nn.Module):
@@ -153,12 +160,16 @@ class GPTSanJapaneseTop1Router(nn.Module):
         super().__init__()
         self.num_experts = config.num_experts
         self.expert_capacity = config.expert_capacity
-        self.classifier = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
+        self.classifier = nn.Linear(
+            config.hidden_size, self.num_experts, bias=config.router_bias
+        )
         self.jitter_noise = config.router_jitter_noise
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
         self.dtype = getattr(torch, config.router_dtype)
 
-    def _compute_router_probabilities(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _compute_router_probabilities(
+        self, hidden_states: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input hidden states.
 
@@ -181,14 +192,18 @@ class GPTSanJapaneseTop1Router(nn.Module):
 
         if self.training and self.jitter_noise > 0:
             # Multiply the token inputs by the uniform distribution - adding some noise
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+            hidden_states *= torch.empty_like(hidden_states).uniform_(
+                1.0 - self.jitter_noise, 1.0 + self.jitter_noise
+            )
 
         # Shape: [num_groups, tokens_per_group, num_experts]
         self._cast_classifier()
         router_logits = self.classifier(hidden_states)
 
         # Apply Softmax and cast back to the original `dtype`
-        router_probabilities = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
+        router_probabilities = nn.functional.softmax(
+            router_logits, dim=-1, dtype=self.dtype
+        ).to(self.input_dtype)
         return router_probabilities, router_logits
 
     def _cast_classifier(self):
@@ -219,7 +234,9 @@ class GPTSanJapaneseTop1Router(nn.Module):
         router_probs, router_logits = self._compute_router_probabilities(hidden_states)
 
         expert_index = torch.argmax(router_probs, dim=-1)
-        expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
+        expert_index = torch.nn.functional.one_hot(
+            expert_index, num_classes=self.num_experts
+        )
 
         # Mask tokens outside expert capacity. Sum over each sequence
         token_priority = torch.cumsum(expert_index, dim=-2)
@@ -236,7 +253,11 @@ class GPTSanJapaneseSparseMLP(nn.Module):
     Implementation of the Switch Transformers Sparse MLP module.
     """
 
-    def __init__(self, config: GPTSanJapaneseConfig, expert_class: nn.Module = GPTSanJapaneseDenseActDense):
+    def __init__(
+        self,
+        config: GPTSanJapaneseConfig,
+        expert_class: nn.Module = GPTSanJapaneseDenseActDense,
+    ):
         super().__init__()
         # Step 1: Get the correct router according to its class
         self.router = GPTSanJapaneseTop1Router(config)
@@ -268,7 +289,9 @@ class GPTSanJapaneseSparseMLP(nn.Module):
         next_states = hidden_states.clone()
         for idx, expert in enumerate(self.experts.values()):
             token_indices = router_mask[:, :, idx].bool()
-            next_states[token_indices] = expert(hidden_states[token_indices]).to(next_states.dtype)
+            next_states[token_indices] = expert(hidden_states[token_indices]).to(
+                next_states.dtype
+            )
 
         hidden_states = router_probs * next_states
         return hidden_states, (router_logits, expert_index)
@@ -376,7 +399,11 @@ class GPTSanJapaneseAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .contiguous()
+        )
 
     def forward(
         self,
@@ -453,7 +480,10 @@ class GPTSanJapaneseAttention(nn.Module):
                 raise ValueError(
                     f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
                 )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = (
+                attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                + attention_mask
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
@@ -464,7 +494,9 @@ class GPTSanJapaneseAttention(nn.Module):
                     f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
                     f" {layer_head_mask.size()}"
                 )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -472,12 +504,18 @@ class GPTSanJapaneseAttention(nn.Module):
             # make sure that attn_weights keeps its gradient.
             # In order to do so, attn_weights have to be reshaped
             # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+            attn_weights_reshaped = attn_weights.view(
+                bsz, self.num_heads, tgt_len, src_len
+            )
+            attn_weights = attn_weights_reshaped.view(
+                bsz * self.num_heads, tgt_len, src_len
+            )
         else:
             attn_weights_reshaped = None
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_probs = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
 
@@ -559,7 +597,9 @@ class GPTSanJapaneseLayerSelfAttention(nn.Module):
         """
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = (
+            past_key_value[:2] if past_key_value is not None else None
+        )
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         atten_out = self.self_attn(
             hidden_states=hidden_states,
@@ -593,7 +633,11 @@ class GPTSanJapaneseBlock(nn.Module):
     def __init__(self, config, ext_layer=False):
         super().__init__()
         self.self_attn = GPTSanJapaneseLayerSelfAttention(config)
-        self.feed_forward = GPTSanJapaneseLayerDenseFF(config) if ext_layer else GPTSanJapaneseLayerSparseFF(config)
+        self.feed_forward = (
+            GPTSanJapaneseLayerDenseFF(config)
+            if ext_layer
+            else GPTSanJapaneseLayerSparseFF(config)
+        )
 
     def forward(
         self,
@@ -661,7 +705,10 @@ class GPTSanJapaneseBlock(nn.Module):
 
         outputs = (hidden,) + atten_out[1:]
 
-        if isinstance(self.feed_forward, GPTSanJapaneseLayerSparseFF) and output_router_tuple:
+        if (
+            isinstance(self.feed_forward, GPTSanJapaneseLayerSparseFF)
+            and output_router_tuple
+        ):
             outputs += (router_tuple,)
 
         return outputs
@@ -691,12 +738,16 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        factor = self.config.initializer_factor  # Used for testing weights initialization
+        factor = (
+            self.config.initializer_factor
+        )  # Used for testing weights initialization
         if isinstance(module, nn.LayerNorm):
             module.weight.data.fill_(factor * 1.0)
             module.bias.data.zero_()
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.weight.data.normal_(
+                mean=0.0, std=factor * ((self.config.d_model) ** -0.5)
+            )
             if hasattr(module, "bias") and module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
@@ -706,9 +757,16 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.embed_tokens.weight.data.normal_(mean=0.0, std=factor * 1.0)
             module.position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
-            if hasattr(module, "extra_position_embeddings") and module.extra_position_embeddings is not None:
-                module.extra_position_embeddings.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, (GPTSanJapaneseModel, GPTSanJapaneseForConditionalGeneration)):
+            if (
+                hasattr(module, "extra_position_embeddings")
+                and module.extra_position_embeddings is not None
+            ):
+                module.extra_position_embeddings.weight.data.normal_(
+                    mean=0.0, std=factor * 1.0
+                )
+        elif isinstance(
+            module, (GPTSanJapaneseModel, GPTSanJapaneseForConditionalGeneration)
+        ):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.final_logits_bias.data.normal_(mean=0.0, std=factor * 1.0)
@@ -718,10 +776,14 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            module.wi.weight.data.normal_(
+                mean=0.0, std=factor * ((self.config.d_model) ** -0.5)
+            )
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            module.wo.weight.data.normal_(
+                mean=0.0, std=factor * ((self.config.d_ff) ** -0.5)
+            )
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
         elif isinstance(module, GPTSanJapaneseAttention):
@@ -729,10 +791,18 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_model
             n_heads = self.config.num_heads
-            module.k_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.v_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.q_proj.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.out_proj.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            module.k_proj.weight.data.normal_(
+                mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5)
+            )
+            module.v_proj.weight.data.normal_(
+                mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5)
+            )
+            module.q_proj.weight.data.normal_(
+                mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5)
+            )
+            module.out_proj.weight.data.normal_(
+                mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5)
+            )
         elif isinstance(module, GPTSanJapaneseSparseMLP):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
@@ -741,8 +811,12 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
             n_heads = self.config.num_heads
             module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                module.experts[f"expert_{idx}"].wi.weight.data.normal_(
+                    mean=0.0, std=factor * (d_model**-0.5)
+                )
+                module.experts[f"expert_{idx}"].wo.weight.data.normal_(
+                    mean=0.0, std=factor * (d_model**-0.5)
+                )
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -757,8 +831,12 @@ class GPTSanJapanesePreTrainedModel(PreTrainedModel):
         # shift inputs to the right
         if is_torch_fx_proxy(input_ids):
             # Item assignment is not supported natively for proxies.
-            shifted_input_ids = torch.full(input_ids.shape[:-1] + (1,), decoder_start_token_id)
-            shifted_input_ids = torch.cat([shifted_input_ids, input_ids[..., :-1]], dim=-1)
+            shifted_input_ids = torch.full(
+                input_ids.shape[:-1] + (1,), decoder_start_token_id
+            )
+            shifted_input_ids = torch.cat(
+                [shifted_input_ids, input_ids[..., :-1]], dim=-1
+            )
         else:
             shifted_input_ids = input_ids.new_zeros(input_ids.shape)
             shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
@@ -848,7 +926,9 @@ GPTSAN_JAPANESE_INPUTS_DOCSTRING = r"""
 class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
     def __init__(self, config: GPTSanJapaneseConfig):
         super().__init__(config)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.d_model
+        )
         self.config = copy.deepcopy(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
         self.last_project = nn.Linear(config.d_model, config.d_model, bias=True)
@@ -861,14 +941,20 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             self.blocks.append(GPTSanJapaneseBlock(config, ext_layer=True))
 
         if config.num_ext_layers > 0:
-            self.extra_position_embeddings = nn.Embedding(config.max_position_embeddings, config.d_model)
+            self.extra_position_embeddings = nn.Embedding(
+                config.max_position_embeddings, config.d_model
+            )
 
         if config.d_spout:
             spouts = []
             for _ in range(8):
                 spouts.append(nn.Linear(config.d_spout, config.d_spout, bias=False))
                 spouts.append(nn.Tanh())
-            spouts.append(nn.Linear(config.d_spout, config.num_layers * 2 * config.d_model, bias=False))
+            spouts.append(
+                nn.Linear(
+                    config.d_spout, config.num_layers * 2 * config.d_model, bias=False
+                )
+            )
             self.spout = nn.Sequential(*spouts)
 
         self.post_init()
@@ -907,10 +993,14 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             `MoEModelOutputWithPastAndCrossAttentions` or `tuple` if `return_dict` returns
             MoEModelOutputWithPastAndCrossAttentions insted of tuple
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         device = self.position_embeddings.weight.device
         if input_ids is None:
-            input_ids = torch.zeros([1, 1]).int().to(device)  # dummy for input_ids was None
+            input_ids = (
+                torch.zeros([1, 1]).int().to(device)
+            )  # dummy for input_ids was None
         if inputs_embeds is not None:
             raise NotImplementedError(
                 "GPTSanJapaneseModel does not use `inputs_embeds`. Make sure to pass in `input_ids` instead."
@@ -929,8 +1019,12 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 
         # If there is an attention_mask, increase first one for spout
         if self.config.d_spout and spout is not None and attention_mask is not None:
-            attention_mask_with_spout = torch.ones(num_batch, attention_mask.shape[1] + 1, device=device)
-            attention_mask_with_spout[:, 1:] -= 1 - attention_mask  # 1st token should be spout
+            attention_mask_with_spout = torch.ones(
+                num_batch, attention_mask.shape[1] + 1, device=device
+            )
+            attention_mask_with_spout[:, 1:] -= (
+                1 - attention_mask
+            )  # 1st token should be spout
             attention_mask = attention_mask_with_spout  # update attention_mask
 
         if num_precontext is not None:
@@ -965,16 +1059,21 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
                     self.config.d_model // self.config.num_heads,
                 ],
             )
-            pasts_or_spout_value = torch.split(pasts_or_spout_value, [1] * self.config.num_layers, dim=1)
+            pasts_or_spout_value = torch.split(
+                pasts_or_spout_value, [1] * self.config.num_layers, dim=1
+            )
             # make same shape as past_key_values
             pasts_or_spout_value = tuple(
-                tuple([b.squeeze(1) for b in torch.split(a.squeeze(1), [1, 1], dim=1)]) for a in pasts_or_spout_value
+                tuple([b.squeeze(1) for b in torch.split(a.squeeze(1), [1, 1], dim=1)])
+                for a in pasts_or_spout_value
             )
         else:
             pasts_or_spout_value = [None] * self.config.num_layers
 
         # Token position considering spout and pasts
-        token_position = torch.arange(num_input_contexts).to(device) + num_pasts_contexts
+        token_position = (
+            torch.arange(num_input_contexts).to(device) + num_pasts_contexts
+        )
 
         if attention_mask is None:
             attention_mask = torch.ones(num_batch, num_input_contexts, device=device)
@@ -982,7 +1081,9 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         # positions for get position_embeddings
         gather_position = (
             (
-                torch.zeros((num_batch, self.config.d_model, num_input_contexts)).to(device)
+                torch.zeros((num_batch, self.config.d_model, num_input_contexts)).to(
+                    device
+                )
                 + token_position.unsqueeze(0)
             )
             .transpose(1, 2)
@@ -990,15 +1091,23 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
         )
         # When padding with padding_side="left", zeros line up on the left side of attention_mask, so position_embeddings is shifted accordingly
         gather_position -= (1 - attention_mask).argmin(dim=-1).unsqueeze(1).unsqueeze(2)
-        gather_position = torch.clip(gather_position, num_pasts_contexts, self.config.max_position_embeddings - 1)
+        gather_position = torch.clip(
+            gather_position, num_pasts_contexts, self.config.max_position_embeddings - 1
+        )
 
         # attention_mask is applied per batch
         for i in range(num_batch):
-            hidden_states[i] += torch.gather(self.position_embeddings.weight, dim=0, index=gather_position[i])
+            hidden_states[i] += torch.gather(
+                self.position_embeddings.weight, dim=0, index=gather_position[i]
+            )
 
         # Create a mask to be used when making the prefix Input length of Prefix-LM variable
         causal_mask = (
-            torch.tril(torch.ones((num_output_contexts, num_output_contexts), dtype=torch.uint8))
+            torch.tril(
+                torch.ones(
+                    (num_output_contexts, num_output_contexts), dtype=torch.uint8
+                )
+            )
             .view(1, 1, num_output_contexts, num_output_contexts)
             .to(device)
         )
@@ -1007,7 +1116,9 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
             token_type_ids = token_type_ids.unsqueeze(1).unsqueeze(2)
             prefix_lm_mask = ((prefix_lm_mask + token_type_ids) > 0).float()
         # Marge prefix_lm_mask and attention_mask
-        extended_attention_mask = prefix_lm_mask * attention_mask.unsqueeze(1).unsqueeze(2)
+        extended_attention_mask = prefix_lm_mask * attention_mask.unsqueeze(
+            1
+        ).unsqueeze(2)
 
         # Prepare head mask if needed
         if head_mask is not None:
@@ -1017,9 +1128,15 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
 
         # outputs
         present_key_value_states = () if self.config.use_cache or use_cache else None
-        all_hidden_states = () if self.config.output_hidden_states or output_hidden_states else None
-        all_attentions = () if self.config.output_attentions or output_attentions else None
-        all_router_probs = () if self.config.output_router_logits or output_router_logits else None
+        all_hidden_states = (
+            () if self.config.output_hidden_states or output_hidden_states else None
+        )
+        all_attentions = (
+            () if self.config.output_attentions or output_attentions else None
+        )
+        all_router_probs = (
+            () if self.config.output_router_logits or output_router_logits else None
+        )
 
         for layer, past in enumerate(pasts_or_spout_value):
             if layer == self.config.num_switch_layers:
@@ -1029,7 +1146,9 @@ class GPTSanJapaneseModel(GPTSanJapanesePreTrainedModel):
                     # Therefore, convert_gptsan_tf_checkpoint_to_pytorch.py is used when converting and loading models created in the original GPTSAN repository.
                     for i in range(num_batch):
                         hidden_states[i] += torch.gather(
-                            self.extra_position_embeddings.weight, dim=0, index=gather_position[i]
+                            self.extra_position_embeddings.weight,
+                            dim=0,
+                            index=gather_position[i],
                         )
 
             output_router_tuple = (
@@ -1187,7 +1306,9 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         ```"""
         SEG_TOKEN = self.config.separator_token_id
         use_cache = use_cache or self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         model_return_dict = True
         num_precontext = None
         if input_ids is not None:
@@ -1230,7 +1351,9 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
 
             if output_router_logits:
                 # Compute the router loss (z_loss + auxiliary loss) for each router in the encoder and decoder
-                router_logits, expert_indexes = self._unpack_router_logits(outputs.router_probs)
+                router_logits, expert_indexes = self._unpack_router_logits(
+                    outputs.router_probs
+                )
                 z_loss = router_z_loss_func(router_logits)
                 router_probs = nn.Softmax(dim=-1)(router_logits)
                 aux_loss = load_balancing_loss_func(router_probs, expert_indexes)
@@ -1280,7 +1403,9 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
             return {
                 "input_ids": input_ids[:, -1:] if input_ids is not None else None,
                 "attention_mask": attention_mask,
-                "token_type_ids": token_type_ids[:, -1:] if token_type_ids is not None else None,
+                "token_type_ids": (
+                    token_type_ids[:, -1:] if token_type_ids is not None else None
+                ),
                 "spout": spout,
                 "past_key_values": past_key_values,
             }
@@ -1296,9 +1421,14 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         return self._shift_right(labels)
 
     def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+        self,
+        new_num_tokens: int,
+        pad_to_multiple_of: Optional[int] = None,
+        mean_resizing: bool = True,
     ) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        new_embeddings = super().resize_token_embeddings(
+            new_num_tokens, pad_to_multiple_of, mean_resizing
+        )
         self._resize_final_logits_bias(new_embeddings.weight.shape[0])
         return new_embeddings
 
@@ -1307,7 +1437,10 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
         if new_num_tokens <= old_num_tokens:
             new_bias = self.final_logits_bias[:, :new_num_tokens]
         else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
+            extra_bias = torch.zeros(
+                (1, new_num_tokens - old_num_tokens),
+                device=self.final_logits_bias.device,
+            )
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
 
@@ -1331,4 +1464,6 @@ class GPTSanJapaneseForConditionalGeneration(GPTSanJapanesePreTrainedModel):
                 router_logits, expert_indexes = router_output
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
-        return torch.cat(total_router_logits, dim=1), torch.cat(total_expert_indexes, dim=1)
+        return torch.cat(total_router_logits, dim=1), torch.cat(
+            total_expert_indexes, dim=1
+        )

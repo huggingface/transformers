@@ -50,9 +50,13 @@ TGT = [
 
 
 def test_disaggregated_scores_are_determinstic():
-    no_aggregation = calculate_rouge(PRED, TGT, bootstrap_aggregation=False, rouge_keys=["rouge2", "rougeL"])
+    no_aggregation = calculate_rouge(
+        PRED, TGT, bootstrap_aggregation=False, rouge_keys=["rouge2", "rougeL"]
+    )
     assert isinstance(no_aggregation, defaultdict)
-    no_aggregation_just_r2 = calculate_rouge(PRED, TGT, bootstrap_aggregation=False, rouge_keys=["rouge2"])
+    no_aggregation_just_r2 = calculate_rouge(
+        PRED, TGT, bootstrap_aggregation=False, rouge_keys=["rouge2"]
+    )
     assert (
         pd.DataFrame(no_aggregation["rouge2"]).fmeasure.mean()
         == pd.DataFrame(no_aggregation_just_r2["rouge2"]).fmeasure.mean()
@@ -83,7 +87,9 @@ def test_single_sent_scores_dont_depend_on_newline_sep():
         'Prosecutor: "No videos were used in the crash investigation" German papers say they saw a cell phone video of'
         " the final seconds on board Flight 9525.",
     ]
-    assert calculate_rouge(pred, tgt, newline_sep=True) == calculate_rouge(pred, tgt, newline_sep=False)
+    assert calculate_rouge(pred, tgt, newline_sep=True) == calculate_rouge(
+        pred, tgt, newline_sep=False
+    )
 
 
 def test_pegasus_newline():
@@ -94,16 +100,22 @@ def test_pegasus_newline():
         """ Marseille prosecutor says "so far no videos were used in the crash investigation" despite media reports . Journalists at Bild and Paris Match are "very confident" the video clip is real, an editor says . Andreas Lubitz had informed his Lufthansa training school of an episode of severe depression, airline says ."""
     ]
 
-    prev_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"], newline_sep=False)["rougeLsum"]
+    prev_score = calculate_rouge(
+        pred, tgt, rouge_keys=["rougeLsum"], newline_sep=False
+    )["rougeLsum"]
     new_score = calculate_rouge(pred, tgt, rouge_keys=["rougeLsum"])["rougeLsum"]
     assert new_score > prev_score
 
 
 def test_rouge_cli():
     data_dir = Path("examples/seq2seq/test_data/wmt_en_ro")
-    metrics = calculate_rouge_path(data_dir.joinpath("test.source"), data_dir.joinpath("test.target"))
+    metrics = calculate_rouge_path(
+        data_dir.joinpath("test.source"), data_dir.joinpath("test.target")
+    )
     assert isinstance(metrics, dict)
     metrics_default_dict = calculate_rouge_path(
-        data_dir.joinpath("test.source"), data_dir.joinpath("test.target"), bootstrap_aggregation=False
+        data_dir.joinpath("test.source"),
+        data_dir.joinpath("test.target"),
+        bootstrap_aggregation=False,
     )
     assert isinstance(metrics_default_dict, defaultdict)

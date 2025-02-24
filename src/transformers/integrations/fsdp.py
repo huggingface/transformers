@@ -33,6 +33,6 @@ def is_fsdp_managed_module(module: nn.Module) -> bool:
 
     import torch.distributed.fsdp
 
-    return isinstance(module, torch.distributed.fsdp.FullyShardedDataParallel) or getattr(
-        module, "_is_fsdp_managed_module", False
-    )
+    return isinstance(
+        module, torch.distributed.fsdp.FullyShardedDataParallel
+    ) or getattr(module, "_is_fsdp_managed_module", False)

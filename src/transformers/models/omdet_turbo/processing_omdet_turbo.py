@@ -118,7 +118,12 @@ def compute_score(boxes):
     num_classes = boxes.shape[2]
     proposal_num = boxes.shape[1]
     scores = torch.sigmoid(boxes)
-    classes = torch.arange(num_classes, device=boxes.device).unsqueeze(0).repeat(proposal_num, 1).flatten(0, 1)
+    classes = (
+        torch.arange(num_classes, device=boxes.device)
+        .unsqueeze(0)
+        .repeat(proposal_num, 1)
+        .flatten(0, 1)
+    )
     return scores, classes
 
 
@@ -164,14 +169,18 @@ def _post_process_boxes_for_image(
 
     # Filter by max number of detections
     proposal_num = len(boxes) if max_num_det is None else max_num_det
-    scores_per_image, topk_indices = scores.flatten(0, 1).topk(proposal_num, sorted=False)
+    scores_per_image, topk_indices = scores.flatten(0, 1).topk(
+        proposal_num, sorted=False
+    )
     labels_per_image = labels[topk_indices]
     boxes_per_image = boxes.view(-1, 1, 4).repeat(1, scores.shape[1], 1).view(-1, 4)
     boxes_per_image = boxes_per_image[topk_indices]
 
     # Convert and scale boxes to original image size
     boxes_per_image = center_to_corners_format(boxes_per_image)
-    boxes_per_image = boxes_per_image * torch.tensor(image_size[::-1]).repeat(2).to(boxes_per_image.device)
+    boxes_per_image = boxes_per_image * torch.tensor(image_size[::-1]).repeat(2).to(
+        boxes_per_image.device
+    )
 
     # Filtering by confidence score
     filter_mask = scores_per_image > threshold  # R x K
@@ -188,7 +197,9 @@ def _post_process_boxes_for_image(
     labels_per_image = labels_per_image[classes_keep]
 
     # NMS
-    keep = batched_nms(boxes_per_image, scores_per_image, labels_per_image, nms_threshold)
+    keep = batched_nms(
+        boxes_per_image, scores_per_image, labels_per_image, nms_threshold
+    )
     boxes_per_image = boxes_per_image[keep]
     scores_per_image = scores_per_image[keep]
     labels_per_image = labels_per_image[keep]
@@ -271,18 +282,30 @@ class OmDetTurboProcessor(ProcessorMixin):
         elif not isinstance(task, (list, tuple)):
             task = [task]
 
-        encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+        encoding_image_processor = self.image_processor(
+            images, **output_kwargs["images_kwargs"]
+        )
         tasks_encoding = self.tokenizer(text=task, **output_kwargs["text_kwargs"])
 
         classes = text
 
-        classes_structure = torch.tensor([len(class_single) for class_single in classes], dtype=torch.long)
-        classes_flattened = [class_single for class_batch in classes for class_single in class_batch]
-        classes_encoding = self.tokenizer(text=classes_flattened, **output_kwargs["text_kwargs"])
+        classes_structure = torch.tensor(
+            [len(class_single) for class_single in classes], dtype=torch.long
+        )
+        classes_flattened = [
+            class_single for class_batch in classes for class_single in class_batch
+        ]
+        classes_encoding = self.tokenizer(
+            text=classes_flattened, **output_kwargs["text_kwargs"]
+        )
 
         encoding = BatchFeature()
-        encoding.update({f"tasks_{key}": value for key, value in tasks_encoding.items()})
-        encoding.update({f"classes_{key}": value for key, value in classes_encoding.items()})
+        encoding.update(
+            {f"tasks_{key}": value for key, value in tasks_encoding.items()}
+        )
+        encoding.update(
+            {f"classes_{key}": value for key, value in classes_encoding.items()}
+        )
         encoding.update({"classes_structure": classes_structure})
         encoding.update(encoding_image_processor)
 
@@ -364,14 +387,18 @@ class OmDetTurboProcessor(ProcessorMixin):
             )
 
         if len(target_sizes) != batch_size:
-            raise ValueError("Make sure that you pass in as many target sizes as output sequences")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as output sequences"
+            )
 
         # Inputs consistency check for text labels
         if text_labels is not None and isinstance(text_labels[0], str):
             text_labels = [text_labels]
 
         if text_labels is not None and len(text_labels) != batch_size:
-            raise ValueError("Make sure that you pass in as many classes group as output sequences")
+            raise ValueError(
+                "Make sure that you pass in as many classes group as output sequences"
+            )
 
         # Convert target_sizes to list for easier handling
         if isinstance(target_sizes, torch.Tensor):
@@ -398,14 +425,21 @@ class OmDetTurboProcessor(ProcessorMixin):
                 max_num_det=max_num_det,
             )
             result = DictWithDeprecationWarning(
-                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
+                {
+                    "boxes": boxes,
+                    "scores": scores,
+                    "labels": labels,
+                    "text_labels": None,
+                }
             )
             results.append(result)
 
         # Add text labels
         if text_labels is not None:
             for result, image_text_labels in zip(results, text_labels):
-                result["text_labels"] = [image_text_labels[idx] for idx in result["labels"]]
+                result["text_labels"] = [
+                    image_text_labels[idx] for idx in result["labels"]
+                ]
 
         return results
 

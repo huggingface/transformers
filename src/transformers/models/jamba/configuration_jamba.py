@@ -193,14 +193,22 @@ class JambaConfig(PretrainedConfig):
         self.attn_layer_period = attn_layer_period
         self.attn_layer_offset = attn_layer_offset
 
-        self._check_supported_offset("attention", self.attn_layer_period, self.attn_layer_offset)
-        self._check_supported_offset("expert", self.expert_layer_period, self.expert_layer_offset)
+        self._check_supported_offset(
+            "attention", self.attn_layer_period, self.attn_layer_offset
+        )
+        self._check_supported_offset(
+            "expert", self.expert_layer_period, self.expert_layer_offset
+        )
 
         self.use_mamba_kernels = use_mamba_kernels
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
-        self.mamba_dt_rank = math.ceil(self.hidden_size / 16) if mamba_dt_rank == "auto" else mamba_dt_rank
+        self.mamba_dt_rank = (
+            math.ceil(self.hidden_size / 16)
+            if mamba_dt_rank == "auto"
+            else mamba_dt_rank
+        )
         self.mamba_conv_bias = mamba_conv_bias
         self.mamba_proj_bias = mamba_proj_bias
 
@@ -215,14 +223,22 @@ class JambaConfig(PretrainedConfig):
     @property
     def layers_block_type(self):
         return [
-            "attention" if i % self.attn_layer_period == self.attn_layer_offset else "mamba"
+            (
+                "attention"
+                if i % self.attn_layer_period == self.attn_layer_offset
+                else "mamba"
+            )
             for i in range(self.num_hidden_layers)
         ]
 
     @property
     def layers_num_experts(self):
         return [
-            self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1
+            (
+                self.num_experts
+                if i % self.expert_layer_period == self.expert_layer_offset
+                else 1
+            )
             for i in range(self.num_hidden_layers)
         ]
 

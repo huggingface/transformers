@@ -37,7 +37,9 @@ def get_xclip_config(model_name, num_frames):
 
     # derive patch size from model name
     start_idx = model_name.find("patch")
-    patch_size = int(model_name[start_idx + len("patch") : start_idx + len("patch") + 2])
+    patch_size = int(
+        model_name[start_idx + len("patch") : start_idx + len("patch") + 2]
+    )
     vision_config = XCLIPVisionConfig(patch_size=patch_size, num_frames=num_frames)
 
     if "large" in model_name:
@@ -66,9 +68,13 @@ def get_xclip_config(model_name, num_frames):
 def rename_key(name):
     # text encoder
     if name == "token_embedding.weight":
-        name = name.replace("token_embedding.weight", "text_model.embeddings.token_embedding.weight")
+        name = name.replace(
+            "token_embedding.weight", "text_model.embeddings.token_embedding.weight"
+        )
     if name == "positional_embedding":
-        name = name.replace("positional_embedding", "text_model.embeddings.position_embedding.weight")
+        name = name.replace(
+            "positional_embedding", "text_model.embeddings.position_embedding.weight"
+        )
     if "ln_1" in name:
         name = name.replace("ln_1", "layer_norm1")
     if "ln_2" in name:
@@ -85,11 +91,18 @@ def rename_key(name):
         name = name.replace("ln_final", "text_model.final_layer_norm")
     # visual encoder
     if name == "visual.class_embedding":
-        name = name.replace("visual.class_embedding", "vision_model.embeddings.class_embedding")
+        name = name.replace(
+            "visual.class_embedding", "vision_model.embeddings.class_embedding"
+        )
     if name == "visual.positional_embedding":
-        name = name.replace("visual.positional_embedding", "vision_model.embeddings.position_embedding.weight")
+        name = name.replace(
+            "visual.positional_embedding",
+            "vision_model.embeddings.position_embedding.weight",
+        )
     if name.startswith("visual.transformer.resblocks"):
-        name = name.replace("visual.transformer.resblocks", "vision_model.encoder.layers")
+        name = name.replace(
+            "visual.transformer.resblocks", "vision_model.encoder.layers"
+        )
     if "visual.conv1" in name:
         name = name.replace("visual.conv1", "vision_model.embeddings.patch_embedding")
     if "visual.ln_pre" in name:
@@ -128,68 +141,92 @@ def convert_state_dict(orig_state_dict, config):
                 dim = config.vision_config.hidden_size
                 if "message_attn" in key:
                     if "weight" in key:
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.message_attn.q_proj.weight"] = val[
-                            :dim, :
-                        ]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.message_attn.k_proj.weight"] = val[
-                            dim : dim * 2, :
-                        ]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.message_attn.v_proj.weight"] = val[
-                            -dim:, :
-                        ]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.message_attn.q_proj.weight"
+                        ] = val[:dim, :]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.message_attn.k_proj.weight"
+                        ] = val[dim : dim * 2, :]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.message_attn.v_proj.weight"
+                        ] = val[-dim:, :]
                     else:
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.message_attn.q_proj.bias"] = val[
-                            :dim
-                        ]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.message_attn.k_proj.bias"] = val[
-                            dim : dim * 2
-                        ]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.message_attn.v_proj.bias"] = val[
-                            -dim:
-                        ]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.message_attn.q_proj.bias"
+                        ] = val[:dim]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.message_attn.k_proj.bias"
+                        ] = val[dim : dim * 2]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.message_attn.v_proj.bias"
+                        ] = val[-dim:]
                 else:
                     if "weight" in key:
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[
-                            :dim, :
-                        ]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[
-                            dim : dim * 2, :
-                        ]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[
-                            -dim:, :
-                        ]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.self_attn.q_proj.weight"
+                        ] = val[:dim, :]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.self_attn.k_proj.weight"
+                        ] = val[dim : dim * 2, :]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.self_attn.v_proj.weight"
+                        ] = val[-dim:, :]
                     else:
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[
-                            dim : dim * 2
-                        ]
-                        orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.self_attn.q_proj.bias"
+                        ] = val[:dim]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.self_attn.k_proj.bias"
+                        ] = val[dim : dim * 2]
+                        orig_state_dict[
+                            f"vision_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"
+                        ] = val[-dim:]
             elif key.startswith("mit"):
                 layer_num = key_split[2]
                 dim = config.vision_config.mit_hidden_size
                 if "weight" in key:
-                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
-                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+                    orig_state_dict[
+                        f"mit.encoder.layers.{layer_num}.self_attn.q_proj.weight"
+                    ] = val[:dim, :]
+                    orig_state_dict[
+                        f"mit.encoder.layers.{layer_num}.self_attn.k_proj.weight"
+                    ] = val[dim : dim * 2, :]
+                    orig_state_dict[
+                        f"mit.encoder.layers.{layer_num}.self_attn.v_proj.weight"
+                    ] = val[-dim:, :]
                 else:
-                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
-                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[dim : dim * 2]
-                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+                    orig_state_dict[
+                        f"mit.encoder.layers.{layer_num}.self_attn.q_proj.bias"
+                    ] = val[:dim]
+                    orig_state_dict[
+                        f"mit.encoder.layers.{layer_num}.self_attn.k_proj.bias"
+                    ] = val[dim : dim * 2]
+                    orig_state_dict[
+                        f"mit.encoder.layers.{layer_num}.self_attn.v_proj.bias"
+                    ] = val[-dim:]
             else:
                 layer_num = key_split[2]
                 dim = config.text_config.hidden_size
                 if "weight" in key:
-                    orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
-                    orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[
-                        dim : dim * 2, :
-                    ]
-                    orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+                    orig_state_dict[
+                        f"text_model.encoder.layers.{layer_num}.self_attn.q_proj.weight"
+                    ] = val[:dim, :]
+                    orig_state_dict[
+                        f"text_model.encoder.layers.{layer_num}.self_attn.k_proj.weight"
+                    ] = val[dim : dim * 2, :]
+                    orig_state_dict[
+                        f"text_model.encoder.layers.{layer_num}.self_attn.v_proj.weight"
+                    ] = val[-dim:, :]
                 else:
-                    orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
-                    orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[
-                        dim : dim * 2
-                    ]
-                    orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+                    orig_state_dict[
+                        f"text_model.encoder.layers.{layer_num}.self_attn.q_proj.bias"
+                    ] = val[:dim]
+                    orig_state_dict[
+                        f"text_model.encoder.layers.{layer_num}.self_attn.k_proj.bias"
+                    ] = val[dim : dim * 2]
+                    orig_state_dict[
+                        f"text_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"
+                    ] = val[-dim:]
         else:
             new_key_name = rename_key(key)
             if new_key_name in ["visual_projection.weight", "text_projection.weight"]:
@@ -215,7 +252,9 @@ def prepare_video(num_frames):
     return list(video)
 
 
-def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_xclip_checkpoint(
+    model_name, pytorch_dump_folder_path=None, push_to_hub=False
+):
     model_to_url = {
         # fully supervised kinetics-400 checkpoints
         "xclip-base-patch32": "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_32_8.pth",
@@ -287,18 +326,26 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     model = XCLIPModel(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
-    assert missing_keys == ["text_model.embeddings.position_ids", "vision_model.embeddings.position_ids"]
+    assert missing_keys == [
+        "text_model.embeddings.position_ids",
+        "vision_model.embeddings.position_ids",
+    ]
     model.eval()
 
     size = 336 if model_name == "xclip-large-patch14-16-frames" else 224
     image_processor = VideoMAEImageProcessor(size=size)
     slow_tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
     fast_tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
-    processor = XCLIPProcessor(image_processor=image_processor, tokenizer=fast_tokenizer)
+    processor = XCLIPProcessor(
+        image_processor=image_processor, tokenizer=fast_tokenizer
+    )
 
     video = prepare_video(num_frames)
     inputs = processor(
-        text=["playing sports", "eating spaghetti", "go shopping"], videos=video, return_tensors="pt", padding=True
+        text=["playing sports", "eating spaghetti", "go shopping"],
+        videos=video,
+        return_tensors="pt",
+        padding=True,
     )
 
     print("Shape of pixel values:", inputs.pixel_values.shape)
@@ -376,11 +423,18 @@ if __name__ == "__main__":
         help="Name of the model.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_xclip_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_xclip_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

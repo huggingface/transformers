@@ -211,7 +211,9 @@ class Phi3Config(PretrainedConfig):
         rope_scaling_short_factor = self.rope_scaling.get("short_factor", None)
         rope_scaling_long_factor = self.rope_scaling.get("long_factor", None)
         if rope_scaling_type is None or rope_scaling_type not in ["longrope"]:
-            raise ValueError(f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}")
+            raise ValueError(
+                f"`rope_scaling`'s type field must be one of ['longrope'], got {rope_scaling_type}"
+            )
         if not (
             isinstance(rope_scaling_short_factor, list)
             and all(isinstance(x, (int, float)) for x in rope_scaling_short_factor)
@@ -219,7 +221,9 @@ class Phi3Config(PretrainedConfig):
             raise ValueError(
                 f"`rope_scaling`'s short_factor field must be a list of numbers, got {rope_scaling_short_factor}"
             )
-        rotary_ndims = int(self.hidden_size // self.num_attention_heads * self.partial_rotary_factor)
+        rotary_ndims = int(
+            self.hidden_size // self.num_attention_heads * self.partial_rotary_factor
+        )
         if not len(rope_scaling_short_factor) == rotary_ndims // 2:
             raise ValueError(
                 f"`rope_scaling`'s short_factor field must have length {rotary_ndims // 2}, got {len(rope_scaling_short_factor)}"

@@ -94,15 +94,43 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         cls_token="[CLS]",
         **kwargs,
     ):
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
-        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        bos_token = (
+            AddedToken(bos_token, lstrip=False, rstrip=False)
+            if isinstance(bos_token, str)
+            else bos_token
+        )
+        eos_token = (
+            AddedToken(eos_token, lstrip=False, rstrip=False)
+            if isinstance(eos_token, str)
+            else eos_token
+        )
+        unk_token = (
+            AddedToken(unk_token, lstrip=False, rstrip=False)
+            if isinstance(unk_token, str)
+            else unk_token
+        )
+        pad_token = (
+            AddedToken(pad_token, lstrip=False, rstrip=False)
+            if isinstance(pad_token, str)
+            else pad_token
+        )
+        cls_token = (
+            AddedToken(cls_token, lstrip=False, rstrip=False)
+            if isinstance(cls_token, str)
+            else cls_token
+        )
+        sep_token = (
+            AddedToken(sep_token, lstrip=False, rstrip=False)
+            if isinstance(sep_token, str)
+            else sep_token
+        )
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         super().__init__(
             vocab_file,
@@ -149,7 +177,10 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -173,7 +204,10 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formatted with special tokens for the model."
                 )
-            return [1 if x in [self.sep_token_id, self.cls_token_id] else 0 for x in token_ids_0]
+            return [
+                1 if x in [self.sep_token_id, self.cls_token_id] else 0
+                for x in token_ids_0
+            ]
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
@@ -209,7 +243,9 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
                 "Your fast tokenizer does not have the necessary information to save the vocabulary for a slow "
@@ -220,7 +256,9 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):

@@ -69,12 +69,17 @@ def remove_symbols(s: str):
     """
     Replace any other markers, symbols, punctuations with a space, keeping diacritics
     """
-    return "".join(" " if unicodedata.category(c)[0] in "MSP" else c for c in unicodedata.normalize("NFKC", s))
+    return "".join(
+        " " if unicodedata.category(c)[0] in "MSP" else c
+        for c in unicodedata.normalize("NFKC", s)
+    )
 
 
 class BasicTextNormalizer:
     def __init__(self, remove_diacritics: bool = False, split_letters: bool = False):
-        self.clean = remove_symbols_and_diacritics if remove_diacritics else remove_symbols
+        self.clean = (
+            remove_symbols_and_diacritics if remove_diacritics else remove_symbols
+        )
         self.split_letters = split_letters
 
     def __call__(self, s: str):
@@ -86,7 +91,9 @@ class BasicTextNormalizer:
         if self.split_letters:
             s = " ".join(regex.findall(r"\X", s, regex.U))
 
-        s = re.sub(r"\s+", " ", s)  # replace any successive whitespace characters with a space
+        s = re.sub(
+            r"\s+", " ", s
+        )  # replace any successive whitespace characters with a space
 
         return s
 
@@ -116,7 +123,8 @@ class EnglishNumberNormalizer:
         }
         # fmt: on
         self.ones_plural = {
-            "sixes" if name == "six" else name + "s": (value, "s") for name, value in self.ones.items()
+            "sixes" if name == "six" else name + "s": (value, "s")
+            for name, value in self.ones.items()
         }
         self.ones_ordinal = {
             "zeroth": (0, "th"),
@@ -143,8 +151,13 @@ class EnglishNumberNormalizer:
             "eighty": 80,
             "ninety": 90,
         }
-        self.tens_plural = {name.replace("y", "ies"): (value, "s") for name, value in self.tens.items()}
-        self.tens_ordinal = {name.replace("y", "ieth"): (value, "th") for name, value in self.tens.items()}
+        self.tens_plural = {
+            name.replace("y", "ies"): (value, "s") for name, value in self.tens.items()
+        }
+        self.tens_ordinal = {
+            name.replace("y", "ieth"): (value, "th")
+            for name, value in self.tens.items()
+        }
         self.tens_suffixed = {**self.tens_plural, **self.tens_ordinal}
 
         self.multipliers = {
@@ -161,9 +174,16 @@ class EnglishNumberNormalizer:
             "nonillion": 1_000_000_000_000_000_000_000_000_000_000,
             "decillion": 1_000_000_000_000_000_000_000_000_000_000_000,
         }
-        self.multipliers_plural = {name + "s": (value, "s") for name, value in self.multipliers.items()}
-        self.multipliers_ordinal = {name + "th": (value, "th") for name, value in self.multipliers.items()}
-        self.multipliers_suffixed = {**self.multipliers_plural, **self.multipliers_ordinal}
+        self.multipliers_plural = {
+            name + "s": (value, "s") for name, value in self.multipliers.items()
+        }
+        self.multipliers_ordinal = {
+            name + "th": (value, "th") for name, value in self.multipliers.items()
+        }
+        self.multipliers_suffixed = {
+            **self.multipliers_plural,
+            **self.multipliers_ordinal,
+        }
         self.decimals = {*self.ones, *self.tens, *self.zeros}
 
         self.preceding_prefixers = {
@@ -182,7 +202,10 @@ class EnglishNumberNormalizer:
             "cent": "¢",
             "cents": "¢",
         }
-        self.prefixes = set(list(self.preceding_prefixers.values()) + list(self.following_prefixers.values()))
+        self.prefixes = set(
+            list(self.preceding_prefixers.values())
+            + list(self.following_prefixers.values())
+        )
         self.suffixers = {
             "per": {"cent": "%"},
             "percent": "%",
@@ -273,7 +296,9 @@ class EnglishNumberNormalizer:
                 if value is None:
                     value = ones
                 elif isinstance(value, str) or prev in self.ones:
-                    if prev in self.tens and ones < 10:  # replace the last zero with the digit
+                    if (
+                        prev in self.tens and ones < 10
+                    ):  # replace the last zero with the digit
                         value = value[:-1] + str(ones)
                     else:
                         value = str(value) + str(ones)
@@ -574,14 +599,18 @@ class EnglishTextNormalizer:
         s = re.sub(r"[<\[][^>\]]*[>\]]", "", s)  # remove words between brackets
         s = re.sub(r"\(([^)]+?)\)", "", s)  # remove words between parenthesis
         s = re.sub(self.ignore_patterns, "", s)
-        s = re.sub(r"\s+'", "'", s)  # standardize when there's a space before an apostrophe
+        s = re.sub(
+            r"\s+'", "'", s
+        )  # standardize when there's a space before an apostrophe
 
         for pattern, replacement in self.replacers.items():
             s = re.sub(pattern, replacement, s)
 
         s = re.sub(r"(\d),(\d)", r"\1\2", s)  # remove commas between digits
         s = re.sub(r"\.([^0-9]|$)", r" \1", s)  # remove periods not followed by numbers
-        s = remove_symbols_and_diacritics(s, keep=".%$¢€£")  # keep some symbols for numerics
+        s = remove_symbols_and_diacritics(
+            s, keep=".%$¢€£"
+        )  # keep some symbols for numerics
 
         s = self.standardize_numbers(s)
         s = self.standardize_spellings(s)
@@ -590,6 +619,8 @@ class EnglishTextNormalizer:
         s = re.sub(r"[.$¢€£]([^0-9])", r" \1", s)
         s = re.sub(r"([^0-9])%", r"\1 ", s)
 
-        s = re.sub(r"\s+", " ", s)  # replace any successive whitespace characters with a space
+        s = re.sub(
+            r"\s+", " ", s
+        )  # replace any successive whitespace characters with a space
 
         return s

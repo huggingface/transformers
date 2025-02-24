@@ -30,10 +30,14 @@ _REALM_BLOCK_RECORDS_FILENAME = "block_records.npy"
 logger = logging.get_logger(__name__)
 
 
-def convert_tfrecord_to_np(block_records_path: str, num_block_records: int) -> np.ndarray:
+def convert_tfrecord_to_np(
+    block_records_path: str, num_block_records: int
+) -> np.ndarray:
     import tensorflow.compat.v1 as tf
 
-    blocks_dataset = tf.data.TFRecordDataset(block_records_path, buffer_size=512 * 1024 * 1024)
+    blocks_dataset = tf.data.TFRecordDataset(
+        block_records_path, buffer_size=512 * 1024 * 1024
+    )
     blocks_dataset = blocks_dataset.batch(num_block_records, drop_remainder=True)
     np_record = next(blocks_dataset.take(1).as_numpy_iterator())
 
@@ -56,16 +60,22 @@ class ScaNNSearcher:
 
         from scann.scann_ops.py.scann_ops_pybind import builder as Builder
 
-        builder = Builder(db=db, num_neighbors=num_neighbors, distance_measure="dot_product")
+        builder = Builder(
+            db=db, num_neighbors=num_neighbors, distance_measure="dot_product"
+        )
         builder = builder.tree(
-            num_leaves=num_leaves, num_leaves_to_search=num_leaves_to_search, training_sample_size=training_sample_size
+            num_leaves=num_leaves,
+            num_leaves_to_search=num_leaves_to_search,
+            training_sample_size=training_sample_size,
         )
         builder = builder.score_ah(dimensions_per_block=dimensions_per_block)
 
         self.searcher = builder.build()
 
     def search_batched(self, question_projection):
-        retrieved_block_ids, _ = self.searcher.search_batched(question_projection.detach().cpu())
+        retrieved_block_ids, _ = self.searcher.search_batched(
+            question_projection.detach().cpu()
+        )
         return retrieved_block_ids.astype("int64")
 
 
@@ -85,10 +95,21 @@ class RealmRetriever:
         self.block_records = block_records
         self.tokenizer = tokenizer
 
-    def __call__(self, retrieved_block_ids, question_input_ids, answer_ids, max_length=None, return_tensors="pt"):
-        retrieved_blocks = np.take(self.block_records, indices=retrieved_block_ids, axis=0)
+    def __call__(
+        self,
+        retrieved_block_ids,
+        question_input_ids,
+        answer_ids,
+        max_length=None,
+        return_tensors="pt",
+    ):
+        retrieved_blocks = np.take(
+            self.block_records, indices=retrieved_block_ids, axis=0
+        )
 
-        question = self.tokenizer.decode(question_input_ids[0], skip_special_tokens=True)
+        question = self.tokenizer.decode(
+            question_input_ids[0], skip_special_tokens=True
+        )
 
         text = []
         text_pair = []
@@ -97,32 +118,53 @@ class RealmRetriever:
             text_pair.append(retrieved_block.decode())
 
         concat_inputs = self.tokenizer(
-            text, text_pair, padding=True, truncation=True, return_special_tokens_mask=True, max_length=max_length
+            text,
+            text_pair,
+            padding=True,
+            truncation=True,
+            return_special_tokens_mask=True,
+            max_length=max_length,
         )
         concat_inputs_tensors = concat_inputs.convert_to_tensors(return_tensors)
 
         if answer_ids is not None:
-            return self.block_has_answer(concat_inputs, answer_ids) + (concat_inputs_tensors,)
+            return self.block_has_answer(concat_inputs, answer_ids) + (
+                concat_inputs_tensors,
+            )
         else:
             return (None, None, None, concat_inputs_tensors)
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *init_inputs, **kwargs):
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *init_inputs,
+        **kwargs
+    ):
         if os.path.isdir(pretrained_model_name_or_path):
-            block_records_path = os.path.join(pretrained_model_name_or_path, _REALM_BLOCK_RECORDS_FILENAME)
+            block_records_path = os.path.join(
+                pretrained_model_name_or_path, _REALM_BLOCK_RECORDS_FILENAME
+            )
         else:
             block_records_path = hf_hub_download(
-                repo_id=pretrained_model_name_or_path, filename=_REALM_BLOCK_RECORDS_FILENAME, **kwargs
+                repo_id=pretrained_model_name_or_path,
+                filename=_REALM_BLOCK_RECORDS_FILENAME,
+                **kwargs
             )
         block_records = np.load(block_records_path, allow_pickle=True)
 
-        tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(
+            pretrained_model_name_or_path, *init_inputs, **kwargs
+        )
 
         return cls(block_records, tokenizer)
 
     def save_pretrained(self, save_directory):
         # save block records
-        np.save(os.path.join(save_directory, _REALM_BLOCK_RECORDS_FILENAME), self.block_records)
+        np.save(
+            os.path.join(save_directory, _REALM_BLOCK_RECORDS_FILENAME),
+            self.block_records,
+        )
         # save tokenizer
         self.tokenizer.save_pretrained(save_directory)
 
@@ -137,7 +179,11 @@ class RealmRetriever:
             input_id_list = input_id.tolist()
             # Check answers between two [SEP] tokens
             first_sep_idx = input_id_list.index(self.tokenizer.sep_token_id)
-            second_sep_idx = first_sep_idx + 1 + input_id_list[first_sep_idx + 1 :].index(self.tokenizer.sep_token_id)
+            second_sep_idx = (
+                first_sep_idx
+                + 1
+                + input_id_list[first_sep_idx + 1 :].index(self.tokenizer.sep_token_id)
+            )
 
             start_pos.append([])
             end_pos.append([])

@@ -80,7 +80,9 @@ def _merge_candidate_labels_text(text: List[str]) -> str:
     For example, ["A cat", "a dog"] -> "a cat. a dog."
     """
     labels = [t.strip().lower() for t in text]  # ensure lowercase
-    merged_labels_str = ". ".join(labels) + "."  # join with dot and add a dot at the end
+    merged_labels_str = (
+        ". ".join(labels) + "."
+    )  # join with dot and add a dot at the end
     return merged_labels_str
 
 
@@ -152,7 +154,9 @@ class GroundingDinoProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
@@ -182,7 +186,9 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         # Get only text
         if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
+            encoding_image_processor = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
         else:
             encoding_image_processor = BatchFeature()
 
@@ -211,7 +217,9 @@ class GroundingDinoProcessor(ProcessorMixin):
             text = _merge_candidate_labels_text(text)
 
         # for batched input
-        elif isinstance(text, (list, tuple)) and all(_is_list_of_candidate_labels(t) for t in text):
+        elif isinstance(text, (list, tuple)) and all(
+            _is_list_of_candidate_labels(t) for t in text
+        ):
             text = [_merge_candidate_labels_text(sample) for sample in text]
 
         return text
@@ -281,7 +289,9 @@ class GroundingDinoProcessor(ProcessorMixin):
         input_ids = input_ids if input_ids is not None else outputs.input_ids
 
         if target_sizes is not None and len(target_sizes) != len(batch_logits):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+            )
 
         batch_probs = torch.sigmoid(batch_logits)  # (batch_size, num_queries, 256)
         batch_scores = torch.max(batch_probs, dim=-1)[0]  # (batch_size, num_queries)
@@ -297,11 +307,15 @@ class GroundingDinoProcessor(ProcessorMixin):
             else:
                 img_h, img_w = target_sizes.unbind(1)
 
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(batch_boxes.device)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(
+                batch_boxes.device
+            )
             batch_boxes = batch_boxes * scale_fct[:, None, :]
 
         results = []
-        for idx, (scores, boxes, probs) in enumerate(zip(batch_scores, batch_boxes, batch_probs)):
+        for idx, (scores, boxes, probs) in enumerate(
+            zip(batch_scores, batch_boxes, batch_probs)
+        ):
             keep = scores > threshold
             scores = scores[keep]
             boxes = boxes[keep]

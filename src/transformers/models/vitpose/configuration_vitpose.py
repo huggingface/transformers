@@ -92,10 +92,14 @@ class VitPoseConfig(PretrainedConfig):
                 "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
             )
         if use_timm_backbone:
-            raise ValueError("use_timm_backbone set `True` is not supported at the moment.")
+            raise ValueError(
+                "use_timm_backbone set `True` is not supported at the moment."
+            )
 
         if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
+            logger.info(
+                "`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone."
+            )
             backbone_config = CONFIG_MAPPING["vitpose_backbone"](out_indices=[4])
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")

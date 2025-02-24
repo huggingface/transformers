@@ -58,17 +58,24 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         requires_backends(self, "timm")
         super().__init__(architecture=architecture)
 
-        self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
-        self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
+        self.data_config = timm.data.resolve_data_config(
+            pretrained_cfg, model=None, verbose=False
+        )
+        self.val_transforms = timm.data.create_transform(
+            **self.data_config, is_training=False
+        )
 
         # useful for training, see examples/pytorch/image-classification/run_image_classification.py
-        self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
+        self.train_transforms = timm.data.create_transform(
+            **self.data_config, is_training=True
+        )
 
         # If `ToTensor` is in the transforms, then the input should be numpy array or PIL image.
         # Otherwise, the input can be a tensor. In later timm versions, `MaybeToTensor` is used
         # which can handle both numpy arrays / PIL images and tensors.
         self._not_supports_tensor_input = any(
-            transform.__class__.__name__ == "ToTensor" for transform in self.val_transforms.transforms
+            transform.__class__.__name__ == "ToTensor"
+            for transform in self.val_transforms.transforms
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -90,7 +97,9 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         """
         image_processor_filename = kwargs.pop("image_processor_filename", "config.json")
         return super().get_image_processor_dict(
-            pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
+            pretrained_model_name_or_path,
+            image_processor_filename=image_processor_filename,
+            **kwargs,
         )
 
     def preprocess(
@@ -108,7 +117,9 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
                 The type of tensors to return.
         """
         if return_tensors != "pt":
-            raise ValueError(f"return_tensors for TimmWrapperImageProcessor must be 'pt', but got {return_tensors}")
+            raise ValueError(
+                f"return_tensors for TimmWrapperImageProcessor must be 'pt', but got {return_tensors}"
+            )
 
         if self._not_supports_tensor_input and isinstance(images, torch.Tensor):
             images = images.cpu().numpy()

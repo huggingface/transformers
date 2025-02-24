@@ -26,7 +26,13 @@ import torch
 from tqdm import tqdm
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from utils import calculate_bleu, calculate_rouge, chunks, parse_numeric_n_bool_cl_kwargs, use_task_specific_params
+from utils import (
+    calculate_bleu,
+    calculate_rouge,
+    chunks,
+    parse_numeric_n_bool_cl_kwargs,
+    use_task_specific_params,
+)
 
 
 logger = getLogger(__name__)
@@ -54,7 +60,9 @@ def generate_summaries_or_translations(
         model = model.half()
 
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    logger.info(f"Inferred tokenizer type: {tokenizer.__class__}")  # if this is wrong, check config.model_type.
+    logger.info(
+        f"Inferred tokenizer type: {tokenizer.__class__}"
+    )  # if this is wrong, check config.model_type.
 
     start_time = time.time()
     # update config with task specific params
@@ -63,20 +71,28 @@ def generate_summaries_or_translations(
         prefix = prefix or getattr(model.config, "prefix", "") or ""
     for examples_chunk in tqdm(list(chunks(examples, batch_size))):
         examples_chunk = [prefix + text for text in examples_chunk]
-        batch = tokenizer(examples_chunk, return_tensors="pt", truncation=True, padding="longest").to(device)
+        batch = tokenizer(
+            examples_chunk, return_tensors="pt", truncation=True, padding="longest"
+        ).to(device)
         summaries = model.generate(
             input_ids=batch.input_ids,
             attention_mask=batch.attention_mask,
             **generate_kwargs,
         )
-        dec = tokenizer.batch_decode(summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        dec = tokenizer.batch_decode(
+            summaries, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
         for hypothesis in dec:
             fout.write(hypothesis + "\n")
             fout.flush()
     fout.close()
     runtime = int(time.time() - start_time)  # seconds
     n_obs = len(examples)
-    return {"n_obs": n_obs, "runtime": runtime, "seconds_per_sample": round(runtime / n_obs, 4)}
+    return {
+        "n_obs": n_obs,
+        "runtime": runtime,
+        "seconds_per_sample": round(runtime / n_obs, 4),
+    }
 
 
 def datetime_now():
@@ -100,22 +116,57 @@ def run_generate(verbose=True):
     """
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("model_name", type=str, help="like facebook/bart-large-cnn,google-t5/t5-base, etc.")
+    parser.add_argument(
+        "model_name",
+        type=str,
+        help="like facebook/bart-large-cnn,google-t5/t5-base, etc.",
+    )
     parser.add_argument("input_path", type=str, help="like cnn_dm/test.source")
     parser.add_argument("save_path", type=str, help="where to save summaries")
-    parser.add_argument("--reference_path", type=str, required=False, help="like cnn_dm/test.target")
-    parser.add_argument("--score_path", type=str, required=False, default="metrics.json", help="where to save metrics")
-    parser.add_argument("--device", type=str, required=False, default=DEFAULT_DEVICE, help="cuda, cuda:1, cpu etc.")
     parser.add_argument(
-        "--prefix", type=str, required=False, default=None, help="will be added to the beginning of src examples"
+        "--reference_path", type=str, required=False, help="like cnn_dm/test.target"
     )
-    parser.add_argument("--task", type=str, default="summarization", help="used for task_specific_params + metrics")
+    parser.add_argument(
+        "--score_path",
+        type=str,
+        required=False,
+        default="metrics.json",
+        help="where to save metrics",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        required=False,
+        default=DEFAULT_DEVICE,
+        help="cuda, cuda:1, cpu etc.",
+    )
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        required=False,
+        default=None,
+        help="will be added to the beginning of src examples",
+    )
+    parser.add_argument(
+        "--task",
+        type=str,
+        default="summarization",
+        help="used for task_specific_params + metrics",
+    )
     parser.add_argument("--bs", type=int, default=8, required=False, help="batch size")
     parser.add_argument(
-        "--n_obs", type=int, default=-1, required=False, help="How many observations. Defaults to all."
+        "--n_obs",
+        type=int,
+        default=-1,
+        required=False,
+        help="How many observations. Defaults to all.",
     )
     parser.add_argument("--fp16", action="store_true")
-    parser.add_argument("--dump-args", action="store_true", help="print the custom hparams with the results")
+    parser.add_argument(
+        "--dump-args",
+        action="store_true",
+        help="print the custom hparams with the results",
+    )
     parser.add_argument(
         "--info",
         nargs="?",
@@ -131,13 +182,18 @@ def run_generate(verbose=True):
     parsed_args = parse_numeric_n_bool_cl_kwargs(rest)
     if parsed_args and verbose:
         print(f"parsed the following generate kwargs: {parsed_args}")
-    examples = [" " + x.rstrip() if "t5" in args.model_name else x.rstrip() for x in open(args.input_path).readlines()]
+    examples = [
+        " " + x.rstrip() if "t5" in args.model_name else x.rstrip()
+        for x in open(args.input_path).readlines()
+    ]
     if args.n_obs > 0:
         examples = examples[: args.n_obs]
     Path(args.save_path).parent.mkdir(exist_ok=True)
 
     if args.reference_path is None and Path(args.score_path).exists():
-        warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
+        warnings.warn(
+            f"score_path {args.score_path} will be overwritten unless you type ctrl-c."
+        )
 
     if args.device == "cpu" and args.fp16:
         # this mix leads to RuntimeError: "threshold_cpu" not implemented for 'Half'
@@ -161,7 +217,9 @@ def run_generate(verbose=True):
     # Compute scores
     score_fn = calculate_bleu if "translation" in args.task else calculate_rouge
     output_lns = [x.rstrip() for x in open(args.save_path).readlines()]
-    reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][: len(output_lns)]
+    reference_lns = [x.rstrip() for x in open(args.reference_path).readlines()][
+        : len(output_lns)
+    ]
     scores: dict = score_fn(output_lns, reference_lns)
     scores.update(runtime_metrics)
 

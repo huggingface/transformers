@@ -116,7 +116,9 @@ class MobileNetV1OnnxConfig(OnnxConfig):
         if self.task == "image-classification":
             return OrderedDict([("logits", {0: "batch"})])
         else:
-            return OrderedDict([("last_hidden_state", {0: "batch"}), ("pooler_output", {0: "batch"})])
+            return OrderedDict(
+                [("last_hidden_state", {0: "batch"}), ("pooler_output", {0: "batch"})]
+            )
 
     @property
     def atol_for_validation(self) -> float:

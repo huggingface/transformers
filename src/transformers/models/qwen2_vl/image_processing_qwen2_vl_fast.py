@@ -108,7 +108,12 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     min_pixels = 56 * 56
     max_pixels = 28 * 28 * 1280
     valid_init_kwargs = Qwen2VLFastImageProcessorInitKwargs
-    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "pixel_values_videos",
+        "video_grid_thw",
+    ]
 
     def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
@@ -183,7 +188,9 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                     max_pixels=self.max_pixels,
                 )
                 stacked_images = F.resize(
-                    stacked_images, size=(resized_height, resized_width), interpolation=interpolation
+                    stacked_images,
+                    size=(resized_height, resized_width),
+                    interpolation=interpolation,
                 )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
@@ -195,19 +202,31 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                stacked_images,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
             )
             processed_images_grouped[shape] = stacked_images
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(
+            processed_images_grouped, grouped_images_index
+        )
         patches = torch.stack(processed_images, dim=0)
         if patches.shape[0] % self.temporal_patch_size != 0:
-            repeats = patches[-1].unsqueeze(0).repeat(self.temporal_patch_size - 1, 1, 1, 1)
+            repeats = (
+                patches[-1].unsqueeze(0).repeat(self.temporal_patch_size - 1, 1, 1, 1)
+            )
             patches = torch.cat([patches, repeats], dim=0)
 
         channel = patches.shape[1]
         grid_t = patches.shape[0] // self.temporal_patch_size
-        grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
+        grid_h, grid_w = (
+            resized_height // self.patch_size,
+            resized_width // self.patch_size,
+        )
 
         patches = patches.view(
             grid_t,
@@ -222,7 +241,8 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         )
         patches = patches.permute(0, 3, 6, 4, 7, 2, 1, 5, 8)
         flatten_patches = patches.reshape(
-            grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
+            grid_t * grid_h * grid_w,
+            channel * self.temporal_patch_size * self.patch_size * self.patch_size,
         )
 
         return flatten_patches, (grid_t, grid_h, grid_w)
@@ -300,11 +320,15 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         # Make hashable for cache
         size = SizeDict(**size) if size is not None else None
@@ -379,7 +403,10 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 vision_grid_thws.append(video_grid_thw)
             pixel_values = torch.stack(pixel_values)
             vision_grid_thws = torch.tensor(vision_grid_thws)
-            data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
+            data = {
+                "pixel_values_videos": pixel_values,
+                "video_grid_thw": vision_grid_thws,
+            }
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

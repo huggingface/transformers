@@ -46,7 +46,9 @@ _CHECKPOINT_FOR_DOC = "alibaba-damo/mgp-str-base"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -59,8 +61,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -136,15 +142,25 @@ class MgpstrEmbeddings(nn.Module):
         )
         self.image_size = image_size
         self.patch_size = patch_size
-        self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
+        self.grid_size = (
+            image_size[0] // patch_size[0],
+            image_size[1] // patch_size[1],
+        )
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.num_tokens = 2 if config.distilled else 1
 
-        self.proj = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.proj = nn.Conv2d(
+            config.num_channels,
+            config.hidden_size,
+            kernel_size=patch_size,
+            stride=patch_size,
+        )
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches + self.num_tokens, config.hidden_size))
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, self.num_patches + self.num_tokens, config.hidden_size)
+        )
         self.pos_drop = nn.Dropout(p=config.drop_rate)
 
     def forward(self, pixel_values):
@@ -192,7 +208,9 @@ class MgpstrAttention(nn.Module):
         head_dim = config.hidden_size // config.num_attention_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias)
+        self.qkv = nn.Linear(
+            config.hidden_size, config.hidden_size * 3, bias=config.qkv_bias
+        )
         self.attn_drop = nn.Dropout(config.attn_drop_rate)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.proj_drop = nn.Dropout(config.drop_rate)
@@ -204,13 +222,19 @@ class MgpstrAttention(nn.Module):
             .reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads)
             .permute(2, 0, 3, 1, 4)
         )
-        query, key, value = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+        query, key, value = (
+            qkv[0],
+            qkv[1],
+            qkv[2],
+        )  # make torchscript happy (cannot use tensor as tuple)
 
         attention_probs = (query @ key.transpose(-2, -1)) * self.scale
         attention_probs = attention_probs.softmax(dim=-1)
         attention_probs = self.attn_drop(attention_probs)
 
-        context_layer = (attention_probs @ value).transpose(1, 2).reshape(batch_size, num, channel)
+        context_layer = (
+            (attention_probs @ value).transpose(1, 2).reshape(batch_size, num, channel)
+        )
         context_layer = self.proj(context_layer)
         context_layer = self.proj_drop(context_layer)
         return (context_layer, attention_probs)
@@ -222,7 +246,9 @@ class MgpstrLayer(nn.Module):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = MgpstrAttention(config)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = MgpstrDropPath(drop_path) if drop_path is not None else nn.Identity()
+        self.drop_path = (
+            MgpstrDropPath(drop_path) if drop_path is not None else nn.Identity()
+        )
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_dim = int(config.hidden_size * config.mlp_ratio)
         self.mlp = MgpstrMlp(config, mlp_hidden_dim)
@@ -236,7 +262,9 @@ class MgpstrLayer(nn.Module):
         hidden_states = self.drop_path(attention_output) + hidden_states
 
         # second residual connection is done here
-        layer_output = hidden_states + self.drop_path(self.mlp(self.norm2(hidden_states)))
+        layer_output = hidden_states + self.drop_path(
+            self.mlp(self.norm2(hidden_states))
+        )
 
         outputs = (layer_output, outputs)
         return outputs
@@ -246,13 +274,25 @@ class MgpstrEncoder(nn.Module):
     def __init__(self, config: MgpstrConfig):
         super().__init__()
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        dpr = [
+            x.item()
+            for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)
+        ]
 
         self.blocks = nn.Sequential(
-            *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
+            *[
+                MgpstrLayer(config=config, drop_path=dpr[i])
+                for i in range(config.num_hidden_layers)
+            ]
         )
 
-    def forward(self, hidden_states, output_attentions=False, output_hidden_states=False, return_dict=True):
+    def forward(
+        self,
+        hidden_states,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -270,7 +310,11 @@ class MgpstrEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -283,11 +327,29 @@ class MgpstrA3Module(nn.Module):
         super().__init__()
         self.token_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.tokenLearner = nn.Sequential(
-            nn.Conv2d(config.hidden_size, config.hidden_size, kernel_size=(1, 1), stride=1, groups=8, bias=False),
-            nn.Conv2d(config.hidden_size, config.max_token_length, kernel_size=(1, 1), stride=1, bias=False),
+            nn.Conv2d(
+                config.hidden_size,
+                config.hidden_size,
+                kernel_size=(1, 1),
+                stride=1,
+                groups=8,
+                bias=False,
+            ),
+            nn.Conv2d(
+                config.hidden_size,
+                config.max_token_length,
+                kernel_size=(1, 1),
+                stride=1,
+                bias=False,
+            ),
         )
         self.feat = nn.Conv2d(
-            config.hidden_size, config.hidden_size, kernel_size=(1, 1), stride=1, groups=8, bias=False
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=(1, 1),
+            stride=1,
+            groups=8,
+            bias=False,
         )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -319,10 +381,16 @@ class MgpstrPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
         if isinstance(module, MgpstrEmbeddings):
-            nn.init.trunc_normal_(module.pos_embed, mean=0.0, std=self.config.initializer_range)
-            nn.init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            nn.init.trunc_normal_(
+                module.pos_embed, mean=0.0, std=self.config.initializer_range
+            )
+            nn.init.trunc_normal_(
+                module.cls_token, mean=0.0, std=self.config.initializer_range
+            )
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data, mean=0.0, std=self.config.initializer_range
+            )
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
@@ -379,11 +447,19 @@ class MgpstrModel(MgpstrPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -473,11 +549,19 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         >>> out_strs["generated_text"]
         '["ticket"]'
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         mgp_outputs = self.mgp_str(
             pixel_values,
@@ -496,7 +580,11 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         bpe_logits = self.bpe_head(bpe_a3_out)
         wp_logits = self.wp_head(wp_a3_out)
 
-        all_a3_attentions = (char_attention, bpe_attention, wp_attention) if output_a3_attentions else None
+        all_a3_attentions = (
+            (char_attention, bpe_attention, wp_attention)
+            if output_a3_attentions
+            else None
+        )
         all_logits = (char_logits, bpe_logits, wp_logits)
 
         if not return_dict:

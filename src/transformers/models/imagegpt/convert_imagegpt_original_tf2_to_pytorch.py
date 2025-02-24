@@ -18,14 +18,20 @@ import argparse
 
 import torch
 
-from transformers import ImageGPTConfig, ImageGPTForCausalLM, load_tf_weights_in_imagegpt
+from transformers import (
+    ImageGPTConfig,
+    ImageGPTForCausalLM,
+    load_tf_weights_in_imagegpt,
+)
 from transformers.utils import CONFIG_NAME, WEIGHTS_NAME, logging
 
 
 logging.set_verbosity_info()
 
 
-def convert_imagegpt_checkpoint_to_pytorch(imagegpt_checkpoint_path, model_size, pytorch_dump_folder_path):
+def convert_imagegpt_checkpoint_to_pytorch(
+    imagegpt_checkpoint_path, model_size, pytorch_dump_folder_path
+):
     # Construct configuration depending on size
     MODELS = {"small": (512, 8, 24), "medium": (1024, 8, 36), "large": (1536, 16, 48)}
     n_embd, n_head, n_layer = MODELS[model_size]  # set model hyperparameters
@@ -63,7 +69,11 @@ if __name__ == "__main__":
         help="Size of the model (can be either 'small', 'medium' or 'large').",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
     convert_imagegpt_checkpoint_to_pytorch(

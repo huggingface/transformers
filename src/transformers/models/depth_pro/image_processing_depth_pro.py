@@ -107,7 +107,9 @@ class DepthProImageProcessor(BaseImageProcessor):
         self.size = size
         self.resample = resample
         self.rescale_factor = rescale_factor
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        self.image_mean = (
+            image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
+        )
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def resize(
@@ -149,7 +151,9 @@ class DepthProImageProcessor(BaseImageProcessor):
 
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+            raise ValueError(
+                f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
+            )
         output_size = (size["height"], size["width"])
 
         # we use torch interpolation instead of image.resize because DepthProImageProcessor
@@ -180,13 +184,17 @@ class DepthProImageProcessor(BaseImageProcessor):
         data_format: Union[str, ChannelDimension],
     ):
         if do_resize and None in (size, resample):
-            raise ValueError("Size and resample must be specified if do_resize is True.")
+            raise ValueError(
+                "Size and resample must be specified if do_resize is True."
+            )
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
 
         if do_normalize and None in (image_mean, image_std):
-            raise ValueError("Image mean and standard deviation must be specified if do_normalize is True.")
+            raise ValueError(
+                "Image mean and standard deviation must be specified if do_normalize is True."
+            )
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -252,7 +260,9 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
@@ -293,21 +303,34 @@ class DepthProImageProcessor(BaseImageProcessor):
         all_images = []
         for image in images:
             if do_rescale:
-                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
 
             if do_normalize:
                 image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
                 )
 
             # depth-pro rescales and normalizes the image before resizing it
             # uses torch interpolation which requires ChannelDimension.FIRST
             if do_resize:
-                image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
+                image = to_channel_dimension_format(
+                    image, ChannelDimension.FIRST, input_channel_dim=input_data_format
+                )
                 image = self.resize(image=image, size=size, resample=resample)
-                image = to_channel_dimension_format(image, data_format, input_channel_dim=ChannelDimension.FIRST)
+                image = to_channel_dimension_format(
+                    image, data_format, input_channel_dim=ChannelDimension.FIRST
+                )
             else:
-                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                image = to_channel_dimension_format(
+                    image, data_format, input_channel_dim=input_data_format
+                )
 
             all_images.append(image)
 
@@ -361,7 +384,9 @@ class DepthProImageProcessor(BaseImageProcessor):
                 # scale image w.r.t fov
                 if fov_value is not None:
                     width = target_size[1]
-                    focal_length = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov_value))
+                    focal_length = (
+                        0.5 * width / torch.tan(0.5 * torch.deg2rad(fov_value))
+                    )
                     depth = depth * width / focal_length
 
                 # interpolate

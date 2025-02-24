@@ -30,7 +30,12 @@ from ....modeling_outputs import (
     ImageClassifierOutputWithNoAttention,
 )
 from ....modeling_utils import PreTrainedModel
-from ....utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ....utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_van import VanConfig
 
 
@@ -48,7 +53,9 @@ _IMAGE_CLASS_CHECKPOINT = "Visual-Attention-Network/van-base"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -61,8 +68,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -89,10 +100,16 @@ class VanOverlappingPatchEmbedder(nn.Module):
     Transformer](https://arxiv.org/abs/2106.13797).
     """
 
-    def __init__(self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4):
+    def __init__(
+        self, in_channels: int, hidden_size: int, patch_size: int = 7, stride: int = 4
+    ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=patch_size // 2
+            in_channels,
+            hidden_size,
+            kernel_size=patch_size,
+            stride=stride,
+            padding=patch_size // 2,
         )
         self.normalization = nn.BatchNorm2d(hidden_size)
 
@@ -118,7 +135,9 @@ class VanMlpLayer(nn.Module):
     ):
         super().__init__()
         self.in_dense = nn.Conv2d(in_channels, hidden_size, kernel_size=1)
-        self.depth_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=3, padding=1, groups=hidden_size)
+        self.depth_wise = nn.Conv2d(
+            hidden_size, hidden_size, kernel_size=3, padding=1, groups=hidden_size
+        )
         self.activation = ACT2FN[hidden_act]
         self.dropout1 = nn.Dropout(dropout_rate)
         self.out_dense = nn.Conv2d(hidden_size, out_channels, kernel_size=1)
@@ -141,9 +160,16 @@ class VanLargeKernelAttention(nn.Module):
 
     def __init__(self, hidden_size: int):
         super().__init__()
-        self.depth_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=5, padding=2, groups=hidden_size)
+        self.depth_wise = nn.Conv2d(
+            hidden_size, hidden_size, kernel_size=5, padding=2, groups=hidden_size
+        )
         self.depth_wise_dilated = nn.Conv2d(
-            hidden_size, hidden_size, kernel_size=7, dilation=3, padding=9, groups=hidden_size
+            hidden_size,
+            hidden_size,
+            kernel_size=7,
+            dilation=3,
+            padding=9,
+            groups=hidden_size,
         )
         self.point_wise = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
 
@@ -204,7 +230,9 @@ class VanLayerScaling(nn.Module):
 
     def __init__(self, hidden_size: int, initial_value: float = 1e-2):
         super().__init__()
-        self.weight = nn.Parameter(initial_value * torch.ones((hidden_size)), requires_grad=True)
+        self.weight = nn.Parameter(
+            initial_value * torch.ones((hidden_size)), requires_grad=True
+        )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         # unsqueezing for broadcasting
@@ -225,13 +253,21 @@ class VanLayer(nn.Module):
         drop_path_rate: float = 0.5,
     ):
         super().__init__()
-        self.drop_path = VanDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = (
+            VanDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        )
         self.pre_normomalization = nn.BatchNorm2d(hidden_size)
         self.attention = VanSpatialAttentionLayer(hidden_size, config.hidden_act)
-        self.attention_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
+        self.attention_scaling = VanLayerScaling(
+            hidden_size, config.layer_scale_init_value
+        )
         self.post_normalization = nn.BatchNorm2d(hidden_size)
         self.mlp = VanMlpLayer(
-            hidden_size, hidden_size * mlp_ratio, hidden_size, config.hidden_act, config.dropout_rate
+            hidden_size,
+            hidden_size * mlp_ratio,
+            hidden_size,
+            config.hidden_act,
+            config.dropout_rate,
         )
         self.mlp_scaling = VanLayerScaling(hidden_size, config.layer_scale_init_value)
 
@@ -272,7 +308,9 @@ class VanStage(nn.Module):
         drop_path_rate: float = 0.0,
     ):
         super().__init__()
-        self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
+        self.embeddings = VanOverlappingPatchEmbedder(
+            in_channels, hidden_size, patch_size, stride
+        )
         self.layers = nn.Sequential(
             *[
                 VanLayer(
@@ -294,7 +332,9 @@ class VanStage(nn.Module):
         hidden_state = hidden_state.flatten(2).transpose(1, 2)
         hidden_state = self.normalization(hidden_state)
         # rearrange  b (h w) c- > b c h w
-        hidden_state = hidden_state.view(batch_size, height, width, hidden_size).permute(0, 3, 1, 2)
+        hidden_state = hidden_state.view(
+            batch_size, height, width, hidden_size
+        ).permute(0, 3, 1, 2)
         return hidden_state
 
 
@@ -311,9 +351,19 @@ class VanEncoder(nn.Module):
         hidden_sizes = config.hidden_sizes
         depths = config.depths
         mlp_ratios = config.mlp_ratios
-        drop_path_rates = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
+        drop_path_rates = [
+            x.item()
+            for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))
+        ]
 
-        for num_stage, (patch_size, stride, hidden_size, depth, mlp_expantion, drop_path_rate) in enumerate(
+        for num_stage, (
+            patch_size,
+            stride,
+            hidden_size,
+            depth,
+            mlp_expantion,
+            drop_path_rate,
+        ) in enumerate(
             zip(patch_sizes, strides, hidden_sizes, depths, mlp_ratios, drop_path_rates)
         ):
             is_first_stage = num_stage == 0
@@ -350,7 +400,9 @@ class VanEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_state, hidden_states=all_hidden_states
+        )
 
 
 class VanPreTrainedModel(PreTrainedModel):
@@ -374,7 +426,9 @@ class VanPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
             nn.init.constant_(module.weight, 1.0)
         elif isinstance(module, nn.Conv2d):
-            fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+            fan_out = (
+                module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+            )
             fan_out //= module.groups
             module.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
@@ -417,7 +471,9 @@ class VanModel(VanPreTrainedModel):
         self.config = config
         self.encoder = VanEncoder(config)
         # final layernorm layer
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(
+            config.hidden_sizes[-1], eps=config.layer_norm_eps
+        )
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -436,9 +492,13 @@ class VanModel(VanPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -472,7 +532,9 @@ class VanForImageClassification(VanPreTrainedModel):
         self.van = VanModel(config)
         # Classifier head
         self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -498,9 +560,15 @@ class VanForImageClassification(VanPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        outputs = self.van(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.van(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -511,7 +579,9 @@ class VanForImageClassification(VanPreTrainedModel):
             if self.config.problem_type is None:
                 if self.config.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.config.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.config.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -524,7 +594,9 @@ class VanForImageClassification(VanPreTrainedModel):
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+                loss = loss_fct(
+                    logits.view(-1, self.config.num_labels), labels.view(-1)
+                )
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
@@ -533,4 +605,6 @@ class VanForImageClassification(VanPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states
+        )

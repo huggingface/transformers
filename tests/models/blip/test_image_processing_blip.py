@@ -19,7 +19,10 @@ import unittest
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import (
+    ImageProcessingTestMixin,
+    prepare_image_inputs,
+)
 
 
 if is_vision_available():
@@ -75,7 +78,9 @@ class BlipImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_image_inputs(
+        self, equal_resolution=False, numpify=False, torchify=False
+    ):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -91,7 +96,9 @@ class BlipImageProcessingTester:
 @require_vision
 class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BlipImageProcessor if is_vision_available() else None
-    fast_image_processing_class = BlipImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        BlipImageProcessorFast if is_torchvision_available() else None
+    )
 
     def setUp(self):
         super().setUp()
@@ -116,7 +123,9 @@ class BlipImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 @require_vision
 class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = BlipImageProcessor if is_vision_available() else None
-    fast_image_processing_class = BlipImageProcessorFast if is_torchvision_available() else None
+    fast_image_processing_class = (
+        BlipImageProcessorFast if is_torchvision_available() else None
+    )
 
     def setUp(self):
         super().setUp()

@@ -95,7 +95,12 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         for shape, stacked_images in grouped_images.items():
             # Fused rescale and normalize
             stacked_images = self.rescale_and_normalize(
-                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                stacked_images,
+                do_rescale,
+                rescale_factor,
+                do_normalize,
+                image_mean,
+                image_std,
             )
             if do_resize:
                 stacked_images = self.resize(
@@ -106,10 +111,16 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
                 )
             processed_images_grouped[shape] = stacked_images
 
-        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        processed_images = reorder_images(
+            processed_images_grouped, grouped_images_index
+        )
+        processed_images = (
+            torch.stack(processed_images, dim=0) if return_tensors else processed_images
+        )
 
-        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
+        return BatchFeature(
+            data={"pixel_values": processed_images}, tensor_type=return_tensors
+        )
 
     # Copied from transformers.models.depth_pro.image_processing_depth_pro.DepthProImageProcessor.post_process_depth_estimation
     def post_process_depth_estimation(
@@ -159,7 +170,9 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
                 # scale image w.r.t fov
                 if fov_value is not None:
                     width = target_size[1]
-                    focal_length = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov_value))
+                    focal_length = (
+                        0.5 * width / torch.tan(0.5 * torch.deg2rad(fov_value))
+                    )
                     depth = depth * width / focal_length
 
                 # interpolate

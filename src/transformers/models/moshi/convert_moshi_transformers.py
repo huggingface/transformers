@@ -37,13 +37,21 @@ logger = logging.get_logger("transformers.models.mimi")
 
 
 def assert_param_count(model_1, model_2):
-    count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
-    count_2 = sum(p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0])
-    assert count_1 == count_2, f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
+    count_1 = sum(
+        p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0]
+    )
+    count_2 = sum(
+        p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0]
+    )
+    assert (
+        count_1 == count_2
+    ), f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
 
 
 def param_count(model):
-    return sum(p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0])
+    return sum(
+        p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0]
+    )
 
 
 def _grab_best_device(use_gpu=True):
@@ -93,8 +101,12 @@ def _preprocess_state_dict(state_dict, config):
             for i in range(config.num_codebooks)
         ]
 
-        state_dict[f"depth_decoder.layers.{layer_idx}.mlp.fc1.weight"] = torch.stack(linear_layers_in)
-        state_dict[f"depth_decoder.layers.{layer_idx}.mlp.fc2.weight"] = torch.stack(linear_layers_out)
+        state_dict[f"depth_decoder.layers.{layer_idx}.mlp.fc1.weight"] = torch.stack(
+            linear_layers_in
+        )
+        state_dict[f"depth_decoder.layers.{layer_idx}.mlp.fc2.weight"] = torch.stack(
+            linear_layers_out
+        )
 
     input_projections = []
     lm_heads = []
@@ -102,7 +114,9 @@ def _preprocess_state_dict(state_dict, config):
         input_projections.append(state_dict.pop(f"depformer_in.{codebook_idx}.weight"))
         lm_heads.append(state_dict.pop(f"linears.{codebook_idx}.weight"))
 
-    state_dict["depth_decoder.input_projections.weight"] = torch.stack(input_projections, dim=0)
+    state_dict["depth_decoder.input_projections.weight"] = torch.stack(
+        input_projections, dim=0
+    )
     state_dict["depth_decoder.lm_heads.weight"] = torch.stack(lm_heads, dim=0)
 
     return state_dict
@@ -126,7 +140,11 @@ def _convert_model(
 
     # permute for sliced rotary
     def permute(w, n_heads, dim1=hidden_size, dim2=hidden_size):
-        return w.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
+        return (
+            w.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+            .transpose(1, 2)
+            .reshape(dim1, dim2)
+        )
 
     for k, v in list(state_dict.items()):
         if "audio_encoder" not in k:
@@ -142,15 +160,21 @@ def _convert_model(
                 # split qkv into query key and value
                 mixed_qkv = state_dict.pop(k)
                 if "depth_decoder" in new_k:
-                    mixed_qkv = mixed_qkv.view(config.num_codebooks, -1, mixed_qkv.shape[-1])
+                    mixed_qkv = mixed_qkv.view(
+                        config.num_codebooks, -1, mixed_qkv.shape[-1]
+                    )
 
                     qkv_dim = mixed_qkv.size(1) // 3
 
                     query_layer = mixed_qkv[:, :qkv_dim]
                     key_layer = mixed_qkv[:, qkv_dim : qkv_dim * 2]
                     value_layer = mixed_qkv[:, qkv_dim * 2 :]
-                    state_dict[new_k.replace("in_proj_weight", "q_proj.linear.weight")] = query_layer
-                    state_dict[new_k.replace("in_proj_weight", "k_proj.linear.weight")] = key_layer
+                    state_dict[
+                        new_k.replace("in_proj_weight", "q_proj.linear.weight")
+                    ] = query_layer
+                    state_dict[
+                        new_k.replace("in_proj_weight", "k_proj.linear.weight")
+                    ] = key_layer
 
                 else:
                     qkv_dim = mixed_qkv.size(0) // 3
@@ -158,17 +182,23 @@ def _convert_model(
                     query_layer = mixed_qkv[:qkv_dim]
                     key_layer = mixed_qkv[qkv_dim : qkv_dim * 2]
                     value_layer = mixed_qkv[qkv_dim * 2 :]
-                    state_dict[new_k.replace("in_proj_weight", "q_proj.linear.weight")] = permute(
-                        query_layer, num_heads, hidden_size, hidden_size
-                    )
-                    state_dict[new_k.replace("in_proj_weight", "k_proj.linear.weight")] = permute(
+                    state_dict[
+                        new_k.replace("in_proj_weight", "q_proj.linear.weight")
+                    ] = permute(query_layer, num_heads, hidden_size, hidden_size)
+                    state_dict[
+                        new_k.replace("in_proj_weight", "k_proj.linear.weight")
+                    ] = permute(
                         key_layer, num_key_value_heads, key_value_head_dim, hidden_size
                     )
 
-                state_dict[new_k.replace("in_proj_weight", "v_proj.linear.weight")] = value_layer
+                state_dict[new_k.replace("in_proj_weight", "v_proj.linear.weight")] = (
+                    value_layer
+                )
             elif "o_proj" in new_k and "depth_decoder" in new_k:
                 output_layer = state_dict.pop(k)
-                state_dict[new_k] = output_layer.view(config.num_codebooks, -1, output_layer.shape[-1])
+                state_dict[new_k] = output_layer.view(
+                    config.num_codebooks, -1, output_layer.shape[-1]
+                )
             else:
                 state_dict[new_k] = state_dict.pop(k)
 
@@ -235,7 +265,9 @@ def convert_checkpoint(
         pad_token_id=config.vocab_size,
         bos_token_id=config.vocab_size,
     )
-    generation_config.depth_decoder_config = depth_decoder_generation_config.to_diff_dict()
+    generation_config.depth_decoder_config = (
+        depth_decoder_generation_config.to_diff_dict()
+    )
 
     model.generation_config = generation_config
 
@@ -245,7 +277,9 @@ def convert_checkpoint(
         original_checkpoint = original_checkpoint["best_state"]
 
     audio_checkpoint = mimi_model.state_dict()
-    original_checkpoint.update({f"audio_encoder.{key}": value for (key, value) in audio_checkpoint.items()})
+    original_checkpoint.update(
+        {f"audio_encoder.{key}": value for (key, value) in audio_checkpoint.items()}
+    )
 
     model = _convert_model(original_checkpoint, model, convert_list, device, config)
 
@@ -258,24 +292,54 @@ def convert_checkpoint(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
     parser.add_argument(
-        "--tokenizer_vocab_path", required=False, default=None, type=str, help="Path to original tokenizer vocab file"
-    )
-    parser.add_argument("--mimi_repo_id", required=True, default=None, type=str, help="Repository id to HF Mimi.")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
-    parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to original checkpoint",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--tokenizer_vocab_path",
+        required=False,
+        default=None,
+        type=str,
+        help="Path to original tokenizer vocab file",
+    )
+    parser.add_argument(
+        "--mimi_repo_id",
+        required=True,
+        default=None,
+        type=str,
+        help="Repository id to HF Mimi.",
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
+    )
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
     )
 
     args = parser.parse_args()
 
     # convert tokenizer
     if args.tokenizer_vocab_path:
-        original_tokenizer = sentencepiece.SentencePieceProcessor(args.tokenizer_vocab_path)
+        original_tokenizer = sentencepiece.SentencePieceProcessor(
+            args.tokenizer_vocab_path
+        )
         tokenizer = MoshiConverter(args.tokenizer_vocab_path).converted()
         tokenizer = PreTrainedTokenizerFast(
             tokenizer_object=tokenizer,

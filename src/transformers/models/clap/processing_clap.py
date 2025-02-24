@@ -78,14 +78,19 @@ class ClapProcessor(ProcessorMixin):
         sampling_rate = kwargs.pop("sampling_rate", None)
 
         if text is None and audios is None:
-            raise ValueError("You have to specify either text or audios. Both cannot be none.")
+            raise ValueError(
+                "You have to specify either text or audios. Both cannot be none."
+            )
 
         if text is not None:
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
 
         if audios is not None:
             audio_features = self.feature_extractor(
-                audios, sampling_rate=sampling_rate, return_tensors=return_tensors, **kwargs
+                audios,
+                sampling_rate=sampling_rate,
+                return_tensors=return_tensors,
+                **kwargs
             )
 
         if text is not None and audios is not None:
@@ -94,7 +99,9 @@ class ClapProcessor(ProcessorMixin):
         elif text is not None:
             return encoding
         else:
-            return BatchEncoding(data=dict(**audio_features), tensor_type=return_tensors)
+            return BatchEncoding(
+                data=dict(**audio_features), tensor_type=return_tensors
+            )
 
     def batch_decode(self, *args, **kwargs):
         """
@@ -114,7 +121,9 @@ class ClapProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
+        return list(
+            dict.fromkeys(tokenizer_input_names + feature_extractor_input_names)
+        )
 
 
 __all__ = ["ClapProcessor"]

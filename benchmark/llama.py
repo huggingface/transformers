@@ -9,7 +9,12 @@ import psutil
 import psycopg2
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig, StaticCache
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
+    StaticCache,
+)
 
 
 os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
@@ -33,15 +38,25 @@ def collect_metrics(benchmark_id, continue_metric_collection, metrics_recorder):
         sleep(0.01)
 
 
-def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
+def run_benchmark(
+    logger: Logger,
+    branch: str,
+    commit_id: str,
+    commit_msg: str,
+    num_tokens_to_generate=100,
+):
     continue_metric_collection = Event()
     metrics_thread = None
     model_id = "meta-llama/Llama-2-7b-hf"
-    metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), logger, branch, commit_id, commit_msg)
+    metrics_recorder = MetricsRecorder(
+        psycopg2.connect("dbname=metrics"), logger, branch, commit_id, commit_msg
+    )
     try:
         gpu_stats = gpustat.GPUStatCollection.new_query()
         gpu_name = gpu_stats[0]["name"]
-        benchmark_id = metrics_recorder.initialise_benchmark({"gpu_name": gpu_name, "model_id": model_id})
+        benchmark_id = metrics_recorder.initialise_benchmark(
+            {"gpu_name": gpu_name, "model_id": model_id}
+        )
         logger.info(f"running benchmark #{benchmark_id} on {gpu_name} for {model_id}")
         metrics_thread = Thread(
             target=collect_metrics,
@@ -50,13 +65,17 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
         metrics_thread.start()
         logger.info("started background thread to fetch device metrics")
 
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"  # silence warnings when compiling
+        os.environ["TOKENIZERS_PARALLELISM"] = (
+            "false"  # silence warnings when compiling
+        )
 
         device = "cuda"
 
         logger.info("downloading weights")
         # This is to avoid counting download in model load time measurement
-        model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.float16
+        )
         gen_config = GenerationConfig(do_sample=False, top_p=1, temperature=1)
         logger.info("loading model")
         start = perf_counter()
@@ -82,11 +101,17 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
         batch_size = inputs["input_ids"].shape[0]
 
         # Copied from the gpt-fast repo
-        def multinomial_sample_one_no_sync(probs_sort):  # Does multinomial sampling without a cuda synchronization
+        def multinomial_sample_one_no_sync(
+            probs_sort,
+        ):  # Does multinomial sampling without a cuda synchronization
             q = torch.empty_like(probs_sort).exponential_(1)
-            return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
+            return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(
+                dtype=torch.int
+            )
 
-        def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
+        def logits_to_probs(
+            logits, temperature: float = 1.0, top_k: Optional[int] = None
+        ):
             logits = logits / max(temperature, 1e-5)
 
             if top_k is not None:
@@ -134,12 +159,16 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             )
             end = perf_counter()
             first_eager_fwd_pass_time = end - start
-            logger.info(f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s")
+            logger.info(
+                f"completed first eager fwd pass in: {first_eager_fwd_pass_time}s"
+            )
             start = perf_counter()
             output = model.generate(**inputs, do_sample=False)
             end = perf_counter()
             first_eager_generate_time = end - start
-            logger.info(f"completed first eager generation in: {first_eager_generate_time}s")
+            logger.info(
+                f"completed first eager generation in: {first_eager_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -160,12 +189,16 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             )
             end = perf_counter()
             second_eager_fwd_pass_time = end - start
-            logger.info(f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s")
+            logger.info(
+                f"completed second eager fwd pass in: {second_eager_fwd_pass_time}s"
+            )
             start = perf_counter()
             model.generate(**inputs, do_sample=False)
             end = perf_counter()
             second_eager_generate_time = end - start
-            logger.info(f"completed second eager generation in: {second_eager_generate_time}s")
+            logger.info(
+                f"completed second eager generation in: {second_eager_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             torch.compiler.reset()
@@ -178,11 +211,15 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             # and full generate. We recommend compiling only the forward for now.
             # "reduce-overhead" will use cudagraphs.
             generated_ids = torch.zeros(
-                (batch_size, num_tokens_to_generate + seq_length), dtype=torch.int, device=device
+                (batch_size, num_tokens_to_generate + seq_length),
+                dtype=torch.int,
+                device=device,
             )
 
             generated_ids[:, :seq_length] = inputs["input_ids"]
-            decode_one_token = torch.compile(decode_one_token, mode="reduce-overhead", fullgraph=True)
+            decode_one_token = torch.compile(
+                decode_one_token, mode="reduce-overhead", fullgraph=True
+            )
             # model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
             # TODO use  decode_one_token(model, input_id.clone(), cache_position) for verification
             past_key_values = StaticCache(
@@ -197,12 +234,17 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             ### First compile, prefill
             start = perf_counter()
             next_token = decode_one_token(
-                model, inputs["input_ids"], cache_position=cache_position, past_key_values=past_key_values
+                model,
+                inputs["input_ids"],
+                cache_position=cache_position,
+                past_key_values=past_key_values,
             )
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_first_token = end - start
-            logger.info(f"completed first compile generation in: {time_to_first_token}s")
+            logger.info(
+                f"completed first compile generation in: {time_to_first_token}s"
+            )
             cache_position += 1
             all_generated_tokens += next_token.clone().detach().cpu().tolist()
 
@@ -210,19 +252,27 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             ### First compile, decoding
             start = perf_counter()
             next_token = decode_one_token(
-                model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values
+                model,
+                next_token.clone(),
+                cache_position=cache_position,
+                past_key_values=past_key_values,
             )
             torch.cuda.synchronize()
             end = perf_counter()
             time_to_second_token = end - start
-            logger.info(f"completed second compile generation in: {time_to_first_token}s")
+            logger.info(
+                f"completed second compile generation in: {time_to_first_token}s"
+            )
             cache_position += 1
             all_generated_tokens += next_token.clone().detach().cpu().tolist()
 
             ### Second compile, decoding
             start = perf_counter()
             next_token = decode_one_token(
-                model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values
+                model,
+                next_token.clone(),
+                cache_position=cache_position,
+                past_key_values=past_key_values,
             )
             torch.cuda.synchronize()
             end = perf_counter()
@@ -237,13 +287,18 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             for _ in range(1, num_tokens_to_generate):
                 all_generated_tokens += next_token.clone().detach().cpu().tolist()
                 next_token = decode_one_token(
-                    model, next_token.clone(), cache_position=cache_position, past_key_values=past_key_values
+                    model,
+                    next_token.clone(),
+                    cache_position=cache_position,
+                    past_key_values=past_key_values,
                 )
                 cache_position += 1
             torch.cuda.synchronize()
             end = perf_counter()
             mean_time_to_next_token = (end - start) / num_tokens_to_generate
-            logger.info(f"completed next compile generation in: {mean_time_to_next_token}s")
+            logger.info(
+                f"completed next compile generation in: {mean_time_to_next_token}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(all_generated_tokens)}")
 
             ####################
@@ -266,7 +321,9 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             torch.cuda.synchronize()
             end = perf_counter()
             first_compile_generate_time = end - start
-            logger.info(f"completed first compile generation in: {first_compile_generate_time}s")
+            logger.info(
+                f"completed first compile generation in: {first_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -282,7 +339,9 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             torch.cuda.synchronize()
             end = perf_counter()
             second_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {second_compile_generate_time}s")
+            logger.info(
+                f"completed second compile generation in: {second_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -298,7 +357,9 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             third_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {third_compile_generate_time}s")
+            logger.info(
+                f"completed second compile generation in: {third_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
             past_key_values = StaticCache(
@@ -313,7 +374,9 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
             output = model.generate(**inputs, past_key_values=past_key_values)
             end = perf_counter()
             fourth_compile_generate_time = end - start
-            logger.info(f"completed second compile generation in: {fourth_compile_generate_time}s")
+            logger.info(
+                f"completed second compile generation in: {fourth_compile_generate_time}s"
+            )
             logger.info(f"generated: {tokenizer.batch_decode(output.cpu().tolist())}")
 
         metrics_recorder.collect_model_measurements(

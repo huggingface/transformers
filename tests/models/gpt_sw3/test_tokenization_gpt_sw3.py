@@ -16,7 +16,13 @@
 import unittest
 
 from transformers import GPTSw3Tokenizer
-from transformers.testing_utils import get_tests_dir, require_jinja, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_jinja,
+    require_sentencepiece,
+    require_tokenizers,
+    slow,
+)
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -37,7 +43,9 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = GPTSw3Tokenizer(SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>")
+        tokenizer = GPTSw3Tokenizer(
+            SAMPLE_VOCAB, eos_token="<unk>", bos_token="<unk>", pad_token="<unk>"
+        )
 
         tokenizer.save_pretrained(self.tmpdirname)
 
@@ -71,7 +79,9 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
 
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [465, 287, 265, 631, 842])
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(tokens), [465, 287, 265, 631, 842]
+        )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         # fmt: off
@@ -84,7 +94,29 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
             ids,
-            [262, 272, 1525, 286, 271, 268, 60, 916, 633, 633, 633, 259, 266, 301, 287, 384, 367, 263, 198, 172, 260],
+            [
+                262,
+                272,
+                1525,
+                286,
+                271,
+                268,
+                60,
+                916,
+                633,
+                633,
+                633,
+                259,
+                266,
+                301,
+                287,
+                384,
+                367,
+                263,
+                198,
+                172,
+                260,
+            ],
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
@@ -100,7 +132,29 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         texts = ["This is a test", "I was born in 92000, and this is falsé."]
         expected_ids_list = [
             [465, 287, 265, 631, 842],
-            [262, 272, 1525, 286, 271, 268, 60, 916, 633, 633, 633, 259, 266, 301, 287, 384, 367, 263, 198, 172, 260],
+            [
+                262,
+                272,
+                1525,
+                286,
+                271,
+                268,
+                60,
+                916,
+                633,
+                633,
+                633,
+                259,
+                266,
+                301,
+                287,
+                384,
+                367,
+                263,
+                198,
+                172,
+                260,
+            ],
         ]
 
         # Test that encode_fast returns the same as tokenize + convert_tokens_to_ids
@@ -142,15 +196,23 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         # This is in English, but it's just here to make sure the chat control tokens are being added properly
         test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+            ],
             [
                 {"role": "system", "content": "You are a helpful chatbot."},
                 {"role": "user", "content": "Hello!"},
                 {"role": "assistant", "content": "Nice to meet you."},
             ],
-            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "assistant", "content": "Nice to meet you."},
+                {"role": "user", "content": "Hello!"},
+            ],
         ]
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        tokenized_chats = [
+            tokenizer.apply_chat_template(test_chat) for test_chat in test_chats
+        ]
         # fmt: off
         expected_tokens = [
             [2000, 1, 575, 541, 419, 530, 339, 265, 878, 708, 727, 275, 347, 541, 260, 1, 968, 263, 314, 419, 366, 354, 294, 360, 1, 575, 541, 419],

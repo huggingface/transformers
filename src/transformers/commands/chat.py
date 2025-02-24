@@ -30,7 +30,12 @@ from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, TextIteratorStreamer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    TextIteratorStreamer,
+)
 
 from . import BaseTransformersCLICommand
 
@@ -118,7 +123,10 @@ def clear_chat_history(system_prompt):
 
 def parse_settings(user_input, current_args, interface):
     settings = user_input[4:].strip().split(";")
-    settings = [(setting.split("=")[0], setting[len(setting.split("=")[0]) + 1 :]) for setting in settings]
+    settings = [
+        (setting.split("=")[0], setting[len(setting.split("=")[0]) + 1 :])
+        for setting in settings
+    ]
     settings = dict(settings)
     error = False
 
@@ -142,7 +150,9 @@ def parse_settings(user_input, current_args, interface):
             interface.print_red(f"There is no '{name}' setting.")
 
     if error:
-        interface.print_red("There was an issue parsing the settings. No settings have been changed.")
+        interface.print_red(
+            "There was an issue parsing the settings. No settings have been changed."
+        )
         return current_args, False
     else:
         for name in settings:
@@ -179,7 +189,11 @@ def load_model_and_tokenizer(args):
         trust_remote_code=args.trust_remote_code,
     )
 
-    torch_dtype = args.torch_dtype if args.torch_dtype in ["auto", None] else getattr(torch, args.torch_dtype)
+    torch_dtype = (
+        args.torch_dtype
+        if args.torch_dtype in ["auto", None]
+        else getattr(torch, args.torch_dtype)
+    )
     quantization_config = get_quantization_config(args)
     model_kwargs = {
         "revision": args.model_revision,
@@ -189,7 +203,9 @@ def load_model_and_tokenizer(args):
         "quantization_config": quantization_config,
     }
     model = AutoModelForCausalLM.from_pretrained(
-        args.model_name_or_path, trust_remote_code=args.trust_remote_code, **model_kwargs
+        args.model_name_or_path,
+        trust_remote_code=args.trust_remote_code,
+        **model_kwargs,
     )
 
     if getattr(model, "hf_device_map", None) is None:
@@ -210,7 +226,9 @@ def parse_eos_tokens(tokenizer, eos_tokens, eos_token_ids):
         all_eos_token_ids.extend(tokenizer.convert_tokens_to_ids(eos_tokens.split(",")))
 
     if eos_token_ids is not None:
-        all_eos_token_ids.extend([int(token_id) for token_id in eos_token_ids.split(",")])
+        all_eos_token_ids.extend(
+            [int(token_id) for token_id in eos_token_ids.split(",")]
+        )
 
     if len(all_eos_token_ids) == 0:
         all_eos_token_ids.append(tokenizer.eos_token_id)
@@ -351,33 +369,61 @@ class ChatArguments:
 
     # General settings
     model_name_or_path: str = field(metadata={"help": "Name of the pre-trained model."})
-    user: Optional[str] = field(default=None, metadata={"help": "Username to display in chat interface."})
-    system_prompt: Optional[str] = field(default=None, metadata={"help": "System prompt."})
-    save_folder: str = field(default="./chat_history/", metadata={"help": "Folder to save chat history."})
-    device: str = field(default="cpu", metadata={"help": "Device to use for inference."})
-    examples_path: Optional[str] = field(default=None, metadata={"help": "Path to a yaml file with examples."})
+    user: Optional[str] = field(
+        default=None, metadata={"help": "Username to display in chat interface."}
+    )
+    system_prompt: Optional[str] = field(
+        default=None, metadata={"help": "System prompt."}
+    )
+    save_folder: str = field(
+        default="./chat_history/", metadata={"help": "Folder to save chat history."}
+    )
+    device: str = field(
+        default="cpu", metadata={"help": "Device to use for inference."}
+    )
+    examples_path: Optional[str] = field(
+        default=None, metadata={"help": "Path to a yaml file with examples."}
+    )
 
     # Generation settings
-    max_new_tokens: int = field(default=256, metadata={"help": "Maximum number of tokens to generate."})
-    do_sample: bool = field(default=True, metadata={"help": "Whether to sample outputs during generation."})
-    num_beams: int = field(default=1, metadata={"help": "Number of beams for beam search."})
-    temperature: float = field(default=1.0, metadata={"help": "Temperature parameter for generation."})
+    max_new_tokens: int = field(
+        default=256, metadata={"help": "Maximum number of tokens to generate."}
+    )
+    do_sample: bool = field(
+        default=True, metadata={"help": "Whether to sample outputs during generation."}
+    )
+    num_beams: int = field(
+        default=1, metadata={"help": "Number of beams for beam search."}
+    )
+    temperature: float = field(
+        default=1.0, metadata={"help": "Temperature parameter for generation."}
+    )
     top_k: int = field(default=50, metadata={"help": "Value of k for top-k sampling."})
-    top_p: float = field(default=1.0, metadata={"help": "Value of p for nucleus sampling."})
-    repetition_penalty: float = field(default=1.0, metadata={"help": "Repetition penalty."})
+    top_p: float = field(
+        default=1.0, metadata={"help": "Value of p for nucleus sampling."}
+    )
+    repetition_penalty: float = field(
+        default=1.0, metadata={"help": "Repetition penalty."}
+    )
     eos_tokens: Optional[str] = field(
         default=None,
-        metadata={"help": "EOS tokens to stop the generation. If multiple they should be comma separated."},
+        metadata={
+            "help": "EOS tokens to stop the generation. If multiple they should be comma separated."
+        },
     )
     eos_token_ids: Optional[str] = field(
         default=None,
-        metadata={"help": "EOS token IDs to stop the generation. If multiple they should be comma separated."},
+        metadata={
+            "help": "EOS token IDs to stop the generation. If multiple they should be comma separated."
+        },
     )
 
     # Model loading
     model_revision: str = field(
         default="main",
-        metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
+        metadata={
+            "help": "Specific model version to use (can be a branch name, tag name or commit id)."
+        },
     )
     torch_dtype: Optional[str] = field(
         default="auto",
@@ -388,7 +434,8 @@ class ChatArguments:
         },
     )
     trust_remote_code: bool = field(
-        default=False, metadata={"help": "Whether to trust remote code when loading a model."}
+        default=False,
+        metadata={"help": "Whether to trust remote code when loading a model."},
     )
     attn_implementation: Optional[str] = field(
         default=None,
@@ -399,14 +446,23 @@ class ChatArguments:
     )
     load_in_8bit: bool = field(
         default=False,
-        metadata={"help": "Whether to use 8 bit precision for the base model - works only with LoRA."},
+        metadata={
+            "help": "Whether to use 8 bit precision for the base model - works only with LoRA."
+        },
     )
     load_in_4bit: bool = field(
         default=False,
-        metadata={"help": "Whether to use 4 bit precision for the base model - works only with LoRA."},
+        metadata={
+            "help": "Whether to use 4 bit precision for the base model - works only with LoRA."
+        },
     )
-    bnb_4bit_quant_type: str = field(default="nf4", metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]})
-    use_bnb_nested_quant: bool = field(default=False, metadata={"help": "Whether to use nested quantization."})
+    bnb_4bit_quant_type: str = field(
+        default="nf4",
+        metadata={"help": "Quantization type.", "choices": ["fp4", "nf4"]},
+    )
+    use_bnb_nested_quant: bool = field(
+        default=False, metadata={"help": "Whether to use nested quantization."}
+    )
 
 
 def chat_command_factory(args: Namespace):
@@ -426,7 +482,9 @@ class ChatCommand(BaseTransformersCLICommand):
             parser: Root parser to register command-specific arguments
         """
         dataclass_types = (ChatArguments,)
-        chat_parser = parser.add_parser("chat", help=HELP_STRING, dataclass_types=dataclass_types)
+        chat_parser = parser.add_parser(
+            "chat", help=HELP_STRING, dataclass_types=dataclass_types
+        )
         chat_parser.set_defaults(func=chat_command_factory)
 
     def __init__(self, args):
@@ -448,9 +506,13 @@ class ChatCommand(BaseTransformersCLICommand):
             user = args.user
 
         model, tokenizer = load_model_and_tokenizer(args)
-        generation_streamer = TextIteratorStreamer(tokenizer, skip_special_tokens=True, skip_prompt=True)
+        generation_streamer = TextIteratorStreamer(
+            tokenizer, skip_special_tokens=True, skip_prompt=True
+        )
 
-        pad_token_id, eos_token_ids = parse_eos_tokens(tokenizer, args.eos_tokens, args.eos_token_ids)
+        pad_token_id, eos_token_ids = parse_eos_tokens(
+            tokenizer, args.eos_tokens, args.eos_token_ids
+        )
 
         interface = RichInterface(model_name=args.model_name_or_path, user_name=user)
         interface.clear()
@@ -489,7 +551,9 @@ class ChatCommand(BaseTransformersCLICommand):
                     continue
 
                 if re.match(SETTING_RE, user_input):
-                    current_args, success = parse_settings(user_input, current_args, interface)
+                    current_args, success = parse_settings(
+                        user_input, current_args, interface
+                    )
                     if success:
                         chat = []
                         interface.clear()
@@ -510,9 +574,9 @@ class ChatCommand(BaseTransformersCLICommand):
 
                 chat.append({"role": "user", "content": user_input})
 
-                inputs = tokenizer.apply_chat_template(chat, return_tensors="pt", add_generation_prompt=True).to(
-                    model.device
-                )
+                inputs = tokenizer.apply_chat_template(
+                    chat, return_tensors="pt", add_generation_prompt=True
+                ).to(model.device)
                 attention_mask = torch.ones_like(inputs)
                 generation_kwargs = {
                     "inputs": inputs,

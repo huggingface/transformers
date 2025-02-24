@@ -12,9 +12,13 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 
-def copy_layers(src_layers: nn.ModuleList, dest_layers: nn.ModuleList, layers_to_copy: List[int]) -> None:
+def copy_layers(
+    src_layers: nn.ModuleList, dest_layers: nn.ModuleList, layers_to_copy: List[int]
+) -> None:
     layers_to_copy = nn.ModuleList([src_layers[i] for i in layers_to_copy])
-    assert len(dest_layers) == len(layers_to_copy), f"{len(dest_layers)} != {len(layers_to_copy)}"
+    assert len(dest_layers) == len(
+        layers_to_copy
+    ), f"{len(dest_layers)} != {len(layers_to_copy)}"
     dest_layers.load_state_dict(layers_to_copy.state_dict())
 
 
@@ -22,7 +26,9 @@ LAYERS_TO_COPY = {
     # maps  num layers in teacher -> num_layers in student -> which teacher layers to copy.
     # 12: bart, 16: pegasus, 6: marian/Helsinki-NLP
     12: {
-        1: [0],  # This says that if the teacher has 12 layers and the student has 1, copy layer 0 of the teacher
+        1: [
+            0
+        ],  # This says that if the teacher has 12 layers and the student has 1, copy layer 0 of the teacher
         2: [0, 6],
         3: [0, 6, 11],
         4: [0, 4, 8, 11],
@@ -67,7 +73,9 @@ def pick_layers_to_copy(n_student, n_teacher):
 def get_layers_to_supervise(n_student, n_teacher) -> List[int]:
     """Used or the --supervise_forward kwarg"""
     if n_student > n_teacher:
-        raise ValueError(f"Cannot perform intermediate supervision for student {n_student} > teacher {n_teacher}")
+        raise ValueError(
+            f"Cannot perform intermediate supervision for student {n_student} > teacher {n_teacher}"
+        )
     elif n_teacher == n_student:
         return list(range(n_teacher))
     elif n_student == 1:
@@ -104,14 +112,21 @@ def create_student_by_copying_alternating_layers(
     _msg = "encoder_layers and decoder_layers cannot be both None-- you would just have an identical teacher."
     assert (e is not None) or (d is not None), _msg
     if isinstance(teacher, str):
-        AutoTokenizer.from_pretrained(teacher).save_pretrained(save_path)  # purely for convenience
+        AutoTokenizer.from_pretrained(teacher).save_pretrained(
+            save_path
+        )  # purely for convenience
         teacher = AutoModelForSeq2SeqLM.from_pretrained(teacher).eval()
     else:
-        assert isinstance(teacher, PreTrainedModel), f"teacher must be a model or string got type {type(teacher)}"
+        assert isinstance(
+            teacher, PreTrainedModel
+        ), f"teacher must be a model or string got type {type(teacher)}"
     init_kwargs = teacher.config.to_diff_dict()
 
     try:
-        teacher_e, teacher_d = teacher.config.encoder_layers, teacher.config.decoder_layers
+        teacher_e, teacher_d = (
+            teacher.config.encoder_layers,
+            teacher.config.decoder_layers,
+        )
         if e is None:
             e = teacher_e
         if d is None:
@@ -119,9 +134,15 @@ def create_student_by_copying_alternating_layers(
         init_kwargs.update({"encoder_layers": e, "decoder_layers": d})
     except AttributeError:  # T5
         if hasattr(teacher.config, "num_encoder_layers"):
-            teacher_e, teacher_d = teacher.config.num_encoder_layers, teacher.config.num_decoder_layers
+            teacher_e, teacher_d = (
+                teacher.config.num_encoder_layers,
+                teacher.config.num_decoder_layers,
+            )
         else:
-            teacher_e, teacher_d = teacher.config.num_layers, teacher.config.num_decoder_layers
+            teacher_e, teacher_d = (
+                teacher.config.num_layers,
+                teacher.config.num_decoder_layers,
+            )
         if e is None:
             e = teacher_e
         if d is None:
@@ -139,7 +160,9 @@ def create_student_by_copying_alternating_layers(
     student = AutoModelForSeq2SeqLM.from_config(student_cfg)
     # Start by copying the full teacher state dict this will copy the first N teacher layers to the student.
     info = student.load_state_dict(teacher.state_dict(), strict=False)
-    assert info.missing_keys == [], info.missing_keys  # every student key should have a teacher keys.
+    assert (
+        info.missing_keys == []
+    ), info.missing_keys  # every student key should have a teacher keys.
 
     if copy_first_teacher_layers:  # Our copying is done. We just log and save
         e_layers_to_copy, d_layers_to_copy = list(range(e)), list(range(d))
@@ -160,12 +183,30 @@ def create_student_by_copying_alternating_layers(
         if hasattr(
             teacher, "prophetnet"
         ):  # For ProphetNet, student.model.encoder.layers is called student.prophetnet.encoder.layers
-            copy_layers(teacher.prophetnet.encoder.layers, student.prophetnet.encoder.layers, e_layers_to_copy)
-            copy_layers(teacher.prophetnet.decoder.layers, student.prophetnet.decoder.layers, d_layers_to_copy)
+            copy_layers(
+                teacher.prophetnet.encoder.layers,
+                student.prophetnet.encoder.layers,
+                e_layers_to_copy,
+            )
+            copy_layers(
+                teacher.prophetnet.decoder.layers,
+                student.prophetnet.decoder.layers,
+                d_layers_to_copy,
+            )
         else:
-            copy_layers(teacher.model.encoder.layers, student.model.encoder.layers, e_layers_to_copy)
-            copy_layers(teacher.model.decoder.layers, student.model.decoder.layers, d_layers_to_copy)
-    except AttributeError:  # For t5, student.model.encoder.layers is called student.encoder.block
+            copy_layers(
+                teacher.model.encoder.layers,
+                student.model.encoder.layers,
+                e_layers_to_copy,
+            )
+            copy_layers(
+                teacher.model.decoder.layers,
+                student.model.decoder.layers,
+                d_layers_to_copy,
+            )
+    except (
+        AttributeError
+    ):  # For t5, student.model.encoder.layers is called student.encoder.block
         copy_layers(teacher.encoder.block, student.encoder.block, e_layers_to_copy)
         copy_layers(teacher.decoder.block, student.decoder.block, d_layers_to_copy)
     logger.info(

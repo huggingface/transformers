@@ -196,7 +196,9 @@ def get_base_command(args, output_dir):
     return [sys.executable] + shlex.split(args.base_cmd)
 
 
-def process_run_single(id, cmd, variation, output_dir, target_metric_key, metric_keys, verbose):
+def process_run_single(
+    id, cmd, variation, output_dir, target_metric_key, metric_keys, verbose
+):
 
     # Enable to debug everything but the run itself, to do it fast and see the progress.
     # This is useful for debugging the output formatting quickly - we can remove it later once
@@ -208,7 +210,11 @@ def process_run_single(id, cmd, variation, output_dir, target_metric_key, metric
         sleep(0)
         return dict(
             {k: random.uniform(0, 100) for k in metric_keys},
-            **{target_metric_key: random.choice([nan, 10.31, 100.2, 55.6666, 222.22222222])},
+            **{
+                target_metric_key: random.choice(
+                    [nan, 10.31, 100.2, 55.6666, 222.22222222]
+                )
+            },
         )
 
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -295,7 +301,9 @@ Hardware:
 """
 
 
-def process_results(results, target_metric_key, report_metric_keys, base_variation, output_dir):
+def process_results(
+    results, target_metric_key, report_metric_keys, base_variation, output_dir
+):
 
     df = pd.DataFrame(results)
     variation_key = "variation"
@@ -304,7 +312,9 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
     sentinel_value = nan
     if base_variation is not None and len(df[df[variation_key] == base_variation]):
         # this may still return nan
-        sentinel_value = df.loc[df[variation_key] == base_variation][target_metric_key].item()
+        sentinel_value = df.loc[df[variation_key] == base_variation][
+            target_metric_key
+        ].item()
     if math.isnan(sentinel_value):
         # as a fallback, use the minimal value as the sentinel
         sentinel_value = df.loc[df[target_metric_key] != nan][target_metric_key].min()
@@ -312,9 +322,11 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
     # create diff column if possible
     if not math.isnan(sentinel_value):
         df[diff_key] = df.apply(
-            lambda r: round(100 * (r[target_metric_key] - sentinel_value) / sentinel_value)
-            if not math.isnan(r[target_metric_key])
-            else 0,
+            lambda r: (
+                round(100 * (r[target_metric_key] - sentinel_value) / sentinel_value)
+                if not math.isnan(r[target_metric_key])
+                else 0
+            ),
             axis="columns",
         )
 
@@ -329,7 +341,10 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
     df_github = df.rename(lambda c: c.replace("_", "<br>"), axis="columns")
     df_console = df.rename(lambda c: c.replace("_", "\n"), axis="columns")
 
-    report = ["", "Copy between the cut-here-lines and paste as is to github or a forum"]
+    report = [
+        "",
+        "Copy between the cut-here-lines and paste as is to github or a forum",
+    ]
     report += ["----------8<-----------------8<--------"]
     report += ["*** Results:", df_github.to_markdown(index=False, floatfmt=".2f")]
     report += ["```"]
@@ -337,7 +352,10 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
     report += ["*** The benchmark command line was:", get_original_command()]
     report += ["```"]
     report += ["----------8<-----------------8<--------"]
-    report += ["*** Results (console):", df_console.to_markdown(index=False, floatfmt=".2f")]
+    report += [
+        "*** Results (console):",
+        df_console.to_markdown(index=False, floatfmt=".2f"),
+    ]
 
     print("\n\n".join(report))
 
@@ -413,7 +431,9 @@ def main():
     report_metric_keys = args.report_metric_keys.split()
 
     # capture prints into a log file for convenience
-    report_fn = f"benchmark-report-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.txt"
+    report_fn = (
+        f"benchmark-report-{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.txt"
+    )
     print(f"\nNote: each run's output is also logged under {output_dir}/log.*.std*.txt")
     print(f"and this script's output is also piped into {report_fn}")
 
@@ -424,7 +444,9 @@ def main():
 
     variation_key = "variation"
     results = []
-    for id, variation in enumerate(tqdm(variations, desc="Total completion: ", leave=False)):
+    for id, variation in enumerate(
+        tqdm(variations, desc="Total completion: ", leave=False)
+    ):
         cmd = base_cmd + variation.split()
         results.append(
             process_run(
@@ -441,7 +463,13 @@ def main():
             )
         )
 
-    process_results(results, args.target_metric_key, report_metric_keys, args.base_variation, output_dir)
+    process_results(
+        results,
+        args.target_metric_key,
+        report_metric_keys,
+        args.base_variation,
+        output_dir,
+    )
 
 
 if __name__ == "__main__":

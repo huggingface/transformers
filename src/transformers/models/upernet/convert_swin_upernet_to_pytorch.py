@@ -25,7 +25,12 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import SegformerImageProcessor, SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
+from transformers import (
+    SegformerImageProcessor,
+    SwinConfig,
+    UperNetConfig,
+    UperNetForSemanticSegmentation,
+)
 
 
 def get_upernet_config(model_name):
@@ -56,7 +61,9 @@ def get_upernet_config(model_name):
     num_labels = 150
     repo_id = "huggingface/label-files"
     filename = "ade20k-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
 
@@ -132,7 +139,10 @@ def rename_key(dct, old, new):
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, backbone_config):
-    num_features = [int(backbone_config.embed_dim * 2**i) for i in range(len(backbone_config.depths))]
+    num_features = [
+        int(backbone_config.embed_dim * 2**i)
+        for i in range(len(backbone_config.depths))
+    ]
     for i in range(len(backbone_config.depths)):
         dim = num_features[i]
         for j in range(backbone_config.depths[i]):
@@ -196,9 +206,9 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         "upernet-swin-large": "https://download.openmmlab.com/mmsegmentation/v0.5/swin/upernet_swin_large_patch4_window12_512x512_pretrain_384x384_22K_160k_ade20k/upernet_swin_large_patch4_window12_512x512_pretrain_384x384_22K_160k_ade20k_20220318_091743-9ba68901.pth",
     }
     checkpoint_url = model_name_to_url[model_name]
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[
-        "state_dict"
-    ]
+    state_dict = torch.hub.load_state_dict_from_url(
+        checkpoint_url, map_location="cpu", file_name=model_name
+    )["state_dict"]
 
     for name, param in state_dict.items():
         print(name, param.shape)
@@ -246,19 +256,35 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # assert values
     if model_name == "upernet-swin-tiny":
         expected_slice = torch.tensor(
-            [[-7.5958, -7.5958, -7.4302], [-7.5958, -7.5958, -7.4302], [-7.4797, -7.4797, -7.3068]]
+            [
+                [-7.5958, -7.5958, -7.4302],
+                [-7.5958, -7.5958, -7.4302],
+                [-7.4797, -7.4797, -7.3068],
+            ]
         )
     elif model_name == "upernet-swin-small":
         expected_slice = torch.tensor(
-            [[-7.1921, -7.1921, -6.9532], [-7.1921, -7.1921, -6.9532], [-7.0908, -7.0908, -6.8534]]
+            [
+                [-7.1921, -7.1921, -6.9532],
+                [-7.1921, -7.1921, -6.9532],
+                [-7.0908, -7.0908, -6.8534],
+            ]
         )
     elif model_name == "upernet-swin-base":
         expected_slice = torch.tensor(
-            [[-6.5851, -6.5851, -6.4330], [-6.5851, -6.5851, -6.4330], [-6.4763, -6.4763, -6.3254]]
+            [
+                [-6.5851, -6.5851, -6.4330],
+                [-6.5851, -6.5851, -6.4330],
+                [-6.4763, -6.4763, -6.3254],
+            ]
         )
     elif model_name == "upernet-swin-large":
         expected_slice = torch.tensor(
-            [[-7.5297, -7.5297, -7.3802], [-7.5297, -7.5297, -7.3802], [-7.4044, -7.4044, -7.2586]]
+            [
+                [-7.5297, -7.5297, -7.3802],
+                [-7.5297, -7.5297, -7.3802],
+                [-7.4044, -7.4044, -7.2586],
+            ]
         )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)
@@ -287,11 +313,18 @@ if __name__ == "__main__":
         help="Name of the Swin + UperNet model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_upernet_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_upernet_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
+    )

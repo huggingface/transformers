@@ -57,7 +57,9 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(
+    value: int, divisor: int = 8, min_value: Optional[int] = None
+) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`. This function is taken from the
     original TensorFlow repo. It can be seen here:
@@ -72,7 +74,9 @@ def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None
     return int(new_value)
 
 
-def clip(value: float, min_val: float = float("-inf"), max_val: float = float("inf")) -> float:
+def clip(
+    value: float, min_val: float = float("-inf"), max_val: float = float("inf")
+) -> float:
     return max(min_val, min(max_val, value))
 
 
@@ -95,9 +99,13 @@ class MobileViTV2ConvLayer(nn.Module):
         padding = int((kernel_size - 1) / 2) * dilation
 
         if in_channels % groups != 0:
-            raise ValueError(f"Input channels ({in_channels}) are not divisible by {groups} groups.")
+            raise ValueError(
+                f"Input channels ({in_channels}) are not divisible by {groups} groups."
+            )
         if out_channels % groups != 0:
-            raise ValueError(f"Output channels ({out_channels}) are not divisible by {groups} groups.")
+            raise ValueError(
+                f"Output channels ({out_channels}) are not divisible by {groups} groups."
+            )
 
         self.convolution = nn.Conv2d(
             in_channels=in_channels,
@@ -148,10 +156,17 @@ class MobileViTV2InvertedResidual(nn.Module):
     """
 
     def __init__(
-        self, config: MobileViTV2Config, in_channels: int, out_channels: int, stride: int, dilation: int = 1
+        self,
+        config: MobileViTV2Config,
+        in_channels: int,
+        out_channels: int,
+        stride: int,
+        dilation: int = 1,
     ) -> None:
         super().__init__()
-        expanded_channels = make_divisible(int(round(in_channels * config.expand_ratio)), 8)
+        expanded_channels = make_divisible(
+            int(round(in_channels * config.expand_ratio)), 8
+        )
 
         if stride not in [1, 2]:
             raise ValueError(f"Invalid stride {stride}.")
@@ -159,7 +174,10 @@ class MobileViTV2InvertedResidual(nn.Module):
         self.use_residual = (stride == 1) and (in_channels == out_channels)
 
         self.expand_1x1 = MobileViTV2ConvLayer(
-            config, in_channels=in_channels, out_channels=expanded_channels, kernel_size=1
+            config,
+            in_channels=in_channels,
+            out_channels=expanded_channels,
+            kernel_size=1,
         )
 
         self.conv_3x3 = MobileViTV2ConvLayer(
@@ -193,7 +211,12 @@ class MobileViTV2InvertedResidual(nn.Module):
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTMobileNetLayer with MobileViT->MobileViTV2
 class MobileViTV2MobileNetLayer(nn.Module):
     def __init__(
-        self, config: MobileViTV2Config, in_channels: int, out_channels: int, stride: int = 1, num_stages: int = 1
+        self,
+        config: MobileViTV2Config,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        num_stages: int = 1,
     ) -> None:
         super().__init__()
 
@@ -258,7 +281,9 @@ class MobileViTV2LinearSelfAttention(nn.Module):
         # Project hidden_states into query, key and value
         # Query --> [batch_size, 1, num_pixels_in_patch, num_patches]
         # value, key --> [batch_size, embed_dim, num_pixels_in_patch, num_patches]
-        query, key, value = torch.split(qkv, split_size_or_sections=[1, self.embed_dim, self.embed_dim], dim=1)
+        query, key, value = torch.split(
+            qkv, split_size_or_sections=[1, self.embed_dim, self.embed_dim], dim=1
+        )
 
         # apply softmax along num_patches dimension
         context_scores = torch.nn.functional.softmax(query, dim=-1)
@@ -327,10 +352,14 @@ class MobileViTV2TransformerLayer(nn.Module):
         dropout: float = 0.0,
     ) -> None:
         super().__init__()
-        self.layernorm_before = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
+        self.layernorm_before = nn.GroupNorm(
+            num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps
+        )
         self.attention = MobileViTV2LinearSelfAttention(config, embed_dim)
         self.dropout1 = nn.Dropout(p=dropout)
-        self.layernorm_after = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.GroupNorm(
+            num_groups=1, num_channels=embed_dim, eps=config.layer_norm_eps
+        )
         self.ffn = MobileViTV2FFN(config, embed_dim, ffn_latent_dim, config.ffn_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -420,10 +449,14 @@ class MobileViTV2Layer(nn.Module):
         )
 
         # Global representations
-        self.transformer = MobileViTV2Transformer(config, d_model=attn_unit_dim, n_layers=n_attn_blocks)
+        self.transformer = MobileViTV2Transformer(
+            config, d_model=attn_unit_dim, n_layers=n_attn_blocks
+        )
 
         # self.layernorm = MobileViTV2LayerNorm2D(attn_unit_dim, eps=config.layer_norm_eps)
-        self.layernorm = nn.GroupNorm(num_groups=1, num_channels=attn_unit_dim, eps=config.layer_norm_eps)
+        self.layernorm = nn.GroupNorm(
+            num_groups=1, num_channels=attn_unit_dim, eps=config.layer_norm_eps
+        )
 
         # Fusion
         self.conv_projection = MobileViTV2ConvLayer(
@@ -435,18 +468,24 @@ class MobileViTV2Layer(nn.Module):
             use_activation=False,
         )
 
-    def unfolding(self, feature_map: torch.Tensor) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    def unfolding(
+        self, feature_map: torch.Tensor
+    ) -> Tuple[torch.Tensor, Tuple[int, int]]:
         batch_size, in_channels, img_height, img_width = feature_map.shape
         patches = nn.functional.unfold(
             feature_map,
             kernel_size=(self.patch_height, self.patch_width),
             stride=(self.patch_height, self.patch_width),
         )
-        patches = patches.reshape(batch_size, in_channels, self.patch_height * self.patch_width, -1)
+        patches = patches.reshape(
+            batch_size, in_channels, self.patch_height * self.patch_width, -1
+        )
 
         return patches, (img_height, img_width)
 
-    def folding(self, patches: torch.Tensor, output_size: Tuple[int, int]) -> torch.Tensor:
+    def folding(
+        self, patches: torch.Tensor, output_size: Tuple[int, int]
+    ) -> torch.Tensor:
         batch_size, in_dim, patch_size, n_patches = patches.shape
         patches = patches.reshape(batch_size, in_dim * patch_size, n_patches)
 
@@ -503,7 +542,9 @@ class MobileViTV2Encoder(nn.Module):
         dilation = 1
 
         layer_0_dim = make_divisible(
-            clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16
+            clip(value=32 * config.width_multiplier, min_val=16, max_val=64),
+            divisor=8,
+            min_value=16,
         )
 
         layer_1_dim = make_divisible(64 * config.width_multiplier, divisor=16)
@@ -534,7 +575,9 @@ class MobileViTV2Encoder(nn.Module):
             config,
             in_channels=layer_2_dim,
             out_channels=layer_3_dim,
-            attn_unit_dim=make_divisible(config.base_attn_unit_dims[0] * config.width_multiplier, divisor=8),
+            attn_unit_dim=make_divisible(
+                config.base_attn_unit_dims[0] * config.width_multiplier, divisor=8
+            ),
             n_attn_blocks=config.n_attn_blocks[0],
         )
         self.layer.append(layer_3)
@@ -546,7 +589,9 @@ class MobileViTV2Encoder(nn.Module):
             config,
             in_channels=layer_3_dim,
             out_channels=layer_4_dim,
-            attn_unit_dim=make_divisible(config.base_attn_unit_dims[1] * config.width_multiplier, divisor=8),
+            attn_unit_dim=make_divisible(
+                config.base_attn_unit_dims[1] * config.width_multiplier, divisor=8
+            ),
             n_attn_blocks=config.n_attn_blocks[1],
             dilation=dilation,
         )
@@ -559,7 +604,9 @@ class MobileViTV2Encoder(nn.Module):
             config,
             in_channels=layer_4_dim,
             out_channels=layer_5_dim,
-            attn_unit_dim=make_divisible(config.base_attn_unit_dims[2] * config.width_multiplier, divisor=8),
+            attn_unit_dim=make_divisible(
+                config.base_attn_unit_dims[2] * config.width_multiplier, divisor=8
+            ),
             n_attn_blocks=config.n_attn_blocks[2],
             dilation=dilation,
         )
@@ -588,7 +635,9 @@ class MobileViTV2Encoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states
+        )
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTPreTrainedModel with MobileViT->MobileViTV2,mobilevit->mobilevitv2
@@ -652,7 +701,9 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
         self.expand_output = expand_output
 
         layer_0_dim = make_divisible(
-            clip(value=32 * config.width_multiplier, min_val=16, max_val=64), divisor=8, min_value=16
+            clip(value=32 * config.width_multiplier, min_val=16, max_val=64),
+            divisor=8,
+            min_value=16,
         )
 
         self.conv_stem = MobileViTV2ConvLayer(
@@ -694,9 +745,13 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -719,7 +774,11 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
             pooled_output = None
 
         if not return_dict:
-            output = (last_hidden_state, pooled_output) if pooled_output is not None else (last_hidden_state,)
+            output = (
+                (last_hidden_state, pooled_output)
+                if pooled_output is not None
+                else (last_hidden_state,)
+            )
             return output + encoder_outputs[1:]
 
         return BaseModelOutputWithPoolingAndNoAttention(
@@ -743,7 +802,9 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
         self.num_labels = config.num_labels
         self.mobilevitv2 = MobileViTV2Model(config)
 
-        out_channels = make_divisible(512 * config.width_multiplier, divisor=8)  # layer 5 output dimension
+        out_channels = make_divisible(
+            512 * config.width_multiplier, divisor=8
+        )  # layer 5 output dimension
         # Classifier head
         self.classifier = (
             nn.Linear(in_features=out_channels, out_features=config.num_labels)
@@ -774,9 +835,15 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
-        outputs = self.mobilevitv2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
+        outputs = self.mobilevitv2(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
 
@@ -787,7 +854,9 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -818,7 +887,9 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTASPPPooling with MobileViT->MobileViTV2
 class MobileViTV2ASPPPooling(nn.Module):
-    def __init__(self, config: MobileViTV2Config, in_channels: int, out_channels: int) -> None:
+    def __init__(
+        self, config: MobileViTV2Config, in_channels: int, out_channels: int
+    ) -> None:
         super().__init__()
 
         self.global_pool = nn.AdaptiveAvgPool2d(output_size=1)
@@ -837,7 +908,9 @@ class MobileViTV2ASPPPooling(nn.Module):
         spatial_size = features.shape[-2:]
         features = self.global_pool(features)
         features = self.conv_1x1(features)
-        features = nn.functional.interpolate(features, size=spatial_size, mode="bilinear", align_corners=False)
+        features = nn.functional.interpolate(
+            features, size=spatial_size, mode="bilinear", align_corners=False
+        )
         return features
 
 
@@ -849,7 +922,9 @@ class MobileViTV2ASPP(nn.Module):
     def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__()
 
-        encoder_out_channels = make_divisible(512 * config.width_multiplier, divisor=8)  # layer 5 output dimension
+        encoder_out_channels = make_divisible(
+            512 * config.width_multiplier, divisor=8
+        )  # layer 5 output dimension
         in_channels = encoder_out_channels
         out_channels = config.aspp_out_channels
 
@@ -885,7 +960,11 @@ class MobileViTV2ASPP(nn.Module):
         self.convs.append(pool_layer)
 
         self.project = MobileViTV2ConvLayer(
-            config, in_channels=5 * out_channels, out_channels=out_channels, kernel_size=1, use_activation="relu"
+            config,
+            in_channels=5 * out_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation="relu",
         )
 
         self.dropout = nn.Dropout(p=config.aspp_dropout_prob)
@@ -948,7 +1027,9 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(MOBILEVITV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -986,9 +1067,13 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         >>> logits = outputs.logits
         ```"""
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
@@ -1009,7 +1094,9 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
             upsampled_logits = nn.functional.interpolate(
                 logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
             )
-            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+            loss_fct = CrossEntropyLoss(
+                ignore_index=self.config.semantic_loss_ignore_index
+            )
             loss = loss_fct(upsampled_logits, labels)
 
         if not return_dict:

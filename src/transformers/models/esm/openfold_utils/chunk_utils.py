@@ -148,7 +148,9 @@ def _get_minimal_slice_set(
     # Analogous to the previous case, but the top is ragged this time
     elif end_edges[divergence_idx]:
         slices.extend(upper())
-        slices.append(path + (slice(start[divergence_idx] + 1, end[divergence_idx] + 1),))
+        slices.append(
+            path + (slice(start[divergence_idx] + 1, end[divergence_idx] + 1),)
+        )
     # If both sides of the range are ragged, we need to handle both sides
     # separately. If there's contiguous meat in between them, we can index it
     # in one big chunk
@@ -156,14 +158,18 @@ def _get_minimal_slice_set(
         slices.extend(upper())
         middle_ground = end[divergence_idx] - start[divergence_idx]
         if middle_ground > 1:
-            slices.append(path + (slice(start[divergence_idx] + 1, end[divergence_idx]),))
+            slices.append(
+                path + (slice(start[divergence_idx] + 1, end[divergence_idx]),)
+            )
         slices.extend(lower())
 
     return slices
 
 
 @torch.jit.ignore
-def _chunk_slice(t: torch.Tensor, flat_start: int, flat_end: int, no_batch_dims: int) -> torch.Tensor:
+def _chunk_slice(
+    t: torch.Tensor, flat_start: int, flat_end: int, no_batch_dims: int
+) -> torch.Tensor:
     """
     Equivalent to
 
@@ -242,7 +248,9 @@ def chunk_layer(
     prepped_inputs: Dict[str, Any] = tensor_tree_map(_prep_inputs, inputs)
     prepped_outputs = None
     if _out is not None:
-        prepped_outputs = tensor_tree_map(lambda t: t.view([-1] + list(t.shape[no_batch_dims:])), _out)
+        prepped_outputs = tensor_tree_map(
+            lambda t: t.view([-1] + list(t.shape[no_batch_dims:])), _out
+        )
 
     flat_batch_dim = 1
     for d in orig_batch_dims:
@@ -274,7 +282,9 @@ def chunk_layer(
 
         # Allocate space for the output
         if out is None:
-            out = tensor_tree_map(lambda t: t.new_zeros((flat_batch_dim,) + t.shape[1:]), output_chunk)
+            out = tensor_tree_map(
+                lambda t: t.new_zeros((flat_batch_dim,) + t.shape[1:]), output_chunk
+            )
 
         # Put the chunk in its pre-allocated space
         if isinstance(output_chunk, dict):
@@ -322,13 +332,17 @@ class ChunkSizeTuner:
         self.cached_chunk_size: Optional[int] = None
         self.cached_arg_data: Optional[tuple] = None
 
-    def _determine_favorable_chunk_size(self, fn: Callable, args: tuple, min_chunk_size: int) -> int:
+    def _determine_favorable_chunk_size(
+        self, fn: Callable, args: tuple, min_chunk_size: int
+    ) -> int:
         logging.info("Tuning chunk size...")
 
         if min_chunk_size >= self.max_chunk_size:
             return min_chunk_size
 
-        candidates: List[int] = [2**l for l in range(int(math.log(self.max_chunk_size, 2)) + 1)]
+        candidates: List[int] = [
+            2**l for l in range(int(math.log(self.max_chunk_size, 2)) + 1)
+        ]
         candidates = [c for c in candidates if c > min_chunk_size]
         candidates = [min_chunk_size] + candidates
         candidates[-1] += 4
@@ -375,7 +389,9 @@ class ChunkSizeTuner:
         min_chunk_size: int,
     ) -> int:
         consistent = True
-        arg_data: tuple = tree_map(lambda a: a.shape if isinstance(a, torch.Tensor) else a, args, object)
+        arg_data: tuple = tree_map(
+            lambda a: a.shape if isinstance(a, torch.Tensor) else a, args, object
+        )
         if self.cached_arg_data is not None:
             # If args have changed shape/value, we need to re-tune
             assert len(self.cached_arg_data) == len(arg_data)

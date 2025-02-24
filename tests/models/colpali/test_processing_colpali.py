@@ -29,10 +29,14 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
+        image_processor = SiglipImageProcessor.from_pretrained(
+            "google/siglip-so400m-patch14-384"
+        )
         image_processor.image_seq_length = 0
         tokenizer = GemmaTokenizer(SAMPLE_VOCAB, keep_accents=True)
-        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor = PaliGemmaProcessor(
+            image_processor=image_processor, tokenizer=tokenizer
+        )
         processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
@@ -44,7 +48,9 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Processor configuration
         image_input = self.prepare_image_inputs()
         image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=112, padding="max_length")
+        tokenizer = self.get_component(
+            "tokenizer", max_length=112, padding="max_length"
+        )
         image_processor.image_seq_length = 14
 
         # Get the processor
@@ -54,11 +60,15 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
 
         # Process the image
-        batch_feature = processor.process_images(images=image_input, return_tensors="pt")
+        batch_feature = processor.process_images(
+            images=image_input, return_tensors="pt"
+        )
 
         # Assertions
         self.assertIn("pixel_values", batch_feature)
-        self.assertEqual(batch_feature["pixel_values"].shape, torch.Size([1, 3, 384, 384]))
+        self.assertEqual(
+            batch_feature["pixel_values"].shape, torch.Size([1, 3, 384, 384])
+        )
 
     @require_torch
     @require_vision
@@ -71,7 +81,9 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # Processor configuration
         image_processor = self.get_component("image_processor")
-        tokenizer = self.get_component("tokenizer", max_length=112, padding="max_length")
+        tokenizer = self.get_component(
+            "tokenizer", max_length=112, padding="max_length"
+        )
         image_processor.image_seq_length = 14
 
         # Get the processor
@@ -92,9 +104,13 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=117, padding="max_length"
+        )
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -109,12 +125,16 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1
         )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=117, padding="max_length"
+        )
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -126,36 +146,50 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
-        processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", padding="longest"
+        )
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
         input_str = self.prepare_text_inputs()
-        inputs = processor(text=input_str, return_tensors="pt", max_length=112, padding="max_length")
+        inputs = processor(
+            text=input_str, return_tensors="pt", max_length=112, padding="max_length"
+        )
         self.assertEqual(inputs[self.text_input_name].shape[-1], 112)
 
     def test_kwargs_overrides_default_image_processor_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=1
         )
-        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_components["tokenizer"] = self.get_component(
+            "tokenizer", max_length=117, padding="max_length"
+        )
 
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
 
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        inputs = processor(
+            images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt"
+        )
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -174,7 +208,9 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_unstructured_kwargs_batched(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -193,7 +229,9 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_doubly_passed_kwargs(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -209,7 +247,9 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_structured_kwargs_nested(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)
@@ -230,7 +270,9 @@ class ColPaliProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_structured_kwargs_nested_from_dict(self):
         if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+            self.skipTest(
+                f"image_processor attribute not present in {self.processor_class}"
+            )
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
         self.skip_processor_without_typed_kwargs(processor)

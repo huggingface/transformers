@@ -63,7 +63,12 @@ _import_structure = {
         "load_dequant_gguf_tensor",
         "load_gguf",
     ],
-    "higgs": ["HiggsLinear", "dequantize_higgs", "quantize_with_higgs", "replace_with_higgs_linear"],
+    "higgs": [
+        "HiggsLinear",
+        "dequantize_higgs",
+        "quantize_with_higgs",
+        "replace_with_higgs_linear",
+    ],
     "hqq": ["prepare_for_hqq_linear"],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -168,7 +173,12 @@ if TYPE_CHECKING:
         load_dequant_gguf_tensor,
         load_gguf,
     )
-    from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
+    from .higgs import (
+        HiggsLinear,
+        dequantize_higgs,
+        quantize_with_higgs,
+        replace_with_higgs_linear,
+    )
     from .hqq import prepare_for_hqq_linear
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
@@ -220,9 +230,14 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
+        from .executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
+        )
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

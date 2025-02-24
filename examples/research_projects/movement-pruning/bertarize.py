@@ -83,7 +83,8 @@ def main(args):
 
     if target_model_path is None:
         target_model_path = os.path.join(
-            os.path.dirname(model_name_or_path), f"bertarized_{os.path.basename(model_name_or_path)}"
+            os.path.dirname(model_name_or_path),
+            f"bertarized_{os.path.basename(model_name_or_path)}",
         )
 
     if not os.path.isdir(target_model_path):

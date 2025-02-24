@@ -51,7 +51,9 @@ def rename_fairseq_keys(state_dict, expert_idx=None):
         key = old_key
         if "moe_layer.experts." in key:
             if expert_idx is not None:
-                key = key.replace("moe_layer.experts.0", f"ffn.experts.expert_{expert_idx}")
+                key = key.replace(
+                    "moe_layer.experts.0", f"ffn.experts.expert_{expert_idx}"
+                )
             else:
                 key = key.replace("moe_layer.experts.", "ffn.experts.expert_")
         if "gate" in key:
@@ -70,7 +72,13 @@ def rename_fairseq_keys(state_dict, expert_idx=None):
     return new_dict
 
 
-def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weights_name: str = WEIGHTS_NAME):
+def shard_on_the_fly(
+    switch_checkpoint_path,
+    dump_path,
+    num_experts,
+    dtype,
+    weights_name: str = WEIGHTS_NAME,
+):
     sharded_state_dicts = []
     total_size = 0
     os.makedirs(dump_path, exist_ok=True)
@@ -82,16 +90,22 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
             remove_ignore_keys_(expert_state)
             expert_state = rename_fairseq_keys(expert_state, expert)
             save_path = os.path.join(
-                dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin")
+                dump_path,
+                weights_name.replace(
+                    ".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"
+                ),
             )
             torch.save(expert_state, save_path)
             sharded_state_dicts.append(expert_state.keys())
-            total_size += sum([value.numel() for key, value in expert_state.items()]) * dtype_byte_size(
-                expert_state[list(expert_state)[0]].dtype
-            )
+            total_size += sum(
+                [value.numel() for key, value in expert_state.items()]
+            ) * dtype_byte_size(expert_state[list(expert_state)[0]].dtype)
 
     # Add the last block
-    save_path = os.path.join(dump_path, weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"))
+    save_path = os.path.join(
+        dump_path,
+        weights_name.replace(".bin", f"-{len(sharded_state_dicts)+1:05d}-of-???.bin"),
+    )
     shared_weights = torch.load(switch_checkpoint_path + "-shared.pt")["model"]
     remove_ignore_keys_(shared_weights)
     shared_weights = rename_fairseq_keys(shared_weights, None)
@@ -108,8 +122,12 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, num_experts, dtype, weig
     # Otherwise, let's build the index
     weight_map = {}
     for idx, shard in enumerate(sharded_state_dicts):
-        shard_file = weights_name.replace(".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin")
-        temp_filename = os.path.join(dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin"))
+        shard_file = weights_name.replace(
+            ".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin"
+        )
+        temp_filename = os.path.join(
+            dump_path, weights_name.replace(".bin", f"-{idx+1:05d}-of-???.bin")
+        )
         os.rename(temp_filename, os.path.join(dump_path, shard_file))
         for key in shard:
             weight_map[key] = shard_file
@@ -135,7 +153,13 @@ if __name__ == "__main__":
         required=False,
         help="Path to a directory containing a folder per layer. Follows the original Google format.",
     )
-    parser.add_argument("--dtype", default="float32", type=str, required=False, help="dtype of the saved model")
+    parser.add_argument(
+        "--dtype",
+        default="float32",
+        type=str,
+        required=False,
+        help="dtype of the saved model",
+    )
     parser.add_argument(
         "--pytorch_dump_folder_path",
         default="/home/arthur_huggingface_co/fairseq/weights/checkpoints/hf-converted-moe-54b",
@@ -152,7 +176,10 @@ if __name__ == "__main__":
     )
 
     config = NllbMoeConfig.from_pretrained(
-        "facebook/nllb-200-3.3B", encoder_sparse_step=4, decoder_sparse_step=4, num_experts=128
+        "facebook/nllb-200-3.3B",
+        encoder_sparse_step=4,
+        decoder_sparse_step=4,
+        num_experts=128,
     )
     config.save_pretrained(args.pytorch_dump_folder_path)
     model = NllbMoeModel.from_pretrained(args.pytorch_dump_folder_path)

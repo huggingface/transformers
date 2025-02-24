@@ -17,7 +17,11 @@
 import jax.numpy as jnp
 
 from ...utils import logging
-from ..t5.modeling_flax_t5 import FlaxT5EncoderModel, FlaxT5ForConditionalGeneration, FlaxT5Model
+from ..t5.modeling_flax_t5 import (
+    FlaxT5EncoderModel,
+    FlaxT5ForConditionalGeneration,
+    FlaxT5Model,
+)
 from .configuration_mt5 import MT5Config
 
 
@@ -27,7 +31,9 @@ _CONFIG_FOR_DOC = "T5Config"
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+def shift_tokens_right(
+    input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int
+) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
@@ -35,7 +41,9 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     shifted_input_ids = shifted_input_ids.at[:, 1:].set(input_ids[:, :-1])
     shifted_input_ids = shifted_input_ids.at[:, 0].set(decoder_start_token_id)
 
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = jnp.where(
+        shifted_input_ids == -100, pad_token_id, shifted_input_ids
+    )
     return shifted_input_ids
 
 

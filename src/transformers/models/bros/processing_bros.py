@@ -19,7 +19,13 @@ Processor class for Bros.
 from typing import List, Optional, Union
 
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import (
+    BatchEncoding,
+    PaddingStrategy,
+    PreTokenizedInput,
+    TextInput,
+    TruncationStrategy,
+)
 from ...utils import TensorType
 
 
@@ -46,7 +52,9 @@ class BrosProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,

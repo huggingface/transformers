@@ -199,7 +199,10 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                     ("input_ids", {0: "batch", 1: "sequence"}),
                     ("attention_mask", {0: "batch", 1: "sequence"}),
                     ("bbox", {0: "batch", 1: "sequence"}),
-                    ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+                    (
+                        "pixel_values",
+                        {0: "batch", 1: "num_channels", 2: "height", 3: "width"},
+                    ),
                 ]
             )
         else:
@@ -261,22 +264,30 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
 
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
         batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+            batch_size,
+            fixed_dimension=OnnxConfig.default_fixed_batch,
+            num_token_to_add=0,
         )
         # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
         token_to_add = processor.tokenizer.num_special_tokens_to_add(is_pair)
         seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+            seq_length,
+            fixed_dimension=OnnxConfig.default_fixed_sequence,
+            num_token_to_add=token_to_add,
         )
         # Generate dummy inputs according to compute batch and sequence
-        dummy_text = [[" ".join([processor.tokenizer.unk_token]) * seq_length]] * batch_size
+        dummy_text = [
+            [" ".join([processor.tokenizer.unk_token]) * seq_length]
+        ] * batch_size
 
         # Generate dummy bounding boxes
         dummy_bboxes = [[[48, 84, 73, 128]]] * batch_size
 
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
         # batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
-        dummy_image = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
+        dummy_image = self._generate_dummy_images(
+            batch_size, num_channels, image_height, image_width
+        )
 
         inputs = dict(
             processor(

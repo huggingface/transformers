@@ -81,7 +81,12 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         normalize_vars=True,
         **kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            **kwargs,
+        )
         self.num_mel_bins = num_mel_bins
         self.dither = dither
         self.do_ceptral_normalize = do_ceptral_normalize
@@ -166,11 +171,19 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(
-        self, input_features: List[np.ndarray], attention_mask: Optional[np.ndarray] = None
+        self,
+        input_features: List[np.ndarray],
+        attention_mask: Optional[np.ndarray] = None,
     ) -> List[np.ndarray]:
-        lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
+        lengths = (
+            attention_mask.sum(-1)
+            if attention_mask is not None
+            else [x.shape[0] for x in input_features]
+        )
         return [
-            self.utterance_cmvn(x, n, self.normalize_means, self.normalize_vars, self.padding_value)
+            self.utterance_cmvn(
+                x, n, self.normalize_means, self.normalize_vars, self.padding_value
+            )
             for x, n in zip(input_features, lengths)
         ]
 
@@ -252,18 +265,25 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        is_batched_numpy = (
+            isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
+        )
         if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+            raise ValueError(
+                f"Only mono-channel audio is supported for input to {self}"
+            )
         is_batched = is_batched_numpy or (
-            isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:
             raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
-        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
+        elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(
+            np.float64
+        ):
             raw_speech = raw_speech.astype(np.float32)
 
         # always return batch
@@ -289,17 +309,22 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features")
         if isinstance(input_features[0], list):
-            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+            padded_inputs["input_features"] = [
+                np.asarray(feature, dtype=np.float32) for feature in input_features
+            ]
 
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+            padded_inputs["attention_mask"] = [
+                np.asarray(array, dtype=np.int32) for array in attention_mask
+            ]
 
         # Utterance-level cepstral mean and variance normalization
         if self.do_ceptral_normalize:
             attention_mask = (
                 np.array(attention_mask, dtype=np.int32)
-                if self._get_padding_strategies(padding, max_length=max_length) is not PaddingStrategy.DO_NOT_PAD
+                if self._get_padding_strategies(padding, max_length=max_length)
+                is not PaddingStrategy.DO_NOT_PAD
                 else None
             )
             padded_inputs["input_features"] = self.normalize(

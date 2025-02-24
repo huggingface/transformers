@@ -124,7 +124,9 @@ class XGLMConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.layerdrop = layerdrop
         self.init_std = init_std
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = (
+            scale_embedding  # scale factor will be sqrt(d_model) if True
+        )
         self.use_cache = use_cache
 
         super().__init__(

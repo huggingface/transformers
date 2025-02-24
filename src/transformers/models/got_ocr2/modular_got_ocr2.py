@@ -28,8 +28,19 @@ from transformers.models.llava.modeling_llava import (
     LlavaForConditionalGeneration,
     LlavaPreTrainedModel,
 )
-from transformers.models.sam.modeling_sam import SamMLPBlock, SamVisionAttention, SamVisionEncoder, SamVisionLayer
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from transformers.models.sam.modeling_sam import (
+    SamMLPBlock,
+    SamVisionAttention,
+    SamVisionEncoder,
+    SamVisionLayer,
+)
+from transformers.processing_utils import (
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    TextKwargs,
+    Unpack,
+)
 from transformers.tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -214,7 +225,9 @@ class GotOcr2Config(PretrainedConfig):
             self.vision_config = vision_config
 
         if isinstance(text_config, dict):
-            text_config["model_type"] = text_config["model_type"] if "model_type" in text_config else "qwen2"
+            text_config["model_type"] = (
+                text_config["model_type"] if "model_type" in text_config else "qwen2"
+            )
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["qwen2"](
@@ -278,7 +291,9 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, int]) -> List:
+def preprocess_box_annotation(
+    box: Union[List, Tuple], image_size: Tuple[int, int]
+) -> List:
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
@@ -289,14 +304,18 @@ def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, in
         box[2] = int(box[2] / width * 1000)
         box[3] = int(box[3] / height * 1000)
     else:
-        raise ValueError("Box must be a list or tuple of lists in the form [x1, y1, x2, y2].")
+        raise ValueError(
+            "Box must be a list or tuple of lists in the form [x1, y1, x2, y2]."
+        )
 
     return list(box)
 
 
 # Similar to image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
+def get_all_supported_aspect_ratios(
+    min_image_tiles: int, max_image_tiles: int
+) -> List[Tuple[int, int]]:
     """
     Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
 
@@ -344,7 +363,9 @@ def get_optimal_tiled_canvas(
     more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
     excessive tiling.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+    possible_tile_arrangements = get_all_supported_aspect_ratios(
+        min_image_tiles, max_image_tiles
+    )
 
     original_height, original_width = original_image_size
     target_tile_height, target_tile_width = target_tile_size
@@ -414,10 +435,16 @@ class GotOcr2ImageProcessor(BlipImageProcessor):
             image = to_pil_image(image, do_rescale=do_rescale)
 
         patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
-        original_height, original_width = original_size["height"], original_size["width"]
+        original_height, original_width = (
+            original_size["height"],
+            original_size["width"],
+        )
         # find the closest aspect ratio to the target
         num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+            (original_height, original_width),
+            (patch_size_height, patch_size_width),
+            min_patches,
+            max_patches,
         )
 
         # calculate the target width and height
@@ -454,16 +481,24 @@ class GotOcr2ImageProcessor(BlipImageProcessor):
                 # If the input image channel dimension was of size 1, then it is dropped when converting to a PIL image
                 # so we need to add it back if necessary.
                 processed_image = (
-                    np.expand_dims(processed_image, axis=-1) if processed_image.ndim == 2 else processed_image
+                    np.expand_dims(processed_image, axis=-1)
+                    if processed_image.ndim == 2
+                    else processed_image
                 )
                 # The image is always in channels last format after converting from a PIL image
                 if data_format is not None:
                     processed_image = to_channel_dimension_format(
-                        processed_image, data_format, input_channel_dim=ChannelDimension.LAST
+                        processed_image,
+                        data_format,
+                        input_channel_dim=ChannelDimension.LAST,
                     )
                 # If an image was rescaled to be in the range [0, 255] before converting to a PIL image, then we need to
                 # rescale it back to the original range.
-                processed_image = self.rescale(processed_image, 1 / 255) if do_rescale else processed_image
+                processed_image = (
+                    self.rescale(processed_image, 1 / 255)
+                    if do_rescale
+                    else processed_image
+                )
                 processed_images_numpy.append(processed_image)
             processed_images = processed_images_numpy
 
@@ -489,7 +524,9 @@ class GotOcr2Processor(ProcessorMixin):
     image_processor_class = "GotOcr2ImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self, image_processor=None, tokenizer=None, chat_template=None, **kwargs
+    ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.message_start_token = "<|im_start|>"
@@ -503,10 +540,14 @@ class GotOcr2Processor(ProcessorMixin):
         if not isinstance(images, (list, tuple)):
             images = [images]
             if multi_page:
-                logger.warning("Multi-page inference is enabled but only one image is passed.")
+                logger.warning(
+                    "Multi-page inference is enabled but only one image is passed."
+                )
                 images = [images]
         elif isinstance(images[0], (list, tuple)) and not multi_page:
-            raise ValueError("Nested images are only supported with `multi_page` set to `True`.")
+            raise ValueError(
+                "Nested images are only supported with `multi_page` set to `True`."
+            )
         elif not isinstance(images[0], (list, tuple)) and multi_page:
             images = [images]
 
@@ -524,7 +565,11 @@ class GotOcr2Processor(ProcessorMixin):
     def __call__(
         self,
         images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text: Optional[
+            Union[
+                TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+            ]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
@@ -595,13 +640,17 @@ class GotOcr2Processor(ProcessorMixin):
         min_patches = output_kwargs["images_kwargs"].pop("min_patches")
         max_patches = output_kwargs["images_kwargs"].pop("max_patches")
 
-        images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)
+        images, text, box, color = self._make_list_of_inputs(
+            images, text, box, color, multi_page
+        )
 
         # Load images as we need to know the image size
         images = load_images(images)
         if text is None:
             text = []
-            for index, (image_group, box_single, color_single) in enumerate(zip(images, box, color)):
+            for index, (image_group, box_single, color_single) in enumerate(
+                zip(images, box, color)
+            ):
                 if crop_to_patches:
                     image_group = self.image_processor.crop_image_to_patches(
                         image_group,
@@ -639,7 +688,9 @@ class GotOcr2Processor(ProcessorMixin):
                 )
                 text.append(prompt)
         elif crop_to_patches:
-            for index, (image_group, box_single, color_single) in enumerate(zip(images, box, color)):
+            for index, (image_group, box_single, color_single) in enumerate(
+                zip(images, box, color)
+            ):
                 image_group = self.image_processor.crop_image_to_patches(
                     image_group,
                     patch_size=output_kwargs["images_kwargs"].get("size"),
@@ -652,7 +703,9 @@ class GotOcr2Processor(ProcessorMixin):
         if multi_page or crop_to_patches:
             # flatten images
             images = [image for image_group in images for image in image_group]
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        image_inputs = self.image_processor(
+            images=images, **output_kwargs["images_kwargs"]
+        )
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
@@ -705,12 +758,24 @@ class GotOcr2MultiModalProjector(nn.Module):
         vision_output_channels = config.vision_config.output_channels
         language_hidden_size = config.text_config.hidden_size
         self.conv_upsampler1 = nn.Conv2d(
-            vision_output_channels, vision_output_channels * 2, kernel_size=3, stride=2, padding=1, bias=False
+            vision_output_channels,
+            vision_output_channels * 2,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
         )
         self.conv_upsampler2 = nn.Conv2d(
-            vision_output_channels * 2, language_hidden_size, kernel_size=3, stride=2, padding=1, bias=False
+            vision_output_channels * 2,
+            language_hidden_size,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
         )
-        self.multimodal_projector = nn.Linear(language_hidden_size, language_hidden_size)
+        self.multimodal_projector = nn.Linear(
+            language_hidden_size, language_hidden_size
+        )
 
     def forward(self, vision_embeddings: torch.Tensor) -> torch.Tensor:
         hidden_state = self.conv_upsampler1(vision_embeddings)
@@ -808,7 +873,9 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in self.language_model._tied_weights_keys
+            ]
 
         self.pad_token_id = config.pad_token_id
 
@@ -830,7 +897,9 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         return self.multi_modal_projector(image_outputs)
 
     @add_start_docstrings_to_model_forward(GOT_OCR2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=GotOcr2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=GotOcr2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -893,14 +962,24 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         when you're planning to sell a template."
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -911,17 +990,27 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values=pixel_values.to(inputs_embeds.dtype))
+            image_features = self.get_image_features(
+                pixel_values=pixel_values.to(inputs_embeds.dtype)
+            )
             n_image_tokens = (input_ids == self.config.image_token_index).sum()
             n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(
+                -1
+            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            image_features = image_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -944,16 +1033,23 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             if attention_mask is not None:
                 # we use the input attention mask to shift the logits and labels, because it is 2D.
                 # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:

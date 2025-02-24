@@ -23,7 +23,9 @@ from typing import List, Optional, Tuple, Union
 import numpy as np
 
 
-def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+def hertz_to_mel(
+    freq: Union[float, np.ndarray], mel_scale: str = "htk"
+) -> Union[float, np.ndarray]:
     """
     Convert frequency from hertz to mels.
 
@@ -52,14 +54,18 @@ def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
 
     if isinstance(freq, np.ndarray):
         log_region = freq >= min_log_hertz
-        mels[log_region] = min_log_mel + np.log(freq[log_region] / min_log_hertz) * logstep
+        mels[log_region] = (
+            min_log_mel + np.log(freq[log_region] / min_log_hertz) * logstep
+        )
     elif freq >= min_log_hertz:
         mels = min_log_mel + np.log(freq / min_log_hertz) * logstep
 
     return mels
 
 
-def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+def mel_to_hertz(
+    mels: Union[float, np.ndarray], mel_scale: str = "htk"
+) -> Union[float, np.ndarray]:
     """
     Convert frequency from mels to hertz.
 
@@ -88,7 +94,9 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
 
     if isinstance(mels, np.ndarray):
         log_region = mels >= min_log_mel
-        freq[log_region] = min_log_hertz * np.exp(logstep * (mels[log_region] - min_log_mel))
+        freq[log_region] = min_log_hertz * np.exp(
+            logstep * (mels[log_region] - min_log_mel)
+        )
     elif mels >= min_log_mel:
         freq = min_log_hertz * np.exp(logstep * (mels - min_log_mel))
 
@@ -96,7 +104,9 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
 
 
 def hertz_to_octave(
-    freq: Union[float, np.ndarray], tuning: Optional[float] = 0.0, bins_per_octave: Optional[int] = 12
+    freq: Union[float, np.ndarray],
+    tuning: Optional[float] = 0.0,
+    bins_per_octave: Optional[int] = 12,
 ):
     """
     Convert frequency from hertz to fractional octave numbers.
@@ -118,7 +128,9 @@ def hertz_to_octave(
     return octave
 
 
-def _create_triangular_filter_bank(fft_freqs: np.ndarray, filter_freqs: np.ndarray) -> np.ndarray:
+def _create_triangular_filter_bank(
+    fft_freqs: np.ndarray, filter_freqs: np.ndarray
+) -> np.ndarray:
     """
     Creates a triangular filter bank.
 
@@ -176,7 +188,9 @@ def chroma_filter_bank(
     # Get the FFT bins, not counting the DC component
     frequencies = np.linspace(0, sampling_rate, num_frequency_bins, endpoint=False)[1:]
 
-    freq_bins = num_chroma * hertz_to_octave(frequencies, tuning=tuning, bins_per_octave=num_chroma)
+    freq_bins = num_chroma * hertz_to_octave(
+        frequencies, tuning=tuning, bins_per_octave=num_chroma
+    )
 
     # make up a value for the 0 Hz bin = 1.5 octaves below bin 1
     # (so chroma is 50% rotated from bin 1, and bin width is broad)
@@ -191,14 +205,21 @@ def chroma_filter_bank(
     # Project into range -num_chroma/2 .. num_chroma/2
     # add on fixed offset of 10*num_chroma to ensure all values passed to
     # rem are positive
-    chroma_filters = np.remainder(chroma_filters + num_chroma2 + 10 * num_chroma, num_chroma) - num_chroma2
+    chroma_filters = (
+        np.remainder(chroma_filters + num_chroma2 + 10 * num_chroma, num_chroma)
+        - num_chroma2
+    )
 
     # Gaussian bumps - 2*D to make them narrower
-    chroma_filters = np.exp(-0.5 * (2 * chroma_filters / np.tile(bins_width, (num_chroma, 1))) ** 2)
+    chroma_filters = np.exp(
+        -0.5 * (2 * chroma_filters / np.tile(bins_width, (num_chroma, 1))) ** 2
+    )
 
     # normalize each column
     if power is not None:
-        chroma_filters = chroma_filters / np.sum(chroma_filters**power, axis=0, keepdims=True) ** (1.0 / power)
+        chroma_filters = chroma_filters / np.sum(
+            chroma_filters**power, axis=0, keepdims=True
+        ) ** (1.0 / power)
 
     # Maybe apply scaling for fft bins
     if weighting_parameters is not None:
@@ -280,7 +301,9 @@ def mel_filter_bank(
     if triangularize_in_mel_space:
         # frequencies of FFT bins in Hz, but filters triangularized in mel space
         fft_bin_width = sampling_rate / (num_frequency_bins * 2)
-        fft_freqs = hertz_to_mel(fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale)
+        fft_freqs = hertz_to_mel(
+            fft_bin_width * np.arange(num_frequency_bins), mel_scale=mel_scale
+        )
         filter_freqs = mel_freqs
     else:
         # frequencies of FFT bins in Hz
@@ -290,7 +313,9 @@ def mel_filter_bank(
 
     if norm is not None and norm == "slaney":
         # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters])
+        enorm = 2.0 / (
+            filter_freqs[2 : num_mel_filters + 2] - filter_freqs[:num_mel_filters]
+        )
         mel_filters *= np.expand_dims(enorm, 0)
 
     if (mel_filters.max(axis=0) == 0.0).any():
@@ -504,16 +529,22 @@ def spectrogram(
         fft_length = frame_length
 
     if frame_length > fft_length:
-        raise ValueError(f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})")
+        raise ValueError(
+            f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})"
+        )
 
     if window_length != frame_length:
-        raise ValueError(f"Length of the window ({window_length}) must equal frame_length ({frame_length})")
+        raise ValueError(
+            f"Length of the window ({window_length}) must equal frame_length ({frame_length})"
+        )
 
     if hop_length <= 0:
         raise ValueError("hop_length must be greater than zero")
 
     if waveform.ndim != 1:
-        raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
+        raise ValueError(
+            f"Input waveform must have only one dimension, shape is {waveform.shape}"
+        )
 
     if np.iscomplexobj(waveform):
         raise ValueError("Complex-valued input waveforms are not currently supported")
@@ -578,11 +609,15 @@ def spectrogram(
             spectrogram = np.log10(spectrogram)
         elif log_mel == "dB":
             if power == 1.0:
-                spectrogram = amplitude_to_db(spectrogram, reference, min_value, db_range)
+                spectrogram = amplitude_to_db(
+                    spectrogram, reference, min_value, db_range
+                )
             elif power == 2.0:
                 spectrogram = power_to_db(spectrogram, reference, min_value, db_range)
             else:
-                raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
+                raise ValueError(
+                    f"Cannot use log_mel option '{log_mel}' with power {power}"
+                )
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
@@ -696,10 +731,14 @@ def spectrogram_batch(
         fft_length = frame_length
 
     if frame_length > fft_length:
-        raise ValueError(f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})")
+        raise ValueError(
+            f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})"
+        )
 
     if window_length != frame_length:
-        raise ValueError(f"Length of the window ({window_length}) must equal frame_length ({frame_length})")
+        raise ValueError(
+            f"Length of the window ({window_length}) must equal frame_length ({frame_length})"
+        )
 
     if hop_length <= 0:
         raise ValueError("hop_length must be greater than zero")
@@ -707,9 +746,13 @@ def spectrogram_batch(
     # Check the dimensions of the waveform , and if waveform is complex
     for waveform in waveform_list:
         if waveform.ndim != 1:
-            raise ValueError(f"Input waveform must have only one dimension, shape is {waveform.shape}")
+            raise ValueError(
+                f"Input waveform must have only one dimension, shape is {waveform.shape}"
+            )
         if np.iscomplexobj(waveform):
-            raise ValueError("Complex-valued input waveforms are not currently supported")
+            raise ValueError(
+                "Complex-valued input waveforms are not currently supported"
+            )
     # Center pad the waveform
     if center:
         padding = [(int(frame_length // 2), int(frame_length // 2))]
@@ -729,7 +772,12 @@ def spectrogram_batch(
     max_length = max(original_waveform_lengths)
     padded_waveform_batch = np.array(
         [
-            np.pad(waveform, (0, max_length - len(waveform)), mode="constant", constant_values=0)
+            np.pad(
+                waveform,
+                (0, max_length - len(waveform)),
+                mode="constant",
+                constant_values=0,
+            )
             for waveform in waveform_list
         ],
         dtype=dtype,
@@ -740,13 +788,20 @@ def spectrogram_batch(
     window = window.astype(np.float64)
 
     # Split waveform into frames of frame_length size
-    num_frames = int(1 + np.floor((padded_waveform_batch.shape[1] - frame_length) / hop_length))
+    num_frames = int(
+        1 + np.floor((padded_waveform_batch.shape[1] - frame_length) / hop_length)
+    )
     # these lengths will be used to remove padding later
-    true_num_frames = [int(1 + np.floor((length - frame_length) / hop_length)) for length in original_waveform_lengths]
+    true_num_frames = [
+        int(1 + np.floor((length - frame_length) / hop_length))
+        for length in original_waveform_lengths
+    ]
     num_batches = padded_waveform_batch.shape[0]
 
     num_frequency_bins = (fft_length // 2) + 1 if onesided else fft_length
-    spectrogram = np.empty((num_batches, num_frames, num_frequency_bins), dtype=np.complex64)
+    spectrogram = np.empty(
+        (num_batches, num_frames, num_frequency_bins), dtype=np.complex64
+    )
 
     # rfft is faster than fft
     fft_func = np.fft.rfft if onesided else np.fft.fft
@@ -754,13 +809,19 @@ def spectrogram_batch(
 
     for frame_idx in range(num_frames):
         timestep = frame_idx * hop_length
-        buffer[:, :frame_length] = padded_waveform_batch[:, timestep : timestep + frame_length]
+        buffer[:, :frame_length] = padded_waveform_batch[
+            :, timestep : timestep + frame_length
+        ]
 
         if dither != 0.0:
-            buffer[:, :frame_length] += dither * np.random.randn(*buffer[:, :frame_length].shape)
+            buffer[:, :frame_length] += dither * np.random.randn(
+                *buffer[:, :frame_length].shape
+            )
 
         if remove_dc_offset:
-            buffer[:, :frame_length] -= buffer[:, :frame_length].mean(axis=1, keepdims=True)
+            buffer[:, :frame_length] -= buffer[:, :frame_length].mean(
+                axis=1, keepdims=True
+            )
 
         if preemphasis is not None:
             buffer[:, 1:frame_length] -= preemphasis * buffer[:, : frame_length - 1]
@@ -787,17 +848,25 @@ def spectrogram_batch(
             spectrogram = np.log10(spectrogram)
         elif log_mel == "dB":
             if power == 1.0:
-                spectrogram = amplitude_to_db_batch(spectrogram, reference, min_value, db_range)
+                spectrogram = amplitude_to_db_batch(
+                    spectrogram, reference, min_value, db_range
+                )
             elif power == 2.0:
-                spectrogram = power_to_db_batch(spectrogram, reference, min_value, db_range)
+                spectrogram = power_to_db_batch(
+                    spectrogram, reference, min_value, db_range
+                )
             else:
-                raise ValueError(f"Cannot use log_mel option '{log_mel}' with power {power}")
+                raise ValueError(
+                    f"Cannot use log_mel option '{log_mel}' with power {power}"
+                )
         else:
             raise ValueError(f"Unknown log_mel option: {log_mel}")
 
         spectrogram = np.asarray(spectrogram, dtype)
 
-    spectrogram_list = [spectrogram[i, : true_num_frames[i], :].T for i in range(len(true_num_frames))]
+    spectrogram_list = [
+        spectrogram[i, : true_num_frames[i], :].T for i in range(len(true_num_frames))
+    ]
 
     return spectrogram_list
 
@@ -848,7 +917,9 @@ def power_to_db(
     if db_range is not None:
         if db_range <= 0.0:
             raise ValueError("db_range must be greater than zero")
-        spectrogram = np.clip(spectrogram, a_min=spectrogram.max() - db_range, a_max=None)
+        spectrogram = np.clip(
+            spectrogram, a_min=spectrogram.max() - db_range, a_max=None
+        )
 
     return spectrogram
 
@@ -946,13 +1017,18 @@ def amplitude_to_db(
     if db_range is not None:
         if db_range <= 0.0:
             raise ValueError("db_range must be greater than zero")
-        spectrogram = np.clip(spectrogram, a_min=spectrogram.max() - db_range, a_max=None)
+        spectrogram = np.clip(
+            spectrogram, a_min=spectrogram.max() - db_range, a_max=None
+        )
 
     return spectrogram
 
 
 def amplitude_to_db_batch(
-    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: Optional[float] = None
+    spectrogram: np.ndarray,
+    reference: float = 1.0,
+    min_value: float = 1e-5,
+    db_range: Optional[float] = None,
 ) -> np.ndarray:
     """
     Converts a batch of amplitude spectrograms to the decibel scale. This computes `20 * log10(spectrogram / reference)`,
@@ -1023,7 +1099,12 @@ def get_mel_filter_banks(
     )
 
 
-def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 400, center: bool = True):
+def fram_wave(
+    waveform: np.array,
+    hop_length: int = 160,
+    fft_window_size: int = 400,
+    center: bool = True,
+):
     """
     In order to compute the short time fourier transform, the waveform needs to be split in overlapping windowed
     segments called `frames`.
@@ -1056,7 +1137,11 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
         if center:
             half_window = (fft_window_size - 1) // 2 + 1
             start = i - half_window if i > half_window else 0
-            end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
+            end = (
+                i + half_window
+                if i < waveform.shape[0] - half_window
+                else waveform.shape[0]
+            )
             frame = waveform[start:end]
             if start == 0:
                 padd_width = (-i + half_window, 0)
@@ -1071,7 +1156,10 @@ def fram_wave(waveform: np.array, hop_length: int = 160, fft_window_size: int = 
             frame_width = frame.shape[0]
             if frame_width < waveform.shape[0]:
                 frame = np.lib.pad(
-                    frame, pad_width=(0, fft_window_size - frame_width), mode="constant", constant_values=0
+                    frame,
+                    pad_width=(0, fft_window_size - frame_width),
+                    mode="constant",
+                    constant_values=0,
                 )
         frames.append(frame)
 

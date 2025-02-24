@@ -197,19 +197,31 @@ _SPECIAL_SUPPORTED_MODELS = [
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
-_SUPPORTED_MODELS = tuple(sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS)))
+_SUPPORTED_MODELS = tuple(
+    sorted(set(_REGULAR_SUPPORTED_MODELS + _SPECIAL_SUPPORTED_MODELS))
+)
 
 _CURRENT_TRACER = None
 
 
 def torch_nn_embedding(self, input):
-    return torch.empty(*input.shape, self.weight.shape[-1], device="meta", dtype=self.weight.dtype)
+    return torch.empty(
+        *input.shape, self.weight.shape[-1], device="meta", dtype=self.weight.dtype
+    )
 
 
 def torch_nn_functional_embedding(
-    input, weight, padding_idx=None, max_norm=None, norm_type=2.0, scale_grad_by_freq=False, sparse=False
+    input,
+    weight,
+    padding_idx=None,
+    max_norm=None,
+    norm_type=2.0,
+    scale_grad_by_freq=False,
+    sparse=False,
 ):
-    return torch.empty(*input.shape, weight.shape[-1], device="meta", dtype=weight.dtype)
+    return torch.empty(
+        *input.shape, weight.shape[-1], device="meta", dtype=weight.dtype
+    )
 
 
 def torch_nn_layernorm(self, input):
@@ -234,7 +246,9 @@ def torch_nn_relu(self, x):
 
 def torch_nn_functional_relu(x, inplace=False):
     if not inplace:
-        raise ValueError("Don't support in-place functional.relu for MetaTensor analysis")
+        raise ValueError(
+            "Don't support in-place functional.relu for MetaTensor analysis"
+        )
     return x
 
 
@@ -387,7 +401,9 @@ def torch_tensor_baddbmm(self, batch1, batch2, *, beta=1, alpha=1, out=None):
 
 def torch_einsum(equation, *operands):
     # TODO: infer shape without performing the computation, this might be quite hard.
-    concrete_operands = (torch.empty_like(operand, device="cpu") for operand in operands)
+    concrete_operands = (
+        torch.empty_like(operand, device="cpu") for operand in operands
+    )
     return torch.einsum(equation, *concrete_operands).to("meta")
 
 
@@ -461,7 +477,9 @@ def torch_nn_conv1d(self, input):
     if shape is None:
         shape = list(input.shape)
         l_out = math.floor(
-            (l_in + 2 * padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1
+            (l_in + 2 * padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1)
+            / self.stride[0]
+            + 1
         )
         shape[-1] = l_out
     shape[-2] = self.out_channels
@@ -479,10 +497,14 @@ def torch_nn_conv2d(self, input):
     if shape is None:
         shape = list(input.shape)
         h_out = math.floor(
-            (h_in + 2 * padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1) / self.stride[0] + 1
+            (h_in + 2 * padding[0] - self.dilation[0] * (self.kernel_size[0] - 1) - 1)
+            / self.stride[0]
+            + 1
         )
         w_out = math.floor(
-            (w_in + 2 * padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1) / self.stride[1] + 1
+            (w_in + 2 * padding[1] - self.dilation[1] * (self.kernel_size[1] - 1) - 1)
+            / self.stride[1]
+            + 1
         )
         shape[-2:] = [h_out, w_out]
     shape[-3] = self.out_channels
@@ -532,7 +554,9 @@ def torch_unique_consecutive(input, **kwargs):
 
 def torch_nn_functional_one_hot(tensor, num_classes=-1):
     if num_classes < 0:
-        raise ValueError("Don't support automatic num_classes inference for MetaTensor analysis")
+        raise ValueError(
+            "Don't support automatic num_classes inference for MetaTensor analysis"
+        )
     shape = list(tensor.shape) + [num_classes]
     return torch.empty(shape, device="meta")
 
@@ -573,7 +597,12 @@ def operator_getitem(a, b):
     def to_concrete(t):
         if isinstance(t, torch.Tensor):
             concrete = torch.ones_like(t, device="cpu")
-            if concrete.dtype in [torch.float16, torch.float32, torch.float64, torch.int32]:
+            if concrete.dtype in [
+                torch.float16,
+                torch.float32,
+                torch.float64,
+                torch.int32,
+            ]:
                 concrete = concrete.to(torch.int64)
             return concrete
         return t
@@ -675,7 +704,9 @@ class HFProxy(Proxy):
         return HFAttribute(self, k)
 
     def __setitem__(self, indices, values):
-        return self.tracer.create_proxy("call_function", operator.setitem, (self, indices, values), {})
+        return self.tracer.create_proxy(
+            "call_function", operator.setitem, (self, indices, values), {}
+        )
 
     def __contains__(self, key):
         if hasattr(self, "_metadata") and self._metadata is not None:
@@ -698,11 +729,15 @@ class HFAttribute(HFProxy):
         # the node for attributes is added lazily, since most will just be method calls
         # which do not rely on the getitem call
         if self._node is None:
-            self._node = self.tracer.create_proxy("call_function", builtins.getattr, (self.root, self.attr), {}).node
+            self._node = self.tracer.create_proxy(
+                "call_function", builtins.getattr, (self.root, self.attr), {}
+            ).node
         return self._node
 
     def __call__(self, *args, **kwargs):
-        return self.tracer.create_proxy("call_method", self.attr, (self.root,) + args, kwargs)
+        return self.tracer.create_proxy(
+            "call_method", self.attr, (self.root,) + args, kwargs
+        )
 
 
 class MetaDeviceAttribute(HFAttribute):
@@ -720,13 +755,17 @@ class HFCacheProxy(HFProxy):
     @property
     def __class__(self):
         if not hasattr(self, "_orig_cache_cls"):
-            raise RuntimeError("The original Cache class must be installed to the HFCacheProxy.")
+            raise RuntimeError(
+                "The original Cache class must be installed to the HFCacheProxy."
+            )
         return self.tracer._CLASSES_TO_PATCH[self._orig_cache_cls]
 
 
 def create_wrapper(
     function: Callable,
-    op_type: Union[Literal["call_function"], Literal["call_method"], Literal["get_attr"]],
+    op_type: Union[
+        Literal["call_function"], Literal["call_method"], Literal["get_attr"]
+    ],
     proxy_factory_fn: Optional[Callable[[Node], Proxy]] = None,
 ) -> Callable:
     @functools.wraps(function)
@@ -753,7 +792,9 @@ def create_wrapper(
                 target = function.__name__
             else:
                 raise ValueError(f"op_type {op_type} not supported.")
-            return tracer.create_proxy(op_type, target, args, kwargs, proxy_factory_fn=proxy_factory_fn)
+            return tracer.create_proxy(
+                op_type, target, args, kwargs, proxy_factory_fn=proxy_factory_fn
+            )
         else:
             return function(*args, **kwargs)
 
@@ -788,7 +829,11 @@ class HFProxyableClassMeta(type):
             else:
                 op_type = None
             if op_type is not None:
-                setattr(cls, attr_name, create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn))
+                setattr(
+                    cls,
+                    attr_name,
+                    create_wrapper(attr, op_type, proxy_factory_fn=proxy_factory_fn),
+                )
         return cls
 
 
@@ -811,11 +856,15 @@ def _proxies_to_metas(v):
     return v
 
 
-def create_cache_proxy_factory_fn(orig_cache_cls: Type[Cache]) -> Callable[[Node], HFCacheProxy]:
+def create_cache_proxy_factory_fn(
+    orig_cache_cls: Type[Cache],
+) -> Callable[[Node], HFCacheProxy]:
     def cache_proxy_factory_fn(n: Node) -> HFCacheProxy:
         global _CURRENT_TRACER
         if not isinstance(_CURRENT_TRACER, HFTracer):
-            raise RuntimeError("Cannot create HFCacheProxy because there is no HFTracer currently tracing.")
+            raise RuntimeError(
+                "Cannot create HFCacheProxy because there is no HFTracer currently tracing."
+            )
         cache_proxy = HFCacheProxy(n, _CURRENT_TRACER)
         cache_proxy.install_orig_cache_cls(orig_cache_cls)
         return cache_proxy
@@ -825,7 +874,10 @@ def create_cache_proxy_factory_fn(orig_cache_cls: Type[Cache]) -> Callable[[Node
 
 # Proxyable equivalent of the cache classes defined in `transformers.cache_utils`.
 ProxyableCache = HFProxyableClassMeta(
-    "ProxyableCache", (Cache,), {}, proxy_factory_fn=create_cache_proxy_factory_fn(Cache)
+    "ProxyableCache",
+    (Cache,),
+    {},
+    proxy_factory_fn=create_cache_proxy_factory_fn(Cache),
 )
 ProxyableDynamicCache = HFProxyableClassMeta(
     "ProxyableDynamicCache",
@@ -847,7 +899,9 @@ ProxyableStaticCache = HFProxyableClassMeta(
 )
 
 
-def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
+def _generate_random_int(
+    low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None
+):
     if forbidden_values is None:
         forbidden_values = []
     value = random.randint(low, high)
@@ -885,10 +939,14 @@ class HFTracer(Tracer):
         StaticCache: ProxyableStaticCache,
     }
 
-    supported_archs = (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
+    supported_archs = (
+        (PreTrainedModel,) if not is_peft_available() else (PreTrainedModel, PeftModel)
+    )
 
     def __init__(self, autowrap_modules=(math,), autowrap_functions=()):
-        super().__init__(autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions)
+        super().__init__(
+            autowrap_modules=autowrap_modules, autowrap_functions=autowrap_functions
+        )
 
         if not is_torch_fx_available():
             raise ImportError(
@@ -897,12 +955,18 @@ class HFTracer(Tracer):
             )
 
     def _generate_dummy_input(
-        self, model: "PreTrainedModel", input_name: str, shape: List[int], input_names: List[str]
+        self,
+        model: "PreTrainedModel",
+        input_name: str,
+        shape: List[int],
+        input_names: List[str],
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
         # from pickle, or from the "__class__" attribute in the general case.
-        model_class_name = getattr(model, "class_for_deserialization", model.__class__).__name__
+        model_class_name = getattr(
+            model, "class_for_deserialization", model.__class__
+        ).__name__
         device = model.device
         inputs_dict = {}
 
@@ -920,16 +984,27 @@ class HFTracer(Tracer):
                 *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
                 *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
             ]:
-                inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
+                inputs_dict["labels"] = torch.zeros(
+                    batch_size, dtype=torch.long, device=device
+                )
             elif model_class_name in [
                 *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
                 *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
                 "XLNetForQuestionAnswering",
             ]:
-                inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-                inputs_dict["end_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-            elif model_class_name in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
-                if not hasattr(model.config, "problem_type") or model.config.problem_type is None:
+                inputs_dict["start_positions"] = torch.zeros(
+                    batch_size, dtype=torch.long, device=device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    batch_size, dtype=torch.long, device=device
+                )
+            elif model_class_name in get_values(
+                MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
+            ):
+                if (
+                    not hasattr(model.config, "problem_type")
+                    or model.config.problem_type is None
+                ):
                     raise ValueError(
                         "Could not retrieve the problem type for the sequence classification task, please set "
                         'model.config.problem_type to one of the following values: "regression", '
@@ -950,7 +1025,9 @@ class HFTracer(Tracer):
                         'Expected model.config.problem_type to be either: "regression", "single_label_classification"'
                         f', or "multi_label_classification", but "{model.config.problem_type}" was provided.'
                     )
-                inputs_dict["labels"] = torch.zeros(*labels_shape, dtype=labels_dtype, device=device)
+                inputs_dict["labels"] = torch.zeros(
+                    *labels_shape, dtype=labels_dtype, device=device
+                )
 
             elif model_class_name in [
                 *get_values(MODEL_FOR_PRETRAINING_MAPPING_NAMES),
@@ -963,9 +1040,13 @@ class HFTracer(Tracer):
                 "PeftModelForCausalLM",
                 "PeftModelForSeq2SeqLM",
             ]:
-                inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
+                inputs_dict["labels"] = torch.zeros(
+                    shape, dtype=torch.long, device=device
+                )
             elif model_class_name in [*get_values(MODEL_FOR_CTC_MAPPING_NAMES)]:
-                inputs_dict["labels"] = torch.zeros(shape, dtype=torch.float32, device=device)
+                inputs_dict["labels"] = torch.zeros(
+                    shape, dtype=torch.float32, device=device
+                )
             else:
                 raise NotImplementedError(
                     f"Generating the dummy input named {input_name} for {model_class_name} is not supported yet."
@@ -987,13 +1068,23 @@ class HFTracer(Tracer):
                 image_size = (image_size, image_size)
             height, width = image_size
             inputs_dict[input_name] = torch.zeros(
-                batch_size, num_channels, height, width, dtype=torch.float32, device=device
+                batch_size,
+                num_channels,
+                height,
+                width,
+                dtype=torch.float32,
+                device=device,
             )
         elif "bbox" in input_name:
-            inputs_dict[input_name] = torch.zeros(*shape, 4, dtype=torch.float, device=device)
+            inputs_dict[input_name] = torch.zeros(
+                *shape, 4, dtype=torch.float, device=device
+            )
         elif "input_features" in input_name:
             inputs_dict[input_name] = torch.zeros(
-                *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
+                *shape,
+                model.config.input_feat_per_channel,
+                dtype=torch.float,
+                device=device,
             )
         elif "inputs_embeds" in input_name:
             batch_size = shape[0]
@@ -1013,7 +1104,9 @@ class HFTracer(Tracer):
                 # (batch_size, sequence_length, embedding_size)
                 embedding_shape = (batch_size, shape[1], embedding_size)
 
-            inputs_dict[input_name] = torch.zeros(embedding_shape, dtype=torch.float, device=device)
+            inputs_dict[input_name] = torch.zeros(
+                embedding_shape, dtype=torch.float, device=device
+            )
         elif "visual_feats" in input_name:
             inputs_dict[input_name] = torch.zeros(
                 shape
@@ -1033,21 +1126,29 @@ class HFTracer(Tracer):
                 device=device,
             )
         elif "inputs" in input_name:
-            inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
+            inputs_dict[input_name] = torch.zeros(
+                *shape, dtype=torch.float, device=device
+            )
         elif "input_values" in input_name:
             batch_size, _ = shape
             # Generating big sequence length for audio inputs.
             seq_length = _generate_random_int(low=10000, high=20000)
-            inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
+            inputs_dict[input_name] = torch.zeros(
+                batch_size, seq_length, dtype=torch.float, device=device
+            )
         elif "mask" in input_name:
             if "past_key_values" in input_names:
                 mask_shape = [shape[0], shape[1] + kv_cache_length]
             else:
                 mask_shape = shape
 
-            inputs_dict[input_name] = torch.zeros(mask_shape, dtype=torch.long, device=device)
+            inputs_dict[input_name] = torch.zeros(
+                mask_shape, dtype=torch.long, device=device
+            )
         elif "ids" in input_name:
-            inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
+            inputs_dict[input_name] = torch.zeros(
+                shape, dtype=torch.long, device=device
+            )
         elif "past_key_values" in input_name:
             if model.config.model_type not in _FX_SUPPORTED_MODELS_WITH_KV_CACHE:
                 raise NotImplementedError(
@@ -1067,12 +1168,25 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = pkv
         else:
             shape_with_hidden_size = shape + [model.config.hidden_size]
-            inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
+            inputs_dict[input_name] = torch.zeros(
+                shape_with_hidden_size, dtype=torch.float, device=device
+            )
 
         return inputs_dict
 
-    def create_proxy(self, kind, target, args, kwargs, name=None, type_expr=None, proxy_factory_fn=None):
-        rv = super().create_proxy(kind, target, args, kwargs, name, type_expr, proxy_factory_fn)
+    def create_proxy(
+        self,
+        kind,
+        target,
+        args,
+        kwargs,
+        name=None,
+        type_expr=None,
+        proxy_factory_fn=None,
+    ):
+        rv = super().create_proxy(
+            kind, target, args, kwargs, name, type_expr, proxy_factory_fn
+        )
 
         if kind == "placeholder" and target in self.meta_args:
             rv.install_metadata(self.meta_args[target])
@@ -1107,11 +1221,15 @@ class HFTracer(Tracer):
                 meta_out = meta_target(*args_metas, **kwargs_metas)
             elif kind == "call_module":
                 if not hasattr(self, "orig_forward"):
-                    raise AttributeError(f"{self} does not have an attribute called orig_forward")
+                    raise AttributeError(
+                        f"{self} does not have an attribute called orig_forward"
+                    )
                 mod = self.root.get_submodule(target)
                 mod_type = type(mod)
                 if mod_type in _MANUAL_META_OVERRIDES:
-                    meta_out = _MANUAL_META_OVERRIDES[mod_type](mod, *args_metas, **kwargs_metas)
+                    meta_out = _MANUAL_META_OVERRIDES[mod_type](
+                        mod, *args_metas, **kwargs_metas
+                    )
                 else:
                     meta_out = self.orig_forward(*args_metas, **kwargs_metas)
             elif kind == "get_attr":
@@ -1133,7 +1251,9 @@ class HFTracer(Tracer):
 
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
-                warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
+                warnings.warn(
+                    f"Could not compute metadata for {kind} target {target}: {e}"
+                )
 
         self._disable_module_getattr = False
         self._disable_call_module = False
@@ -1146,16 +1266,23 @@ class HFTracer(Tracer):
             return attr_val
         else:
 
-            def maybe_get_proxy_for_attr(attr_val, collection_to_search, parameter_proxy_cache):
+            def maybe_get_proxy_for_attr(
+                attr_val, collection_to_search, parameter_proxy_cache
+            ):
                 for n, p in collection_to_search:
                     if attr_val is p:
                         if n not in parameter_proxy_cache:
                             kwargs = {}
-                            if "proxy_factory_fn" in inspect.signature(self.create_proxy).parameters:
+                            if (
+                                "proxy_factory_fn"
+                                in inspect.signature(self.create_proxy).parameters
+                            ):
                                 kwargs["proxy_factory_fn"] = (
                                     None
                                     if not self.param_shapes_constant
-                                    else lambda node: ParameterProxy(self, node, n, attr_val)
+                                    else lambda node: ParameterProxy(
+                                        self, node, n, attr_val
+                                    )
                                 )
                             val_proxy = self.create_proxy("get_attr", n, (), {}, **kwargs)  # type: ignore[arg-type]
                             parameter_proxy_cache[n] = val_proxy
@@ -1195,7 +1322,8 @@ class HFTracer(Tracer):
     def patch_for_tracing(self, root: Union[torch.nn.Module, Callable[..., Any]]):
         # Patching torch functions
         self.patched_torch_methods = {
-            target: gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
+            target: gen_constructor_wrapper(getattr(torch, target))
+            for target in self._TORCH_METHODS_TO_PATCH
         }
         self.orig_fns = set()
 
@@ -1260,17 +1388,24 @@ class HFTracer(Tracer):
                 A FX `torch.fx.Graph` representing the semantics of the passed-in `root`.
 
         """
-        sig = inspect.signature(root.forward if isinstance(root, torch.nn.Module) else root)
+        sig = inspect.signature(
+            root.forward if isinstance(root, torch.nn.Module) else root
+        )
 
         if concrete_args is None:
             concrete_args = {}
 
-        if dummy_inputs is not None and complete_concrete_args_with_inputs_not_in_dummy_inputs:
+        if (
+            dummy_inputs is not None
+            and complete_concrete_args_with_inputs_not_in_dummy_inputs
+        ):
             for param in sig.parameters.values():
                 if param.name in dummy_inputs:
                     continue
                 if param.default is inspect.Parameter.empty:
-                    raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
+                    raise ValueError(
+                        f"You need to specify a default value for the parameter {param.name}."
+                    )
             concrete_args.update(
                 {
                     p.name: p.default
@@ -1286,7 +1421,9 @@ class HFTracer(Tracer):
         sequence_length = _generate_random_int()
         shape = [batch_size, sequence_length]
 
-        if root.__class__.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
+        if root.__class__.__name__ in get_values(
+            MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES
+        ):
             num_choices = _generate_random_int(low=2, high=5)
             shape.insert(1, num_choices)
 
@@ -1296,10 +1433,14 @@ class HFTracer(Tracer):
                 continue
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
-            if isinstance(root, self.supported_archs) or type(root).__qualname__.startswith(
-                ("_deserialize_graph_module", "_CodeOnlyModule")
-            ):
-                inputs.update(self._generate_dummy_input(root, input_name, shape, input_names=input_names))
+            if isinstance(root, self.supported_archs) or type(
+                root
+            ).__qualname__.startswith(("_deserialize_graph_module", "_CodeOnlyModule")):
+                inputs.update(
+                    self._generate_dummy_input(
+                        root, input_name, shape, input_names=input_names
+                    )
+                )
             else:
                 raise RuntimeError(
                     f"Could not generate input named {input_name} for because root is not a"
@@ -1314,7 +1455,10 @@ class HFTracer(Tracer):
         concrete_metas = pytree.tree_map(to_meta, inputs)
 
         for param in sig.parameters.values():
-            if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
+            if (
+                param.kind == inspect.Parameter.VAR_KEYWORD
+                and param.name not in input_names
+            ):
                 concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
 
@@ -1398,15 +1542,19 @@ class HFTracer(Tracer):
         try:
             return super().path_of_module(mod)
         except NameError as e:
-            if self.allow_insert_stateless_mods and len(list(mod.parameters())) == 0 and len(list(mod.buffers())) == 0:
+            if (
+                self.allow_insert_stateless_mods
+                and len(list(mod.parameters())) == 0
+                and len(list(mod.buffers())) == 0
+            ):
                 path = self._insert_module_as_submodule(mod)
                 return path
             raise e
 
     def is_leaf_module(self, m: torch.nn.Module, module_qualified_name: str) -> bool:
-        return (not self._stateless_mod_instanciation_depends_on_proxies(m)) and super().is_leaf_module(
-            m, module_qualified_name
-        )
+        return (
+            not self._stateless_mod_instanciation_depends_on_proxies(m)
+        ) and super().is_leaf_module(m, module_qualified_name)
 
     @compatibility(is_backward_compatible=True)
     def keys(self, obj: "Proxy") -> Any:
@@ -1424,14 +1572,18 @@ def get_concrete_args(model: nn.Module, input_names: List[str]):
     sig = inspect.signature(model.forward)
 
     if not (set(input_names) <= set(sig.parameters.keys())):
-        formatted_input_names = input_names[0] if len(input_names) == 1 else ", ".join(input_names)
+        formatted_input_names = (
+            input_names[0] if len(input_names) == 1 else ", ".join(input_names)
+        )
         formatted_allowed_input_names = ", ".join(sig.parameters.keys())
         raise ValueError(
             f"The model does not have input(s) named: {formatted_input_names}, expected a subset of the following:"
             f" {formatted_allowed_input_names}"
         )
 
-    return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
+    return {
+        p.name: p.default for p in sig.parameters.values() if p.name not in input_names
+    }
 
 
 def is_model_supported(model: "PreTrainedModel"):
@@ -1485,12 +1637,16 @@ def symbolic_trace(
     if not disable_check:
         check_if_model_is_supported(model)
 
-    if "past_key_values" in input_names and not getattr(model.config, "use_cache", False):
+    if "past_key_values" in input_names and not getattr(
+        model.config, "use_cache", False
+    ):
         logger.warning(
             "`past_key_values` were specified as input names, but model.config.use_cache = False, this might lead to "
             "unexpected behavior."
         )
-    if "past_key_values" not in input_names and getattr(model.config, "use_cache", False):
+    if "past_key_values" not in input_names and getattr(
+        model.config, "use_cache", False
+    ):
         logger.warning(
             "`past_key_values` were not specified as input names, but model.config.use_cache = True. Setting "
             "model.config.use_cache = False."

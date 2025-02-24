@@ -14,7 +14,8 @@
 # limitations under the License.
 """Convert Swin SimMIM checkpoints from the original repository.
 
-URL: https://github.com/microsoft/Swin-Transformer/blob/main/MODELHUB.md#simmim-pretrained-swin-v1-models"""
+URL: https://github.com/microsoft/Swin-Transformer/blob/main/MODELHUB.md#simmim-pretrained-swin-v1-models
+"""
 
 import argparse
 
@@ -53,7 +54,9 @@ def rename_key(name):
     if "encoder.mask_token" in name:
         name = name.replace("encoder.mask_token", "embeddings.mask_token")
     if "encoder.patch_embed.proj" in name:
-        name = name.replace("encoder.patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "encoder.patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "encoder.patch_embed.norm" in name:
         name = name.replace("encoder.patch_embed.norm", "embeddings.norm")
     if "attn.proj" in name:
@@ -92,35 +95,41 @@ def convert_state_dict(orig_state_dict, model):
             key_split = key.split(".")
             layer_num = int(key_split[2])
             block_num = int(key_split[4])
-            dim = model.swin.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
+            dim = (
+                model.swin.encoder.layers[layer_num]
+                .blocks[block_num]
+                .attention.self.all_head_size
+            )
 
             if "weight" in key:
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"] = (
-                    val[:dim, :]
-                )
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
-                    dim : dim * 2, :
-                ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"] = (
-                    val[-dim:, :]
-                )
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
+                ] = val[:dim, :]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"
+                ] = val[dim : dim * 2, :]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
+                ] = val[-dim:, :]
             else:
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
-                    :dim
-                ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
-                    dim : dim * 2
-                ]
-                orig_state_dict[f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = val[
-                    -dim:
-                ]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"swin.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"
+                ] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
     return orig_state_dict
 
 
-def convert_swin_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
+def convert_swin_checkpoint(
+    model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub
+):
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
 
     config = get_swin_config(model_name)
@@ -172,11 +181,21 @@ if __name__ == "__main__":
         help="Path to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
 
     args = parser.parse_args()
-    convert_swin_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_swin_checkpoint(
+        args.model_name,
+        args.checkpoint_path,
+        args.pytorch_dump_folder_path,
+        args.push_to_hub,
+    )

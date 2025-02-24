@@ -9,7 +9,13 @@ from ..utils import (
     is_torch_available,
     requires_backends,
 )
-from .base import ArgumentHandler, Dataset, Pipeline, PipelineException, build_pipeline_init_args
+from .base import (
+    ArgumentHandler,
+    Dataset,
+    Pipeline,
+    PipelineException,
+    build_pipeline_init_args,
+)
 
 
 if is_torch_available():
@@ -47,7 +53,11 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
         if table is None:
             raise ValueError("Keyword argument `table` cannot be None.")
         elif query is None:
-            if isinstance(table, dict) and table.get("query") is not None and table.get("table") is not None:
+            if (
+                isinstance(table, dict)
+                and table.get("query") is not None
+                and table.get("table") is not None
+            ):
                 tqa_pipeline_inputs = [table]
             elif isinstance(table, list) and len(table) > 0:
                 if not all(isinstance(d, dict) for d in table):
@@ -55,14 +65,21 @@ class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
                         f"Keyword argument `table` should be a list of dict, but is {(type(d) for d in table)}"
                     )
 
-                if table[0].get("query") is not None and table[0].get("table") is not None:
+                if (
+                    table[0].get("query") is not None
+                    and table[0].get("table") is not None
+                ):
                     tqa_pipeline_inputs = table
                 else:
                     raise ValueError(
                         "If keyword argument `table` is a list of dictionaries, each dictionary should have a `table`"
                         f" and `query` key, but only dictionary has keys {table[0].keys()} `table` and `query` keys."
                     )
-            elif Dataset is not None and isinstance(table, Dataset) or isinstance(table, types.GeneratorType):
+            elif (
+                Dataset is not None
+                and isinstance(table, Dataset)
+                or isinstance(table, types.GeneratorType)
+            ):
                 return table
             else:
                 raise ValueError(
@@ -116,7 +133,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
     default_input_names = "table,query"
 
-    def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
+    def __init__(
+        self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self._args_parser = args_parser
 
@@ -128,10 +147,12 @@ class TableQuestionAnsweringPipeline(Pipeline):
             mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
         self.check_model_type(mapping)
 
-        self.aggregate = bool(getattr(self.model.config, "aggregation_labels", None)) and bool(
-            getattr(self.model.config, "num_aggregation_labels", None)
+        self.aggregate = bool(
+            getattr(self.model.config, "aggregation_labels", None)
+        ) and bool(getattr(self.model.config, "num_aggregation_labels", None))
+        self.type = (
+            "tapas" if hasattr(self.model.config, "aggregation_labels") else None
         )
-        self.type = "tapas" if hasattr(self.model.config, "aggregation_labels") else None
 
     def batch_inference(self, **inputs):
         return self.model(**inputs)
@@ -156,8 +177,12 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 # If sequences have already been processed, the token type IDs will be created according to the previous
                 # answer.
                 if prev_answers is not None:
-                    prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
-                    model_labels = np.zeros_like(prev_labels_example.cpu().numpy())  # shape (seq_len,)
+                    prev_labels_example = token_type_ids_example[
+                        :, 3
+                    ]  # shape (seq_len,)
+                    model_labels = np.zeros_like(
+                        prev_labels_example.cpu().numpy()
+                    )  # shape (seq_len,)
 
                     token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
                     for i in range(model_labels.shape[0]):
@@ -168,7 +193,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
                         if row_id >= 0 and col_id >= 0 and segment_id == 1:
                             model_labels[i] = int(prev_answers[(col_id, row_id)])
 
-                    token_type_ids_example[:, 3] = torch.from_numpy(model_labels).type(torch.long).to(self.device)
+                    token_type_ids_example[:, 3] = (
+                        torch.from_numpy(model_labels).type(torch.long).to(self.device)
+                    )
 
                 input_ids_example = input_ids[index]
                 attention_mask_example = attention_mask[index]  # shape (seq_len,)
@@ -186,9 +213,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 all_logits.append(logits)
 
                 dist_per_token = torch.distributions.Bernoulli(logits=logits)
-                probabilities = dist_per_token.probs * attention_mask_example.type(torch.float32).to(
-                    dist_per_token.probs.device
-                )
+                probabilities = dist_per_token.probs * attention_mask_example.type(
+                    torch.float32
+                ).to(dist_per_token.probs.device)
 
                 coords_to_probs = collections.defaultdict(list)
                 for i, p in enumerate(probabilities.squeeze().tolist()):
@@ -198,11 +225,18 @@ class TableQuestionAnsweringPipeline(Pipeline):
                     if col >= 0 and row >= 0 and segment_id == 1:
                         coords_to_probs[(col, row)].append(p)
 
-                prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
+                prev_answers = {
+                    key: np.array(coords_to_probs[key]).mean() > 0.5
+                    for key in coords_to_probs
+                }
 
             logits_batch = torch.cat(tuple(all_logits), 0)
 
-            return (logits_batch,) if not self.aggregate else (logits_batch, torch.cat(tuple(all_aggregations), 0))
+            return (
+                (logits_batch,)
+                if not self.aggregate
+                else (logits_batch, torch.cat(tuple(all_aggregations), 0))
+            )
         else:
             all_logits = []
             all_aggregations = []
@@ -218,8 +252,12 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 # If sequences have already been processed, the token type IDs will be created according to the previous
                 # answer.
                 if prev_answers is not None:
-                    prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
-                    model_labels = np.zeros_like(prev_labels_example, dtype=np.int32)  # shape (seq_len,)
+                    prev_labels_example = token_type_ids_example[
+                        :, 3
+                    ]  # shape (seq_len,)
+                    model_labels = np.zeros_like(
+                        prev_labels_example, dtype=np.int32
+                    )  # shape (seq_len,)
 
                     token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
                     for i in range(model_labels.shape[0]):
@@ -260,11 +298,18 @@ class TableQuestionAnsweringPipeline(Pipeline):
                     if col >= 0 and row >= 0 and segment_id == 1:
                         coords_to_probs[(col, row)].append(p)
 
-                prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
+                prev_answers = {
+                    key: np.array(coords_to_probs[key]).mean() > 0.5
+                    for key in coords_to_probs
+                }
 
             logits_batch = tf.concat(tuple(all_logits), 0)
 
-            return (logits_batch,) if not self.aggregate else (logits_batch, tf.concat(tuple(all_aggregations), 0))
+            return (
+                (logits_batch,)
+                if not self.aggregate
+                else (logits_batch, tf.concat(tuple(all_aggregations), 0))
+            )
 
     def __call__(self, *args, **kwargs):
         r"""
@@ -348,7 +393,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
             return results[0]
         return results
 
-    def _sanitize_parameters(self, sequential=None, padding=None, truncation=None, **kwargs):
+    def _sanitize_parameters(
+        self, sequential=None, padding=None, truncation=None, **kwargs
+    ):
         preprocess_params = {}
         if padding is not None:
             preprocess_params["padding"] = padding
@@ -367,7 +414,9 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
         return preprocess_params, forward_params, {}
 
-    def preprocess(self, pipeline_input, sequential=None, padding=True, truncation=None):
+    def preprocess(
+        self, pipeline_input, sequential=None, padding=True, truncation=None
+    ):
         if truncation is None:
             if self.type == "tapas":
                 truncation = "drop_rows_to_fit"
@@ -379,7 +428,13 @@ class TableQuestionAnsweringPipeline(Pipeline):
             raise ValueError("table is empty")
         if query is None or query == "":
             raise ValueError("query is empty")
-        inputs = self.tokenizer(table, query, return_tensors=self.framework, truncation=truncation, padding=padding)
+        inputs = self.tokenizer(
+            table,
+            query,
+            return_tensors=self.framework,
+            truncation=truncation,
+            padding=padding,
+        )
         inputs["table"] = table
         return inputs
 
@@ -397,7 +452,11 @@ class TableQuestionAnsweringPipeline(Pipeline):
                 generate_kwargs["generation_config"] = self.generation_config
 
             outputs = self.model.generate(**model_inputs, **generate_kwargs)
-        model_outputs = {"model_inputs": model_inputs, "table": table, "outputs": outputs}
+        model_outputs = {
+            "model_inputs": model_inputs,
+            "table": table,
+            "outputs": outputs,
+        }
         return model_outputs
 
     def postprocess(self, model_outputs):
@@ -407,17 +466,26 @@ class TableQuestionAnsweringPipeline(Pipeline):
         if self.type == "tapas":
             if self.aggregate:
                 logits, logits_agg = outputs[:2]
-                predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits, logits_agg)
+                predictions = self.tokenizer.convert_logits_to_predictions(
+                    inputs, logits, logits_agg
+                )
                 answer_coordinates_batch, agg_predictions = predictions
-                aggregators = {i: self.model.config.aggregation_labels[pred] for i, pred in enumerate(agg_predictions)}
+                aggregators = {
+                    i: self.model.config.aggregation_labels[pred]
+                    for i, pred in enumerate(agg_predictions)
+                }
 
                 no_agg_label_index = self.model.config.no_aggregation_label_index
                 aggregators_prefix = {
-                    i: aggregators[i] + " > " for i, pred in enumerate(agg_predictions) if pred != no_agg_label_index
+                    i: aggregators[i] + " > "
+                    for i, pred in enumerate(agg_predictions)
+                    if pred != no_agg_label_index
                 }
             else:
                 logits = outputs[0]
-                predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits)
+                predictions = self.tokenizer.convert_logits_to_predictions(
+                    inputs, logits
+                )
                 answer_coordinates_batch = predictions[0]
                 aggregators = {}
                 aggregators_prefix = {}
@@ -438,6 +506,11 @@ class TableQuestionAnsweringPipeline(Pipeline):
             if len(answer) == 0:
                 raise PipelineException("Empty answer")
         else:
-            answers = [{"answer": answer} for answer in self.tokenizer.batch_decode(outputs, skip_special_tokens=True)]
+            answers = [
+                {"answer": answer}
+                for answer in self.tokenizer.batch_decode(
+                    outputs, skip_special_tokens=True
+                )
+            ]
 
         return answers if len(answers) > 1 else answers[0]

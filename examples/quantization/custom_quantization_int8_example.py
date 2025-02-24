@@ -8,7 +8,12 @@ from accelerate import init_empty_weights
 from huggingface_hub import HfApi
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.quantizers import HfQuantizer, get_module_from_name, register_quantization_config, register_quantizer
+from transformers.quantizers import (
+    HfQuantizer,
+    get_module_from_name,
+    register_quantization_config,
+    register_quantizer,
+)
 from transformers.utils.quantization_config import QuantizationConfigMixin
 
 
@@ -19,8 +24,12 @@ class Int8SymmetricLinear(torch.nn.Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.register_buffer("weight", torch.zeros((out_features, in_features), dtype=torch.int8))
-        self.register_buffer("weight_scale", torch.zeros((out_features, 1), dtype=dtype))
+        self.register_buffer(
+            "weight", torch.zeros((out_features, in_features), dtype=torch.int8)
+        )
+        self.register_buffer(
+            "weight_scale", torch.zeros((out_features, 1), dtype=dtype)
+        )
 
         if bias:
             self.register_buffer("bias", torch.zeros((self.out_features), dtype=dtype))
@@ -57,13 +66,17 @@ def _replace_with_int8_symmetric_linear(
             # Check if the current key is not in the `modules_to_not_convert`
             current_key_name_str = ".".join(current_key_name)
             if not any(
-                (key + "." in current_key_name_str) or (key == current_key_name_str) for key in modules_to_not_convert
+                (key + "." in current_key_name_str) or (key == current_key_name_str)
+                for key in modules_to_not_convert
             ):
                 with init_empty_weights(include_buffers=True):
                     in_features = module.in_features
                     out_features = module.out_features
                     model._modules[name] = Int8SymmetricLinear(
-                        in_features, out_features, module.bias is not None, dtype=module.weight.dtype
+                        in_features,
+                        out_features,
+                        module.bias is not None,
+                        dtype=module.weight.dtype,
                     )
                     has_been_replaced = True
                     model._modules[name].requires_grad_(False)
@@ -83,19 +96,29 @@ def _replace_with_int8_symmetric_linear(
 
 
 def replace_with_int8_symmetric_linear(
-    model, modules_to_not_convert=None, current_key_name=None, quantization_config=None, pre_quantized=False
+    model,
+    modules_to_not_convert=None,
+    current_key_name=None,
+    quantization_config=None,
+    pre_quantized=False,
 ):
     """
     Main function to replace model layers with INT8 symmetric quantized versions.
     """
-    modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    modules_to_not_convert = (
+        ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
+    )
 
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
 
     model, has_been_replaced = _replace_with_int8_symmetric_linear(
-        model, modules_to_not_convert, current_key_name, quantization_config, pre_quantized=pre_quantized
+        model,
+        modules_to_not_convert,
+        current_key_name,
+        quantization_config,
+        pre_quantized=pre_quantized,
     )
 
     if not has_been_replaced:
@@ -172,11 +195,15 @@ class Int8SymmetricQuantizer(HfQuantizer):
         if isinstance(module, Int8SymmetricLinear):
             if self.pre_quantized or tensor_name == "bias":
                 if tensor_name == "weight" and param_value.dtype != torch.int8:
-                    raise ValueError("Expect quantized weights but got an unquantized weight")
+                    raise ValueError(
+                        "Expect quantized weights but got an unquantized weight"
+                    )
                 return False
             else:
                 if tensor_name == "weight_scale":
-                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
+                    raise ValueError(
+                        "Expect unquantized weights but got a quantized weight_scale"
+                    )
                 return True
         return False
 
@@ -192,17 +219,23 @@ class Int8SymmetricQuantizer(HfQuantizer):
         """
         Quantizes weights to INT8 symmetric format.
         """
-        abs_max_per_row = torch.max(torch.abs(param_value), dim=1, keepdim=True)[0].clamp(min=1e-5)
+        abs_max_per_row = torch.max(torch.abs(param_value), dim=1, keepdim=True)[
+            0
+        ].clamp(min=1e-5)
 
         weight_scale = abs_max_per_row / 127.0
 
-        weight_quantized = torch.round(param_value / weight_scale).clamp(-128, 127).to(torch.int8)
+        weight_quantized = (
+            torch.round(param_value / weight_scale).clamp(-128, 127).to(torch.int8)
+        )
 
         module, tensor_name = get_module_from_name(model, param_name)
         module._buffers[tensor_name] = weight_quantized.to(target_device)
         module._buffers["weight_scale"] = weight_scale.to(target_device)
 
-    def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
+    def update_missing_keys(
+        self, model, missing_keys: List[str], prefix: str
+    ) -> List[str]:
         not_missing_keys = []
         for name, module in model.named_modules():
             if isinstance(module, Int8SymmetricLinear):
@@ -232,7 +265,10 @@ class Int8SymmetricQuantizer(HfQuantizer):
 # Example usage
 if __name__ == "__main__":
     model_int8 = AutoModelForCausalLM.from_pretrained(
-        "meta-llama/Llama-3.2-1B", quantization_config=Int8SymmetricConfig(), torch_dtype=torch.float, device_map="cpu"
+        "meta-llama/Llama-3.2-1B",
+        quantization_config=Int8SymmetricConfig(),
+        torch_dtype=torch.float,
+        device_map="cpu",
     )
 
     tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B")

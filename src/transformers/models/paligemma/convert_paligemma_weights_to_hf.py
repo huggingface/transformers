@@ -83,9 +83,13 @@ def get_paligemma_config(variant: str, precision: str):
             "projector_hidden_act": "gelu_fast",
             "vision_use_head": False,
         }
-        final_config = PaliGemmaConfig(text_config=text_config, vision_config=vision_config, **config)
+        final_config = PaliGemmaConfig(
+            text_config=text_config, vision_config=vision_config, **config
+        )
     else:
-        raise ValueError(f"Identifier {variant} not supported. Available: {PALIGEMMA_VARIANTS}")
+        raise ValueError(
+            f"Identifier {variant} not supported. Available: {PALIGEMMA_VARIANTS}"
+        )
     return final_config
 
 
@@ -236,7 +240,9 @@ def convert_paligemma_checkpoint(
             tokenizer_id = "google/gemma-2b"
             tokenizer = AutoTokenizer.from_pretrained(tokenizer_id)
         else:
-            tokenizer_class = GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
+            tokenizer_class = (
+                GemmaTokenizer if GemmaTokenizerFast is None else GemmaTokenizerFast
+            )
             tokenizer = tokenizer_class(tokenizer_model_file)
         image_token = AddedToken("<image>", normalized=False, special=True)
         tokens_to_add = {"additional_special_tokens": [image_token]}
@@ -244,11 +250,18 @@ def convert_paligemma_checkpoint(
 
         # tokenizer.padding_side = 'right' # uncomment for testing purposes only.
 
-        image_processor = SiglipImageProcessor.from_pretrained("google/siglip-so400m-patch14-384")
-        image_processor.size = {"width": config.vision_config.image_size, "height": config.vision_config.image_size}
+        image_processor = SiglipImageProcessor.from_pretrained(
+            "google/siglip-so400m-patch14-384"
+        )
+        image_processor.size = {
+            "width": config.vision_config.image_size,
+            "height": config.vision_config.image_size,
+        }
         image_processor.image_seq_length = config.vision_config.num_image_tokens
 
-        processor = PaliGemmaProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        processor = PaliGemmaProcessor(
+            image_processor=image_processor, tokenizer=tokenizer
+        )
         data = load(checkpoint_path)
         state_dict = flatten_nested_dict(data)
         del data
@@ -262,7 +275,9 @@ def convert_paligemma_checkpoint(
     else:
         processor = PaliGemmaProcessor.from_pretrained(pytorch_dump_folder_path)
         model = (
-            PaliGemmaForConditionalGeneration.from_pretrained(pytorch_dump_folder_path, attn_implementation="sdpa")
+            PaliGemmaForConditionalGeneration.from_pretrained(
+                pytorch_dump_folder_path, attn_implementation="sdpa"
+            )
             .to(device)
             .eval()
         )
@@ -274,20 +289,40 @@ def convert_paligemma_checkpoint(
     mu = torch.mean(pre_expansion_embeddings, dim=0).float()
     n = pre_expansion_embeddings.size()[0]
     sigma = ((pre_expansion_embeddings - mu).T @ (pre_expansion_embeddings - mu)) / n
-    dist = torch.distributions.multivariate_normal.MultivariateNormal(mu, covariance_matrix=1e-5 * sigma)
+    dist = torch.distributions.multivariate_normal.MultivariateNormal(
+        mu, covariance_matrix=1e-5 * sigma
+    )
 
     # We add an image token so we resize the model
     model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
     model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))),
+        tuple(
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.model.embed_tokens.weight.data[257152:].shape[
+                        0
+                    ]
+                )
+            )
+        ),
         dim=0,
     )
     model.language_model.lm_head.weight.data[257152:] = torch.stack(
-        tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0]))),
+        tuple(
+            (
+                dist.sample()
+                for _ in range(
+                    model.language_model.lm_head.weight.data[257152:].shape[0]
+                )
+            )
+        ),
         dim=0,
     )
 
-    model.save_pretrained(pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True)
+    model.save_pretrained(
+        pytorch_dump_folder_path, max_shard_size="2GB", safe_serialization=True
+    )
     processor.save_pretrained(pytorch_dump_folder_path)
 
 
@@ -333,7 +368,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--do_convert_weights", action="store_true", help="Whether or not to reload and convert the weights."
+        "--do_convert_weights",
+        action="store_true",
+        help="Whether or not to reload and convert the weights.",
     )
 
     args = parser.parse_args()

@@ -81,16 +81,22 @@ class SuperGlueConfig(PretrainedConfig):
         initializer_range: float = 0.02,
         **kwargs,
     ):
-        self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
+        self.gnn_layers_types = (
+            gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
+        )
         # Check whether all gnn_layers_types are either 'self' or 'cross'
-        if not all(layer_type in ["self", "cross"] for layer_type in self.gnn_layers_types):
+        if not all(
+            layer_type in ["self", "cross"] for layer_type in self.gnn_layers_types
+        ):
             raise ValueError("All gnn_layers_types must be either 'self' or 'cross'")
 
         if hidden_size % num_attention_heads != 0:
             raise ValueError("hidden_size % num_attention_heads is different from zero")
 
         self.keypoint_encoder_sizes = (
-            keypoint_encoder_sizes if keypoint_encoder_sizes is not None else [32, 64, 128, 256]
+            keypoint_encoder_sizes
+            if keypoint_encoder_sizes is not None
+            else [32, 64, 128, 256]
         )
         self.hidden_size = hidden_size
         self.keypoint_encoder_sizes = keypoint_encoder_sizes
@@ -101,11 +107,13 @@ class SuperGlueConfig(PretrainedConfig):
 
         if isinstance(keypoint_detector_config, dict):
             keypoint_detector_config["model_type"] = (
-                keypoint_detector_config["model_type"] if "model_type" in keypoint_detector_config else "superpoint"
+                keypoint_detector_config["model_type"]
+                if "model_type" in keypoint_detector_config
+                else "superpoint"
             )
-            keypoint_detector_config = CONFIG_MAPPING[keypoint_detector_config["model_type"]](
-                **keypoint_detector_config
-            )
+            keypoint_detector_config = CONFIG_MAPPING[
+                keypoint_detector_config["model_type"]
+            ](**keypoint_detector_config)
         if keypoint_detector_config is None:
             keypoint_detector_config = CONFIG_MAPPING["superpoint"]()
 

@@ -20,7 +20,12 @@ from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
+from ...processing_utils import (
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+    _validate_images_text_input_order,
+)
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
 
@@ -88,13 +93,17 @@ class LlavaProcessor(ProcessorMixin):
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token = (
+            tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        )
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text: Union[
+            TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]
+        ] = None,
         audio=None,
         videos=None,
         **kwargs: Unpack[LlavaProcessorKwargs],
@@ -142,14 +151,18 @@ class LlavaProcessor(ProcessorMixin):
             **kwargs,
         )
         if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(
+                images, **output_kwargs["images_kwargs"]
+            )
         else:
             image_inputs = {}
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise ValueError(
+                "Invalid input text. Please provide a string, or a list of strings"
+            )
 
         # try to expand inputs in processing if we have the necessary parts
         prompt_strings = text
@@ -165,7 +178,9 @@ class LlavaProcessor(ProcessorMixin):
 
             prompt_strings = []
             for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
+                sample = sample.replace(
+                    self.image_token, self.image_token * num_image_tokens
+                )
                 prompt_strings.append(sample)
 
         text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])

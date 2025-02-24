@@ -18,7 +18,12 @@ from __future__ import annotations
 import unittest
 
 from transformers import is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tf,
+    require_tokenizers,
+    slow,
+)
 
 
 if is_tf_available():
@@ -46,11 +51,19 @@ class TFCamembertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.convert_to_tensor(
-            [[[-0.0254, 0.0235, 0.1027], [0.0606, -0.1811, -0.0418], [-0.1561, -0.1127, 0.2687]]],
+            [
+                [
+                    [-0.0254, 0.0235, 0.1027],
+                    [0.0606, -0.1811, -0.0418],
+                    [-0.1561, -0.1127, 0.2687],
+                ]
+            ],
             dtype=tf.float32,
         )
         # camembert = torch.hub.load('pytorch/fairseq', 'camembert.v0')
         # camembert.eval()
         # expected_slice = roberta.model.forward(input_ids)[0][:, :3, :3].detach()
 
-        self.assertTrue(np.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))
+        self.assertTrue(
+            np.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4)
+        )

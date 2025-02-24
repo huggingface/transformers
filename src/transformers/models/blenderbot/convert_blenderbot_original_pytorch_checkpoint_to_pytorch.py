@@ -75,7 +75,9 @@ IGNORE_KEYS = ["START"]
 
 
 @torch.no_grad()
-def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_json_path):
+def convert_parlai_checkpoint(
+    checkpoint_path, pytorch_dump_folder_path, config_json_path
+):
     """
     Copy/paste/tweak model's weights to our BERT structure.
     """
@@ -95,7 +97,9 @@ def convert_parlai_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_
             failures.append([k, new_k])
         else:
             mapping[new_k] = v
-    if cfg.normalize_before:  # Blenderbot-3B checkpoints. Rename layernorm_embedding -> layer_norm
+    if (
+        cfg.normalize_before
+    ):  # Blenderbot-3B checkpoints. Rename layernorm_embedding -> layer_norm
         rename_layernorm_keys(sd)
     m.model.load_state_dict(mapping, strict=True)
     m.half()
@@ -106,9 +110,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument("--src_path", type=str, help="like blenderbot-model.bin")
-    parser.add_argument("--save_dir", default="hf_blenderbot", type=str, help="Where to save converted model.")
     parser.add_argument(
-        "--hf_config_json", default="blenderbot-3b-config.json", type=str, help="Path to config to use"
+        "--save_dir",
+        default="hf_blenderbot",
+        type=str,
+        help="Where to save converted model.",
+    )
+    parser.add_argument(
+        "--hf_config_json",
+        default="blenderbot-3b-config.json",
+        type=str,
+        help="Path to config to use",
     )
     args = parser.parse_args()
     convert_parlai_checkpoint(args.src_path, args.save_dir, args.hf_config_json)

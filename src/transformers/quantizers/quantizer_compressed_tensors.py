@@ -58,11 +58,15 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         if not is_torch_available():
             # torch already should be installed as part of compressed tensors
-            raise ImportError("torch is required for using compressed-tensors quantization")
+            raise ImportError(
+                "torch is required for using compressed-tensors quantization"
+            )
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
-            logger.info("Loading model using torch.float16 for compressed-tensors quantization")
+            logger.info(
+                "Loading model using torch.float16 for compressed-tensors quantization"
+            )
             torch_dtype = torch.float16
         elif torch_dtype != torch.float16:
             logger.info(
@@ -76,14 +80,18 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         ct_quantization_config = self.compressor.quantization_config
 
         if self.run_compressed and self.is_quantization_compressed:
-            apply_quantization_config(model, ct_quantization_config, run_compressed=True)
+            apply_quantization_config(
+                model, ct_quantization_config, run_compressed=True
+            )
         elif not self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
 
-        if (self.is_quantization_compressed and not self.run_compressed) or self.is_sparsification_compressed:
+        if (
+            self.is_quantization_compressed and not self.run_compressed
+        ) or self.is_sparsification_compressed:
             config = kwargs.get("config", None)
             cache_path = config._name_or_path
 
@@ -96,7 +104,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             if self.is_quantization_compressed and not self.run_compressed:
                 from compressed_tensors.quantization import QuantizationStatus
 
-                self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
+                self.compressor.quantization_config.quantization_status = (
+                    QuantizationStatus.FROZEN
+                )
             self.compressor.decompress(model_path=cache_path, model=model)
 
     @property
@@ -105,7 +115,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return (
             self.quantization_config.quantization_config is not None
-            and self.quantization_config.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+            and self.quantization_config.quantization_config.quantization_status
+            == QuantizationStatus.COMPRESSED
         )
 
     @property
@@ -114,7 +125,8 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return (
             self.quantization_config.sparsity_config is not None
-            and self.quantization_config.sparsity_config.format != CompressionFormat.dense.value
+            and self.quantization_config.sparsity_config.format
+            != CompressionFormat.dense.value
         )
 
     @property

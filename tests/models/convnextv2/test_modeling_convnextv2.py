@@ -18,7 +18,10 @@ import unittest
 
 from transformers import ConvNextV2Config
 from transformers.models.auto import get_values
-from transformers.models.auto.modeling_auto import MODEL_FOR_BACKBONE_MAPPING_NAMES, MODEL_MAPPING_NAMES
+from transformers.models.auto.modeling_auto import (
+    MODEL_FOR_BACKBONE_MAPPING_NAMES,
+    MODEL_MAPPING_NAMES,
+)
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
@@ -30,7 +33,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import ConvNextV2Backbone, ConvNextV2ForImageClassification, ConvNextV2Model
+    from transformers import (
+        ConvNextV2Backbone,
+        ConvNextV2ForImageClassification,
+        ConvNextV2Model,
+    )
 
 
 if is_vision_available():
@@ -77,7 +84,9 @@ class ConvNextV2ModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -109,7 +118,12 @@ class ConvNextV2ModelTester:
         # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (
+                self.batch_size,
+                self.hidden_sizes[-1],
+                self.image_size // 32,
+                self.image_size // 32,
+            ),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -127,7 +141,10 @@ class ConvNextV2ModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[1], 4, 4],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
@@ -142,7 +159,10 @@ class ConvNextV2ModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[-1], 1, 1],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
@@ -178,7 +198,10 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": ConvNextV2Model, "image-classification": ConvNextV2ForImageClassification}
+        {
+            "image-feature-extraction": ConvNextV2Model,
+            "image-classification": ConvNextV2ForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -220,7 +243,9 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.skipTest(reason="ModelTester is not set to test training")
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_labels()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_with_labels()
+            )
             config.return_dict = True
 
             if model_class.__name__ in [
@@ -232,7 +257,9 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -241,13 +268,18 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.skipTest(reason="ModelTester is not set to test training")
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_with_labels()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_with_labels()
+            )
             config.use_cache = False
             config.return_dict = True
 
             if (
                 model_class.__name__
-                in [*get_values(MODEL_MAPPING_NAMES), *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES)]
+                in [
+                    *get_values(MODEL_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_BACKBONE_MAPPING_NAMES),
+                ]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue
@@ -256,7 +288,9 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.to(torch_device)
             model.gradient_checkpointing_enable()
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -273,7 +307,11 @@ class ConvNextV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -318,11 +356,17 @@ def prepare_img():
 class ConvNextV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-1k-224") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-1k-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNextV2ForImageClassification.from_pretrained("facebook/convnextv2-tiny-1k-224").to(torch_device)
+        model = ConvNextV2ForImageClassification.from_pretrained(
+            "facebook/convnextv2-tiny-1k-224"
+        ).to(torch_device)
 
         preprocessor = self.default_image_processor
         image = prepare_img()
@@ -337,4 +381,6 @@ class ConvNextV2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_slice = torch.tensor([0.9996, 0.1966, -0.4386]).to(torch_device)
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )

@@ -32,7 +32,12 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = True
     test_slow_tokenizer = False
     from_pretrained_vocab_key = "tokenizer_file"
-    special_tokens_map = {"bos_token": "<s>", "eos_token": "</s>", "unk_token": "<unk>", "pad_token": "<pad>"}
+    special_tokens_map = {
+        "bos_token": "<s>",
+        "eos_token": "</s>",
+        "unk_token": "<unk>",
+        "pad_token": "<pad>",
+    }
 
     def setUp(self):
         super().setUp()
@@ -54,7 +59,10 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_rust_tokenizer()
 
         INPUT_SENTENCES = ["The quick brown fox</s>", "jumps over the lazy dog</s>"]
-        TARGET_TOKENS = [[2175, 23714, 73173, 144252, 2], [77, 132619, 3478, 368, 109586, 35433, 2]]
+        TARGET_TOKENS = [
+            [2175, 23714, 73173, 144252, 2],
+            [77, 132619, 3478, 368, 109586, 35433, 2],
+        ]
 
         computed_tokens = tokenizer.batch_encode_plus(INPUT_SENTENCES)["input_ids"]
         self.assertListEqual(TARGET_TOKENS, computed_tokens)
@@ -65,7 +73,9 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=6):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
+                    pretrained_name, **kwargs
+                )
                 # tokenizer_r.pad_token = None # Hotfixing padding = None
                 # Simple input
                 s = "This is a simple input"
@@ -88,10 +98,22 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.fail("Bloom Tokenizer should be able to deal with padding")
 
                 tokenizer_r.pad_token = None  # Hotfixing padding = None
-                self.assertRaises(ValueError, tokenizer_r.encode, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode,
+                    s,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Simple input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, s, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode_plus,
+                    s,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Simple input
                 self.assertRaises(
@@ -103,10 +125,22 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode, p, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode,
+                    p,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Pair input
-                self.assertRaises(ValueError, tokenizer_r.encode_plus, p, max_length=max_length, padding="max_length")
+                self.assertRaises(
+                    ValueError,
+                    tokenizer_r.encode_plus,
+                    p,
+                    max_length=max_length,
+                    padding="max_length",
+                )
 
                 # Pair input
                 self.assertRaises(
@@ -123,32 +157,67 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             - https://huggingface.co/bigscience/tokenizer/
         """
         tokenizer = self.get_rust_tokenizer()
-        ds = load_dataset("facebook/xnli", "all_languages", split="test", streaming=True)
+        ds = load_dataset(
+            "facebook/xnli", "all_languages", split="test", streaming=True
+        )
 
         sample_data = next(iter(ds))["premise"]  # pick up one data
         input_text = list(sample_data.values())
 
         output_tokens = list(map(tokenizer.encode, input_text))
-        predicted_text = [tokenizer.decode(x, clean_up_tokenization_spaces=False) for x in output_tokens]
+        predicted_text = [
+            tokenizer.decode(x, clean_up_tokenization_spaces=False)
+            for x in output_tokens
+        ]
         self.assertListEqual(predicted_text, input_text)
 
     @require_jinja
     def test_tokenization_for_chat(self):
         tokenizer = self.get_rust_tokenizer()
-        tokenizer.chat_template = "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
+        tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{{ message.content }}{{ eos_token }}"
+            "{% endfor %}"
+        )
         test_chats = [
-            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+            ],
             [
                 {"role": "system", "content": "You are a helpful chatbot."},
                 {"role": "user", "content": "Hello!"},
                 {"role": "assistant", "content": "Nice to meet you."},
             ],
-            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "assistant", "content": "Nice to meet you."},
+                {"role": "user", "content": "Hello!"},
+            ],
         ]
-        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
+        tokenized_chats = [
+            tokenizer.apply_chat_template(test_chat) for test_chat in test_chats
+        ]
         expected_tokens = [
             [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2],
-            [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2, 229126, 427, 11890, 1152, 17, 2],
+            [
+                5448,
+                1306,
+                267,
+                66799,
+                44799,
+                37143,
+                17,
+                2,
+                59414,
+                4,
+                2,
+                229126,
+                427,
+                11890,
+                1152,
+                17,
+                2,
+            ],
             [229126, 427, 11890, 1152, 17, 2, 59414, 4, 2],
         ]
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):

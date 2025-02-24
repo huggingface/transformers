@@ -24,7 +24,11 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ....activations import ACT2FN
-from ....modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ....modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    ImageClassifierOutput,
+)
 from ....modeling_utils import PreTrainedModel
 from ....utils import (
     ModelOutput,
@@ -56,7 +60,13 @@ class EfficientFormerPatchEmbeddings(nn.Module):
     height, width] it produces output tensor with the shape [batch_size, num_channels, height/stride, width/stride]
     """
 
-    def __init__(self, config: EfficientFormerConfig, num_channels: int, embed_dim: int, apply_norm: bool = True):
+    def __init__(
+        self,
+        config: EfficientFormerConfig,
+        num_channels: int,
+        embed_dim: int,
+        apply_norm: bool = True,
+    ):
         super().__init__()
         self.num_channels = num_channels
 
@@ -67,7 +77,11 @@ class EfficientFormerPatchEmbeddings(nn.Module):
             stride=config.downsample_stride,
             padding=config.downsample_pad,
         )
-        self.norm = nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps) if apply_norm else nn.Identity()
+        self.norm = (
+            nn.BatchNorm2d(embed_dim, eps=config.batch_norm_eps)
+            if apply_norm
+            else nn.Identity()
+        )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -83,7 +97,14 @@ class EfficientFormerPatchEmbeddings(nn.Module):
 
 
 class EfficientFormerSelfAttention(nn.Module):
-    def __init__(self, dim: int, key_dim: int, num_heads: int, attention_ratio: int, resolution: int):
+    def __init__(
+        self,
+        dim: int,
+        key_dim: int,
+        num_heads: int,
+        attention_ratio: int,
+        resolution: int,
+    ):
         super().__init__()
 
         self.num_heads = num_heads
@@ -106,8 +127,12 @@ class EfficientFormerSelfAttention(nn.Module):
                 if offset not in attention_offsets:
                     attention_offsets[offset] = len(attention_offsets)
                 idxs.append(attention_offsets[offset])
-        self.attention_biases = torch.nn.Parameter(torch.zeros(num_heads, len(attention_offsets)))
-        self.register_buffer("attention_bias_idxs", torch.LongTensor(idxs).view(num_points, num_points))
+        self.attention_biases = torch.nn.Parameter(
+            torch.zeros(num_heads, len(attention_offsets))
+        )
+        self.register_buffer(
+            "attention_bias_idxs", torch.LongTensor(idxs).view(num_points, num_points)
+        )
 
     @torch.no_grad()
     def train(self, mode=True):
@@ -117,12 +142,14 @@ class EfficientFormerSelfAttention(nn.Module):
         else:
             self.ab = self.attention_biases[:, self.attention_bias_idxs]
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
+    def forward(
+        self, hidden_states: torch.Tensor, output_attentions: bool = False
+    ) -> Tuple[torch.Tensor]:
         batch_size, sequence_length, num_channels = hidden_states.shape
         qkv = self.qkv(hidden_states)
-        query_layer, key_layer, value_layer = qkv.reshape(batch_size, sequence_length, self.num_heads, -1).split(
-            [self.key_dim, self.key_dim, self.expanded_key_dim], dim=3
-        )
+        query_layer, key_layer, value_layer = qkv.reshape(
+            batch_size, sequence_length, self.num_heads, -1
+        ).split([self.key_dim, self.key_dim, self.expanded_key_dim], dim=3)
         query_layer = query_layer.permute(0, 2, 1, 3)
         key_layer = key_layer.permute(0, 2, 1, 3)
         value_layer = value_layer.permute(0, 2, 1, 3)
@@ -131,17 +158,25 @@ class EfficientFormerSelfAttention(nn.Module):
         # Let's do it manually here, so users won't have to do this everytime.
         if not self.training:
             self.ab = self.ab.to(self.attention_biases.device)
-        attention_probs = (torch.matmul(query_layer, key_layer.transpose(-2, -1))) * self.scale + (
-            self.attention_biases[:, self.attention_bias_idxs] if self.training else self.ab
+        attention_probs = (
+            torch.matmul(query_layer, key_layer.transpose(-2, -1))
+        ) * self.scale + (
+            self.attention_biases[:, self.attention_bias_idxs]
+            if self.training
+            else self.ab
         )
 
         attention_probs = attention_probs.softmax(dim=-1)
 
         context_layer = torch.matmul(attention_probs, value_layer).transpose(1, 2)
-        context_layer = context_layer.reshape(batch_size, sequence_length, self.total_expanded_key_dim)
+        context_layer = context_layer.reshape(
+            batch_size, sequence_length, self.total_expanded_key_dim
+        )
         context_layer = self.projection(context_layer)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -150,10 +185,16 @@ class EfficientFormerConvStem(nn.Module):
     def __init__(self, config: EfficientFormerConfig, out_channels: int):
         super().__init__()
 
-        self.convolution1 = nn.Conv2d(config.num_channels, out_channels // 2, kernel_size=3, stride=2, padding=1)
-        self.batchnorm_before = nn.BatchNorm2d(out_channels // 2, eps=config.batch_norm_eps)
+        self.convolution1 = nn.Conv2d(
+            config.num_channels, out_channels // 2, kernel_size=3, stride=2, padding=1
+        )
+        self.batchnorm_before = nn.BatchNorm2d(
+            out_channels // 2, eps=config.batch_norm_eps
+        )
 
-        self.convolution2 = nn.Conv2d(out_channels // 2, out_channels, kernel_size=3, stride=2, padding=1)
+        self.convolution2 = nn.Conv2d(
+            out_channels // 2, out_channels, kernel_size=3, stride=2, padding=1
+        )
         self.batchnorm_after = nn.BatchNorm2d(out_channels, eps=config.batch_norm_eps)
 
         self.activation = nn.ReLU()
@@ -170,7 +211,9 @@ class EfficientFormerConvStem(nn.Module):
 class EfficientFormerPooling(nn.Module):
     def __init__(self, pool_size: int):
         super().__init__()
-        self.pool = nn.AvgPool2d(pool_size, stride=1, padding=pool_size // 2, count_include_pad=False)
+        self.pool = nn.AvgPool2d(
+            pool_size, stride=1, padding=pool_size // 2, count_include_pad=False
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         output = self.pool(hidden_states) - hidden_states
@@ -222,7 +265,9 @@ class EfficientFormerConvMlp(nn.Module):
         self.convolution2 = nn.Conv2d(hidden_features, out_features, 1)
         self.dropout = nn.Dropout(drop)
 
-        self.batchnorm_before = nn.BatchNorm2d(hidden_features, eps=config.batch_norm_eps)
+        self.batchnorm_before = nn.BatchNorm2d(
+            hidden_features, eps=config.batch_norm_eps
+        )
         self.batchnorm_after = nn.BatchNorm2d(out_features, eps=config.batch_norm_eps)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
@@ -239,7 +284,9 @@ class EfficientFormerConvMlp(nn.Module):
         return hidden_state
 
 
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -252,8 +299,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -298,29 +349,46 @@ class EfficientFormerMeta3D(nn.Module):
         self.layernorm2 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
         mlp_hidden_dim = int(dim * config.mlp_expansion_ratio)
-        self.mlp = EfficientFormerDenseMlp(config, in_features=dim, hidden_features=mlp_hidden_dim)
+        self.mlp = EfficientFormerDenseMlp(
+            config, in_features=dim, hidden_features=mlp_hidden_dim
+        )
 
-        self.drop_path = EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = (
+            EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        )
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
-            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            self.layer_scale_1 = nn.Parameter(
+                config.layer_scale_init_value * torch.ones((dim)), requires_grad=True
+            )
+            self.layer_scale_2 = nn.Parameter(
+                config.layer_scale_init_value * torch.ones((dim)), requires_grad=True
+            )
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
-        self_attention_outputs = self.token_mixer(self.layernorm1(hidden_states), output_attentions)
+    def forward(
+        self, hidden_states: torch.Tensor, output_attentions: bool = False
+    ) -> Tuple[torch.Tensor]:
+        self_attention_outputs = self.token_mixer(
+            self.layernorm1(hidden_states), output_attentions
+        )
         attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[
+            1:
+        ]  # add self attentions if we output attention weights
 
         if self.use_layer_scale:
             layer_output = hidden_states + self.drop_path(
                 self.layer_scale_1.unsqueeze(0).unsqueeze(0) * attention_output
             )
             layer_output = layer_output + self.drop_path(
-                self.layer_scale_2.unsqueeze(0).unsqueeze(0) * self.mlp(self.layernorm2(layer_output))
+                self.layer_scale_2.unsqueeze(0).unsqueeze(0)
+                * self.mlp(self.layernorm2(layer_output))
             )
         else:
             layer_output = hidden_states + self.drop_path(attention_output)
-            layer_output = layer_output + self.drop_path(self.mlp(self.layernorm2(layer_output)))
+            layer_output = layer_output + self.drop_path(
+                self.mlp(self.layernorm2(layer_output))
+            )
 
         outputs = (layer_output,) + outputs
 
@@ -335,10 +403,17 @@ class EfficientFormerMeta3DLayers(nn.Module):
             for block_idx in range(config.num_meta3d_blocks)
         ]
         self.blocks = nn.ModuleList(
-            [EfficientFormerMeta3D(config, config.hidden_sizes[-1], drop_path=drop_path) for drop_path in drop_paths]
+            [
+                EfficientFormerMeta3D(
+                    config, config.hidden_sizes[-1], drop_path=drop_path
+                )
+                for drop_path in drop_paths
+            ]
         )
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
+    def forward(
+        self, hidden_states: torch.Tensor, output_attentions: bool = False
+    ) -> Tuple[torch.Tensor]:
         all_attention_outputs = () if output_attentions else None
 
         for layer_module in self.blocks:
@@ -364,20 +439,31 @@ class EfficientFormerMeta4D(nn.Module):
         self.token_mixer = EfficientFormerPooling(pool_size=pool_size)
         mlp_hidden_dim = int(dim * config.mlp_expansion_ratio)
         self.mlp = EfficientFormerConvMlp(
-            config, in_features=dim, hidden_features=mlp_hidden_dim, drop=config.hidden_dropout_prob
+            config,
+            in_features=dim,
+            hidden_features=mlp_hidden_dim,
+            drop=config.hidden_dropout_prob,
         )
 
-        self.drop_path = EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = (
+            EfficientFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        )
         self.use_layer_scale = config.use_layer_scale
         if config.use_layer_scale:
-            self.layer_scale_1 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
-            self.layer_scale_2 = nn.Parameter(config.layer_scale_init_value * torch.ones((dim)), requires_grad=True)
+            self.layer_scale_1 = nn.Parameter(
+                config.layer_scale_init_value * torch.ones((dim)), requires_grad=True
+            )
+            self.layer_scale_2 = nn.Parameter(
+                config.layer_scale_init_value * torch.ones((dim)), requires_grad=True
+            )
 
     def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor]:
         outputs = self.token_mixer(hidden_states)
 
         if self.use_layer_scale:
-            layer_output = hidden_states + self.drop_path(self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * outputs)
+            layer_output = hidden_states + self.drop_path(
+                self.layer_scale_1.unsqueeze(-1).unsqueeze(-1) * outputs
+            )
 
             layer_output = layer_output + self.drop_path(
                 self.layer_scale_2.unsqueeze(-1).unsqueeze(-1) * self.mlp(layer_output)
@@ -393,15 +479,20 @@ class EfficientFormerMeta4DLayers(nn.Module):
     def __init__(self, config: EfficientFormerConfig, stage_idx: int):
         super().__init__()
         num_layers = (
-            config.depths[stage_idx] if stage_idx != -1 else config.depths[stage_idx] - config.num_meta3d_blocks
+            config.depths[stage_idx]
+            if stage_idx != -1
+            else config.depths[stage_idx] - config.num_meta3d_blocks
         )
         drop_paths = [
-            config.drop_path_rate * (block_idx + sum(config.depths[:stage_idx])) for block_idx in range(num_layers)
+            config.drop_path_rate * (block_idx + sum(config.depths[:stage_idx]))
+            for block_idx in range(num_layers)
         ]
 
         self.blocks = nn.ModuleList(
             [
-                EfficientFormerMeta4D(config, config.hidden_sizes[stage_idx], drop_path=drop_path)
+                EfficientFormerMeta4D(
+                    config, config.hidden_sizes[stage_idx], drop_path=drop_path
+                )
                 for drop_path in drop_paths
             ]
         )
@@ -429,7 +520,9 @@ class EfficientFormerLastStage(nn.Module):
         self.flat = EfficientFormerFlat()
         self.meta3D_layers = EfficientFormerMeta3DLayers(config)
 
-    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False) -> Tuple[torch.Tensor]:
+    def forward(
+        self, hidden_states: torch.Tensor, output_attentions: bool = False
+    ) -> Tuple[torch.Tensor]:
         hidden_states = self.meta4D_layers(hidden_states)
         hidden_states = self.flat(hidden_states)
         hidden_states = self.meta3D_layers(hidden_states, output_attentions)
@@ -443,7 +536,8 @@ class EfficientFormerEncoder(nn.Module):
         self.config = config
         num_intermediate_stages = len(config.depths) - 1
         downsamples = [
-            config.downsamples[i] or config.hidden_sizes[i] != config.hidden_sizes[i + 1]
+            config.downsamples[i]
+            or config.hidden_sizes[i] != config.hidden_sizes[i + 1]
             for i in range(num_intermediate_stages)
         ]
         intermediate_stages = []
@@ -452,7 +546,9 @@ class EfficientFormerEncoder(nn.Module):
             intermediate_stages.append(EfficientFormerIntermediateStage(config, i))
             if downsamples[i]:
                 intermediate_stages.append(
-                    EfficientFormerPatchEmbeddings(config, config.hidden_sizes[i], config.hidden_sizes[i + 1])
+                    EfficientFormerPatchEmbeddings(
+                        config, config.hidden_sizes[i], config.hidden_sizes[i + 1]
+                    )
                 )
 
         self.intermediate_stages = nn.ModuleList(intermediate_stages)
@@ -476,7 +572,9 @@ class EfficientFormerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-        layer_output = self.last_stage(hidden_states, output_attentions=output_attentions)
+        layer_output = self.last_stage(
+            hidden_states, output_attentions=output_attentions
+        )
 
         if output_attentions:
             all_self_attentions = all_self_attentions + layer_output[1:]
@@ -485,7 +583,11 @@ class EfficientFormerEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (layer_output[0],)
 
         if not return_dict:
-            return tuple(v for v in [layer_output[0], all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [layer_output[0], all_hidden_states, all_self_attentions]
+                if v is not None
+            )
 
         return BaseModelOutput(
             last_hidden_state=layer_output[0],
@@ -554,7 +656,9 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
 
         self.patch_embed = EfficientFormerConvStem(config, config.hidden_sizes[0])
         self.encoder = EfficientFormerEncoder(config)
-        self.layernorm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)
+        self.layernorm = nn.LayerNorm(
+            config.hidden_sizes[-1], eps=config.layer_norm_eps
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -574,18 +678,28 @@ class EfficientFormerModel(EfficientFormerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.patch_embed(pixel_values)
         encoder_outputs = self.encoder(
-            embedding_output, output_attentions=output_attentions, output_hidden_states=output_hidden_states
+            embedding_output,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
 
         sequence_output = encoder_outputs[0]
@@ -618,7 +732,9 @@ class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
 
         # Classifier head
         self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -645,7 +761,9 @@ class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.efficientformer(
             pixel_values,
@@ -663,7 +781,9 @@ class EfficientFormerForImageClassification(EfficientFormerPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -747,10 +867,16 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
         self.efficientformer = EfficientFormerModel(config)
 
         # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.classifier = (
+            nn.Linear(config.hidden_size, config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
+        )
         # Distillation head
         self.distillation_classifier = (
-            nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(config.hidden_size, config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
@@ -770,7 +896,9 @@ class EfficientFormerForImageClassificationWithTeacher(EfficientFormerPreTrained
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[tuple, EfficientFormerForImageClassificationWithTeacherOutput]:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         outputs = self.efficientformer(
             pixel_values,
             output_attentions=output_attentions,

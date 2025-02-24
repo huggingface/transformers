@@ -1,6 +1,12 @@
 from typing import Any, Dict, List, Union
 
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
+from ..utils import (
+    add_end_docstrings,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -112,7 +118,9 @@ class ObjectDetectionPipeline(Pipeline):
         if self.framework == "pt":
             inputs = inputs.to(self.torch_dtype)
         if self.tokenizer is not None:
-            inputs = self.tokenizer(text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt")
+            inputs = self.tokenizer(
+                text=inputs["words"], boxes=inputs["boxes"], return_tensors="pt"
+            )
         inputs["target_size"] = target_size
         return inputs
 
@@ -143,28 +151,45 @@ class ObjectDetectionPipeline(Pipeline):
                     )
                 )
 
-            scores, classes = model_outputs["logits"].squeeze(0).softmax(dim=-1).max(dim=-1)
-            labels = [self.model.config.id2label[prediction] for prediction in classes.tolist()]
+            scores, classes = (
+                model_outputs["logits"].squeeze(0).softmax(dim=-1).max(dim=-1)
+            )
+            labels = [
+                self.model.config.id2label[prediction]
+                for prediction in classes.tolist()
+            ]
             boxes = [unnormalize(bbox) for bbox in model_outputs["bbox"].squeeze(0)]
             keys = ["score", "label", "box"]
-            annotation = [dict(zip(keys, vals)) for vals in zip(scores.tolist(), labels, boxes) if vals[0] > threshold]
+            annotation = [
+                dict(zip(keys, vals))
+                for vals in zip(scores.tolist(), labels, boxes)
+                if vals[0] > threshold
+            ]
         else:
             # This is a regular ForObjectDetectionModel
-            raw_annotations = self.image_processor.post_process_object_detection(model_outputs, threshold, target_size)
+            raw_annotations = self.image_processor.post_process_object_detection(
+                model_outputs, threshold, target_size
+            )
             raw_annotation = raw_annotations[0]
             scores = raw_annotation["scores"]
             labels = raw_annotation["labels"]
             boxes = raw_annotation["boxes"]
 
             raw_annotation["scores"] = scores.tolist()
-            raw_annotation["labels"] = [self.model.config.id2label[label.item()] for label in labels]
+            raw_annotation["labels"] = [
+                self.model.config.id2label[label.item()] for label in labels
+            ]
             raw_annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
 
             # {"scores": [...], ...} --> [{"score":x, ...}, ...]
             keys = ["score", "label", "box"]
             annotation = [
                 dict(zip(keys, vals))
-                for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["boxes"])
+                for vals in zip(
+                    raw_annotation["scores"],
+                    raw_annotation["labels"],
+                    raw_annotation["boxes"],
+                )
             ]
 
         return annotation
@@ -180,7 +205,9 @@ class ObjectDetectionPipeline(Pipeline):
             bbox (`Dict[str, int]`): Dict containing the coordinates in corners format.
         """
         if self.framework != "pt":
-            raise ValueError("The ObjectDetectionPipeline is only available in PyTorch.")
+            raise ValueError(
+                "The ObjectDetectionPipeline is only available in PyTorch."
+            )
         xmin, ymin, xmax, ymax = box.int().tolist()
         bbox = {
             "xmin": xmin,

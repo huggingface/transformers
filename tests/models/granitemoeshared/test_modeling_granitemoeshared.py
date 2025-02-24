@@ -18,7 +18,12 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GraniteMoeSharedConfig, is_torch_available, set_seed
+from transformers import (
+    AutoTokenizer,
+    GraniteMoeSharedConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     require_read_token,
     require_torch,
@@ -106,19 +111,33 @@ class GraniteMoeSharedModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return GraniteMoeSharedConfig(
@@ -139,14 +158,24 @@ class GraniteMoeSharedModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = GraniteMoeSharedModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_model_as_decoder(
         self,
@@ -176,7 +205,10 @@ class GraniteMoeSharedModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
 
     def create_and_check_for_causal_lm(
         self,
@@ -194,7 +226,9 @@ class GraniteMoeSharedModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -250,13 +284,17 @@ class GraniteMoeSharedModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[
+            :, -3:, random_slice_idx
+        ].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        self.parent.assertTrue(
+            torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -274,7 +312,9 @@ class GraniteMoeSharedModelTester:
 
 
 @require_torch
-class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class GraniteMoeSharedModelTest(
+    ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             GraniteMoeSharedModel,
@@ -301,7 +341,9 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
     def setUp(self):
         self.model_tester = GraniteMoeSharedModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteMoeSharedConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=GraniteMoeSharedConfig, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -316,7 +358,9 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip("GraniteMoeShared buffers include complex numbers, which breaks this test")
+    @unittest.skip(
+        "GraniteMoeShared buffers include complex numbers, which breaks this test"
+    )
     def test_save_load_fast_init_from_base(self):
         pass
 
@@ -324,16 +368,22 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+        long_input = ids_tensor(
+            [1, int(config.max_position_embeddings * 1.5)], config.vocab_size
+        )
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         original_model = GraniteMoeSharedModel(config)
         original_model.to(torch_device)
         original_model.eval()
         original_short_output = original_model(short_input).last_hidden_state
         original_long_output = original_model(long_input).last_hidden_state
 
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        set_seed(
+            42
+        )  # Fixed seed at init time so the two models get the same random weights
         config.rope_scaling = {"type": scaling_type, "factor": 10.0}
         scaled_model = GraniteMoeSharedModel(config)
         scaled_model.to(torch_device)
@@ -344,12 +394,18 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+            torch.testing.assert_close(
+                original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5
+            )
         else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            self.assertFalse(
+                torch.allclose(original_short_output, scaled_short_output, atol=1e-5)
+            )
 
         # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+        self.assertFalse(
+            torch.allclose(original_long_output, scaled_long_output, atol=1e-5)
+        )
 
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -358,37 +414,61 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exlusively to get the dtype and the device
-        position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exlusively to get the dtype and the device
+        position_ids_short = torch.arange(
+            short_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_short = position_ids_short.unsqueeze(0)
-        position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
+        position_ids_long = torch.arange(
+            long_input_length, dtype=torch.long, device=torch_device
+        )
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
         original_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
-        torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            original_cos_short, original_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            original_sin_short, original_sin_long[:, :short_input_length, :]
+        )
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
         config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-        linear_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
+        linear_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(
+            torch_device
+        )
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            linear_cos_short, linear_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            linear_sin_short, linear_sin_long[:, :short_input_length, :]
+        )
         for new_position in range(0, long_input_length, scaling_factor):
             original_position = int(new_position // scaling_factor)
-            torch.testing.assert_close(linear_cos_long[:, new_position, :], original_cos_long[:, original_position, :])
-            torch.testing.assert_close(linear_sin_long[:, new_position, :], original_sin_long[:, original_position, :])
+            torch.testing.assert_close(
+                linear_cos_long[:, new_position, :],
+                original_cos_long[:, original_position, :],
+            )
+            torch.testing.assert_close(
+                linear_sin_long[:, new_position, :],
+                original_sin_long[:, original_position, :],
+            )
 
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
         config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
-        ntk_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
+        ntk_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(
+            torch_device
+        )
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -402,11 +482,17 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
         config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
-        yarn_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(torch_device)
+        yarn_scaling_rope = GraniteMoeSharedRotaryEmbedding(config=config).to(
+            torch_device
+        )
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
-        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
-        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        torch.testing.assert_close(
+            yarn_cos_short, yarn_cos_long[:, :short_input_length, :]
+        )
+        torch.testing.assert_close(
+            yarn_sin_short, yarn_sin_long[:, :short_input_length, :]
+        )
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_cos_short, original_cos_short)
         with self.assertRaises(AssertionError):
@@ -427,14 +513,18 @@ class GraniteMoeSharedIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
-            cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+            cls.cuda_compute_capability_major_version = (
+                torch.cuda.get_device_capability()[0]
+            )
 
     @slow
     @require_read_token
     def test_model_3b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
 
-        model = GraniteMoeSharedForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
+        model = GraniteMoeSharedForCausalLM.from_pretrained(
+            "ibm/PowerMoE-3b", device_map="auto"
+        )
 
         with torch.no_grad():
             out = model(torch.tensor([input_ids]).to(torch_device))
@@ -468,11 +558,19 @@ class GraniteMoeSharedIntegrationTest(unittest.TestCase):
         )
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("ibm/PowerMoE-3b")
-        model = GraniteMoeSharedForCausalLM.from_pretrained("ibm/PowerMoE-3b", device_map="auto")
+        model = GraniteMoeSharedForCausalLM.from_pretrained(
+            "ibm/PowerMoE-3b", device_map="auto"
+        )
         model_inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
-        generated_ids = model.generate(**model_inputs, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
+        generated_ids = model.generate(
+            **model_inputs,
+            max_new_tokens=64,
+            top_p=None,
+            temperature=1,
+            do_sample=False
+        )
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

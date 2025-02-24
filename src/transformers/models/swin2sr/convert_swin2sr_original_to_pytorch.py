@@ -21,7 +21,11 @@ import torch
 from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
-from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution, Swin2SRImageProcessor
+from transformers import (
+    Swin2SRConfig,
+    Swin2SRForImageSuperResolution,
+    Swin2SRImageProcessor,
+)
 
 
 def get_config(checkpoint_url):
@@ -54,7 +58,9 @@ def get_config(checkpoint_url):
 
 def rename_key(name, config):
     if "patch_embed.proj" in name and "layers" not in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
+        name = name.replace(
+            "patch_embed.proj", "embeddings.patch_embeddings.projection"
+        )
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "embeddings.patch_embeddings.layernorm")
     if "layers" in name:
@@ -137,22 +143,22 @@ def convert_state_dict(orig_state_dict, config):
                 orig_state_dict[
                     f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.weight"
                 ] = val[:dim, :]
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.weight"] = (
-                    val[dim : dim * 2, :]
-                )
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.weight"
+                ] = val[dim : dim * 2, :]
                 orig_state_dict[
                     f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.weight"
                 ] = val[-dim:, :]
             else:
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.bias"] = (
-                    val[:dim]
-                )
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"] = (
-                    val[dim : dim * 2]
-                )
-                orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"] = (
-                    val[-dim:]
-                )
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"
+                ] = val[-dim:]
             pass
         else:
             orig_state_dict[rename_key(key, config)] = val
@@ -172,7 +178,11 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     if len(missing_keys) > 0:
         raise ValueError("Missing keys when converting: {}".format(missing_keys))
     for key in unexpected_keys:
-        if not ("relative_position_index" in key or "relative_coords_table" in key or "self_mask" in key):
+        if not (
+            "relative_position_index" in key
+            or "relative_coords_table" in key
+            or "self_mask" in key
+        ):
             raise ValueError(f"Unexpected key {key} in state_dict")
 
     # verify values
@@ -200,34 +210,56 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     if "Swin2SR_ClassicalSR_X2_64" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 512, 512])
         expected_slice = torch.tensor(
-            [[-0.7087, -0.7138, -0.6721], [-0.8340, -0.8095, -0.7298], [-0.9149, -0.8414, -0.7940]]
+            [
+                [-0.7087, -0.7138, -0.6721],
+                [-0.8340, -0.8095, -0.7298],
+                [-0.9149, -0.8414, -0.7940],
+            ]
         )
     elif "Swin2SR_ClassicalSR_X4_64" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 1024, 1024])
         expected_slice = torch.tensor(
-            [[-0.7775, -0.8105, -0.8933], [-0.7764, -0.8356, -0.9225], [-0.7976, -0.8686, -0.9579]]
+            [
+                [-0.7775, -0.8105, -0.8933],
+                [-0.7764, -0.8356, -0.9225],
+                [-0.7976, -0.8686, -0.9579],
+            ]
         )
     elif "Swin2SR_CompressedSR_X4_48" in checkpoint_url:
         # TODO values didn't match exactly here
         expected_shape = torch.Size([1, 3, 1024, 1024])
         expected_slice = torch.tensor(
-            [[-0.8035, -0.7504, -0.7491], [-0.8538, -0.8124, -0.7782], [-0.8804, -0.8651, -0.8493]]
+            [
+                [-0.8035, -0.7504, -0.7491],
+                [-0.8538, -0.8124, -0.7782],
+                [-0.8804, -0.8651, -0.8493],
+            ]
         )
     elif "Swin2SR_Lightweight_X2_64" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 512, 512])
         expected_slice = torch.tensor(
-            [[-0.7669, -0.8662, -0.8767], [-0.8810, -0.9962, -0.9820], [-0.9340, -1.0322, -1.1149]]
+            [
+                [-0.7669, -0.8662, -0.8767],
+                [-0.8810, -0.9962, -0.9820],
+                [-0.9340, -1.0322, -1.1149],
+            ]
         )
     elif "Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 1024, 1024])
         expected_slice = torch.tensor(
-            [[-0.5238, -0.5557, -0.6321], [-0.6016, -0.5903, -0.6391], [-0.6244, -0.6334, -0.6889]]
+            [
+                [-0.5238, -0.5557, -0.6321],
+                [-0.6016, -0.5903, -0.6391],
+                [-0.6244, -0.6334, -0.6889],
+            ]
         )
 
     assert (
         outputs.reconstruction.shape == expected_shape
     ), f"Shape of reconstruction should be {expected_shape}, but is {outputs.reconstruction.shape}"
-    assert torch.allclose(outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-3)
+    assert torch.allclose(
+        outputs.reconstruction[0, 0, :3, :3], expected_slice, atol=1e-3
+    )
     print("Looks ok!")
 
     url_to_name = {
@@ -270,9 +302,18 @@ if __name__ == "__main__":
         help="URL of the original Swin2SR checkpoint you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the converted model to the hub.")
+    parser.add_argument(
+        "--push_to_hub",
+        action="store_true",
+        help="Whether to push the converted model to the hub.",
+    )
 
     args = parser.parse_args()
-    convert_swin2sr_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_swin2sr_checkpoint(
+        args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub
+    )

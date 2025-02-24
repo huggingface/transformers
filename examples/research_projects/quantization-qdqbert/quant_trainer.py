@@ -38,16 +38,51 @@ def add_arguments(parser):
     group = parser.add_argument_group("quant_trainer arguments")
     group.add_argument("--wprec", type=int, default=8, help="weight precision")
     group.add_argument("--aprec", type=int, default=8, help="activation precision")
-    group.add_argument("--quant-per-tensor", action="store_true", help="per tensor weight scaling")
-    group.add_argument("--quant-disable", action="store_true", help="disable all quantizers")
-    group.add_argument("--quant-disable-embeddings", action="store_true", help="disable all embeddings quantizers")
-    group.add_argument("--quant-disable-keyword", type=str, nargs="+", help="disable quantizers by keyword")
-    group.add_argument("--quant-disable-layer-module", type=str, help="disable quantizers by keyword under layer.")
-    group.add_argument("--quant-enable-layer-module", type=str, help="enable quantizers by keyword under layer")
-    group.add_argument("--calibrator", default="max", help="which quantization range calibrator to use")
-    group.add_argument("--percentile", default=None, type=float, help="percentile for PercentileCalibrator")
-    group.add_argument("--fuse-qkv", action="store_true", help="use the same scale factor for qkv")
-    group.add_argument("--clip-gelu", metavar="N", type=float, help="clip gelu output maximum value to N")
+    group.add_argument(
+        "--quant-per-tensor", action="store_true", help="per tensor weight scaling"
+    )
+    group.add_argument(
+        "--quant-disable", action="store_true", help="disable all quantizers"
+    )
+    group.add_argument(
+        "--quant-disable-embeddings",
+        action="store_true",
+        help="disable all embeddings quantizers",
+    )
+    group.add_argument(
+        "--quant-disable-keyword",
+        type=str,
+        nargs="+",
+        help="disable quantizers by keyword",
+    )
+    group.add_argument(
+        "--quant-disable-layer-module",
+        type=str,
+        help="disable quantizers by keyword under layer.",
+    )
+    group.add_argument(
+        "--quant-enable-layer-module",
+        type=str,
+        help="enable quantizers by keyword under layer",
+    )
+    group.add_argument(
+        "--calibrator", default="max", help="which quantization range calibrator to use"
+    )
+    group.add_argument(
+        "--percentile",
+        default=None,
+        type=float,
+        help="percentile for PercentileCalibrator",
+    )
+    group.add_argument(
+        "--fuse-qkv", action="store_true", help="use the same scale factor for qkv"
+    )
+    group.add_argument(
+        "--clip-gelu",
+        metavar="N",
+        type=float,
+        help="clip gelu output maximum value to N",
+    )
     group.add_argument(
         "--recalibrate-weights",
         action="store_true",
@@ -73,7 +108,9 @@ def set_default_quantizers(args):
         raise ValueError(f"Invalid calibrator {args.calibrator}")
 
     input_desc = QuantDescriptor(num_bits=args.aprec, calib_method=calib_method)
-    weight_desc = QuantDescriptor(num_bits=args.wprec, axis=(None if args.quant_per_tensor else (0,)))
+    weight_desc = QuantDescriptor(
+        num_bits=args.wprec, axis=(None if args.quant_per_tensor else (0,))
+    )
     quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
     quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
 
@@ -95,10 +132,14 @@ def configure_model(model, args, calib=False, eval=False):
             set_quantizer_by_name(model, args.quant_disable_keyword, _disabled=True)
 
         if args.quant_disable_layer_module:
-            set_quantizer_by_name(model, [r"layer.\d+." + args.quant_disable_layer_module], _disabled=True)
+            set_quantizer_by_name(
+                model, [r"layer.\d+." + args.quant_disable_layer_module], _disabled=True
+            )
 
         if args.quant_enable_layer_module:
-            set_quantizer_by_name(model, [r"layer.\d+." + args.quant_enable_layer_module], _disabled=False)
+            set_quantizer_by_name(
+                model, [r"layer.\d+." + args.quant_enable_layer_module], _disabled=False
+            )
 
         if args.recalibrate_weights:
             recalibrate_weights(model)
@@ -172,9 +213,17 @@ def fuse_qkv(model, args):
     for name, mod in model.named_modules():
         if name.endswith(".attention.self"):
             logger.info(f"FUSE_QKV: {name:{name_width}}")
-            fuse3(mod.matmul_q_input_quantizer, mod.matmul_k_input_quantizer, mod.matmul_v_input_quantizer)
+            fuse3(
+                mod.matmul_q_input_quantizer,
+                mod.matmul_k_input_quantizer,
+                mod.matmul_v_input_quantizer,
+            )
             if args.quant_per_tensor:
-                fuse3(mod.query._weight_quantizer, mod.key._weight_quantizer, mod.value._weight_quantizer)
+                fuse3(
+                    mod.query._weight_quantizer,
+                    mod.key._weight_quantizer,
+                    mod.value._weight_quantizer,
+                )
 
 
 def clip_gelu(model, maxval):
@@ -183,11 +232,15 @@ def clip_gelu(model, maxval):
     """
 
     for name, mod in model.named_modules():
-        if name.endswith(".output.dense") and not name.endswith("attention.output.dense"):
+        if name.endswith(".output.dense") and not name.endswith(
+            "attention.output.dense"
+        ):
             amax_init = mod._input_quantizer._amax.data.detach().item()
             mod._input_quantizer._amax.data.detach().clamp_(max=maxval)
             amax = mod._input_quantizer._amax.data.detach().item()
-            logger.info(f"CLIP_GELU: {name:{name_width}} amax: {amax_init:5.2f} -> {amax:5.2f}")
+            logger.info(
+                f"CLIP_GELU: {name:{name_width}} amax: {amax_init:5.2f} -> {amax:5.2f}"
+            )
 
 
 def expand_amax(model):
@@ -197,7 +250,9 @@ def expand_amax(model):
         if hasattr(mod, "_weight_quantizer") and mod._weight_quantizer.axis is not None:
             k = mod.weight.shape[0]
             amax = mod._weight_quantizer._amax.detach()
-            mod._weight_quantizer._amax = torch.ones(k, dtype=amax.dtype, device=amax.device) * amax
+            mod._weight_quantizer._amax = (
+                torch.ones(k, dtype=amax.dtype, device=amax.device) * amax
+            )
             print(f"expanding {name} {amax} -> {mod._weight_quantizer._amax}")
 
 
@@ -212,10 +267,18 @@ def recalibrate_weights(model):
 
             # determine which axes to reduce across
             # e.g. a 4D tensor quantized per axis 0 should reduce over (1,2,3)
-            axis_set = set() if mod._weight_quantizer.axis is None else set(mod._weight_quantizer.axis)
+            axis_set = (
+                set()
+                if mod._weight_quantizer.axis is None
+                else set(mod._weight_quantizer.axis)
+            )
             reduce_axis = set(range(len(mod.weight.size()))) - axis_set
-            amax = pytorch_quantization.utils.reduce_amax(mod.weight, axis=reduce_axis, keepdims=True).detach()
-            logger.info(f"RECALIB: {name:{name_width}} {mod._weight_quantizer._amax.flatten()} -> {amax.flatten()}")
+            amax = pytorch_quantization.utils.reduce_amax(
+                mod.weight, axis=reduce_axis, keepdims=True
+            ).detach()
+            logger.info(
+                f"RECALIB: {name:{name_width}} {mod._weight_quantizer._amax.flatten()} -> {amax.flatten()}"
+            )
             mod._weight_quantizer._amax = amax
 
 

@@ -42,7 +42,12 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_longt5 import LongT5Config
 
 
@@ -55,7 +60,9 @@ remat = nn_partitioning.remat
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
-def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
+def shift_tokens_right(
+    input_ids: jnp.ndarray, pad_token_id: int, decoder_start_token_id: int
+) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
@@ -63,11 +70,15 @@ def shift_tokens_right(input_ids: jnp.ndarray, pad_token_id: int, decoder_start_
     shifted_input_ids = shifted_input_ids.at[:, 1:].set(input_ids[:, :-1])
     shifted_input_ids = shifted_input_ids.at[:, 0].set(decoder_start_token_id)
 
-    shifted_input_ids = jnp.where(shifted_input_ids == -100, pad_token_id, shifted_input_ids)
+    shifted_input_ids = jnp.where(
+        shifted_input_ids == -100, pad_token_id, shifted_input_ids
+    )
     return shifted_input_ids
 
 
-def _pad_to_multiple(x: jnp.ndarray, block_len: int, axis: int, pad_value: int = 0) -> jnp.ndarray:
+def _pad_to_multiple(
+    x: jnp.ndarray, block_len: int, axis: int, pad_value: int = 0
+) -> jnp.ndarray:
     """Pad an array so that a sequence length will be a multiple of `block_len`"""
     pad_len = -x.shape[axis] % block_len
     pad = [(0, 0)] * x.ndim
@@ -88,7 +99,9 @@ def _split_into_blocks(x: jnp.ndarray, block_len: int, axis: int) -> jnp.ndarray
     return x.reshape(output_shape)
 
 
-def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0) -> jnp.ndarray:
+def _concatenate_3_blocks(
+    x: jnp.ndarray, block_axis: int, sequence_axis: int, pad_value: int = 0
+) -> jnp.ndarray:
     """Concatenate three consecutive blocks for each input block for local attentiont.
     For more information, see: https://arxiv.org/pdf/2112.07916.pdf.
     """
@@ -107,18 +120,24 @@ def _concatenate_3_blocks(x: jnp.ndarray, block_axis: int, sequence_axis: int, p
         indices[block_axis] = slice(i, i + num_blocks)
         indices = tuple(indices)
         blocks_list.append(x[indices])
-    return jnp.concatenate(blocks_list, axis=sequence_axis)  # [batch_size, num_blocks, 3 * block_len, ...]
+    return jnp.concatenate(
+        blocks_list, axis=sequence_axis
+    )  # [batch_size, num_blocks, 3 * block_len, ...]
 
 
 def _make_3block_relative_position_ids(block_len: int) -> jnp.ndarray:
     """Makes 3-blocked relative position ids for local attention."""
     position_ids = jnp.arange(3 * block_len, dtype=jnp.int32)
     center_position_ids = position_ids[block_len:-block_len]
-    relative_position_ids = position_ids[None, :] - center_position_ids[:, None]  # [block_len, 3 * block_len]
+    relative_position_ids = (
+        position_ids[None, :] - center_position_ids[:, None]
+    )  # [block_len, 3 * block_len]
     return relative_position_ids
 
 
-def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int) -> jnp.ndarray:
+def _mask_local_attention_mask(
+    local_attention_mask: np.ndarray, block_len: int
+) -> jnp.ndarray:
     """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
     relative_position_ids = _make_3block_relative_position_ids(block_len)
     locality_mask = jnp.abs(relative_position_ids) < block_len
@@ -126,23 +145,31 @@ def _mask_local_attention_mask(local_attention_mask: np.ndarray, block_len: int)
     return jnp.logical_and(local_attention_mask, locality_mask)
 
 
-def _get_local_attention_mask(attention_mask: np.ndarray, block_len: int) -> jnp.ndarray:
+def _get_local_attention_mask(
+    attention_mask: np.ndarray, block_len: int
+) -> jnp.ndarray:
     """Prepare attention mask to be applied for a local attention."""
     # [batch_size, num_blocks, block_len]
     _blocked_attention_mask = _split_into_blocks(attention_mask, block_len, axis=1)
     # [batch_size, num_block, 3 * block_len]
-    _3blocked_attention_mask = _concatenate_3_blocks(_blocked_attention_mask, block_axis=1, sequence_axis=2)
+    _3blocked_attention_mask = _concatenate_3_blocks(
+        _blocked_attention_mask, block_axis=1, sequence_axis=2
+    )
 
     _blocked_attention_mask = _blocked_attention_mask[..., None]
     _3blocked_attention_mask = _3blocked_attention_mask[..., None, :]
     # [batch_size, num_block, block_len, 3 * block_len]
-    local_attention_mask = jnp.logical_and(_blocked_attention_mask, _3blocked_attention_mask)
+    local_attention_mask = jnp.logical_and(
+        _blocked_attention_mask, _3blocked_attention_mask
+    )
     local_attention_mask = _mask_local_attention_mask(local_attention_mask, block_len)
     # [batch_size, 1, num_block, block_len, 3 * block_len]
     return local_attention_mask[:, None, ...]
 
 
-def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: int) -> Tuple[jnp.ndarray, np.ndarray]:
+def _make_global_fixed_block_ids(
+    attention_mask: np.ndarray, global_block_size: int
+) -> Tuple[jnp.ndarray, np.ndarray]:
     """Obtain the "fixed block" global id corresponding to each input token.
 
     This implementation is a simlified version of the original Flaxformr implementation adopted from:
@@ -166,7 +193,8 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
     fixed_block_mask = jnp.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
     mask = jnp.where(attention_mask != 0.0, 1.0, -1000.0)
     global_block_ids = jnp.maximum(
-        jnp.floor(mask + fixed_block_mask - 1.0), jnp.array(-1.0, dtype=attention_mask.dtype)
+        jnp.floor(mask + fixed_block_mask - 1.0),
+        jnp.array(-1.0, dtype=attention_mask.dtype),
     )
     # set padding tokens to -1
     global_block_ids = (global_block_ids * attention_mask) + (attention_mask - 1)
@@ -176,24 +204,34 @@ def _make_global_fixed_block_ids(attention_mask: np.ndarray, global_block_size: 
 
     # [batch_size, seq_len // global_block_size]
     if num_globals > 0:
-        _sequence_block_ids_max = jnp.repeat(global_block_ids.max(axis=-1)[:, None], repeats=num_globals, axis=1)
+        _sequence_block_ids_max = jnp.repeat(
+            global_block_ids.max(axis=-1)[:, None], repeats=num_globals, axis=1
+        )
     else:
-        _sequence_block_ids_max = jnp.zeros((batch_size, 0), dtype=global_block_ids.dtype)
+        _sequence_block_ids_max = jnp.zeros(
+            (batch_size, 0), dtype=global_block_ids.dtype
+        )
     global_segment_ids = jnp.cumsum(jnp.ones((batch_size, num_globals)), axis=-1) - 1
     global_segment_ids = jnp.where(global_segment_ids <= _sequence_block_ids_max, 1, 0)
     return global_block_ids, global_segment_ids
 
 
-def _make_side_relative_position_ids(attention_mask: np.ndarray, global_block_size: int) -> np.ndarray:
+def _make_side_relative_position_ids(
+    attention_mask: np.ndarray, global_block_size: int
+) -> np.ndarray:
     """Create the relative position tensor for local -> global attention."""
-    block_ids, global_segment_ids = _make_global_fixed_block_ids(attention_mask, global_block_size)
+    block_ids, global_segment_ids = _make_global_fixed_block_ids(
+        attention_mask, global_block_size
+    )
     global_seq_len = global_segment_ids.shape[-1]
     global_positions = jnp.arange(global_seq_len)
     side_relative_position = global_positions - block_ids[..., None]
     return side_relative_position
 
 
-def _create_global_aggregates(hidden_states: np.ndarray, block_ids: np.ndarray, global_seq_len: int) -> np.ndarray:
+def _create_global_aggregates(
+    hidden_states: np.ndarray, block_ids: np.ndarray, global_seq_len: int
+) -> np.ndarray:
     """Compute individual block aggregates by summing over individual blocks."""
     # (batch..., seq_len, global_seq_len))
     one_hot_block_ids = jax.nn.one_hot(block_ids, global_seq_len)
@@ -299,7 +337,9 @@ class FlaxLongT5LayerFF(nn.Module):
 
     def setup(self):
         if self.config.is_gated_act:
-            self.DenseReluDense = FlaxLongT5DenseGatedActDense(self.config, dtype=self.dtype)
+            self.DenseReluDense = FlaxLongT5DenseGatedActDense(
+                self.config, dtype=self.dtype
+            )
         else:
             self.DenseReluDense = FlaxLongT5DenseActDense(self.config, dtype=self.dtype)
 
@@ -310,8 +350,12 @@ class FlaxLongT5LayerFF(nn.Module):
 
     def __call__(self, hidden_states, deterministic=True):
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states, deterministic=deterministic)
-        hidden_states = hidden_states + self.dropout(forwarded_states, deterministic=deterministic)
+        forwarded_states = self.DenseReluDense(
+            forwarded_states, deterministic=deterministic
+        )
+        hidden_states = hidden_states + self.dropout(
+            forwarded_states, deterministic=deterministic
+        )
         return hidden_states
 
 
@@ -324,14 +368,18 @@ class FlaxLongT5Attention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
-        self.relative_attention_max_distance = self.config.relative_attention_max_distance
+        self.relative_attention_max_distance = (
+            self.config.relative_attention_max_distance
+        )
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
         self.dropout = self.config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
+        q_init_std = self.config.initializer_factor * (
+            (self.inner_dim * self.key_value_proj_dim) ** -0.5
+        )
         kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
         o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
@@ -369,7 +417,9 @@ class FlaxLongT5Attention(nn.Module):
             )
 
     @staticmethod
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+    def _relative_position_bucket(
+        relative_position, bidirectional=True, num_buckets=32, max_distance=128
+    ):
         """
         Adapted from Mesh Tensorflow:
         https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
@@ -396,11 +446,17 @@ class FlaxLongT5Attention(nn.Module):
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         relative_position_if_large = max_exact + (
-            jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
+            jnp.log(relative_position / max_exact)
+            / jnp.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(
+            relative_position_if_large, a_max=num_buckets - 1
+        )
 
-        relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
+        relative_buckets += jnp.where(
+            is_small, relative_position, relative_position_if_large
+        )
 
         return relative_buckets.astype("i4")
 
@@ -422,7 +478,9 @@ class FlaxLongT5Attention(nn.Module):
         return values
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim)
+        )
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.inner_dim,))
@@ -436,9 +494,15 @@ class FlaxLongT5Attention(nn.Module):
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
-        cached_key = self.variable("cache", "cached_key", jnp.zeros, key.shape, key.dtype)
-        cached_value = self.variable("cache", "cached_value", jnp.zeros, value.shape, value.dtype)
-        cache_index = self.variable("cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32))
+        cached_key = self.variable(
+            "cache", "cached_key", jnp.zeros, key.shape, key.dtype
+        )
+        cached_value = self.variable(
+            "cache", "cached_value", jnp.zeros, value.shape, value.dtype
+        )
+        cache_index = self.variable(
+            "cache", "cache_index", lambda: jnp.array(0, dtype=jnp.int32)
+        )
 
         if is_initialized:
             *batch_dims, max_length, num_heads, depth_per_head = cached_key.value.shape
@@ -461,9 +525,19 @@ class FlaxLongT5Attention(nn.Module):
         return key, value, attention_mask
 
     def _create_position_bias(
-        self, key_states, query_states, attention_mask, init_cache, seq_length, causal_attention_mask_shift
+        self,
+        key_states,
+        query_states,
+        attention_mask,
+        init_cache,
+        seq_length,
+        causal_attention_mask_shift,
     ):
-        cache_is_filled = self.causal and self.has_variable("cache", "cached_key") and (not init_cache)
+        cache_is_filled = (
+            self.causal
+            and self.has_variable("cache", "cached_key")
+            and (not init_cache)
+        )
         key_length = key_states.shape[1]
         query_length = key_length if cache_is_filled else query_states.shape[1]
 
@@ -472,7 +546,9 @@ class FlaxLongT5Attention(nn.Module):
         elif attention_mask is not None:
             position_bias = jnp.zeros_like(attention_mask)
         else:
-            position_bias = jnp.zeros((1, self.n_heads, query_length, key_length), dtype=self.dtype)
+            position_bias = jnp.zeros(
+                (1, self.n_heads, query_length, key_length), dtype=self.dtype
+            )
 
         # if key and values are already calculated, only the last query position bias should be taken
         if cache_is_filled:
@@ -501,9 +577,19 @@ class FlaxLongT5Attention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:2]
 
         # q, k, v projections
-        query_states = self.q(hidden_states)  # (batch_size, n_heads, seq_length, dim_per_head)
-        key_states = self.k(hidden_states) if key_value_states is None else self.k(key_value_states)
-        value_states = self.v(hidden_states) if key_value_states is None else self.v(key_value_states)
+        query_states = self.q(
+            hidden_states
+        )  # (batch_size, n_heads, seq_length, dim_per_head)
+        key_states = (
+            self.k(hidden_states)
+            if key_value_states is None
+            else self.k(key_value_states)
+        )
+        value_states = (
+            self.v(hidden_states)
+            if key_value_states is None
+            else self.v(key_value_states)
+        )
 
         # reshape to (batch_size, seq_length, n_heads, head_dim)
         query_states = self._split_heads(query_states)
@@ -515,7 +601,9 @@ class FlaxLongT5Attention(nn.Module):
 
         # for fast decoding causal attention mask should be shifted
         causal_attention_mask_shift = (
-            self.variables["cache"]["cache_index"] if (self.has_variable("cache", "cached_key") and self.causal) else 0
+            self.variables["cache"]["cache_index"]
+            if (self.has_variable("cache", "cached_key") and self.causal)
+            else 0
         )
         # create causal attention_mask; attention_mask has to be defined when model is causal
         if self.causal:
@@ -535,7 +623,8 @@ class FlaxLongT5Attention(nn.Module):
                 causal_attention_mask, (batch_size,) + causal_attention_mask.shape[1:]
             )
             attention_mask = jnp.broadcast_to(
-                jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_attention_mask.shape
+                jnp.expand_dims(attention_mask, axis=(-3, -2)),
+                causal_attention_mask.shape,
             )
             attention_mask = combine_masks(attention_mask, causal_attention_mask)
         elif attention_mask is not None:
@@ -560,7 +649,12 @@ class FlaxLongT5Attention(nn.Module):
         if position_bias is None:
             # compute position bias (only for first layer)
             position_bias = self._create_position_bias(
-                key_states, query_states, attention_mask, init_cache, seq_length, causal_attention_mask_shift
+                key_states,
+                query_states,
+                attention_mask,
+                init_cache,
+                seq_length,
+                causal_attention_mask_shift,
             )
 
             if attention_mask is not None:
@@ -607,7 +701,9 @@ class FlaxLongT5LocalAttention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
-        self.relative_attention_max_distance = self.config.relative_attention_max_distance
+        self.relative_attention_max_distance = (
+            self.config.relative_attention_max_distance
+        )
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
@@ -616,7 +712,9 @@ class FlaxLongT5LocalAttention(nn.Module):
         self.dropout = self.config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
+        q_init_std = self.config.initializer_factor * (
+            (self.inner_dim * self.key_value_proj_dim) ** -0.5
+        )
         kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
         o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
@@ -654,7 +752,9 @@ class FlaxLongT5LocalAttention(nn.Module):
 
     @staticmethod
     # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Attention._relative_position_bucket
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+    def _relative_position_bucket(
+        relative_position, bidirectional=True, num_buckets=32, max_distance=128
+    ):
         """
         Adapted from Mesh Tensorflow:
         https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
@@ -681,11 +781,17 @@ class FlaxLongT5LocalAttention(nn.Module):
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         relative_position_if_large = max_exact + (
-            jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
+            jnp.log(relative_position / max_exact)
+            / jnp.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(
+            relative_position_if_large, a_max=num_buckets - 1
+        )
 
-        relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
+        relative_buckets += jnp.where(
+            is_small, relative_position, relative_position_if_large
+        )
 
         return relative_buckets.astype("i4")
 
@@ -707,19 +813,25 @@ class FlaxLongT5LocalAttention(nn.Module):
         return values
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim)
+        )
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[0], -1, self.inner_dim)
 
-    def _create_position_bias(self, block_len: int, attention_mask: Optional[np.ndarray]) -> np.ndarray:
+    def _create_position_bias(
+        self, block_len: int, attention_mask: Optional[np.ndarray]
+    ) -> np.ndarray:
         # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
         if self.has_relative_attention_bias:
             position_bias = self.compute_bias(block_len)
         elif attention_mask is not None:
             position_bias = jnp.zeros_like(attention_mask)
         else:
-            position_bias = jnp.zeros((1, 1, self.n_heads, block_len, 3 * block_len), dtype=self.dtype)
+            position_bias = jnp.zeros(
+                (1, 1, self.n_heads, block_len, 3 * block_len), dtype=self.dtype
+            )
 
         return position_bias
 
@@ -738,9 +850,19 @@ class FlaxLongT5LocalAttention(nn.Module):
         batch_size, seq_length = hidden_states.shape[:2]
 
         # q, k, v projections
-        query_states = self.q(hidden_states)  # (batch_size, n_heads, seq_length, dim_per_head)
-        key_states = self.k(hidden_states) if key_value_states is None else self.k(key_value_states)
-        value_states = self.v(hidden_states) if key_value_states is None else self.v(key_value_states)
+        query_states = self.q(
+            hidden_states
+        )  # (batch_size, n_heads, seq_length, dim_per_head)
+        key_states = (
+            self.k(hidden_states)
+            if key_value_states is None
+            else self.k(key_value_states)
+        )
+        value_states = (
+            self.v(hidden_states)
+            if key_value_states is None
+            else self.v(key_value_states)
+        )
 
         # reshape to (batch_size, seq_length, n_heads, head_dim)
         query_states = self._split_heads(query_states)
@@ -754,7 +876,9 @@ class FlaxLongT5LocalAttention(nn.Module):
 
         # Concatenate 3 blocks for keys and values -> (batch_size, num_blocks, 3 * block_len, n_heads, dim_per_head)
         key_states = _concatenate_3_blocks(key_states, block_axis=1, sequence_axis=2)
-        value_states = _concatenate_3_blocks(value_states, block_axis=1, sequence_axis=2)
+        value_states = _concatenate_3_blocks(
+            value_states, block_axis=1, sequence_axis=2
+        )
 
         # counter-act scaling in dot_product_attention_weights function
         query_states *= jnp.sqrt(query_states.shape[-1])
@@ -818,7 +942,9 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
     def setup(self):
         self.relative_attention_num_buckets = self.config.relative_attention_num_buckets
-        self.relative_attention_max_distance = self.config.relative_attention_max_distance
+        self.relative_attention_max_distance = (
+            self.config.relative_attention_max_distance
+        )
         self.d_model = self.config.d_model
         self.key_value_proj_dim = self.config.d_kv
         self.n_heads = self.config.num_heads
@@ -828,7 +954,9 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         self.dropout = self.config.dropout_rate
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
-        q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
+        q_init_std = self.config.initializer_factor * (
+            (self.inner_dim * self.key_value_proj_dim) ** -0.5
+        )
         kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
         o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
 
@@ -877,7 +1005,9 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
     @staticmethod
     # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Attention._relative_position_bucket
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+    def _relative_position_bucket(
+        relative_position, bidirectional=True, num_buckets=32, max_distance=128
+    ):
         """
         Adapted from Mesh Tensorflow:
         https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
@@ -904,11 +1034,17 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         relative_position_if_large = max_exact + (
-            jnp.log(relative_position / max_exact) / jnp.log(max_distance / max_exact) * (num_buckets - max_exact)
+            jnp.log(relative_position / max_exact)
+            / jnp.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
         )
-        relative_position_if_large = jnp.clip(relative_position_if_large, a_max=num_buckets - 1)
+        relative_position_if_large = jnp.clip(
+            relative_position_if_large, a_max=num_buckets - 1
+        )
 
-        relative_buckets += jnp.where(is_small, relative_position, relative_position_if_large)
+        relative_buckets += jnp.where(
+            is_small, relative_position, relative_position_if_large
+        )
 
         return relative_buckets.astype("i4")
 
@@ -929,16 +1065,22 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         values = values.transpose((2, 0, 1))[None, None, :, :, :]
         return values
 
-    def compute_side_bias(self, attention_mask: np.ndarray, global_segment_ids: np.ndarray) -> np.ndarray:
+    def compute_side_bias(
+        self, attention_mask: np.ndarray, global_segment_ids: np.ndarray
+    ) -> np.ndarray:
         # (batch_size, 1, 1, seq_len, global_seq_len)
-        side_attention_mask = jnp.equal(attention_mask[..., None], global_segment_ids[:, None, :])[:, None, ...]
+        side_attention_mask = jnp.equal(
+            attention_mask[..., None], global_segment_ids[:, None, :]
+        )[:, None, ...]
         attention_side_bias = jax.lax.select(
             side_attention_mask > 0,
             jnp.full(side_attention_mask.shape, 0.0).astype(self.dtype),
             jnp.full(side_attention_mask.shape, -1e10).astype(self.dtype),
         )
         # (batch_size, seq_len, global_seq_len)
-        side_relative_position = _make_side_relative_position_ids(attention_mask, self.global_block_size)
+        side_relative_position = _make_side_relative_position_ids(
+            attention_mask, self.global_block_size
+        )
         side_relative_position_bucket = self._relative_position_bucket(
             side_relative_position,
             bidirectional=True,
@@ -955,19 +1097,25 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         return attention_side_bias
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.n_heads, self.key_value_proj_dim)
+        )
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[0], -1, self.inner_dim)
 
-    def _create_position_bias(self, block_len: int, attention_mask: Optional[np.ndarray]) -> np.ndarray:
+    def _create_position_bias(
+        self, block_len: int, attention_mask: Optional[np.ndarray]
+    ) -> np.ndarray:
         # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
         if self.has_relative_attention_bias:
             position_bias = self.compute_bias(block_len)
         elif attention_mask is not None:
             position_bias = jnp.zeros_like(attention_mask)
         else:
-            position_bias = jnp.zeros((1, 1, self.n_heads, block_len, 3 * block_len), dtype=self.dtype)
+            position_bias = jnp.zeros(
+                (1, 1, self.n_heads, block_len, 3 * block_len), dtype=self.dtype
+            )
 
         return position_bias
 
@@ -990,18 +1138,34 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         # global_seq_len := seq_len // self.global_block_size
         # shapes: (batch_size, seq_len) & (batch_size, global_seq_len)
         block_ids, global_segment_ids = _make_global_fixed_block_ids(
-            attention_mask if attention_mask is not None else jnp.ones((batch_size, seq_length)),
+            (
+                attention_mask
+                if attention_mask is not None
+                else jnp.ones((batch_size, seq_length))
+            ),
             self.global_block_size,
         )
         # Create global inputs
         _global_seq_len = global_segment_ids.shape[-1]
-        global_inputs = _create_global_aggregates(hidden_states, block_ids, _global_seq_len)
+        global_inputs = _create_global_aggregates(
+            hidden_states, block_ids, _global_seq_len
+        )
         global_inputs = self.global_input_layer_norm(global_inputs)
 
         # q, k, v projections
-        query_states = self.q(hidden_states)  # (batch_size, n_heads, seq_length, dim_per_head)
-        key_states = self.k(hidden_states) if key_value_states is None else self.k(key_value_states)
-        value_states = self.v(hidden_states) if key_value_states is None else self.v(key_value_states)
+        query_states = self.q(
+            hidden_states
+        )  # (batch_size, n_heads, seq_length, dim_per_head)
+        key_states = (
+            self.k(hidden_states)
+            if key_value_states is None
+            else self.k(key_value_states)
+        )
+        value_states = (
+            self.v(hidden_states)
+            if key_value_states is None
+            else self.v(key_value_states)
+        )
 
         # reshape to (batch_size, seq_length, n_heads, head_dim)
         query_states = self._split_heads(query_states)
@@ -1023,7 +1187,9 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
 
         # Concatenate 3 blocks for keys and values -> (batch_size, num_blocks, 3 * block_len, n_heads, dim_per_head)
         key_states = _concatenate_3_blocks(key_states, block_axis=1, sequence_axis=2)
-        value_states = _concatenate_3_blocks(value_states, block_axis=1, sequence_axis=2)
+        value_states = _concatenate_3_blocks(
+            value_states, block_axis=1, sequence_axis=2
+        )
 
         # Tile side inputs across local key/value blocks
         # New shape: (batch_size, num_blocks, global_seq_len, n_heads, dim_per_head)
@@ -1041,7 +1207,9 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
         query_states *= jnp.sqrt(query_states.shape[-1])
 
         if attention_mask is not None:
-            local_attention_mask = _get_local_attention_mask(attention_mask, self.block_len)
+            local_attention_mask = _get_local_attention_mask(
+                attention_mask, self.block_len
+            )
             local_attention_mask = jax.lax.select(
                 local_attention_mask > 0,
                 jnp.full(local_attention_mask.shape, 0.0).astype(self.dtype),
@@ -1059,10 +1227,16 @@ class FlaxLongT5TransientGlobalAttention(nn.Module):
             # Calculate global/side bias - shape: # (batch_size, num_heads, seq_len, global_seq_len)
             if attention_mask is None:
                 attention_mask = jnp.ones((batch_size, seq_length))
-            side_position_bias = self.compute_side_bias(attention_mask, global_segment_ids)
-            side_position_bias = _split_into_blocks(side_position_bias, self.block_len, axis=-2)
+            side_position_bias = self.compute_side_bias(
+                attention_mask, global_segment_ids
+            )
+            side_position_bias = _split_into_blocks(
+                side_position_bias, self.block_len, axis=-2
+            )
             side_position_bias = jnp.swapaxes(side_position_bias, 1, 2)
-            position_bias = jnp.concatenate((position_bias, side_position_bias), axis=-1)
+            position_bias = jnp.concatenate(
+                (position_bias, side_position_bias), axis=-1
+            )
 
         # create dropout rng
         dropout_rng = None
@@ -1108,7 +1282,9 @@ class FlaxLongT5LayerLocalSelfAttention(nn.Module):
 
     def setup(self):
         self.LocalSelfAttention = FlaxLongT5LocalAttention(
-            self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype
+            self.config,
+            has_relative_attention_bias=self.has_relative_attention_bias,
+            dtype=self.dtype,
         )
         self.layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
@@ -1132,8 +1308,12 @@ class FlaxLongT5LayerLocalSelfAttention(nn.Module):
             output_attentions=output_attentions,
             deterministic=deterministic,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(
+            attention_output[0], deterministic=deterministic
+        )
+        outputs = (hidden_states,) + attention_output[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -1146,7 +1326,9 @@ class FlaxLongT5LayerTransientGlobalSelfAttention(nn.Module):
 
     def setup(self):
         self.TransientGlobalSelfAttention = FlaxLongT5TransientGlobalAttention(
-            self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype
+            self.config,
+            has_relative_attention_bias=self.has_relative_attention_bias,
+            dtype=self.dtype,
         )
         self.layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
@@ -1170,8 +1352,12 @@ class FlaxLongT5LayerTransientGlobalSelfAttention(nn.Module):
             output_attentions=output_attentions,
             deterministic=deterministic,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(
+            attention_output[0], deterministic=deterministic
+        )
+        outputs = (hidden_states,) + attention_output[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -1211,8 +1397,12 @@ class FlaxLongT5LayerSelfAttention(nn.Module):
             deterministic=deterministic,
             init_cache=init_cache,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(
+            attention_output[0], deterministic=deterministic
+        )
+        outputs = (hidden_states,) + attention_output[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -1223,7 +1413,10 @@ class FlaxLongT5LayerCrossAttention(nn.Module):
 
     def setup(self):
         self.EncDecAttention = FlaxLongT5Attention(
-            self.config, has_relative_attention_bias=False, causal=False, dtype=self.dtype
+            self.config,
+            has_relative_attention_bias=False,
+            causal=False,
+            dtype=self.dtype,
         )
         self.layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
@@ -1247,8 +1440,12 @@ class FlaxLongT5LayerCrossAttention(nn.Module):
             position_bias=position_bias,
             output_attentions=output_attentions,
         )
-        hidden_states = hidden_states + self.dropout(attention_output[0], deterministic=deterministic)
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(
+            attention_output[0], deterministic=deterministic
+        )
+        outputs = (hidden_states,) + attention_output[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -1280,10 +1477,18 @@ class FlaxLongT5Block(nn.Module):
         )
         feed_forward_index = 1
         if self.causal:
-            self.layer += (FlaxLongT5LayerCrossAttention(self.config, name=str(1), dtype=self.dtype),)
+            self.layer += (
+                FlaxLongT5LayerCrossAttention(
+                    self.config, name=str(1), dtype=self.dtype
+                ),
+            )
             feed_forward_index += 1
 
-        self.layer += (FlaxLongT5LayerFF(self.config, name=str(feed_forward_index), dtype=self.dtype),)
+        self.layer += (
+            FlaxLongT5LayerFF(
+                self.config, name=str(feed_forward_index), dtype=self.dtype
+            ),
+        )
 
     # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5Block.__call__ with T5->LongT5
     def __call__(
@@ -1308,7 +1513,9 @@ class FlaxLongT5Block(nn.Module):
             init_cache=init_cache,
         )
         hidden_states = self_attention_outputs[0]
-        attention_outputs = self_attention_outputs[1:]  # Keep self-attention outputs and relative position weights
+        attention_outputs = self_attention_outputs[
+            1:
+        ]  # Keep self-attention outputs and relative position weights
 
         do_cross_attention = self.causal and encoder_hidden_states is not None
         if do_cross_attention:
@@ -1345,7 +1552,9 @@ class FlaxLongT5LayerCollection(nn.Module):
 
     def setup(self):
         self.layer = FlaxLongT5Block(
-            self.config, has_relative_attention_bias=self.has_relative_attention_bias, dtype=self.dtype
+            self.config,
+            has_relative_attention_bias=self.has_relative_attention_bias,
+            dtype=self.dtype,
         )
 
     def __call__(
@@ -1382,7 +1591,9 @@ class FlaxLongT5BlockCollection(nn.Module):
     def setup(self):
         self.causal = self.config.causal
         if self.gradient_checkpointing:
-            FlaxLongT5CheckpointLayer = remat(FlaxLongT5LayerCollection, static_argnums=(6, 7, 8))
+            FlaxLongT5CheckpointLayer = remat(
+                FlaxLongT5LayerCollection, static_argnums=(6, 7, 8)
+            )
             self.blocks = [
                 FlaxLongT5CheckpointLayer(
                     self.config,
@@ -1445,7 +1656,9 @@ class FlaxLongT5BlockCollection(nn.Module):
             position_bias = layer_outputs[1]
 
             if self.causal and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
+                encoder_decoder_position_bias = layer_outputs[
+                    3 if output_attentions else 2
+                ]
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[2],)
@@ -1471,7 +1684,9 @@ class FlaxLongT5Stack(nn.Module):
         self.causal = self.config.causal
 
         self.block = FlaxLongT5BlockCollection(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.final_layer_norm = FlaxLongT5LayerNorm(
             self.config.d_model, eps=self.config.layer_norm_epsilon, dtype=self.dtype
@@ -1682,7 +1897,14 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
     def enable_gradient_checkpointing(self):
         self._module = self.module_class(
@@ -1691,7 +1913,9 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
             gradient_checkpointing=True,
         )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
 
@@ -1734,11 +1958,19 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         params: dict = None,
         dropout_rng: PRNGKey = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if decoder_input_ids is None:
             raise ValueError(
@@ -1788,7 +2020,9 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         decoder_input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         decoder_attention_mask = jnp.ones_like(decoder_input_ids)
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
+        def _decoder_forward(
+            module, decoder_input_ids, decoder_attention_mask, **kwargs
+        ):
             decoder_module = module._get_decoder_module()
             return decoder_module(
                 decoder_input_ids,
@@ -1807,7 +2041,9 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings(LONGT5_ENCODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutput, config_class=LongT5Config)
+    @replace_return_docstrings(
+        output_type=FlaxBaseModelOutput, config_class=LongT5Config
+    )
     def encode(
         self,
         input_ids: jnp.ndarray,
@@ -1834,11 +2070,19 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         >>> inputs = tokenizer(text, return_tensors="np")
         >>> encoder_outputs = model.encode(**inputs)
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -1865,7 +2109,10 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         )
 
     @add_start_docstrings(LONGT5_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=LongT5Config)
+    @replace_return_docstrings(
+        output_type=FlaxBaseModelOutputWithPastAndCrossAttentions,
+        config_class=LongT5Config,
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -1902,11 +2149,19 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         encoder_hidden_states = encoder_outputs[0]
         if encoder_attention_mask is None:
@@ -1933,7 +2188,9 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         else:
             mutable = False
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
+        def _decoder_forward(
+            module, decoder_input_ids, decoder_attention_mask, **kwargs
+        ):
             decoder_module = module._get_decoder_module()
             return decoder_module(
                 decoder_input_ids,
@@ -2029,7 +2286,9 @@ class FlaxLongT5Module(nn.Module):
         self.shared = nn.Embed(
             self.config.vocab_size,
             self.config.d_model,
-            embedding_init=jax.nn.initializers.normal(self.config.initializer_factor * 1.0),
+            embedding_init=jax.nn.initializers.normal(
+                self.config.initializer_factor * 1.0
+            ),
             dtype=self.dtype,
         )
 
@@ -2064,7 +2323,9 @@ class FlaxLongT5Module(nn.Module):
         return_dict=None,
         deterministic: bool = True,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # Encode if needed (training, first prediction pass)
         encoder_outputs = self.encoder(
@@ -2108,7 +2369,9 @@ class FlaxLongT5Model(FlaxLongT5PreTrainedModel):
     module_class = FlaxLongT5Module
 
 
-append_call_sample_docstring(FlaxLongT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC)
+append_call_sample_docstring(
+    FlaxLongT5Model, _CHECKPOINT_FOR_DOC, FlaxSeq2SeqModelOutput, _CONFIG_FOR_DOC
+)
 
 FLAX_LONGT5_MODEL_DOCSTRING = """
     Returns:
@@ -2133,11 +2396,17 @@ FLAX_LONGT5_MODEL_DOCSTRING = """
 """
 
 
-overwrite_call_docstring(FlaxLongT5Model, LONGT5_INPUTS_DOCSTRING + FLAX_LONGT5_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxLongT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+overwrite_call_docstring(
+    FlaxLongT5Model, LONGT5_INPUTS_DOCSTRING + FLAX_LONGT5_MODEL_DOCSTRING
+)
+append_replace_return_docstrings(
+    FlaxLongT5Model, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+)
 
 
-@add_start_docstrings("""LONGT5 Model with a `language modeling` head on top.""", LONGT5_START_DOCSTRING)
+@add_start_docstrings(
+    """LONGT5 Model with a `language modeling` head on top.""", LONGT5_START_DOCSTRING
+)
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5ForConditionalGenerationModule with T5->LongT5
 class FlaxLongT5ForConditionalGenerationModule(nn.Module):
     config: LongT5Config
@@ -2165,7 +2434,10 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = FlaxLongT5Stack(
-            encoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            encoder_config,
+            self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
         decoder_config = copy.deepcopy(self.config)
@@ -2173,7 +2445,10 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = self.config.num_decoder_layers
         self.decoder = FlaxLongT5Stack(
-            decoder_config, self.shared, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing
+            decoder_config,
+            self.shared,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
         self.lm_head = nn.Dense(
@@ -2195,7 +2470,9 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
         return_dict=None,
         deterministic: bool = True,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         # Encode
         encoder_outputs = self.encoder(
@@ -2230,7 +2507,9 @@ class FlaxLongT5ForConditionalGenerationModule(nn.Module):
 
         if self.config.tie_word_embeddings:
             shared_embedding = self.shared.variables["params"]["embedding"]
-            lm_logits = self.lm_head.apply({"params": {"kernel": shared_embedding.T}}, sequence_output)
+            lm_logits = self.lm_head.apply(
+                {"params": {"kernel": shared_embedding.T}}, sequence_output
+            )
         else:
             lm_logits = self.lm_head(sequence_output)
 
@@ -2253,7 +2532,9 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
     module_class = FlaxLongT5ForConditionalGenerationModule
 
     @add_start_docstrings(LONGT5_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=LongT5Config)
+    @replace_return_docstrings(
+        output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=LongT5Config
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -2290,11 +2571,19 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
         >>> logits = outputs.logits
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         encoder_hidden_states = encoder_outputs[0]
         if encoder_attention_mask is None:
@@ -2321,7 +2610,9 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         else:
             mutable = False
 
-        def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
+        def _decoder_forward(
+            module, decoder_input_ids, decoder_attention_mask, **kwargs
+        ):
             decoder_module = module._get_decoder_module()
             decoder_outputs = decoder_module(
                 decoder_input_ids,
@@ -2338,7 +2629,9 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
 
             if self.config.tie_word_embeddings:
                 shared_embedding = module.shared.variables["params"]["embedding"]
-                lm_logits = module.lm_head.apply({"params": {"kernel": shared_embedding.T}}, sequence_output)
+                lm_logits = module.lm_head.apply(
+                    {"params": {"kernel": shared_embedding.T}}, sequence_output
+                )
             else:
                 lm_logits = module.lm_head(sequence_output)
 
@@ -2439,11 +2732,18 @@ FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING = """
 
 
 overwrite_call_docstring(
-    FlaxLongT5ForConditionalGeneration, LONGT5_INPUTS_DOCSTRING + FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING
+    FlaxLongT5ForConditionalGeneration,
+    LONGT5_INPUTS_DOCSTRING + FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING,
 )
 append_replace_return_docstrings(
-    FlaxLongT5ForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+    FlaxLongT5ForConditionalGeneration,
+    output_type=FlaxSeq2SeqLMOutput,
+    config_class=_CONFIG_FOR_DOC,
 )
 
 
-__all__ = ["FlaxLongT5ForConditionalGeneration", "FlaxLongT5Model", "FlaxLongT5PreTrainedModel"]
+__all__ = [
+    "FlaxLongT5ForConditionalGeneration",
+    "FlaxLongT5Model",
+    "FlaxLongT5PreTrainedModel",
+]

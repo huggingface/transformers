@@ -86,9 +86,14 @@ class VipLlavaCausalLMOutputWithPast(ModelOutput):
 class VipLlavaMultiModalProjector(nn.Module):
     def __init__(self, config: VipLlavaConfig):
         super().__init__()
-        num_feature_layers = 1 if isinstance(config.vision_feature_layers, int) else len(config.vision_feature_layers)
+        num_feature_layers = (
+            1
+            if isinstance(config.vision_feature_layers, int)
+            else len(config.vision_feature_layers)
+        )
         self.projector_layernorm = nn.LayerNorm(
-            num_feature_layers * config.vision_config.hidden_size, eps=config.projector_layernorm_eps
+            num_feature_layers * config.vision_config.hidden_size,
+            eps=config.projector_layernorm_eps,
         )
 
         self.linear_1 = nn.Linear(
@@ -97,7 +102,9 @@ class VipLlavaMultiModalProjector(nn.Module):
             bias=True,
         )
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=True
+        )
 
     def forward(self, hidden_states):
         hidden_states = self.projector_layernorm(hidden_states)
@@ -249,9 +256,13 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+            self._tied_weights_keys = [
+                f"language_model.{k}" for k in self.language_model._tied_weights_keys
+            ]
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        )
 
         self.post_init()
 
@@ -274,7 +285,11 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         return self.language_model.get_decoder()
 
     # Ignore copy
-    def get_image_features(self, pixel_values: torch.FloatTensor, vision_feature_layers: Union[int, List[int]]):
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layers: Union[int, List[int]],
+    ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -295,14 +310,19 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
             image_features = image_outputs.hidden_states[vision_feature_layers][:, 1:]
         else:
             # Usually, we select the features from index 1: the layers -2, -5, -8, -11 and 6
-            image_features = [image_outputs.hidden_states[index][:, 1:] for index in vision_feature_layers]
+            image_features = [
+                image_outputs.hidden_states[index][:, 1:]
+                for index in vision_feature_layers
+            ]
             image_features = torch.cat(image_features, dim=-1)
         image_features = self.multi_modal_projector(image_features)
         return image_features
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(VIPLLAVA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(
+        output_type=VipLlavaCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC
+    )
     # Ignore copy
     def forward(
         self,
@@ -364,17 +384,29 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         The image features a brown and white cat sitting on a green surface, with a red ball in its
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         vision_feature_layers = (
-            vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
+            vision_feature_layers
+            if vision_feature_layers is not None
+            else self.config.vision_feature_layers
         )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+            raise ValueError(
+                "You must specify exactly one of input_ids or inputs_embeds"
+            )
 
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
@@ -389,16 +421,27 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
                 pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
             )
 
-            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
-            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != image_features.numel():
+            special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(
+                -1
+            )
+            special_image_mask = special_image_mask.expand_as(inputs_embeds).to(
+                inputs_embeds.device
+            )
+            if (
+                not is_torchdynamo_compiling()
+                and inputs_embeds[special_image_mask].numel() != image_features.numel()
+            ):
                 n_image_tokens = (input_ids == self.config.image_token_index).sum()
                 n_image_features = image_features.shape[0] * image_features.shape[1]
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            image_features = image_features.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(
+                special_image_mask, image_features
+            )
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -420,16 +463,23 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
         if labels is not None:
             # Shift so that tokens < n predict n
             if attention_mask is not None:
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
+                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(
+                    logits.device
+                )
+                shift_logits = logits[..., :-1, :][
+                    shift_attention_mask.to(logits.device) != 0
+                ].contiguous()
+                shift_labels = labels[..., 1:][
+                    shift_attention_mask.to(labels.device) != 0
+                ].contiguous()
             else:
                 shift_logits = logits[..., :-1, :].contiguous()
                 shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+                shift_logits.view(-1, shift_logits.size(-1)),
+                shift_labels.view(-1).to(shift_logits.device),
             )
 
         if not return_dict:

@@ -25,12 +25,18 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
 
-Batch = namedtuple("Batch", ["document_names", "batch_size", "src", "segs", "mask_src", "tgt_str"])
+Batch = namedtuple(
+    "Batch", ["document_names", "batch_size", "src", "segs", "mask_src", "tgt_str"]
+)
 
 
 def evaluate(args):
-    tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased", do_lower_case=True)
-    model = BertAbs.from_pretrained("remi/bertabs-finetuned-extractive-abstractive-summarization")
+    tokenizer = BertTokenizer.from_pretrained(
+        "google-bert/bert-base-uncased", do_lower_case=True
+    )
+    model = BertAbs.from_pretrained(
+        "remi/bertabs-finetuned-extractive-abstractive-summarization"
+    )
     model.to(args.device)
     model.eval()
 
@@ -78,7 +84,9 @@ def evaluate(args):
     logger.info("  Minimum length = %d", args.min_length)
     logger.info("  Maximum length = %d", args.max_length)
     logger.info("  Alpha (length penalty) = %.2f", args.alpha)
-    logger.info("  Trigrams %s be blocked", ("will" if args.block_trigram else "will NOT"))
+    logger.info(
+        "  Trigrams %s be blocked", ("will" if args.block_trigram else "will NOT")
+    )
 
     for batch in tqdm(data_iterator):
         batch_data = predictor.translate_batch(batch)
@@ -215,11 +223,19 @@ def collate(data, tokenizer, block_size, device):
     names = [name for name, _, _ in data]
     summaries = [" ".join(summary_list) for _, _, summary_list in data]
 
-    encoded_text = [encode_for_summarization(story, summary, tokenizer) for _, story, summary in data]
+    encoded_text = [
+        encode_for_summarization(story, summary, tokenizer)
+        for _, story, summary in data
+    ]
     encoded_stories = torch.tensor(
-        [truncate_or_pad(story, block_size, tokenizer.pad_token_id) for story, _ in encoded_text]
+        [
+            truncate_or_pad(story, block_size, tokenizer.pad_token_id)
+            for story, _ in encoded_text
+        ]
     )
-    encoder_token_type_ids = compute_token_type_ids(encoded_stories, tokenizer.cls_token_id)
+    encoder_token_type_ids = compute_token_type_ids(
+        encoded_stories, tokenizer.cls_token_id
+    )
     encoder_mask = build_mask(encoded_stories, tokenizer.pad_token_id)
 
     batch = Batch(
@@ -316,7 +332,9 @@ def main():
     args = parser.parse_args()
 
     # Select device (distibuted not available)
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
+    args.device = torch.device(
+        "cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu"
+    )
 
     # Check the existence of directories
     if not args.summaries_output_dir:

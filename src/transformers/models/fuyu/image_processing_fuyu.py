@@ -67,7 +67,9 @@ def make_list_of_list_of_images(
     if isinstance(images, list):
         return [make_list_of_images(image) for image in images]
 
-    raise ValueError("images must be a list of list of images or a list of images or an image.")
+    raise ValueError(
+        "images must be a list of list of images or a list of images or an image."
+    )
 
 
 class FuyuBatchFeature(BatchFeature):
@@ -101,7 +103,9 @@ class FuyuBatchFeature(BatchFeature):
                 return _convert_tensor(elem)
             except:  # noqa E722
                 if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                    raise ValueError(
+                        "Unable to create tensor returning overflowing values of different lengths. "
+                    )
                 raise ValueError(
                     "Unable to create tensor, you should probably activate padding "
                     "with 'padding=True' to have batched tensors with the same length."
@@ -111,7 +115,9 @@ class FuyuBatchFeature(BatchFeature):
         for key, value in self.items():
             if isinstance(value, list) and isinstance(value[0], list):
                 # List[List[Any]] -> List[List[Tensor]]
-                self[key] = [[_safe_convert_tensor(elem) for elem in elems] for elems in value]
+                self[key] = [
+                    [_safe_convert_tensor(elem) for elem in elems] for elems in value
+                ]
             elif isinstance(value, list):
                 # List[Any] -> List[Tensor]
                 self[key] = [_safe_convert_tensor(elem) for elem in value]
@@ -150,7 +156,9 @@ class FuyuBatchFeature(BatchFeature):
                 device = arg
             else:
                 # it's something else
-                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
+                raise ValueError(
+                    f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported."
+                )
 
         def _to(elem):
             # check if v is a floating point
@@ -261,7 +269,9 @@ class FuyuImageProcessor(BaseImageProcessor):
         self.image_std = image_std
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
-        self.patch_size = patch_size if patch_size is not None else {"height": 30, "width": 30}
+        self.patch_size = (
+            patch_size if patch_size is not None else {"height": 30, "width": 30}
+        )
 
     def resize(
         self,
@@ -434,18 +444,28 @@ class FuyuImageProcessor(BaseImageProcessor):
         resample = resample if resample is not None else self.resample
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        padding_value = padding_value if padding_value is not None else self.padding_value
+        padding_value = (
+            padding_value if padding_value is not None else self.padding_value
+        )
         padding_mode = padding_mode if padding_mode is not None else self.padding_mode
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         patch_size = patch_size if patch_size is not None else self.patch_size
 
-        if isinstance(images, list) and any(isinstance(elem, list) and len(elem) >= 2 for elem in images):
-            raise ValueError("Multiple images for a single sample are not yet supported.")
+        if isinstance(images, list) and any(
+            isinstance(elem, list) and len(elem) >= 2 for elem in images
+        ):
+            raise ValueError(
+                "Multiple images for a single sample are not yet supported."
+            )
 
         batch_images = make_list_of_list_of_images(images)
 
@@ -462,7 +482,9 @@ class FuyuImageProcessor(BaseImageProcessor):
             resample=resample,
         )
         # All transformations expect numpy arrays.
-        batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
+        batch_images = [
+            [to_numpy_array(image) for image in images] for images in batch_images
+        ]
 
         if do_rescale and is_scaled_image(batch_images[0][0]):
             logger.warning_once(
@@ -474,16 +496,25 @@ class FuyuImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(batch_images[0][0])
 
-        original_image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        original_image_sizes = [
+            get_image_size(images[0], channel_dim=input_data_format)
+            for images in batch_images
+        ]
         size = get_size_dict(size)  # for BC
 
         if do_resize:
             batch_images = [
-                [self.resize(image, size=size, input_data_format=input_data_format) for image in images]
+                [
+                    self.resize(image, size=size, input_data_format=input_data_format)
+                    for image in images
+                ]
                 for images in batch_images
             ]
 
-        image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        image_sizes = [
+            get_image_size(images[0], channel_dim=input_data_format)
+            for images in batch_images
+        ]
         image_unpadded_heights = [[image_size[0]] for image_size in image_sizes]
         image_unpadded_widths = [[image_size[1]] for image_size in image_sizes]
 
@@ -510,14 +541,24 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         if do_rescale:
             batch_images = [
-                [self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images]
+                [
+                    self.rescale(
+                        image, scale=rescale_factor, input_data_format=input_data_format
+                    )
+                    for image in images
+                ]
                 for images in batch_images
             ]
 
         if do_normalize:
             batch_images = [
                 [
-                    self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                    self.normalize(
+                        image,
+                        mean=image_mean,
+                        std=image_std,
+                        input_data_format=input_data_format,
+                    )
                     for image in images
                 ]
                 for images in batch_images
@@ -525,7 +566,10 @@ class FuyuImageProcessor(BaseImageProcessor):
 
         if data_format is not None:
             batch_images = [
-                [to_channel_dimension_format(image, data_format, input_data_format) for image in images]
+                [
+                    to_channel_dimension_format(image, data_format, input_data_format)
+                    for image in images
+                ]
                 for images in batch_images
             ]
 
@@ -537,7 +581,9 @@ class FuyuImageProcessor(BaseImageProcessor):
         }
         return FuyuBatchFeature(data=data, tensor_type=return_tensors)
 
-    def get_num_patches(self, image_height: int, image_width: int, patch_size: Dict[str, int] = None) -> int:
+    def get_num_patches(
+        self, image_height: int, image_width: int, patch_size: Dict[str, int] = None
+    ) -> int:
         """
         Calculate number of patches required to encode an image.
 
@@ -562,7 +608,9 @@ class FuyuImageProcessor(BaseImageProcessor):
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
         return num_patches
 
-    def patchify_image(self, image: "torch.Tensor", patch_size: Optional[Dict[str, int]] = None) -> "torch.Tensor":
+    def patchify_image(
+        self, image: "torch.Tensor", patch_size: Optional[Dict[str, int]] = None
+    ) -> "torch.Tensor":
         """
         Convert an image into a tensor of patches.
 
@@ -641,39 +689,58 @@ class FuyuImageProcessor(BaseImageProcessor):
                         # math.ceil(torch.tensor(300).cuda() / 30) == 11
                         new_h = min(
                             image_height,
-                            math.ceil(image_unpadded_h[batch_index, subseq_index] / patch_height) * patch_height,
+                            math.ceil(
+                                image_unpadded_h[batch_index, subseq_index]
+                                / patch_height
+                            )
+                            * patch_height,
                         )
                         new_w = min(
                             image_width,
-                            math.ceil(image_unpadded_w[batch_index, subseq_index] / patch_width) * patch_width,
+                            math.ceil(
+                                image_unpadded_w[batch_index, subseq_index]
+                                / patch_width
+                            )
+                            * patch_width,
                         )
                         image = image[:, :new_h, :new_w]
                         image_height, image_width = new_h, new_w
 
-                    num_patches = self.get_num_patches(image_height=image_height, image_width=image_width)
+                    num_patches = self.get_num_patches(
+                        image_height=image_height, image_width=image_width
+                    )
                     tensor_of_image_ids = torch.full(
-                        [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
+                        [num_patches],
+                        image_placeholder_id,
+                        dtype=torch.int32,
+                        device=image_input.device,
                     )
                     patches = self.patchify_image(image=image.unsqueeze(0)).squeeze(0)
                     assert num_patches == patches.shape[0]
 
                     if variable_sized:
                         # Now terminate each line with |NEWLINE|.
-                        tensor_of_image_ids = tensor_of_image_ids.reshape(-1, image_width // patch_width)
+                        tensor_of_image_ids = tensor_of_image_ids.reshape(
+                            -1, image_width // patch_width
+                        )
                         newline_ids = torch.full(
                             [tensor_of_image_ids.shape[0], 1],
                             image_newline_id,
                             dtype=torch.int32,
                             device=image_input.device,
                         )
-                        tensor_of_image_ids = torch.cat([tensor_of_image_ids, newline_ids], dim=1)
+                        tensor_of_image_ids = torch.cat(
+                            [tensor_of_image_ids, newline_ids], dim=1
+                        )
                         tensor_of_image_ids = tensor_of_image_ids.reshape(-1)
 
                     images.append([image])
                     image_input_ids.append(tensor_of_image_ids)
                     image_patches.append(patches)
                 else:
-                    image_input_ids.append(torch.tensor([], dtype=torch.int32, device=image_input.device))
+                    image_input_ids.append(
+                        torch.tensor([], dtype=torch.int32, device=image_input.device)
+                    )
 
             batch_image_input_ids.append(image_input_ids)
             batch_image_patches.append(image_patches)
@@ -691,13 +758,17 @@ class FuyuImageProcessor(BaseImageProcessor):
                 # Indices of image patches.
                 patches_mask = subseq_image_input_ids == image_placeholder_id
                 num_patches = torch.count_nonzero(patches_mask)
-                indices = torch.arange(num_patches, dtype=torch.int64, device=subseq_image_input_ids.device).type_as(
-                    subseq_image_input_ids
-                )
+                indices = torch.arange(
+                    num_patches, dtype=torch.int64, device=subseq_image_input_ids.device
+                ).type_as(subseq_image_input_ids)
 
                 # Place those indices in the image input ids token stream, with -1 representing non-index tokens.
-                indices_in_stream_per_batch = torch.full_like(subseq_image_input_ids, -1)
-                indices_in_stream_per_subsequence = torch.full_like(subseq_image_input_ids, -1)
+                indices_in_stream_per_batch = torch.full_like(
+                    subseq_image_input_ids, -1
+                )
+                indices_in_stream_per_subsequence = torch.full_like(
+                    subseq_image_input_ids, -1
+                )
                 patches_inds = torch.nonzero(patches_mask, as_tuple=True)[0]
 
                 indices_in_stream_per_batch[patches_inds] = indices + index_offset

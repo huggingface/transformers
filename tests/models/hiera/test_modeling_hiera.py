@@ -41,7 +41,12 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import HieraBackbone, HieraForImageClassification, HieraForPreTraining, HieraModel
+    from transformers import (
+        HieraBackbone,
+        HieraForImageClassification,
+        HieraForPreTraining,
+        HieraModel,
+    )
 
 if is_vision_available():
     from PIL import Image
@@ -99,7 +104,9 @@ class HieraModelTester:
         self.type_sequence_label_size = type_sequence_label_size
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size[0], self.image_size[1]]
+        )
 
         labels = None
         if self.use_labels:
@@ -135,11 +142,20 @@ class HieraModelTester:
         model.eval()
         result = model(pixel_values)
 
-        tokens_spatial_shape = [i // s for i, s in zip(self.image_size, config.patch_stride)]
-        expected_seq_len = math.prod(tokens_spatial_shape) // math.prod(config.query_stride) ** (config.num_query_pool)
-        expected_dim = int(config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1))
+        tokens_spatial_shape = [
+            i // s for i, s in zip(self.image_size, config.patch_stride)
+        ]
+        expected_seq_len = math.prod(tokens_spatial_shape) // math.prod(
+            config.query_stride
+        ) ** (config.num_query_pool)
+        expected_dim = int(
+            config.embed_dim * config.embed_dim_multiplier ** (len(config.depths) - 1)
+        )
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, expected_seq_len, expected_dim),
+        )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
         model = HieraBackbone(config=config)
@@ -149,9 +165,12 @@ class HieraModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        num_patches = config.image_size[0] // config.patch_stride[0] // config.masked_unit_size[0]
+        num_patches = (
+            config.image_size[0] // config.patch_stride[0] // config.masked_unit_size[0]
+        )
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], num_patches, num_patches]
+            list(result.feature_maps[0].shape),
+            [self.batch_size, model.channels[0], num_patches, num_patches],
         )
 
         # verify channels
@@ -167,7 +186,8 @@ class HieraModelTester:
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
         self.parent.assertListEqual(
-            list(result.feature_maps[0].shape), [self.batch_size, model.channels[-1], num_patches, num_patches]
+            list(result.feature_maps[0].shape),
+            [self.batch_size, model.channels[-1], num_patches, num_patches],
         )
 
         # verify channels
@@ -178,10 +198,13 @@ class HieraModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        pred_stride = config.patch_stride[-1] * (config.query_stride[-1] ** config.num_query_pool)
+        pred_stride = config.patch_stride[-1] * (
+            config.query_stride[-1] ** config.num_query_pool
+        )
         num_patches = self.image_size[0] // pred_stride
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, num_patches**2, self.num_channels * pred_stride**2)
+            result.logits.shape,
+            (self.batch_size, num_patches**2, self.num_channels * pred_stride**2),
         )
 
         # test greyscale images
@@ -190,9 +213,13 @@ class HieraModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size[0], self.image_size[0]])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size[0], self.image_size[0]]
+        )
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches**2, pred_stride**2))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, num_patches**2, pred_stride**2)
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -200,7 +227,9 @@ class HieraModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
         # test greyscale images
         config.num_channels = 1
@@ -208,9 +237,13 @@ class HieraModelTester:
         model.to(torch_device)
         model.eval()
 
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size[0], self.image_size[0]])
+        pixel_values = floats_tensor(
+            [self.batch_size, 1, self.image_size[0], self.image_size[0]]
+        )
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -241,7 +274,10 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": HieraModel, "image-classification": HieraForImageClassification}
+        {
+            "image-feature-extraction": HieraModel,
+            "image-classification": HieraForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -254,7 +290,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = HieraModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=HieraConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=HieraConfig, has_text_modality=False
+        )
 
     def test_config(self):
         self.config_tester.create_and_test_config_to_json_string()
@@ -295,7 +333,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            seq_len = math.prod([i // s for i, s in zip(config.image_size, config.patch_stride)])
+            seq_len = math.prod(
+                [i // s for i, s in zip(config.image_size, config.patch_stride)]
+            )
             mask_unit_area = math.prod(config.masked_unit_size)
             num_windows = seq_len // mask_unit_area
             if model_class.__name__ == "HieraForPreTraining":
@@ -311,7 +351,12 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-4:]),
-                [self.model_tester.num_heads[0], num_windows, mask_unit_area, seq_len // num_windows],
+                [
+                    self.model_tester.num_heads[0],
+                    num_windows,
+                    mask_unit_area,
+                    seq_len // num_windows,
+                ],
             )
             out_len = len(outputs)
 
@@ -334,7 +379,12 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(self_attentions[0].shape[-4:]),
-                [self.model_tester.num_heads[0], num_windows, mask_unit_area, seq_len // num_windows],
+                [
+                    self.model_tester.num_heads[0],
+                    num_windows,
+                    mask_unit_area,
+                    seq_len // num_windows,
+                ],
             )
 
     # Overriding as attention shape depends on patch_stride and mask_unit_size
@@ -350,14 +400,18 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", len(self.model_tester.depths) + 1
+                self.model_tester,
+                "expected_num_hidden_layers",
+                len(self.model_tester.depths) + 1,
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             # Hiera has a different seq_length
             patch_size = config.patch_stride
 
-            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+            num_patches = (image_size[1] // patch_size[1]) * (
+                image_size[0] // patch_size[0]
+            )
             if model_class.__name__ == "HieraForPreTraining":
                 mask_unit_area = math.prod(config.masked_unit_size)
                 num_windows = num_patches // mask_unit_area
@@ -376,7 +430,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 batch_size = reshaped_hidden_states[0].shape[0]
                 num_channels = reshaped_hidden_states[0].shape[-1]
 
-                reshaped_hidden_states = reshaped_hidden_states[0].view(batch_size, -1, num_channels)
+                reshaped_hidden_states = reshaped_hidden_states[0].view(
+                    batch_size, -1, num_channels
+                )
                 self.assertListEqual(
                     list(reshaped_hidden_states.shape[-2:]),
                     [num_patches, self.model_tester.embed_dim],
@@ -406,12 +462,18 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):
             with torch.no_grad():
-                tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
-                dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
+                tuple_output = model(
+                    **tuple_inputs, return_dict=False, **additional_kwargs
+                )
+                dict_output = model(
+                    **dict_inputs, return_dict=True, **additional_kwargs
+                ).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (List, Tuple)):
-                        for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
+                        for tuple_iterable_value, dict_iterable_value in zip(
+                            tuple_object, dict_object
+                        ):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif isinstance(tuple_object, Dict):
                         for tuple_iterable_value, dict_iterable_value in zip(
@@ -423,7 +485,9 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     else:
                         self.assertTrue(
                             torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
+                                set_nan_tensor_to_zero(tuple_object),
+                                set_nan_tensor_to_zero(dict_object),
+                                atol=1e-5,
                             ),
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
@@ -446,8 +510,12 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
 
             tuple_inputs = self._prepare_for_class(inputs_dict, model_class)
@@ -455,8 +523,12 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             additional_kwargs["output_hidden_states"] = True
             check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
 
-            tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            tuple_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
+            dict_inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
 
             if self.has_attentions:
@@ -468,12 +540,20 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 additional_kwargs["output_attentions"] = True
                 check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
 
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                tuple_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                dict_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
                 check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
 
-                tuple_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-                dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+                tuple_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
+                dict_inputs = self._prepare_for_class(
+                    inputs_dict, model_class, return_labels=True
+                )
                 additional_kwargs["output_hidden_states"] = True
                 check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs)
 
@@ -528,11 +608,17 @@ def prepare_img():
 class HieraModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-in1k-hf") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-in1k-hf")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = HieraForImageClassification.from_pretrained("facebook/hiera-tiny-224-in1k-hf").to(torch_device)
+        model = HieraForImageClassification.from_pretrained(
+            "facebook/hiera-tiny-224-in1k-hf"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -540,13 +626,30 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         expected_pixel_values = torch.tensor(
             [
-                [[0.2967, 0.4679, 0.4508], [0.3309, 0.4337, 0.3309], [0.3309, 0.3823, 0.3309]],
-                [[-1.5455, -1.4930, -1.5455], [-1.5280, -1.4755, -1.5980], [-1.5630, -1.5280, -1.4755]],
-                [[-0.6367, -0.4973, -0.5321], [-0.7936, -0.6715, -0.6715], [-0.8284, -0.7413, -0.5670]],
+                [
+                    [0.2967, 0.4679, 0.4508],
+                    [0.3309, 0.4337, 0.3309],
+                    [0.3309, 0.3823, 0.3309],
+                ],
+                [
+                    [-1.5455, -1.4930, -1.5455],
+                    [-1.5280, -1.4755, -1.5980],
+                    [-1.5630, -1.5280, -1.4755],
+                ],
+                [
+                    [-0.6367, -0.4973, -0.5321],
+                    [-0.7936, -0.6715, -0.6715],
+                    [-0.8284, -0.7413, -0.5670],
+                ],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(inputs.pixel_values[0, :3, :3, :3], expected_pixel_values, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            inputs.pixel_values[0, :3, :3, :3],
+            expected_pixel_values,
+            rtol=1e-4,
+            atol=1e-4,
+        )
 
         # forward pass
         with torch.no_grad():
@@ -556,15 +659,23 @@ class HieraModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([[0.8028, 0.2409, -0.2254, -0.3712, -0.2848]]).to(torch_device)
+        expected_slice = torch.tensor([[0.8028, 0.2409, -0.2254, -0.3712, -0.2848]]).to(
+            torch_device
+        )
 
-        torch.testing.assert_close(outputs.logits[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :5], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     def test_inference_interpolate_pos_encoding(self):
-        model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf").to(torch_device)
+        model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf").to(
+            torch_device
+        )
 
         image_processor = AutoImageProcessor.from_pretrained(
-            "facebook/hiera-tiny-224-hf", size={"shortest_edge": 448}, crop_size={"height": 448, "width": 448}
+            "facebook/hiera-tiny-224-hf",
+            size={"shortest_edge": 448},
+            crop_size={"height": 448, "width": 448},
         )
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
@@ -579,17 +690,25 @@ class HieraModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[1.7853, 0.0690, 0.3177], [2.6853, -0.2334, 0.0889], [1.5445, -0.1515, -0.0300]]
+            [
+                [1.7853, 0.0690, 0.3177],
+                [2.6853, -0.2334, 0.0889],
+                [1.5445, -0.1515, -0.0300],
+            ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_inference_for_pretraining(self):
         # make random mask reproducible
         torch.manual_seed(2)
 
-        model = HieraForPreTraining.from_pretrained("facebook/hiera-tiny-224-mae-hf").to(torch_device)
+        model = HieraForPreTraining.from_pretrained(
+            "facebook/hiera-tiny-224-mae-hf"
+        ).to(torch_device)
         image_processor = self.default_image_processor
 
         image = prepare_img()
@@ -597,7 +716,10 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         config = model.config
         mask_spatial_shape = [
-            i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
+            i // s // ms
+            for i, s, ms in zip(
+                config.image_size, config.patch_stride, config.masked_unit_size
+            )
         ]
         num_windows = math.prod(mask_spatial_shape)
         noise = torch.rand(1, num_windows).to(torch_device)
@@ -620,7 +742,12 @@ class HieraModelIntegrationTest(unittest.TestCase):
             ]
         )
 
-        torch.testing.assert_close(outputs.logits[0, :5, :5], expected_slice.to(torch_device), rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :5, :5],
+            expected_slice.to(torch_device),
+            rtol=1e-4,
+            atol=1e-4,
+        )
 
 
 @require_torch

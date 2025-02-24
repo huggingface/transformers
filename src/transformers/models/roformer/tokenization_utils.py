@@ -37,7 +37,9 @@ class JiebaPreTokenizer:
             )
         self.jieba = rjieba
 
-    def jieba_split(self, i: int, normalized_string: NormalizedString) -> List[NormalizedString]:
+    def jieba_split(
+        self, i: int, normalized_string: NormalizedString
+    ) -> List[NormalizedString]:
         splits = []
 
         # this code slice normalized_string is too slow (6s) but test_alignement_methods can pass

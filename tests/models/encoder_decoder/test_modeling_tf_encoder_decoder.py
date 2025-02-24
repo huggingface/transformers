@@ -73,7 +73,9 @@ class TFEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
+        encoder_decoder_config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            config, decoder_config
+        )
         self.assertTrue(encoder_decoder_config.decoder.is_decoder)
 
         enc_dec_model = TFEncoderDecoderModel(encoder_decoder_config)
@@ -89,10 +91,12 @@ class TFEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def check_encoder_decoder_model(
@@ -106,8 +110,12 @@ class TFEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         self.assertTrue(enc_dec_model.config.decoder.is_decoder)
         self.assertTrue(enc_dec_model.config.decoder.add_cross_attention)
         self.assertTrue(enc_dec_model.config.is_encoder_decoder)
@@ -120,10 +128,12 @@ class TFEncoderDecoderMixin:
             kwargs=kwargs,
         )
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
         encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_hidden_states)
@@ -137,10 +147,12 @@ class TFEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def check_encoder_decoder_model_from_pretrained(
@@ -155,8 +167,14 @@ class TFEncoderDecoderMixin:
         return_dict,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        kwargs = {"encoder_model": encoder_model, "decoder_model": decoder_model, "return_dict": return_dict}
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        kwargs = {
+            "encoder_model": encoder_model,
+            "decoder_model": decoder_model,
+            "return_dict": return_dict,
+        }
         enc_dec_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(**kwargs)
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -168,10 +186,12 @@ class TFEncoderDecoderMixin:
         )
 
         self.assertEqual(
-            outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
+            outputs_encoder_decoder["logits"].shape,
+            (decoder_input_ids.shape + (decoder_config.vocab_size,)),
         )
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def check_save_and_load(
@@ -185,8 +205,12 @@ class TFEncoderDecoderMixin:
         decoder_attention_mask,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
 
         outputs = enc_dec_model(
             input_ids=input_ids,
@@ -226,8 +250,12 @@ class TFEncoderDecoderMixin:
         labels,
         **kwargs,
     ):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
 
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -245,17 +273,24 @@ class TFEncoderDecoderMixin:
         expected_shape = (batch_size, seq_len, decoder_config.vocab_size)
         self.assertEqual(outputs_encoder_decoder["logits"].shape, expected_shape)
         self.assertEqual(
-            outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+            outputs_encoder_decoder["encoder_last_hidden_state"].shape,
+            (input_ids.shape + (config.hidden_size,)),
         )
 
     def _check_output_with_attentions(
-        self, outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
+        self,
+        outputs_encoder_decoder,
+        config,
+        input_ids,
+        decoder_config,
+        decoder_input_ids,
     ):
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
         self.assertEqual(
-            encoder_attentions[0].shape[-3:], (config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1])
+            encoder_attentions[0].shape[-3:],
+            (config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
         )
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
@@ -268,7 +303,11 @@ class TFEncoderDecoderMixin:
 
         self.assertEqual(
             decoder_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, decoder_input_ids.shape[-1], decoder_input_ids.shape[-1]),
+            (
+                decoder_config.num_attention_heads,
+                decoder_input_ids.shape[-1],
+                decoder_input_ids.shape[-1],
+            ),
         )
 
         cross_attentions = outputs_encoder_decoder["cross_attentions"]
@@ -279,7 +318,11 @@ class TFEncoderDecoderMixin:
         )
         self.assertEqual(
             cross_attentions[0].shape[-3:],
-            (decoder_config.num_attention_heads, cross_attention_input_seq_len, input_ids.shape[-1]),
+            (
+                decoder_config.num_attention_heads,
+                cross_attention_input_seq_len,
+                input_ids.shape[-1],
+            ),
         )
 
     def check_encoder_decoder_model_output_attentions(
@@ -296,8 +339,12 @@ class TFEncoderDecoderMixin:
         # make the decoder inputs a different shape from the encoder inputs to harden the test
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -307,7 +354,11 @@ class TFEncoderDecoderMixin:
             kwargs=kwargs,
         )
         self._check_output_with_attentions(
-            outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
+            outputs_encoder_decoder,
+            config,
+            input_ids,
+            decoder_config,
+            decoder_input_ids,
         )
 
     def check_encoder_decoder_model_output_attentions_from_config(
@@ -327,8 +378,12 @@ class TFEncoderDecoderMixin:
 
         decoder_input_ids = decoder_input_ids[:, :-1]
         decoder_attention_mask = decoder_attention_mask[:, :-1]
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         enc_dec_model.config.output_attentions = True  # model config -> won't work
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
@@ -340,14 +395,22 @@ class TFEncoderDecoderMixin:
         self.assertTrue(
             all(
                 key not in outputs_encoder_decoder
-                for key in ["encoder_attentions", "decoder_attentions", "cross_attentions"]
+                for key in [
+                    "encoder_attentions",
+                    "decoder_attentions",
+                    "cross_attentions",
+                ]
             )
         )
 
         config.output_attentions = True  # inner model config -> will work
         decoder_config.output_attentions = True
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
             decoder_input_ids=decoder_input_ids,
@@ -356,17 +419,29 @@ class TFEncoderDecoderMixin:
             kwargs=kwargs,
         )
         self._check_output_with_attentions(
-            outputs_encoder_decoder, config, input_ids, decoder_config, decoder_input_ids
+            outputs_encoder_decoder,
+            config,
+            input_ids,
+            decoder_config,
+            decoder_input_ids,
         )
 
-    def check_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
-        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
-        enc_dec_model = TFEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+    def check_encoder_decoder_model_generate(
+        self, input_ids, config, decoder_config, **kwargs
+    ):
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            config, decoder_config
+        )
+        enc_dec_model = TFEncoderDecoderModel(
+            encoder=encoder_model, decoder=decoder_model
+        )
 
         # Generate until max length
         if hasattr(enc_dec_model.config, "eos_token_id"):
             enc_dec_model.config.eos_token_id = None
-        if hasattr(enc_dec_model.config, "decoder") and hasattr(enc_dec_model.config.decoder, "eos_token_id"):
+        if hasattr(enc_dec_model.config, "decoder") and hasattr(
+            enc_dec_model.config.decoder, "eos_token_id"
+        ):
             enc_dec_model.config.decoder.eos_token_id = None
         if hasattr(enc_dec_model.generation_config, "eos_token_id"):
             enc_dec_model.generation_config.eos_token_id = None
@@ -375,7 +450,10 @@ class TFEncoderDecoderMixin:
         generated_output = enc_dec_model.generate(
             input_ids, decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id
         )
-        self.assertEqual(tuple(generated_output.shape.as_list()), (input_ids.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(
+            tuple(generated_output.shape.as_list()),
+            (input_ids.shape[0],) + (decoder_config.max_length,),
+        )
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -387,11 +465,15 @@ class TFEncoderDecoderMixin:
 
     def test_encoder_decoder_model_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=False)
+        self.check_encoder_decoder_model_from_pretrained(
+            **input_ids_dict, return_dict=False
+        )
 
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=True)
+        self.check_encoder_decoder_model_from_pretrained(
+            **input_ids_dict, return_dict=True
+        )
 
     def test_save_and_load_from_pretrained(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -415,7 +497,9 @@ class TFEncoderDecoderMixin:
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
         diff = np.abs((a - b)).max()
-        self.assertLessEqual(diff, tol, f"Difference between torch and tf is {diff} (>= {tol}).")
+        self.assertLessEqual(
+            diff, tol, f"Difference between torch and tf is {diff} (>= {tol})."
+        )
 
     def test_model_save_load_from_pretrained(self):
         model_2 = self.get_pretrained_model()
@@ -464,8 +548,12 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        encoder_config_and_inputs = self.encoder_model_tester.prepare_config_and_inputs()
-        decoder_config_and_inputs = self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        encoder_config_and_inputs = (
+            self.encoder_model_tester.prepare_config_and_inputs()
+        )
+        decoder_config_and_inputs = (
+            self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        )
         (
             config,
             input_ids,
@@ -525,8 +613,12 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        encoder_config_and_inputs = self.encoder_model_tester.prepare_config_and_inputs()
-        decoder_config_and_inputs = self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        encoder_config_and_inputs = (
+            self.encoder_model_tester.prepare_config_and_inputs()
+        )
+        decoder_config_and_inputs = (
+            self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        )
         (
             config,
             input_ids,
@@ -587,8 +679,12 @@ class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        encoder_config_and_inputs = self.encoder_model_tester.prepare_config_and_inputs()
-        decoder_config_and_inputs = self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        encoder_config_and_inputs = (
+            self.encoder_model_tester.prepare_config_and_inputs()
+        )
+        decoder_config_and_inputs = (
+            self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        )
         (
             config,
             input_ids,
@@ -648,8 +744,12 @@ class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
         return encoder_model, decoder_model
 
     def prepare_config_and_inputs(self):
-        encoder_config_and_inputs = self.encoder_model_tester.prepare_config_and_inputs()
-        decoder_config_and_inputs = self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        encoder_config_and_inputs = (
+            self.encoder_model_tester.prepare_config_and_inputs()
+        )
+        decoder_config_and_inputs = (
+            self.decoder_model_tester.prepare_config_and_inputs_for_decoder()
+        )
         (
             config,
             input_ids,
@@ -705,12 +805,18 @@ class TFEncoderDecoderModelTest(unittest.TestCase):
         return config
 
     def get_encoderdecoder_model(self):
-        return TFEncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
+        return TFEncoderDecoderModel.from_pretrained(
+            "patrickvonplaten/bert2bert-cnn_dailymail-fp16"
+        )
 
     def get_encoder_decoder_models(self):
-        encoder_model = TFBertModel.from_pretrained("google-bert/bert-base-cased", name="encoder")
+        encoder_model = TFBertModel.from_pretrained(
+            "google-bert/bert-base-cased", name="encoder"
+        )
         decoder_model = TFBertLMHeadModel.from_pretrained(
-            "google-bert/bert-base-cased", config=self.get_decoder_config(), name="decoder"
+            "google-bert/bert-base-cased",
+            config=self.get_decoder_config(),
+            name="decoder",
         )
         return {"encoder": encoder_model, "decoder": decoder_model}
 
@@ -739,14 +845,18 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         decoder_config = AutoConfig.from_pretrained(
             "google-bert/bert-base-uncased", is_decoder=True, add_cross_attention=True
         )
-        return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        return EncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config, decoder_config
+        )
 
     def get_encoder_decoder_config_small(self):
         encoder_config = AutoConfig.from_pretrained("hf-internal-testing/tiny-bert")
         decoder_config = AutoConfig.from_pretrained(
             "hf-internal-testing/tiny-bert", is_decoder=True, add_cross_attention=True
         )
-        return EncoderDecoderConfig.from_encoder_decoder_configs(encoder_config, decoder_config)
+        return EncoderDecoderConfig.from_encoder_decoder_configs(
+            encoder_config, decoder_config
+        )
 
     def test_encoder_decoder_save_load_from_encoder_decoder(self):
         config = self.get_encoder_decoder_config_small()
@@ -762,7 +872,9 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         input_ids = ids_tensor([13, 5], encoder.config.vocab_size)
         decoder_input_ids = ids_tensor([13, 1], decoder.config.vocab_size)
 
-        logits_orig = encoder_decoder_orig(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+        logits_orig = encoder_decoder_orig(
+            input_ids=input_ids, decoder_input_ids=decoder_input_ids
+        ).logits
 
         with tempfile.TemporaryDirectory() as tmp_dirname:
             encoder_path = os.path.join(tmp_dirname, "encoder")
@@ -771,9 +883,13 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             encoder.save_pretrained(encoder_path)
             decoder.save_pretrained(decoder_path)
 
-            encoder_decoder = TFEncoderDecoderModel.from_encoder_decoder_pretrained(encoder_path, decoder_path)
+            encoder_decoder = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
+                encoder_path, decoder_path
+            )
 
-        logits_1 = encoder_decoder(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+        logits_1 = encoder_decoder(
+            input_ids=input_ids, decoder_input_ids=decoder_input_ids
+        ).logits
 
         self.assertTrue(logits_orig.numpy().sum() - logits_1.numpy().sum() < 1e-3)
 
@@ -784,7 +900,9 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             encoder_decoder.save_pretrained(tmp_dirname)
             encoder_decoder = TFEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-        logits_2 = encoder_decoder(input_ids=input_ids, decoder_input_ids=decoder_input_ids).logits
+        logits_2 = encoder_decoder(
+            input_ids=input_ids, decoder_input_ids=decoder_input_ids
+        ).logits
 
         max_diff = np.max(np.abs(logits_2.numpy() - logits_orig.numpy()))
         self.assertAlmostEqual(max_diff, 0.0, places=4)
@@ -794,11 +912,19 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         load_weight_prefix = TFEncoderDecoderModel.load_weight_prefix
 
         config = self.get_encoder_decoder_config()
-        encoder_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-        decoder_tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
+        encoder_tokenizer = AutoTokenizer.from_pretrained(
+            "google-bert/bert-base-uncased"
+        )
+        decoder_tokenizer = AutoTokenizer.from_pretrained(
+            "google-bert/bert-base-uncased"
+        )
 
-        input_ids = encoder_tokenizer("who sings does he love me with reba", return_tensors="tf").input_ids
-        decoder_input_ids = decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+        input_ids = encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="tf"
+        ).input_ids
+        decoder_input_ids = decoder_tokenizer(
+            "Linda Davis", return_tensors="tf"
+        ).input_ids
 
         with tempfile.TemporaryDirectory() as tmp_dirname:
             # Since most of HF's models don't have pretrained cross-attention layers, they are randomly
@@ -807,10 +933,15 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             # So we create pretrained models (without `load_weight_prefix`), save them, and later,
             # we load them using `from_pretrained`.
             # (we don't need to do this for encoder, but let's make the code more similar between encoder/decoder)
-            encoder = TFAutoModel.from_pretrained("google-bert/bert-base-uncased", name="encoder")
+            encoder = TFAutoModel.from_pretrained(
+                "google-bert/bert-base-uncased", name="encoder"
+            )
             # It's necessary to specify `add_cross_attention=True` here.
             decoder = TFAutoModelForCausalLM.from_pretrained(
-                "google-bert/bert-base-uncased", is_decoder=True, add_cross_attention=True, name="decoder"
+                "google-bert/bert-base-uncased",
+                is_decoder=True,
+                add_cross_attention=True,
+                name="decoder",
             )
             pretrained_encoder_dir = os.path.join(tmp_dirname, "pretrained_encoder")
             pretrained_decoder_dir = os.path.join(tmp_dirname, "pretrained_decoder")
@@ -827,21 +958,31 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             enc_dec_model.save_pretrained(tmp_dirname)
             enc_dec_model = TFEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-            output = enc_dec_model(input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+            output = enc_dec_model(
+                input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids
+            )
 
             loss_pretrained = output.loss
             del enc_dec_model
 
             # Create the model using `__init__` with loaded ``pretrained`` encoder / decoder
             encoder = TFAutoModel.from_pretrained(
-                pretrained_encoder_dir, load_weight_prefix=load_weight_prefix, name="encoder"
+                pretrained_encoder_dir,
+                load_weight_prefix=load_weight_prefix,
+                name="encoder",
             )
             decoder = TFAutoModelForCausalLM.from_pretrained(
-                pretrained_decoder_dir, load_weight_prefix=load_weight_prefix, name="decoder"
+                pretrained_decoder_dir,
+                load_weight_prefix=load_weight_prefix,
+                name="decoder",
             )
-            enc_dec_model = TFEncoderDecoderModel(config=config, encoder=encoder, decoder=decoder)
+            enc_dec_model = TFEncoderDecoderModel(
+                config=config, encoder=encoder, decoder=decoder
+            )
 
-        output = enc_dec_model(input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids)
+        output = enc_dec_model(
+            input_ids, decoder_input_ids=decoder_input_ids, labels=decoder_input_ids
+        )
 
         loss_init = output.loss
 

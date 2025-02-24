@@ -29,7 +29,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import ConvNextBackbone, ConvNextForImageClassification, ConvNextModel
+    from transformers import (
+        ConvNextBackbone,
+        ConvNextForImageClassification,
+        ConvNextModel,
+    )
 
 
 if is_vision_available():
@@ -76,7 +80,9 @@ class ConvNextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         if self.use_labels:
@@ -107,7 +113,12 @@ class ConvNextModelTester:
         # expected last hidden states: B, C, H // 32, W // 32
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.hidden_sizes[-1], self.image_size // 32, self.image_size // 32),
+            (
+                self.batch_size,
+                self.hidden_sizes[-1],
+                self.image_size // 32,
+                self.image_size // 32,
+            ),
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
@@ -125,7 +136,10 @@ class ConvNextModelTester:
 
         # verify hidden states
         self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[1], 4, 4],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), len(config.out_features))
@@ -140,7 +154,10 @@ class ConvNextModelTester:
 
         # verify feature maps
         self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape),
+            [self.batch_size, self.hidden_sizes[-1], 1, 1],
+        )
 
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
@@ -170,7 +187,10 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": ConvNextModel, "image-classification": ConvNextForImageClassification}
+        {
+            "image-feature-extraction": ConvNextModel,
+            "image-classification": ConvNextForImageClassification,
+        }
         if is_torch_available()
         else {}
     )
@@ -224,7 +244,11 @@ class ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = (
+                outputs.encoder_hidden_states
+                if config.is_encoder_decoder
+                else outputs.hidden_states
+            )
 
             expected_num_stages = self.model_tester.num_stages
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
@@ -269,11 +293,17 @@ def prepare_img():
 class ConvNextModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224") if is_vision_available() else None
+        return (
+            AutoImageProcessor.from_pretrained("facebook/convnext-tiny-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ConvNextForImageClassification.from_pretrained("facebook/convnext-tiny-224").to(torch_device)
+        model = ConvNextForImageClassification.from_pretrained(
+            "facebook/convnext-tiny-224"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -289,7 +319,9 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.0260, -0.4739, 0.1911]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
 
 @require_torch

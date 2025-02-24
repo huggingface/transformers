@@ -46,13 +46,21 @@ LARGE_SUPPORTED_LANGUAGES = ["afr","amh","arb","ary","arz","asm","azj","bel","be
 
 
 def assert_param_count(model_1, model_2):
-    count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
-    count_2 = sum(p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0])
-    assert count_1 == count_2, f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
+    count_1 = sum(
+        p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0]
+    )
+    count_2 = sum(
+        p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0]
+    )
+    assert (
+        count_1 == count_2
+    ), f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
 
 
 def param_count(model):
-    return sum(p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0])
+    return sum(
+        p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0]
+    )
 
 
 def _grab_best_device(use_gpu=True):
@@ -81,7 +89,10 @@ vocoder_convert_list = [
 # order is important
 wav2vec_convert_list = [
     ("speech_encoder_frontend.model_dim_proj", "feature_projection.projection"),
-    ("speech_encoder_frontend.post_extract_layer_norm", "feature_projection.layer_norm"),
+    (
+        "speech_encoder_frontend.post_extract_layer_norm",
+        "feature_projection.layer_norm",
+    ),
     ("speech_encoder_frontend.pos_encoder.conv", "encoder.pos_conv_embed.conv"),
     ("speech_encoder.inner.layers", "encoder.layers"),
     ("speech_encoder.inner_layer_norm", "encoder.layer_norm"),
@@ -147,7 +158,9 @@ text_convert_list = [
 
 CUR_PATH = os.path.dirname(os.path.abspath(__file__))
 default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
-CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "huggingface", "hub")
+CACHE_DIR = os.path.join(
+    os.getenv("XDG_CACHE_HOME", default_cache_dir), "huggingface", "hub"
+)
 
 
 def _load_hf_config():
@@ -235,7 +248,9 @@ def load_model(save_dir, model_type, repo_id):
 
     langs = LARGE_SUPPORTED_LANGUAGES
     langs = [f"__{lang}__" for lang in langs]
-    vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
+    vocab_file = os.path.join(
+        os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model"
+    )
 
     save_dir = os.path.join(save_dir, name)
     Path(save_dir).mkdir(exist_ok=True)
@@ -253,13 +268,17 @@ def load_model(save_dir, model_type, repo_id):
         )
 
     ####### get language to ids dict
-    text_decoder_lang_code_to_id = {lang.replace("__", ""): tokenizer.convert_tokens_to_ids(lang) for lang in langs}
+    text_decoder_lang_code_to_id = {
+        lang.replace("__", ""): tokenizer.convert_tokens_to_ids(lang) for lang in langs
+    }
     # offset: vocoder unit vocab size + 5 (for EOS/PAD/BOS/UNK/MSK) + len(supported_languages)
     t2u_lang_code_to_id = {
         code.replace("__", ""): i + 10005 + len(UNIT_SUPPORTED_LANGUAGES)
         for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)
     }
-    vocoder_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)}
+    vocoder_lang_code_to_id = {
+        code.replace("__", ""): i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)
+    }
 
     ######### FE
 
@@ -280,17 +299,27 @@ def load_model(save_dir, model_type, repo_id):
     hf_config = _load_hf_config()
 
     ######## get id_to_text and char_to_id from original model tokenizers
-    id_to_text = {i: original_model.text_tokenizer.model.index_to_token(i) for i in range(hf_config.vocab_size)}
+    id_to_text = {
+        i: original_model.text_tokenizer.model.index_to_token(i)
+        for i in range(hf_config.vocab_size)
+    }
     char_to_id = {
-        original_model.model.t2u_model.decoder_frontend.char_tokenizer.model.index_to_token(i): i for i in range(10904)
+        original_model.model.t2u_model.decoder_frontend.char_tokenizer.model.index_to_token(
+            i
+        ): i
+        for i in range(10904)
     }
 
     # init model
     hf_model = SeamlessM4Tv2Model(hf_config)
 
-    hf_model.generation_config.__setattr__("text_decoder_lang_to_code_id", text_decoder_lang_code_to_id)
+    hf_model.generation_config.__setattr__(
+        "text_decoder_lang_to_code_id", text_decoder_lang_code_to_id
+    )
     hf_model.generation_config.__setattr__("t2u_lang_code_to_id", t2u_lang_code_to_id)
-    hf_model.generation_config.__setattr__("vocoder_lang_code_to_id", vocoder_lang_code_to_id)
+    hf_model.generation_config.__setattr__(
+        "vocoder_lang_code_to_id", vocoder_lang_code_to_id
+    )
     hf_model.generation_config.__setattr__("id_to_text", id_to_text)
     hf_model.generation_config.__setattr__("char_to_id", char_to_id)
 
@@ -310,7 +339,12 @@ def load_model(save_dir, model_type, repo_id):
     # 1. take care of speech encoder
     wav2vec = hf_model.speech_encoder
     hf_model.speech_encoder = _convert_model(
-        original_model, wav2vec, wav2vec_convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"
+        original_model,
+        wav2vec,
+        wav2vec_convert_list,
+        device,
+        unwanted_prefix="model.",
+        filter_state_dict="speech",
     )
 
     # 2. take care of t2u
@@ -364,7 +398,9 @@ def load_model(save_dir, model_type, repo_id):
     count_2 = param_count(original_model)
 
     print(f"HF MODEL:{count_1}, ORIGINAL_MODEL: {count_2}, diff:{count_1 - count_2}")
-    print(f"HF MODEL excluding embeddings:{hf_model.num_parameters(exclude_embeddings=True)}")
+    print(
+        f"HF MODEL excluding embeddings:{hf_model.num_parameters(exclude_embeddings=True)}"
+    )
 
     del original_model
 

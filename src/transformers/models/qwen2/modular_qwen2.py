@@ -9,20 +9,15 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-    LlamaMLP,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-)
+from ..llama.modeling_llama import (LlamaAttention, LlamaDecoderLayer,
+                                    LlamaForCausalLM,
+                                    LlamaForQuestionAnswering,
+                                    LlamaForSequenceClassification,
+                                    LlamaForTokenClassification, LlamaMLP,
+                                    apply_rotary_pos_emb,
+                                    eager_attention_forward)
 from ..mistral.modeling_mistral import MistralModel
 from .configuration_qwen2 import Qwen2Config
-
 
 logger = logging.get_logger(__name__)
 
@@ -38,10 +33,18 @@ class Qwen2MLP(LlamaMLP):
 class Qwen2Attention(LlamaAttention):
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=True
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=False
+        )
 
     def forward(
         self,
@@ -60,12 +63,16 @@ class Qwen2Attention(LlamaAttention):
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+        query_states, key_states = apply_rotary_pos_emb(
+            query_states, key_states, cos, sin
+        )
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs
+            )
 
         sliding_window = None
         if (
@@ -77,13 +84,17 @@ class Qwen2Attention(LlamaAttention):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and kwargs.get(
+                "output_attentions", False
+            ):
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+                attention_interface = ALL_ATTENTION_FUNCTIONS[
+                    self.config._attn_implementation
+                ]
 
         attn_output, attn_weights = attention_interface(
             self,

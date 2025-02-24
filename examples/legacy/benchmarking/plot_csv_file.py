@@ -39,11 +39,15 @@ class PlotArguments:
     )
     plot_along_batch: bool = field(
         default=False,
-        metadata={"help": "Whether to plot along batch size or sequence length. Defaults to sequence length."},
+        metadata={
+            "help": "Whether to plot along batch size or sequence length. Defaults to sequence length."
+        },
     )
     is_time: bool = field(
         default=False,
-        metadata={"help": "Whether the csv file has time results or memory results. Defaults to memory results."},
+        metadata={
+            "help": "Whether the csv file has time results or memory results. Defaults to memory results."
+        },
     )
     no_log_scale: bool = field(
         default=False,
@@ -57,10 +61,15 @@ class PlotArguments:
     )
     figure_png_file: Optional[str] = field(
         default=None,
-        metadata={"help": "Filename under which the plot will be saved. If unused no plot is saved."},
+        metadata={
+            "help": "Filename under which the plot will be saved. If unused no plot is saved."
+        },
     )
     short_model_names: Optional[List[str]] = list_field(
-        default=None, metadata={"help": "List of model names that are used instead of the ones in the csv file."}
+        default=None,
+        metadata={
+            "help": "List of model names that are used instead of the ones in the csv file."
+        },
     )
 
 
@@ -90,22 +99,28 @@ class Plot:
             for row in reader:
                 model_name = row["model"]
                 self.result_dict[model_name]["bsz"].append(int(row["batch_size"]))
-                self.result_dict[model_name]["seq_len"].append(int(row["sequence_length"]))
+                self.result_dict[model_name]["seq_len"].append(
+                    int(row["sequence_length"])
+                )
                 if can_convert_to_int(row["result"]):
                     # value is not None
-                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
-                        int(row["result"])
-                    )
+                    self.result_dict[model_name]["result"][
+                        (int(row["batch_size"]), int(row["sequence_length"]))
+                    ] = int(row["result"])
                 elif can_convert_to_float(row["result"]):
                     # value is not None
-                    self.result_dict[model_name]["result"][(int(row["batch_size"]), int(row["sequence_length"]))] = (
-                        float(row["result"])
-                    )
+                    self.result_dict[model_name]["result"][
+                        (int(row["batch_size"]), int(row["sequence_length"]))
+                    ] = float(row["result"])
 
     def plot(self):
         fig, ax = plt.subplots()
         title_str = "Time usage" if self.args.is_time else "Memory usage"
-        title_str = title_str + " for training" if self.args.is_train else title_str + " for inference"
+        title_str = (
+            title_str + " for training"
+            if self.args.is_train
+            else title_str + " for inference"
+        )
 
         if not self.args.no_log_scale:
             # set logarithm scales
@@ -121,32 +136,48 @@ class Plot:
             results = self.result_dict[model_name]["result"]
 
             (x_axis_array, inner_loop_array) = (
-                (batch_sizes, sequence_lengths) if self.args.plot_along_batch else (sequence_lengths, batch_sizes)
+                (batch_sizes, sequence_lengths)
+                if self.args.plot_along_batch
+                else (sequence_lengths, batch_sizes)
             )
 
             label_model_name = (
-                model_name if self.args.short_model_names is None else self.args.short_model_names[model_name_idx]
+                model_name
+                if self.args.short_model_names is None
+                else self.args.short_model_names[model_name_idx]
             )
 
             for inner_loop_value in inner_loop_array:
                 if self.args.plot_along_batch:
                     y_axis_array = np.asarray(
-                        [results[(x, inner_loop_value)] for x in x_axis_array if (x, inner_loop_value) in results],
+                        [
+                            results[(x, inner_loop_value)]
+                            for x in x_axis_array
+                            if (x, inner_loop_value) in results
+                        ],
                         dtype=int,
                     )
                 else:
                     y_axis_array = np.asarray(
-                        [results[(inner_loop_value, x)] for x in x_axis_array if (inner_loop_value, x) in results],
+                        [
+                            results[(inner_loop_value, x)]
+                            for x in x_axis_array
+                            if (inner_loop_value, x) in results
+                        ],
                         dtype=np.float32,
                     )
 
                 (x_axis_label, inner_loop_label) = (
-                    ("batch_size", "len") if self.args.plot_along_batch else ("in #tokens", "bsz")
+                    ("batch_size", "len")
+                    if self.args.plot_along_batch
+                    else ("in #tokens", "bsz")
                 )
 
                 x_axis_array = np.asarray(x_axis_array, int)[: len(y_axis_array)]
                 plt.scatter(
-                    x_axis_array, y_axis_array, label=f"{label_model_name} - {inner_loop_label}: {inner_loop_value}"
+                    x_axis_array,
+                    y_axis_array,
+                    label=f"{label_model_name} - {inner_loop_label}: {inner_loop_value}",
                 )
                 plt.plot(x_axis_array, y_axis_array, "--")
 

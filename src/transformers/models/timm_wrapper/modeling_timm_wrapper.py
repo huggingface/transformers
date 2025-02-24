@@ -136,11 +136,15 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0)
+        self.timm_model = timm.create_model(
+            config.architecture, pretrained=False, num_classes=0
+        )
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TimmWrapperModelOutput, config_class=TimmWrapperConfig)
+    @replace_return_docstrings(
+        output_type=TimmWrapperModelOutput, config_class=TimmWrapperConfig
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -188,17 +192,27 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
         do_pooling = do_pooling if do_pooling is not None else self.config.do_pooling
 
         if output_attentions:
             raise ValueError("Cannot set `output_attentions` for timm models.")
 
-        if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
+        if output_hidden_states and not hasattr(
+            self.timm_model, "forward_intermediates"
+        ):
             raise ValueError(
                 "The 'output_hidden_states' option cannot be set for this timm model. "
                 "To enable this feature, the 'forward_intermediates' method must be implemented "
@@ -212,7 +226,9 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
             # to enable hidden states selection
             if isinstance(output_hidden_states, (list, tuple)):
                 kwargs["indices"] = output_hidden_states
-            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(
+                pixel_values, **kwargs
+            )
         else:
             last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
             hidden_states = None
@@ -250,12 +266,16 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
                 "or use `TimmWrapperModel` for feature extraction."
             )
 
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=config.num_labels)
+        self.timm_model = timm.create_model(
+            config.architecture, pretrained=False, num_classes=config.num_labels
+        )
         self.num_labels = config.num_labels
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=TimmWrapperConfig)
+    @replace_return_docstrings(
+        output_type=ImageClassifierOutput, config_class=TimmWrapperConfig
+    )
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -301,16 +321,26 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
         )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
 
         if output_attentions:
             raise ValueError("Cannot set `output_attentions` for timm models.")
 
-        if output_hidden_states and not hasattr(self.timm_model, "forward_intermediates"):
+        if output_hidden_states and not hasattr(
+            self.timm_model, "forward_intermediates"
+        ):
             raise ValueError(
                 "The 'output_hidden_states' option cannot be set for this timm model. "
                 "To enable this feature, the 'forward_intermediates' method must be implemented "
@@ -324,7 +354,9 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             # to enable hidden states selection
             if isinstance(output_hidden_states, (list, tuple)):
                 kwargs["indices"] = output_hidden_states
-            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(
+                pixel_values, **kwargs
+            )
             logits = self.timm_model.forward_head(last_hidden_state)
         else:
             logits = self.timm_model(pixel_values, **kwargs)
@@ -335,7 +367,9 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -364,4 +398,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         )
 
 
-__all__ = ["TimmWrapperPreTrainedModel", "TimmWrapperModel", "TimmWrapperForImageClassification"]
+__all__ = [
+    "TimmWrapperPreTrainedModel",
+    "TimmWrapperModel",
+    "TimmWrapperForImageClassification",
+]

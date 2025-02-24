@@ -51,7 +51,9 @@ _IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_281"  # ImageNet ID for "tabby, tabby cat"
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+def drop_path(
+    input: torch.Tensor, drop_prob: float = 0.0, training: bool = False
+) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -64,8 +66,12 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     if drop_prob == 0.0 or not training:
         return input
     keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    shape = (input.shape[0],) + (1,) * (
+        input.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(
+        shape, dtype=input.dtype, device=input.device
+    )
     random_tensor.floor_()  # binarize
     output = input.div(keep_prob) * random_tensor
     return output
@@ -92,9 +98,15 @@ class PvtV2OverlapPatchEmbeddings(nn.Module):
     def __init__(self, config: PvtV2Config, layer_idx: int):
         super().__init__()
         patch_size = config.patch_sizes[layer_idx]
-        patch_size = (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
+        patch_size = (
+            (patch_size, patch_size) if isinstance(patch_size, int) else patch_size
+        )
         stride = config.strides[layer_idx]
-        num_channels = config.num_channels if layer_idx == 0 else config.hidden_sizes[layer_idx - 1]
+        num_channels = (
+            config.num_channels
+            if layer_idx == 0
+            else config.hidden_sizes[layer_idx - 1]
+        )
         hidden_size = config.hidden_sizes[layer_idx]
         self.patch_size = patch_size
         self.proj = nn.Conv2d(
@@ -127,7 +139,9 @@ class PvtV2DepthWiseConv(nn.Module):
 
     def forward(self, hidden_states, height, width):
         batch_size, seq_len, num_channels = hidden_states.shape
-        hidden_states = hidden_states.transpose(1, 2).view(batch_size, num_channels, height, width)
+        hidden_states = hidden_states.transpose(1, 2).view(
+            batch_size, num_channels, height, width
+        )
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
@@ -137,7 +151,13 @@ class PvtV2DepthWiseConv(nn.Module):
 class PvtV2SelfAttention(nn.Module):
     """Efficient self-attention mechanism."""
 
-    def __init__(self, config: PvtV2Config, hidden_size: int, num_attention_heads: int, spatial_reduction_ratio: int):
+    def __init__(
+        self,
+        config: PvtV2Config,
+        hidden_size: int,
+        num_attention_heads: int,
+        spatial_reduction_ratio: int,
+    ):
         super().__init__()
         self.linear_attention = config.linear_attention
         self.pruned_heads = set()
@@ -153,9 +173,13 @@ class PvtV2SelfAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(
+            self.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
         self.key = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(
+            self.hidden_size, self.all_head_size, bias=config.qkv_bias
+        )
         self.attn_drop = nn.Dropout(config.attention_probs_dropout_prob)
         self.proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.proj_drop = nn.Dropout(config.hidden_dropout_prob)
@@ -163,17 +187,25 @@ class PvtV2SelfAttention(nn.Module):
         self.spatial_reduction_ratio = spatial_reduction_ratio
         if self.linear_attention:
             self.pool = nn.AdaptiveAvgPool2d(7)
-            self.spatial_reduction = nn.Conv2d(self.hidden_size, self.hidden_size, kernel_size=1, stride=1)
+            self.spatial_reduction = nn.Conv2d(
+                self.hidden_size, self.hidden_size, kernel_size=1, stride=1
+            )
             self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
             self.act = nn.GELU()
         elif spatial_reduction_ratio > 1:
             self.spatial_reduction = nn.Conv2d(
-                self.hidden_size, self.hidden_size, kernel_size=spatial_reduction_ratio, stride=spatial_reduction_ratio
+                self.hidden_size,
+                self.hidden_size,
+                kernel_size=spatial_reduction_ratio,
+                stride=spatial_reduction_ratio,
             )
             self.layer_norm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def transpose_for_scores(self, hidden_states) -> torch.Tensor:
-        new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_shape = hidden_states.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         hidden_states = hidden_states.view(new_shape)
         return hidden_states.permute(0, 2, 1, 3)
 
@@ -188,15 +220,23 @@ class PvtV2SelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
         if self.linear_attention:
-            hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+            hidden_states = hidden_states.permute(0, 2, 1).reshape(
+                batch_size, num_channels, height, width
+            )
             hidden_states = (
-                self.spatial_reduction(self.pool(hidden_states)).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+                self.spatial_reduction(self.pool(hidden_states))
+                .reshape(batch_size, num_channels, -1)
+                .permute(0, 2, 1)
             )
             hidden_states = self.act(self.layer_norm(hidden_states))
         elif self.spatial_reduction_ratio > 1:
-            hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
+            hidden_states = hidden_states.permute(0, 2, 1).reshape(
+                batch_size, num_channels, height, width
+            )
             hidden_states = (
-                self.spatial_reduction(hidden_states).reshape(batch_size, num_channels, -1).permute(0, 2, 1)
+                self.spatial_reduction(hidden_states)
+                .reshape(batch_size, num_channels, -1)
+                .permute(0, 2, 1)
             )
             hidden_states = self.layer_norm(hidden_states)
 
@@ -214,11 +254,17 @@ class PvtV2SelfAttention(nn.Module):
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.attn_drop(attention_probs)
-        context_layer = (attention_probs @ value_layer).transpose(1, 2).reshape(batch_size, seq_len, num_channels)
+        context_layer = (
+            (attention_probs @ value_layer)
+            .transpose(1, 2)
+            .reshape(batch_size, seq_len, num_channels)
+        )
         context_layer = self.proj(context_layer)
         context_layer = self.proj_drop(context_layer)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         return outputs
 
@@ -289,9 +335,17 @@ class PvtV2BlockLayer(nn.Module):
         self.drop_path = PvtV2DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layer_norm_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
-        self.mlp = PvtV2ConvFeedForwardNetwork(config=config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.mlp = PvtV2ConvFeedForwardNetwork(
+            config=config, in_features=hidden_size, hidden_features=mlp_hidden_size
+        )
 
-    def forward(self, hidden_states: torch.Tensor, height: int, width: int, output_attentions: bool = False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        height: int,
+        width: int,
+        output_attentions: bool = False,
+    ):
         self_attention_outputs = self.attention(
             hidden_states=self.layer_norm_1(hidden_states),
             height=height,
@@ -323,20 +377,26 @@ class PvtV2EncoderLayer(nn.Module):
         )
         # Transformer block
         # stochastic depth decay rule
-        drop_path_decays = torch.linspace(0, config.drop_path_rate, sum(config.depths)).tolist()
+        drop_path_decays = torch.linspace(
+            0, config.drop_path_rate, sum(config.depths)
+        ).tolist()
         block_layers = []
         for block_idx in range(config.depths[layer_idx]):
             block_layers.append(
                 PvtV2BlockLayer(
                     config=config,
                     layer_idx=layer_idx,
-                    drop_path=drop_path_decays[sum(config.depths[:layer_idx]) + block_idx],
+                    drop_path=drop_path_decays[
+                        sum(config.depths[:layer_idx]) + block_idx
+                    ],
                 )
             )
         self.blocks = nn.ModuleList(block_layers)
 
         # Layer norm
-        self.layer_norm = nn.LayerNorm(config.hidden_sizes[layer_idx], eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(
+            config.hidden_sizes[layer_idx], eps=config.layer_norm_eps
+        )
 
     def forward(self, hidden_states, output_attentions):
         all_self_attentions = () if output_attentions else None
@@ -366,7 +426,9 @@ class PvtV2Encoder(nn.Module):
         self.gradient_checkpointing = False
 
         # encoder layers
-        self.layers = nn.ModuleList([PvtV2EncoderLayer(config, i) for i in range(config.num_encoder_blocks)])
+        self.layers = nn.ModuleList(
+            [PvtV2EncoderLayer(config, i) for i in range(config.num_encoder_blocks)]
+        )
 
     def forward(
         self,
@@ -382,7 +444,9 @@ class PvtV2Encoder(nn.Module):
         hidden_states = pixel_values
         for idx, layer in enumerate(self.layers):
             if self.gradient_checkpointing and self.training:
-                layer_output = self._gradient_checkpointing_func(layer.__call__, hidden_states, output_attentions)
+                layer_output = self._gradient_checkpointing_func(
+                    layer.__call__, hidden_states, output_attentions
+                )
             else:
                 layer_output = layer(hidden_states, output_attentions)
             outputs, height, width = layer_output
@@ -390,11 +454,19 @@ class PvtV2Encoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[1],)
             # reshape back to (batch_size, num_channels, height, width)
-            hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+            hidden_states = (
+                hidden_states.reshape(batch_size, height, width, -1)
+                .permute(0, 3, 1, 2)
+                .contiguous()
+            )
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -418,14 +490,18 @@ class PvtV2PreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(module.weight.data, mean=0.0, std=self.config.initializer_range)
+            module.weight.data = nn.init.trunc_normal_(
+                module.weight.data, mean=0.0, std=self.config.initializer_range
+            )
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv2d):
-            fan_out = module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+            fan_out = (
+                module.kernel_size[0] * module.kernel_size[1] * module.out_channels
+            )
             fan_out //= module.groups
             module.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
             if module.bias is not None:
@@ -482,7 +558,9 @@ class PvtV2Model(PvtV2PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(
+        PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)")
+    )
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -497,11 +575,19 @@ class PvtV2Model(PvtV2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         encoder_outputs = self.encoder(
             pixel_values=pixel_values,
@@ -537,13 +623,17 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
 
         # Classifier head
         self.classifier = (
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
+            if config.num_labels > 0
+            else nn.Identity()
         )
 
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)"))
+    @add_start_docstrings_to_model_forward(
+        PVT_V2_INPUTS_DOCSTRING.format("(batch_size, channels, height, width)")
+    )
     @add_code_sample_docstrings(
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
@@ -564,7 +654,9 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         outputs = self.pvt_v2(
             pixel_values=pixel_values,
@@ -579,7 +671,9 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
         batch_size = sequence_output.shape[0]
         # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
         sequence_output = sequence_output.permute(0, 2, 3, 1)
-        sequence_output = sequence_output.reshape(batch_size, -1, self.config.hidden_sizes[-1])
+        sequence_output = sequence_output.reshape(
+            batch_size, -1, self.config.hidden_sizes[-1]
+        )
 
         # global average pooling
         sequence_output = sequence_output.mean(dim=1)
@@ -591,7 +685,9 @@ class PvtV2ForImageClassification(PvtV2PreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (
+                    labels.dtype == torch.long or labels.dtype == torch.int
+                ):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
@@ -668,9 +764,13 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
         >>> list(feature_maps[-1].shape)
         [1, 256, 7, 7]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
         )
 
         outputs = self.encoder(
@@ -700,4 +800,9 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
         )
 
 
-__all__ = ["PvtV2ForImageClassification", "PvtV2Model", "PvtV2PreTrainedModel", "PvtV2Backbone"]
+__all__ = [
+    "PvtV2ForImageClassification",
+    "PvtV2Model",
+    "PvtV2PreTrainedModel",
+    "PvtV2Backbone",
+]

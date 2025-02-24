@@ -102,7 +102,10 @@ class BlenderbotConfig(PretrainedConfig):
 
     model_type = "blenderbot"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+    }
 
     def __init__(
         self,
@@ -151,7 +154,9 @@ class BlenderbotConfig(PretrainedConfig):
         self.decoder_layerdrop = decoder_layerdrop
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.scale_embedding = (
+            scale_embedding  # scale factor will be sqrt(d_model) if True
+        )
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -177,10 +182,16 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             )
             if self.use_past:
                 common_inputs["decoder_input_ids"] = {0: "batch"}
-                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "past_decoder_sequence + sequence"}
+                common_inputs["decoder_attention_mask"] = {
+                    0: "batch",
+                    1: "past_decoder_sequence + sequence",
+                }
             else:
                 common_inputs["decoder_input_ids"] = {0: "batch", 1: "decoder_sequence"}
-                common_inputs["decoder_attention_mask"] = {0: "batch", 1: "decoder_sequence"}
+                common_inputs["decoder_attention_mask"] = {
+                    0: "batch",
+                    1: "decoder_sequence",
+                }
             if self.use_past:
                 self.fill_with_past_key_values_(common_inputs, direction="inputs")
         elif self.task == "causal-lm":
@@ -193,8 +204,14 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             if self.use_past:
                 _, num_decoder_layers = self.num_layers
                 for i in range(num_decoder_layers):
-                    common_inputs[f"past_key_values.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-                    common_inputs[f"past_key_values.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+                    common_inputs[f"past_key_values.{i}.key"] = {
+                        0: "batch",
+                        2: "past_sequence + sequence",
+                    }
+                    common_inputs[f"past_key_values.{i}.value"] = {
+                        0: "batch",
+                        2: "past_sequence + sequence",
+                    }
         else:
             common_inputs = OrderedDict(
                 [
@@ -217,8 +234,14 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             if self.use_past:
                 num_encoder_layers, _ = self.num_layers
                 for i in range(num_encoder_layers):
-                    common_outputs[f"present.{i}.key"] = {0: "batch", 2: "past_sequence + sequence"}
-                    common_outputs[f"present.{i}.value"] = {0: "batch", 2: "past_sequence + sequence"}
+                    common_outputs[f"present.{i}.key"] = {
+                        0: "batch",
+                        2: "past_sequence + sequence",
+                    }
+                    common_outputs[f"present.{i}.value"] = {
+                        0: "batch",
+                        2: "past_sequence + sequence",
+                    }
         return common_outputs
 
     def _generate_dummy_inputs_for_default_and_seq2seq_lm(
@@ -237,17 +260,23 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
         decoder_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
             tokenizer, batch_size, decoder_seq_length, is_pair, framework
         )
-        decoder_inputs = {f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()}
+        decoder_inputs = {
+            f"decoder_{name}": tensor for name, tensor in decoder_inputs.items()
+        }
         common_inputs = dict(**encoder_inputs, **decoder_inputs)
 
         if self.use_past:
             if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                raise ValueError(
+                    "Cannot generate dummy past_keys inputs without PyTorch installed."
+                )
             else:
                 import torch
             batch, encoder_seq_length = common_inputs["input_ids"].shape
             decoder_seq_length = common_inputs["decoder_input_ids"].shape[1]
-            num_encoder_attention_heads, num_decoder_attention_heads = self.num_attention_heads
+            num_encoder_attention_heads, num_decoder_attention_heads = (
+                self.num_attention_heads
+            )
             encoder_shape = (
                 batch,
                 num_encoder_attention_heads,
@@ -262,7 +291,11 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
                 self._config.hidden_size // num_decoder_attention_heads,
             )
             common_inputs["decoder_attention_mask"] = torch.cat(
-                [common_inputs["decoder_attention_mask"], torch.ones(batch, decoder_past_length)], dim=1
+                [
+                    common_inputs["decoder_attention_mask"],
+                    torch.ones(batch, decoder_past_length),
+                ],
+                dim=1,
             )
             common_inputs["past_key_values"] = []
             _, num_decoder_layers = self.num_layers
@@ -292,7 +325,9 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
 
         if self.use_past:
             if not is_torch_available():
-                raise ValueError("Cannot generate dummy past_keys inputs without PyTorch installed.")
+                raise ValueError(
+                    "Cannot generate dummy past_keys inputs without PyTorch installed."
+                )
             else:
                 import torch
             batch, seqlen = common_inputs["input_ids"].shape
@@ -307,10 +342,15 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
             )
             mask_dtype = common_inputs["attention_mask"].dtype
             common_inputs["attention_mask"] = torch.cat(
-                [common_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
+                [
+                    common_inputs["attention_mask"],
+                    torch.ones(batch, past_key_values_length, dtype=mask_dtype),
+                ],
+                dim=1,
             )
             common_inputs["past_key_values"] = [
-                (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(num_decoder_layers)
+                (torch.zeros(past_shape), torch.zeros(past_shape))
+                for _ in range(num_decoder_layers)
             ]
         return common_inputs
 
@@ -327,13 +367,17 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
         # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
         batch_size = compute_effective_axis_dimension(
-            batch_size, fixed_dimension=OnnxConfig.default_fixed_batch, num_token_to_add=0
+            batch_size,
+            fixed_dimension=OnnxConfig.default_fixed_batch,
+            num_token_to_add=0,
         )
 
         # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
         token_to_add = tokenizer.num_special_tokens_to_add(is_pair)
         seq_length = compute_effective_axis_dimension(
-            seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence, num_token_to_add=token_to_add
+            seq_length,
+            fixed_dimension=OnnxConfig.default_fixed_sequence,
+            num_token_to_add=token_to_add,
         )
 
         # Generate dummy inputs according to compute batch and sequence
@@ -352,16 +396,28 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
     ) -> Mapping[str, Any]:
         if self.task in ["default", "seq2seq-lm"]:
             common_inputs = self._generate_dummy_inputs_for_default_and_seq2seq_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer,
+                batch_size=batch_size,
+                seq_length=seq_length,
+                is_pair=is_pair,
+                framework=framework,
             )
 
         elif self.task == "causal-lm":
             common_inputs = self._generate_dummy_inputs_for_causal_lm(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer,
+                batch_size=batch_size,
+                seq_length=seq_length,
+                is_pair=is_pair,
+                framework=framework,
             )
         else:
             common_inputs = self._generate_dummy_inputs_for_sequence_classification_and_question_answering(
-                tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
+                tokenizer,
+                batch_size=batch_size,
+                seq_length=seq_length,
+                is_pair=is_pair,
+                framework=framework,
             )
 
         return common_inputs
@@ -369,27 +425,49 @@ class BlenderbotOnnxConfig(OnnxSeq2SeqConfigWithPast):
     # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig._flatten_past_key_values_
     def _flatten_past_key_values_(self, flattened_output, name, idx, t):
         if self.task in ["default", "seq2seq-lm"]:
-            flattened_output = super()._flatten_past_key_values_(flattened_output, name, idx, t)
-        else:
-            flattened_output = super(OnnxSeq2SeqConfigWithPast, self)._flatten_past_key_values_(
+            flattened_output = super()._flatten_past_key_values_(
                 flattened_output, name, idx, t
             )
+        else:
+            flattened_output = super(
+                OnnxSeq2SeqConfigWithPast, self
+            )._flatten_past_key_values_(flattened_output, name, idx, t)
 
-    def fill_with_past_key_values_(self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str):
+    def fill_with_past_key_values_(
+        self, inputs_or_outputs: Mapping[str, Mapping[int, str]], direction: str
+    ):
         if direction not in ["inputs", "outputs"]:
-            raise ValueError(f'direction must either be "inputs" or "outputs", but {direction} was given')
+            raise ValueError(
+                f'direction must either be "inputs" or "outputs", but {direction} was given'
+            )
 
         name = "past_key_values" if direction == "inputs" else "present"
         _, num_decoder_layers = self.num_layers
 
         encoder_sequence = "past_encoder_sequence"
-        decoder_sequence = "past_decoder_sequence" if direction == "inputs" else "past_decoder_sequence + sequence"
+        decoder_sequence = (
+            "past_decoder_sequence"
+            if direction == "inputs"
+            else "past_decoder_sequence + sequence"
+        )
 
         for i in range(num_decoder_layers):
-            inputs_or_outputs[f"{name}.{i}.decoder.key"] = {0: "batch", 2: decoder_sequence}
-            inputs_or_outputs[f"{name}.{i}.decoder.value"] = {0: "batch", 2: decoder_sequence}
-            inputs_or_outputs[f"{name}.{i}.encoder.key"] = {0: "batch", 2: encoder_sequence}
-            inputs_or_outputs[f"{name}.{i}.encoder.value"] = {0: "batch", 2: encoder_sequence}
+            inputs_or_outputs[f"{name}.{i}.decoder.key"] = {
+                0: "batch",
+                2: decoder_sequence,
+            }
+            inputs_or_outputs[f"{name}.{i}.decoder.value"] = {
+                0: "batch",
+                2: decoder_sequence,
+            }
+            inputs_or_outputs[f"{name}.{i}.encoder.key"] = {
+                0: "batch",
+                2: encoder_sequence,
+            }
+            inputs_or_outputs[f"{name}.{i}.encoder.value"] = {
+                0: "batch",
+                2: encoder_sequence,
+            }
 
 
 __all__ = ["BlenderbotConfig", "BlenderbotOnnxConfig"]

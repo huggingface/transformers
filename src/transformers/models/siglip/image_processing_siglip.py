@@ -35,7 +35,12 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_vision_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -175,11 +180,15 @@ class SiglipImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, param_name="size", default_to_square=False)
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        do_convert_rgb = (
+            do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        )
 
         images = make_flat_list_of_images(images)
 
@@ -217,24 +226,41 @@ class SiglipImageProcessor(BaseImageProcessor):
         if do_resize:
             height, width = size["height"], size["width"]
             images = [
-                resize(image=image, size=(height, width), resample=resample, input_data_format=input_data_format)
+                resize(
+                    image=image,
+                    size=(height, width),
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_rescale:
             images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         if do_normalize:
             images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format,
+                )
                 for image in images
             ]
 
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(
+                image, data_format, input_channel_dim=input_data_format
+            )
+            for image in images
         ]
 
         data = {"pixel_values": images}

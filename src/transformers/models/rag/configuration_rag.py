@@ -136,7 +136,9 @@ class RagConfig(PretrainedConfig):
 
         from ..auto.configuration_auto import AutoConfig
 
-        self.question_encoder = AutoConfig.for_model(question_encoder_model_type, **question_encoder_config)
+        self.question_encoder = AutoConfig.for_model(
+            question_encoder_model_type, **question_encoder_config
+        )
         self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)
 
         self.reduce_loss = reduce_loss
@@ -167,11 +169,16 @@ class RagConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         if self.forced_eos_token_id is None:
-            self.forced_eos_token_id = getattr(self.generator, "forced_eos_token_id", None)
+            self.forced_eos_token_id = getattr(
+                self.generator, "forced_eos_token_id", None
+            )
 
     @classmethod
     def from_question_encoder_generator_configs(
-        cls, question_encoder_config: PretrainedConfig, generator_config: PretrainedConfig, **kwargs
+        cls,
+        question_encoder_config: PretrainedConfig,
+        generator_config: PretrainedConfig,
+        **kwargs,
     ) -> PretrainedConfig:
         r"""
         Instantiate a [`EncoderDecoderConfig`] (or a derived class) from a pre-trained encoder model configuration and
@@ -180,7 +187,11 @@ class RagConfig(PretrainedConfig):
         Returns:
             [`EncoderDecoderConfig`]: An instance of a configuration object
         """
-        return cls(question_encoder=question_encoder_config.to_dict(), generator=generator_config.to_dict(), **kwargs)
+        return cls(
+            question_encoder=question_encoder_config.to_dict(),
+            generator=generator_config.to_dict(),
+            **kwargs,
+        )
 
 
 __all__ = ["RagConfig"]

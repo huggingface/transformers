@@ -23,7 +23,9 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.univnet")
 
 
-def get_kernel_predictor_key_mapping(config: UnivNetConfig, old_prefix: str = "", new_prefix: str = ""):
+def get_kernel_predictor_key_mapping(
+    config: UnivNetConfig, old_prefix: str = "", new_prefix: str = ""
+):
     mapping = {}
     # Initial conv layer
     mapping[f"{old_prefix}.input_conv.0.weight_g"] = f"{new_prefix}.input_conv.weight_g"
@@ -32,13 +34,25 @@ def get_kernel_predictor_key_mapping(config: UnivNetConfig, old_prefix: str = ""
 
     # Kernel predictor resnet blocks
     for i in range(config.kernel_predictor_num_blocks):
-        mapping[f"{old_prefix}.residual_convs.{i}.1.weight_g"] = f"{new_prefix}.resblocks.{i}.conv1.weight_g"
-        mapping[f"{old_prefix}.residual_convs.{i}.1.weight_v"] = f"{new_prefix}.resblocks.{i}.conv1.weight_v"
-        mapping[f"{old_prefix}.residual_convs.{i}.1.bias"] = f"{new_prefix}.resblocks.{i}.conv1.bias"
+        mapping[f"{old_prefix}.residual_convs.{i}.1.weight_g"] = (
+            f"{new_prefix}.resblocks.{i}.conv1.weight_g"
+        )
+        mapping[f"{old_prefix}.residual_convs.{i}.1.weight_v"] = (
+            f"{new_prefix}.resblocks.{i}.conv1.weight_v"
+        )
+        mapping[f"{old_prefix}.residual_convs.{i}.1.bias"] = (
+            f"{new_prefix}.resblocks.{i}.conv1.bias"
+        )
 
-        mapping[f"{old_prefix}.residual_convs.{i}.3.weight_g"] = f"{new_prefix}.resblocks.{i}.conv2.weight_g"
-        mapping[f"{old_prefix}.residual_convs.{i}.3.weight_v"] = f"{new_prefix}.resblocks.{i}.conv2.weight_v"
-        mapping[f"{old_prefix}.residual_convs.{i}.3.bias"] = f"{new_prefix}.resblocks.{i}.conv2.bias"
+        mapping[f"{old_prefix}.residual_convs.{i}.3.weight_g"] = (
+            f"{new_prefix}.resblocks.{i}.conv2.weight_g"
+        )
+        mapping[f"{old_prefix}.residual_convs.{i}.3.weight_v"] = (
+            f"{new_prefix}.resblocks.{i}.conv2.weight_v"
+        )
+        mapping[f"{old_prefix}.residual_convs.{i}.3.bias"] = (
+            f"{new_prefix}.resblocks.{i}.conv2.bias"
+        )
 
     # Kernel output conv
     mapping[f"{old_prefix}.kernel_conv.weight_g"] = f"{new_prefix}.kernel_conv.weight_g"
@@ -61,21 +75,33 @@ def get_key_mapping(config: UnivNetConfig):
     # LVC Residual blocks
     for i in range(len(config.resblock_stride_sizes)):
         # LVCBlock initial convt layer
-        mapping[f"res_stack.{i}.convt_pre.1.weight_g"] = f"resblocks.{i}.convt_pre.weight_g"
-        mapping[f"res_stack.{i}.convt_pre.1.weight_v"] = f"resblocks.{i}.convt_pre.weight_v"
+        mapping[f"res_stack.{i}.convt_pre.1.weight_g"] = (
+            f"resblocks.{i}.convt_pre.weight_g"
+        )
+        mapping[f"res_stack.{i}.convt_pre.1.weight_v"] = (
+            f"resblocks.{i}.convt_pre.weight_v"
+        )
         mapping[f"res_stack.{i}.convt_pre.1.bias"] = f"resblocks.{i}.convt_pre.bias"
 
         # Kernel predictor
         kernel_predictor_mapping = get_kernel_predictor_key_mapping(
-            config, old_prefix=f"res_stack.{i}.kernel_predictor", new_prefix=f"resblocks.{i}.kernel_predictor"
+            config,
+            old_prefix=f"res_stack.{i}.kernel_predictor",
+            new_prefix=f"resblocks.{i}.kernel_predictor",
         )
         mapping.update(kernel_predictor_mapping)
 
         # LVC Residual blocks
         for j in range(len(config.resblock_dilation_sizes[i])):
-            mapping[f"res_stack.{i}.conv_blocks.{j}.1.weight_g"] = f"resblocks.{i}.resblocks.{j}.conv.weight_g"
-            mapping[f"res_stack.{i}.conv_blocks.{j}.1.weight_v"] = f"resblocks.{i}.resblocks.{j}.conv.weight_v"
-            mapping[f"res_stack.{i}.conv_blocks.{j}.1.bias"] = f"resblocks.{i}.resblocks.{j}.conv.bias"
+            mapping[f"res_stack.{i}.conv_blocks.{j}.1.weight_g"] = (
+                f"resblocks.{i}.resblocks.{j}.conv.weight_g"
+            )
+            mapping[f"res_stack.{i}.conv_blocks.{j}.1.weight_v"] = (
+                f"resblocks.{i}.resblocks.{j}.conv.weight_v"
+            )
+            mapping[f"res_stack.{i}.conv_blocks.{j}.1.bias"] = (
+                f"resblocks.{i}.resblocks.{j}.conv.bias"
+            )
 
     # Output conv layer
     mapping["conv_post.1.weight_g"] = "conv_post.weight_g"
@@ -126,7 +152,9 @@ def convert_univnet_checkpoint(
     # Remove weight norm in preparation for inference
     model.remove_weight_norm()
 
-    model.save_pretrained(pytorch_dump_folder_path, safe_serialization=safe_serialization)
+    model.save_pretrained(
+        pytorch_dump_folder_path, safe_serialization=safe_serialization
+    )
 
     if repo_id:
         print("Pushing to the hub...")
@@ -135,16 +163,36 @@ def convert_univnet_checkpoint(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to original checkpoint")
-    parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
+        "--checkpoint_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to original checkpoint",
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to hf config.json of model to convert",
     )
     parser.add_argument(
-        "--safe_serialization", action="store_true", help="Whether to save the model using `safetensors`."
+        "--pytorch_dump_folder_path",
+        required=True,
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    parser.add_argument(
+        "--push_to_hub",
+        default=None,
+        type=str,
+        help="Where to upload the converted model on the 🤗 hub.",
+    )
+    parser.add_argument(
+        "--safe_serialization",
+        action="store_true",
+        help="Whether to save the model using `safetensors`.",
     )
 
     args = parser.parse_args()

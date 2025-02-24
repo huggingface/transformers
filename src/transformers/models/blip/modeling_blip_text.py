@@ -48,8 +48,12 @@ class BlipTextEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+        )
+        self.position_embeddings = nn.Embedding(
+            config.max_position_embeddings, config.hidden_size
+        )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -58,9 +62,13 @@ class BlipTextEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+            "position_ids",
+            torch.arange(config.max_position_embeddings).expand((1, -1)),
+            persistent=False,
         )
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
 
         self.config = config
 
@@ -79,7 +87,9 @@ class BlipTextEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+            position_ids = self.position_ids[
+                :, past_key_values_length : seq_length + past_key_values_length
+            ]
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -99,7 +109,9 @@ class BlipTextSelfAttention(nn.Module):
     def __init__(self, config, is_cross_attention):
         super().__init__()
         self.config = config
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(
+            config, "embedding_size"
+        ):
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention heads (%d)"
                 % (config.hidden_size, config.num_attention_heads)
@@ -118,10 +130,17 @@ class BlipTextSelfAttention(nn.Module):
             self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        self.position_embedding_type = getattr(
+            config, "position_embedding_type", "absolute"
+        )
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = nn.Embedding(
+                2 * config.max_position_embeddings - 1, self.attention_head_size
+            )
 
     def save_attn_gradients(self, attn_gradients):
         self.attn_gradients = attn_gradients
@@ -136,7 +155,10 @@ class BlipTextSelfAttention(nn.Module):
         return self.attention_map
 
     def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = x.size()[:-1] + (
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
@@ -177,26 +199,49 @@ class BlipTextSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        if (
+            self.position_embedding_type == "relative_key"
+            or self.position_embedding_type == "relative_key_query"
+        ):
             seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            position_ids_l = torch.arange(
+                seq_length, dtype=torch.long, device=hidden_states.device
+            ).view(-1, 1)
+            position_ids_r = torch.arange(
+                seq_length, dtype=torch.long, device=hidden_states.device
+            ).view(1, -1)
             distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            positional_embedding = self.distance_embedding(
+                distance + self.max_position_embeddings - 1
+            )
+            positional_embedding = positional_embedding.to(
+                dtype=query_layer.dtype
+            )  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+                relative_position_scores_query = torch.einsum(
+                    "bhld,lrd->bhlr", query_layer, positional_embedding
+                )
+                relative_position_scores_key = torch.einsum(
+                    "bhrd,lrd->bhlr", key_layer, positional_embedding
+                )
+                attention_scores = (
+                    attention_scores
+                    + relative_position_scores_query
+                    + relative_position_scores_key
+                )
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BlipTextModel forward() function)
-            attention_scores = attention_scores + attention_mask.to(attention_scores.device)
+            attention_scores = attention_scores + attention_mask.to(
+                attention_scores.device
+            )
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -215,7 +260,9 @@ class BlipTextSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (
+            (context_layer, attention_probs) if output_attentions else (context_layer,)
+        )
 
         outputs = outputs + (past_key_value,)
         return outputs
@@ -229,7 +276,9 @@ class BlipTextSelfOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -248,7 +297,10 @@ class BlipTextAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads,
+            self.self.num_attention_heads,
+            self.self.attention_head_size,
+            self.pruned_heads,
         )
 
         # Prune linear layers
@@ -259,7 +311,9 @@ class BlipTextAttention(nn.Module):
 
         # Update hyper params and store pruned heads
         self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.self.all_head_size = (
+            self.self.attention_head_size * self.self.num_attention_heads
+        )
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -282,7 +336,9 @@ class BlipTextAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        outputs = (attention_output,) + self_outputs[
+            1:
+        ]  # add attentions if we output them
         return outputs
 
 
@@ -310,7 +366,9 @@ class BlipTextOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, input_tensor: torch.Tensor
+    ) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
@@ -326,7 +384,9 @@ class BlipTextLayer(nn.Module):
         self.attention = BlipTextAttention(config)
         self.layer_num = layer_num
         if self.config.is_decoder:
-            self.crossattention = BlipTextAttention(config, is_cross_attention=self.config.is_decoder)
+            self.crossattention = BlipTextAttention(
+                config, is_cross_attention=self.config.is_decoder
+            )
         self.intermediate = BlipTextIntermediate(config)
         self.output = BlipTextOutput(config)
 
@@ -341,7 +401,9 @@ class BlipTextLayer(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = (
+            past_key_value[:2] if past_key_value is not None else None
+        )
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -364,9 +426,14 @@ class BlipTextLayer(nn.Module):
                 output_attentions=output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            outputs = (
+                outputs + cross_attention_outputs[1:-1]
+            )  # add cross attentions if we output attention weights
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -385,7 +452,9 @@ class BlipTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([BlipTextLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [BlipTextLayer(config, i) for i in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -409,7 +478,9 @@ class BlipTextEncoder(nn.Module):
                 use_cache = False
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.is_decoder else None
+        all_cross_attentions = (
+            () if output_attentions and self.config.is_decoder else None
+        )
 
         next_decoder_cache = () if use_cache else None
 
@@ -603,7 +674,11 @@ class BlipTextModel(BlipTextPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def get_extended_attention_mask(
-        self, attention_mask: Tensor, input_shape: Tuple[int], device: device, is_decoder: bool
+        self,
+        attention_mask: Tensor,
+        input_shape: Tuple[int],
+        device: device,
+        is_decoder: bool,
     ) -> Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -631,7 +706,10 @@ class BlipTextModel(BlipTextPreTrainedModel):
                 batch_size, seq_length = input_shape
 
                 seq_ids = torch.arange(seq_length, device=device)
-                causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
+                causal_mask = (
+                    seq_ids[None, None, :].repeat(batch_size, seq_length, 1)
+                    <= seq_ids[None, :, None]
+                )
                 # in case past_key_values are used we need to add a prefix ones mask to the causal mask
                 # causal and attention masks must have same type with pytorch version < 1.3
                 causal_mask = causal_mask.to(attention_mask.dtype)
@@ -641,14 +719,18 @@ class BlipTextModel(BlipTextPreTrainedModel):
                     causal_mask = torch.cat(
                         [
                             torch.ones(
-                                (batch_size, seq_length, prefix_seq_len), device=device, dtype=causal_mask.dtype
+                                (batch_size, seq_length, prefix_seq_len),
+                                device=device,
+                                dtype=causal_mask.dtype,
                             ),
                             causal_mask,
                         ],
                         axis=-1,
                     )
 
-                extended_attention_mask = causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                extended_attention_mask = (
+                    causal_mask[:, None, :, :] * attention_mask[:, None, None, :]
+                )
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
@@ -663,7 +745,9 @@ class BlipTextModel(BlipTextPreTrainedModel):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        extended_attention_mask = extended_attention_mask.to(
+            dtype=self.dtype
+        )  # fp16 compatibility
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
@@ -702,11 +786,19 @@ class BlipTextModel(BlipTextPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         if is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -714,7 +806,9 @@ class BlipTextModel(BlipTextPreTrainedModel):
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+            raise ValueError(
+                "You cannot specify both input_ids and inputs_embeds at the same time"
+            )
         elif input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
@@ -729,13 +823,19 @@ class BlipTextModel(BlipTextPreTrainedModel):
             batch_size, seq_length = input_shape
             device = encoder_embeds.device
         else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds or encoder_embeds")
+            raise ValueError(
+                "You have to specify either input_ids or inputs_embeds or encoder_embeds"
+            )
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = (
+            past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        )
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length))).to(device)
+            attention_mask = torch.ones(
+                ((batch_size, seq_length + past_key_values_length))
+            ).to(device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -747,18 +847,28 @@ class BlipTextModel(BlipTextPreTrainedModel):
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if encoder_hidden_states is not None:
             if isinstance(encoder_hidden_states, list):
-                encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[0].size()
+                encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states[
+                    0
+                ].size()
             else:
-                encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+                encoder_batch_size, encoder_sequence_length, _ = (
+                    encoder_hidden_states.size()
+                )
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
 
             if isinstance(encoder_attention_mask, list):
-                encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
+                encoder_extended_attention_mask = [
+                    self.invert_attention_mask(mask) for mask in encoder_attention_mask
+                ]
             elif encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+                encoder_extended_attention_mask = self.invert_attention_mask(
+                    encoder_attention_mask
+                )
             else:
-                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+                encoder_extended_attention_mask = self.invert_attention_mask(
+                    encoder_attention_mask
+                )
         else:
             encoder_extended_attention_mask = None
 
@@ -792,7 +902,9 @@ class BlipTextModel(BlipTextPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = (
+            self.pooler(sequence_output) if self.pooler is not None else None
+        )
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -870,7 +982,9 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
         if labels is not None:
             use_cache = False
 
@@ -901,8 +1015,13 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             # we are doing next-token prediction; shift prediction scores and input ids by one
             shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
             labels = labels[:, 1:].contiguous().to(shifted_prediction_scores.device)
-            loss_fct = CrossEntropyLoss(reduction=reduction, label_smoothing=self.label_smoothing)
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            loss_fct = CrossEntropyLoss(
+                reduction=reduction, label_smoothing=self.label_smoothing
+            )
+            lm_loss = loss_fct(
+                shifted_prediction_scores.view(-1, self.config.vocab_size),
+                labels.view(-1),
+            )
             if reduction == "none":
                 lm_loss = lm_loss.view(prediction_scores.size(0), -1).sum(1)
 
@@ -919,7 +1038,9 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs
+    ):
         # Overwrite -- hardcoded key return (`is_decoder=True`)
 
         input_shape = input_ids.shape
@@ -953,6 +1074,9 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
-                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+                tuple(
+                    past_state.index_select(0, beam_idx.to(past_state.device))
+                    for past_state in layer_past
+                ),
             )
         return reordered_past

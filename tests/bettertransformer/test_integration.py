@@ -48,13 +48,23 @@ class BetterTransformerIntegrationTest(unittest.TestCase):
 
         model = model.to_bettertransformer()
 
-        self.assertTrue(any("BetterTransformer" in mod.__class__.__name__ for _, mod in model.named_modules()))
+        self.assertTrue(
+            any(
+                "BetterTransformer" in mod.__class__.__name__
+                for _, mod in model.named_modules()
+            )
+        )
 
         output = model.generate(**inp)
 
         model = model.reverse_bettertransformer()
 
-        self.assertFalse(any("BetterTransformer" in mod.__class__.__name__ for _, mod in model.named_modules()))
+        self.assertFalse(
+            any(
+                "BetterTransformer" in mod.__class__.__name__
+                for _, mod in model.named_modules()
+            )
+        )
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -62,7 +72,10 @@ class BetterTransformerIntegrationTest(unittest.TestCase):
             model_reloaded = AutoModelForSeq2SeqLM.from_pretrained(tmpdirname)
 
             self.assertFalse(
-                any("BetterTransformer" in mod.__class__.__name__ for _, mod in model_reloaded.named_modules())
+                any(
+                    "BetterTransformer" in mod.__class__.__name__
+                    for _, mod in model_reloaded.named_modules()
+                )
             )
 
             output_from_pretrained = model_reloaded.generate(**inp)

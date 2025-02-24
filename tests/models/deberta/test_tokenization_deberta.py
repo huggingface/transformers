@@ -62,7 +62,9 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.special_tokens_map = {"unk_token": "[UNK]"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.merges_file = os.path.join(
+            self.tmpdirname, VOCAB_FILES_NAMES["merges_file"]
+        )
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
@@ -86,7 +88,9 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         input_tokens = tokens + [tokenizer.unk_token]
         input_bpe_tokens = [0, 1, 2, 15, 10, 9, 3, 2, 15, 19]
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
+        self.assertListEqual(
+            tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens
+        )
 
     def test_token_type_ids(self):
         tokenizer = self.get_tokenizer()
@@ -105,7 +109,10 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "sequence builders", add_special_tokens=True, add_prefix_space=False
         )
         encoded_pair_from_decode = tokenizer.encode(
-            "sequence builders", "multi-sequence build", add_special_tokens=True, add_prefix_space=False
+            "sequence builders",
+            "multi-sequence build",
+            add_special_tokens=True,
+            add_prefix_space=False,
         )
 
         encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
@@ -132,7 +139,10 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ]
 
             encoding = tokenizer(sequences, padding=True)
-            decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]]
+            decoded_sequences = [
+                tokenizer.decode(seq, skip_special_tokens=True)
+                for seq in encoding["input_ids"]
+            ]
 
             # fmt: off
             expected_encoding = {

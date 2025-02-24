@@ -28,7 +28,13 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import BitImageProcessor, HieraConfig, HieraForImageClassification, HieraForPreTraining, HieraModel
+from transformers import (
+    BitImageProcessor,
+    HieraConfig,
+    HieraForImageClassification,
+    HieraForPreTraining,
+    HieraModel,
+)
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from transformers.utils import logging
 
@@ -156,12 +162,16 @@ def prepare_img():
     return im
 
 
-def get_labels_for_classifier(model_name: str) -> Tuple[Dict[int, str], Dict[str, int], int]:
+def get_labels_for_classifier(
+    model_name: str,
+) -> Tuple[Dict[int, str], Dict[str, int], int]:
     repo_id = "huggingface/label-files"
 
     filename = "imagenet-1k-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(
+        open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r")
+    )
     id2label = {int(k): v for k, v in id2label.items()}
     label2id = {v: k for k, v in id2label.items()}
     num_labels = len(id2label)
@@ -179,9 +189,13 @@ def get_hiera_config(model_name: str, base_model: bool, mae_model: bool) -> Hier
     elif model_name == "hiera-base-plus-224":
         config = HieraConfig(embed_dim=112, num_heads=[2, 4, 8, 16])
     elif model_name == "hiera-large-224":
-        config = HieraConfig(embed_dim=144, num_heads=[2, 4, 8, 16], depths=[2, 6, 36, 4])
+        config = HieraConfig(
+            embed_dim=144, num_heads=[2, 4, 8, 16], depths=[2, 6, 36, 4]
+        )
     elif model_name == "hiera-huge-224":
-        config = HieraConfig(embed_dim=256, num_heads=[4, 8, 16, 32], depths=[2, 6, 36, 4])
+        config = HieraConfig(
+            embed_dim=256, num_heads=[4, 8, 16, 32], depths=[2, 6, 36, 4]
+        )
     else:
         raise ValueError(f"Unrecognized model name: {model_name}")
 
@@ -215,9 +229,13 @@ def convert_hiera_checkpoint(args):
 
     # Load original hiera model
     original_model_name = model_name.replace("-", "_")
-    original_model_name = f"mae_{original_model_name}" if mae_model else original_model_name
+    original_model_name = (
+        f"mae_{original_model_name}" if mae_model else original_model_name
+    )
 
-    original_checkpoint_name = "mae_in1k_ft_in1k" if not (base_model or mae_model) else "mae_in1k"
+    original_checkpoint_name = (
+        "mae_in1k_ft_in1k" if not (base_model or mae_model) else "mae_in1k"
+    )
 
     original_model = torch.hub.load(
         "facebookresearch/hiera",
@@ -257,7 +275,10 @@ def convert_hiera_checkpoint(args):
 
     original_image_preprocessor = transforms.Compose(
         [
-            transforms.Resize(int((256 / 224) * 224), interpolation=transforms.functional.InterpolationMode.BICUBIC),
+            transforms.Resize(
+                int((256 / 224) * 224),
+                interpolation=transforms.functional.InterpolationMode.BICUBIC,
+            ),
             transforms.CenterCrop(224),
             transforms.ToTensor(),
             transforms.Normalize(IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD),
@@ -265,7 +286,9 @@ def convert_hiera_checkpoint(args):
     )
 
     image_processor = BitImageProcessor(
-        image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD, size={"shortest_edge": 256}
+        image_mean=IMAGENET_DEFAULT_MEAN,
+        image_std=IMAGENET_DEFAULT_STD,
+        size={"shortest_edge": 256},
     )
     inputs = image_processor(images=input_image, return_tensors="pt")
 
@@ -281,7 +304,10 @@ def convert_hiera_checkpoint(args):
 
     # If is MAE we pass a noise to generate a random mask
     mask_spatial_shape = [
-        i // s // ms for i, s, ms in zip(config.image_size, config.patch_stride, config.masked_unit_size)
+        i // s // ms
+        for i, s, ms in zip(
+            config.image_size, config.patch_stride, config.masked_unit_size
+        )
     ]
     num_windows = math.prod(mask_spatial_shape)
     torch.manual_seed(2)
@@ -290,16 +316,22 @@ def convert_hiera_checkpoint(args):
     # original implementation returns logits.softmax(dim=-1)
 
     if base_model:
-        expected_prob, expected_intermediates = original_model(expected_pixel_values, return_intermediates=True)
+        expected_prob, expected_intermediates = original_model(
+            expected_pixel_values, return_intermediates=True
+        )
         expected_last_hidden = expected_intermediates[-1]
         batch_size, _, _, hidden_dim = expected_last_hidden.shape
         expected_last_hidden = expected_last_hidden.reshape(batch_size, -1, hidden_dim)
-        assert torch.allclose(outputs.last_hidden_state, expected_last_hidden, atol=1e-3)
+        assert torch.allclose(
+            outputs.last_hidden_state, expected_last_hidden, atol=1e-3
+        )
         print("Base Model looks good as hidden states match original implementation!")
         print(f"{outputs.last_hidden_state[0, :3, :3]=}")
     elif mae_model:
         # get mask from noise to be able to compare outputs
-        mask, _ = model.hiera.embeddings.patch_embeddings.random_masking(expected_pixel_values, noise)
+        mask, _ = model.hiera.embeddings.patch_embeddings.random_masking(
+            expected_pixel_values, noise
+        )
         expected_loss, _, _, _ = original_model(expected_pixel_values, mask=mask.bool())
         assert torch.allclose(outputs.loss, expected_loss, atol=1e-3)
         print("MAE Model looks good as loss matches original implementation!")
@@ -310,7 +342,9 @@ def convert_hiera_checkpoint(args):
         print(f"{outputs.logits[:, :5]=}")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}")
+        print(
+            f"Saving model and processor for {model_name} to {pytorch_dump_folder_path}"
+        )
         model.save_pretrained(pytorch_dump_folder_path)
         image_processor.save_pretrained(pytorch_dump_folder_path)
 
@@ -346,7 +380,10 @@ if __name__ == "__main__":
         help="Name of the Hiera model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch-dump-folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch-dump-folder_path",
+        default=None,
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--verify-logits",
@@ -354,7 +391,9 @@ if __name__ == "__main__":
         help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
-        "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push-to-hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the 🤗 hub.",
     )
     parser.add_argument(
         "--base-model",
@@ -362,7 +401,9 @@ if __name__ == "__main__":
         help="Whether to only convert the base model (no projection head weights).",
     )
     parser.add_argument(
-        "--mae-model", action="store_true", help="Whether to convert to MAE checkpoint to HieraForPreTraining."
+        "--mae-model",
+        action="store_true",
+        help="Whether to convert to MAE checkpoint to HieraForPreTraining.",
     )
 
     args = parser.parse_args()

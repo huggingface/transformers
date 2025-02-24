@@ -72,7 +72,9 @@ class TextStreamer(BaseStreamer):
         ```
     """
 
-    def __init__(self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs):
+    def __init__(
+        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, **decode_kwargs
+    ):
         self.tokenizer = tokenizer
         self.skip_prompt = skip_prompt
         self.decode_kwargs = decode_kwargs
@@ -206,7 +208,11 @@ class TextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
+        self,
+        tokenizer: "AutoTokenizer",
+        skip_prompt: bool = False,
+        timeout: Optional[float] = None,
+        **decode_kwargs,
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = Queue()
@@ -284,7 +290,11 @@ class AsyncTextIteratorStreamer(TextStreamer):
     """
 
     def __init__(
-        self, tokenizer: "AutoTokenizer", skip_prompt: bool = False, timeout: Optional[float] = None, **decode_kwargs
+        self,
+        tokenizer: "AutoTokenizer",
+        skip_prompt: bool = False,
+        timeout: Optional[float] = None,
+        **decode_kwargs,
     ):
         super().__init__(tokenizer, skip_prompt, **decode_kwargs)
         self.text_queue = asyncio.Queue()
@@ -308,7 +318,9 @@ class AsyncTextIteratorStreamer(TextStreamer):
                 async with asyncio.timeout(self.timeout):
                     value = await self.text_queue.get()
             else:
-                value = await asyncio.wait_for(self.text_queue.get(), timeout=self.timeout)
+                value = await asyncio.wait_for(
+                    self.text_queue.get(), timeout=self.timeout
+                )
         except asyncio.TimeoutError:
             raise TimeoutError()
         else:

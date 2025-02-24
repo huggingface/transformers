@@ -26,7 +26,13 @@ from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
+from huggingface_hub import (
+    create_repo,
+    get_collection,
+    hf_hub_download,
+    metadata_update,
+    upload_folder,
+)
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
 from packaging import version
 
@@ -74,7 +80,9 @@ def get_repo_type(repo_id, repo_type=None, **hub_kwargs):
             hf_hub_download(repo_id, TOOL_CONFIG_FILE, repo_type="model", **hub_kwargs)
             return "model"
         except RepositoryNotFoundError:
-            raise EnvironmentError(f"`{repo_id}` does not seem to be a valid repo identifier on the Hub.")
+            raise EnvironmentError(
+                f"`{repo_id}` does not seem to be a valid repo identifier on the Hub."
+            )
         except Exception:
             return "model"
     except Exception:
@@ -146,7 +154,15 @@ class Tool:
             "inputs": dict,
             "output_type": str,
         }
-        authorized_types = ["string", "integer", "number", "image", "audio", "any", "boolean"]
+        authorized_types = [
+            "string",
+            "integer",
+            "number",
+            "image",
+            "audio",
+            "any",
+            "boolean",
+        ]
 
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
@@ -157,7 +173,9 @@ class Tool:
                     f"Attribute {attr} should have type {expected_type.__name__}, got {type(attr_value)} instead."
                 )
         for input_name, input_content in self.inputs.items():
-            assert isinstance(input_content, dict), f"Input '{input_name}' should be a dictionary."
+            assert isinstance(
+                input_content, dict
+            ), f"Input '{input_name}' should be a dictionary."
             assert (
                 "type" in input_content and "description" in input_content
             ), f"Input '{input_name}' should have keys 'type' and 'description', has only {list(input_content.keys())}."
@@ -239,7 +257,11 @@ class Tool:
         # Save app file
         app_file = os.path.join(output_dir, "app.py")
         with open(app_file, "w", encoding="utf-8") as f:
-            f.write(APP_FILE_TEMPLATE.format(module_name=last_module, class_name=self.__class__.__name__))
+            f.write(
+                APP_FILE_TEMPLATE.format(
+                    module_name=last_module, class_name=self.__class__.__name__
+                )
+            )
 
         # Save requirements file
         requirements_file = os.path.join(output_dir, "requirements.txt")
@@ -331,7 +353,9 @@ class Tool:
             custom_tool = config
 
         tool_class = custom_tool["tool_class"]
-        tool_class = get_class_from_dynamic_module(tool_class, repo_id, token=token, **hub_kwargs)
+        tool_class = get_class_from_dynamic_module(
+            tool_class, repo_id, token=token, **hub_kwargs
+        )
 
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
@@ -408,7 +432,9 @@ class Tool:
         with tempfile.TemporaryDirectory() as work_dir:
             # Save all files.
             self.save(work_dir)
-            logger.info(f"Uploading the following files to {repo_id}: {','.join(os.listdir(work_dir))}")
+            logger.info(
+                f"Uploading the following files to {repo_id}: {','.join(os.listdir(work_dir))}"
+            )
             return upload_folder(
                 repo_id=repo_id,
                 commit_message=commit_message,
@@ -420,7 +446,11 @@ class Tool:
 
     @staticmethod
     def from_space(
-        space_id: str, name: str, description: str, api_name: Optional[str] = None, token: Optional[str] = None
+        space_id: str,
+        name: str,
+        description: str,
+        api_name: Optional[str] = None,
+        token: Optional[str] = None,
     ):
         """
         Creates a [`Tool`] from a Space given its id on the Hub.
@@ -473,7 +503,9 @@ class Tool:
                 self.client = Client(space_id, hf_token=token)
                 self.name = name
                 self.description = description
-                space_description = self.client.view_api(return_format="dict", print_info=False)["named_endpoints"]
+                space_description = self.client.view_api(
+                    return_format="dict", print_info=False
+                )["named_endpoints"]
 
                 # If api_name is not defined, take the first of the available APIs for this space
                 if api_name is None:
@@ -486,7 +518,9 @@ class Tool:
                 try:
                     space_description_api = space_description[api_name]
                 except KeyError:
-                    raise KeyError(f"Could not find specified {api_name=} among available api names.")
+                    raise KeyError(
+                        f"Could not find specified {api_name=} among available api names."
+                    )
 
                 self.inputs = {}
                 for parameter in space_description_api["parameters"]:
@@ -511,9 +545,11 @@ class Tool:
                     temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
                     arg.save(temp_file.name)
                     arg = temp_file.name
-                if (isinstance(arg, (str, Path)) and Path(arg).exists() and Path(arg).is_file()) or is_http_url_like(
-                    arg
-                ):
+                if (
+                    isinstance(arg, (str, Path))
+                    and Path(arg).exists()
+                    and Path(arg).is_file()
+                ) or is_http_url_like(arg):
                     arg = handle_file(arg)
                 return arg
 
@@ -532,7 +568,9 @@ class Tool:
                     ]  # Sometime the space also returns the generation seed, in which case the result is at index 0
                 return output
 
-        return SpaceToolWrapper(space_id, name, description, api_name=api_name, token=token)
+        return SpaceToolWrapper(
+            space_id, name, description, api_name=api_name, token=token
+        )
 
     @staticmethod
     def from_gradio(gradio_tool):
@@ -549,7 +587,8 @@ class Tool:
                 self._gradio_tool = _gradio_tool
                 func_args = list(inspect.signature(_gradio_tool.run).parameters.items())
                 self.inputs = {
-                    key: {"type": CONVERSION_DICT[value.annotation], "description": ""} for key, value in func_args
+                    key: {"type": CONVERSION_DICT[value.annotation], "description": ""}
+                    for key, value in func_args
                 }
                 self.forward = self._gradio_tool.run
 
@@ -591,7 +630,9 @@ DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 """
 
 
-def get_tool_description_with_args(tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE) -> str:
+def get_tool_description_with_args(
+    tool: Tool, description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+) -> str:
     compiled_template = compile_jinja_template(description_template)
     rendered = compiled_template.render(
         tool=tool,
@@ -609,7 +650,9 @@ def compile_jinja_template(template):
         raise ImportError("template requires jinja2 to be installed.")
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
-        raise ImportError(f"template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}.")
+        raise ImportError(
+            f"template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
+        )
 
     def raise_exception(message):
         raise TemplateError(message)
@@ -685,7 +728,9 @@ class PipelineTool(Tool):
 
         if model is None:
             if self.default_checkpoint is None:
-                raise ValueError("This tool does not implement a default checkpoint, you need to pass one.")
+                raise ValueError(
+                    "This tool does not implement a default checkpoint, you need to pass one."
+                )
             model = self.default_checkpoint
         if pre_processor is None:
             pre_processor = model
@@ -708,15 +753,21 @@ class PipelineTool(Tool):
         Instantiates the `pre_processor`, `model` and `post_processor` if necessary.
         """
         if isinstance(self.pre_processor, str):
-            self.pre_processor = self.pre_processor_class.from_pretrained(self.pre_processor, **self.hub_kwargs)
+            self.pre_processor = self.pre_processor_class.from_pretrained(
+                self.pre_processor, **self.hub_kwargs
+            )
 
         if isinstance(self.model, str):
-            self.model = self.model_class.from_pretrained(self.model, **self.model_kwargs, **self.hub_kwargs)
+            self.model = self.model_class.from_pretrained(
+                self.model, **self.model_kwargs, **self.hub_kwargs
+            )
 
         if self.post_processor is None:
             self.post_processor = self.pre_processor
         elif isinstance(self.post_processor, str):
-            self.post_processor = self.post_processor_class.from_pretrained(self.post_processor, **self.hub_kwargs)
+            self.post_processor = self.post_processor_class.from_pretrained(
+                self.post_processor, **self.hub_kwargs
+            )
 
         if self.device is None:
             if self.device_map is not None:
@@ -756,8 +807,12 @@ class PipelineTool(Tool):
 
         encoded_inputs = self.encode(*args, **kwargs)
 
-        tensor_inputs = {k: v for k, v in encoded_inputs.items() if isinstance(v, torch.Tensor)}
-        non_tensor_inputs = {k: v for k, v in encoded_inputs.items() if not isinstance(v, torch.Tensor)}
+        tensor_inputs = {
+            k: v for k, v in encoded_inputs.items() if isinstance(v, torch.Tensor)
+        }
+        non_tensor_inputs = {
+            k: v for k, v in encoded_inputs.items() if not isinstance(v, torch.Tensor)
+        }
 
         encoded_inputs = send_to_device(tensor_inputs, self.device)
         outputs = self.forward({**encoded_inputs, **non_tensor_inputs})
@@ -778,7 +833,9 @@ def launch_gradio_demo(tool_class: Tool):
     try:
         import gradio as gr
     except ImportError:
-        raise ImportError("Gradio should be installed in order to launch a gradio demo.")
+        raise ImportError(
+            "Gradio should be installed in order to launch a gradio demo."
+        )
 
     tool = tool_class()
 
@@ -795,11 +852,15 @@ def launch_gradio_demo(tool_class: Tool):
 
     gradio_inputs = []
     for input_name, input_details in tool_class.inputs.items():
-        input_gradio_component_class = TYPE_TO_COMPONENT_CLASS_MAPPING[input_details["type"]]
+        input_gradio_component_class = TYPE_TO_COMPONENT_CLASS_MAPPING[
+            input_details["type"]
+        ]
         new_component = input_gradio_component_class(label=input_name)
         gradio_inputs.append(new_component)
 
-    output_gradio_componentclass = TYPE_TO_COMPONENT_CLASS_MAPPING[tool_class.output_type]
+    output_gradio_componentclass = TYPE_TO_COMPONENT_CLASS_MAPPING[
+        tool_class.output_type
+    ]
     gradio_output = output_gradio_componentclass(label=input_name)
 
     gr.Interface(
@@ -868,7 +929,9 @@ def load_tool(task_or_repo_id, model_repo_id=None, token=None, **kwargs):
             f"the tools that you load. We recommend specifying a `revision` to ensure you're loading the "
             f"code that you have checked."
         )
-        return Tool.from_hub(task_or_repo_id, model_repo_id=model_repo_id, token=token, **kwargs)
+        return Tool.from_hub(
+            task_or_repo_id, model_repo_id=model_repo_id, token=token, **kwargs
+        )
 
 
 def add_description(description):
@@ -928,7 +991,9 @@ class EndpointClient:
             payload["parameters"] = params
 
         # Make API call
-        response = get_session().post(self.endpoint_url, headers=self.headers, json=payload, data=data)
+        response = get_session().post(
+            self.endpoint_url, headers=self.headers, json=payload, data=data
+        )
 
         # By default, parse the response for the user.
         if output_image:
@@ -965,7 +1030,9 @@ class ToolCollection:
 
     def __init__(self, collection_slug: str, token: Optional[str] = None):
         self._collection = get_collection(collection_slug, token=token)
-        self._hub_repo_ids = {item.item_id for item in self._collection.items if item.item_type == "space"}
+        self._hub_repo_ids = {
+            item.item_id for item in self._collection.items if item.item_type == "space"
+        }
         self.tools = {Tool.from_hub(repo_id) for repo_id in self._hub_repo_ids}
 
 
@@ -979,7 +1046,9 @@ def tool(tool_function: Callable) -> Tool:
     """
     parameters = get_json_schema(tool_function)["function"]
     if "return" not in parameters:
-        raise TypeHintParsingException("Tool return type not found: make sure your function has a return type hint!")
+        raise TypeHintParsingException(
+            "Tool return type not found: make sure your function has a return type hint!"
+        )
     class_name = f"{parameters['name'].capitalize()}Tool"
 
     class SpecificTool(Tool):
@@ -993,9 +1062,9 @@ def tool(tool_function: Callable) -> Tool:
             return tool_function(*args, **kwargs)
 
     original_signature = inspect.signature(tool_function)
-    new_parameters = [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)] + list(
-        original_signature.parameters.values()
-    )
+    new_parameters = [
+        inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ] + list(original_signature.parameters.values())
     new_signature = original_signature.replace(parameters=new_parameters)
     SpecificTool.forward.__signature__ = new_signature
 

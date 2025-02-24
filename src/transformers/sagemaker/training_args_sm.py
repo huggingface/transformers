@@ -63,7 +63,9 @@ if is_sagemaker_model_parallel_available():
 class SageMakerTrainingArguments(TrainingArguments):
     mp_parameters: str = field(
         default="",
-        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in SageMakerTrainer"},
+        metadata={
+            "help": "Used by the SageMaker launcher to send mp-specific args. Ignored in SageMakerTrainer"
+        },
     )
 
     def __post_init__(self):
@@ -77,7 +79,11 @@ class SageMakerTrainingArguments(TrainingArguments):
     @cached_property
     def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
-        if torch.distributed.is_available() and torch.distributed.is_initialized() and self.local_rank == -1:
+        if (
+            torch.distributed.is_available()
+            and torch.distributed.is_initialized()
+            and self.local_rank == -1
+        ):
             logger.warning(
                 "torch.distributed process group is initialized, but local_rank == -1. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
@@ -92,7 +98,9 @@ class SageMakerTrainingArguments(TrainingArguments):
         elif is_sagemaker_dp_enabled():
             import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
 
-            torch.distributed.init_process_group(backend="smddp", timeout=self.ddp_timeout_delta)
+            torch.distributed.init_process_group(
+                backend="smddp", timeout=self.ddp_timeout_delta
+            )
             self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
@@ -111,7 +119,9 @@ class SageMakerTrainingArguments(TrainingArguments):
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             if not torch.distributed.is_initialized():
-                torch.distributed.init_process_group(backend="nccl", timeout=self.ddp_timeout_delta)
+                torch.distributed.init_process_group(
+                    backend="nccl", timeout=self.ddp_timeout_delta
+                )
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 

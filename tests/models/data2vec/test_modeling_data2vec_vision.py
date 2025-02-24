@@ -39,7 +39,13 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, sdpa_kernel
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    sdpa_kernel,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -115,13 +121,17 @@ class Data2VecVisionModelTester:
         self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size, self.num_channels, self.image_size, self.image_size]
+        )
 
         labels = None
         pixel_labels = None
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            pixel_labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
+            pixel_labels = ids_tensor(
+                [self.batch_size, self.image_size, self.image_size], self.num_labels
+            )
 
         config = self.get_config()
 
@@ -153,28 +163,49 @@ class Data2VecVisionModelTester:
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (self.image_size // self.patch_size) ** 2
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, num_patches + 1, self.hidden_size),
+        )
 
-    def create_and_check_for_image_classification(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_classification(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.type_sequence_label_size
         model = Data2VecVisionForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.type_sequence_label_size)
+        )
 
-    def create_and_check_for_image_segmentation(self, config, pixel_values, labels, pixel_labels):
+    def create_and_check_for_image_segmentation(
+        self, config, pixel_values, labels, pixel_labels
+    ):
         config.num_labels = self.num_labels
         model = Data2VecVisionForSemanticSegmentation(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size * 2,
+                self.image_size * 2,
+            ),
         )
         result = model(pixel_values, labels=pixel_labels)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_labels, self.image_size * 2, self.image_size * 2)
+            result.logits.shape,
+            (
+                self.batch_size,
+                self.num_labels,
+                self.image_size * 2,
+                self.image_size * 2,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -192,7 +223,11 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     """
 
     all_model_classes = (
-        (Data2VecVisionModel, Data2VecVisionForImageClassification, Data2VecVisionForSemanticSegmentation)
+        (
+            Data2VecVisionModel,
+            Data2VecVisionForImageClassification,
+            Data2VecVisionForSemanticSegmentation,
+        )
         if is_torch_available()
         else ()
     )
@@ -213,7 +248,10 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=Data2VecVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
         )
 
     def test_config(self):
@@ -261,7 +299,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             model = model_class(config)
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -274,12 +314,17 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class.__name__ in MODEL_MAPPING_NAMES.values() or not model_class.supports_gradient_checkpointing:
+            if (
+                model_class.__name__ in MODEL_MAPPING_NAMES.values()
+                or not model_class.supports_gradient_checkpointing
+            ):
                 continue
             # TODO: remove the following 3 lines once we have a MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
             # this can then be incorporated into _prepare_for_class in test_modeling_common.py
             elif model_class.__name__ == "Data2VecVisionForSemanticSegmentation":
-                batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
+                batch_size, num_channels, height, width = inputs_dict[
+                    "pixel_values"
+                ].shape
                 inputs_dict["labels"] = torch.zeros(
                     [self.model_tester.batch_size, height, width], device=torch_device
                 ).long()
@@ -287,7 +332,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             model.gradient_checkpointing_enable()
             model.to(torch_device)
             model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            inputs = self._prepare_for_class(
+                inputs_dict, model_class, return_labels=True
+            )
             loss = model(**inputs).loss
             loss.backward()
 
@@ -335,10 +382,16 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         if not self.all_model_classes[0]._supports_sdpa:
             self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
 
-        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(torch_device):
-            self.skipTest(f"float16 not supported on {torch_device} (on the specific device currently used)")
+        if torch_dtype == "float16" and not is_torch_fp16_available_on_device(
+            torch_device
+        ):
+            self.skipTest(
+                f"float16 not supported on {torch_device} (on the specific device currently used)"
+            )
 
-        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(torch_device):
+        if torch_dtype == "bfloat16" and not is_torch_bf16_available_on_device(
+            torch_device
+        ):
             self.skipTest(
                 f"bfloat16 not supported on {torch_device} (on the specific device currently used, e.g. Nvidia T4 GPU)"
             )
@@ -384,7 +437,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
         for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = (
+                self.model_tester.prepare_config_and_inputs_for_common()
+            )
 
             config.rms_norm_eps = 1.0
             config.layer_norm_eps = 1.0
@@ -395,7 +450,9 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             model = model_class(config)
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype, use_mask_token=True)
+                model_sdpa = model_class.from_pretrained(
+                    tmpdirname, torch_dtype=torch_dtype, use_mask_token=True
+                )
                 model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
 
                 model_eager = model_class.from_pretrained(
@@ -420,14 +477,24 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 for padding_side in ["left", "right"]:
                     for use_mask in [False, True]:
                         for output_attentions in [True, False]:
-                            can_output_attn = "output_attentions" in inspect.signature(model_sdpa.forward).parameters
-                            if not (self.has_attentions and can_output_attn) and output_attentions:
+                            can_output_attn = (
+                                "output_attentions"
+                                in inspect.signature(model_sdpa.forward).parameters
+                            )
+                            if (
+                                not (self.has_attentions and can_output_attn)
+                                and output_attentions
+                            ):
                                 continue
                             # TODO: if we can also check with `batch_size=1` without being flaky?
                             for batch_size in [7]:
                                 dummy_input = inputs_dict[model.main_input_name]
 
-                                if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
+                                if dummy_input.dtype in [
+                                    torch.float32,
+                                    torch.bfloat16,
+                                    torch.float16,
+                                ]:
                                     dummy_input = dummy_input.to(torch_dtype)
 
                                 dummy_input = dummy_input[:batch_size]
@@ -440,16 +507,38 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
                                     if (
                                         self.has_attentions
-                                        and "output_attentions" in inspect.signature(model_sdpa.forward).parameters
+                                        and "output_attentions"
+                                        in inspect.signature(
+                                            model_sdpa.forward
+                                        ).parameters
                                     ):
-                                        processed_inputs["output_attentions"] = output_attentions
+                                        processed_inputs["output_attentions"] = (
+                                            output_attentions
+                                        )
 
-                                    if "bool_masked_pos" in inspect.signature(model_eager.forward).parameters:
-                                        dummy_mask = torch.ones((self.model_tester.num_masks,))
-                                        mask_length = self.model_tester.seq_length - 1 - dummy_mask.size(0)
-                                        dummy_mask = torch.cat([dummy_mask, torch.zeros(mask_length)])
-                                        dummy_bool_masked_pos = dummy_mask.expand(batch_size, -1).bool()
-                                        processed_inputs["bool_masked_pos"] = dummy_bool_masked_pos.to(torch_device)
+                                    if (
+                                        "bool_masked_pos"
+                                        in inspect.signature(
+                                            model_eager.forward
+                                        ).parameters
+                                    ):
+                                        dummy_mask = torch.ones(
+                                            (self.model_tester.num_masks,)
+                                        )
+                                        mask_length = (
+                                            self.model_tester.seq_length
+                                            - 1
+                                            - dummy_mask.size(0)
+                                        )
+                                        dummy_mask = torch.cat(
+                                            [dummy_mask, torch.zeros(mask_length)]
+                                        )
+                                        dummy_bool_masked_pos = dummy_mask.expand(
+                                            batch_size, -1
+                                        ).bool()
+                                        processed_inputs["bool_masked_pos"] = (
+                                            dummy_bool_masked_pos.to(torch_device)
+                                        )
 
                                     with torch.no_grad():
                                         with sdpa_kernel(
@@ -457,15 +546,23 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                                             enable_math=True,
                                             enable_mem_efficient=enable_kernels,
                                         ):
-                                            prepared_inputs = self._prepare_for_class(processed_inputs, model_class)
-                                            outputs_eager = model_eager(**prepared_inputs)
+                                            prepared_inputs = self._prepare_for_class(
+                                                processed_inputs, model_class
+                                            )
+                                            outputs_eager = model_eager(
+                                                **prepared_inputs
+                                            )
                                             outputs_sdpa = model_sdpa(**prepared_inputs)
 
                                     logits_eager = outputs_eager.hidden_states[-1]
                                     logits_sdpa = outputs_sdpa.hidden_states[-1]
                                     if torch_device in ["cpu", "cuda"]:
-                                        atol = atols[torch_device, enable_kernels, torch_dtype]
-                                        rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                        atol = atols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
+                                        rtol = rtols[
+                                            torch_device, enable_kernels, torch_dtype
+                                        ]
                                     elif torch_device == "xpu":
                                         # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                                         # which is implemented on PyTorch level using aten operators and is
@@ -478,31 +575,54 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
                                     # Masked tokens output slightly deviates - we don't mind that.
                                     if use_mask:
-                                        _logits_sdpa = torch.zeros_like(input=logits_sdpa)
-                                        _logits_eager = torch.zeros_like(input=logits_eager)
+                                        _logits_sdpa = torch.zeros_like(
+                                            input=logits_sdpa
+                                        )
+                                        _logits_eager = torch.zeros_like(
+                                            input=logits_eager
+                                        )
 
                                         _logits_sdpa[:-1] = logits_sdpa[:-1]
                                         _logits_eager[:-1] = logits_eager[:-1]
 
                                         if padding_side == "left":
                                             _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
-                                            _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
+                                            _logits_eager[-1:, 2:] = logits_eager[
+                                                -1:, 2:
+                                            ]
 
                                         elif padding_side == "right":
-                                            _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
-                                            _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
+                                            _logits_sdpa[-1:, 2:] = logits_sdpa[
+                                                -1:, :-2
+                                            ]
+                                            _logits_eager[-1:, 2:] = logits_eager[
+                                                -1:, :-2
+                                            ]
 
                                         logits_sdpa = _logits_sdpa
                                         logits_eager = _logits_eager
 
                                     results = [
-                                        torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
-                                        for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+                                        torch.allclose(
+                                            _logits_sdpa,
+                                            _logits_eager,
+                                            atol=atol,
+                                            rtol=rtol,
+                                        )
+                                        for (_logits_sdpa, _logits_eager) in zip(
+                                            logits_sdpa, logits_eager
+                                        )
                                     ]
                                     # If 80% batch elements have matched results, it's fine
                                     if np.mean(results) < 0.8:
                                         fail_cases.append(
-                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                            get_mean_reldiff(
+                                                failcase,
+                                                logits_sdpa,
+                                                logits_eager,
+                                                atol,
+                                                rtol,
+                                            )
                                         )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
@@ -520,14 +640,16 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
+            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+            if is_vision_available()
+            else None
         )
 
     @slow
     def test_inference_image_classification_head_imagenet_1k(self):
-        model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base-ft1k").to(
-            torch_device
-        )
+        model = Data2VecVisionForImageClassification.from_pretrained(
+            "facebook/data2vec-vision-base-ft1k"
+        ).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -546,19 +668,26 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
 
         torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
-        expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
+        expected_top2 = [
+            model.config.label2id[i]
+            for i in ["remote control, remote", "tabby, tabby cat"]
+        ]
         self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
         model_name = "facebook/data2vec-vision-base-ft1k"
-        model = Data2VecVisionModel.from_pretrained(model_name, **{"use_absolute_position_embeddings": True}).to(
-            torch_device
-        )
+        model = Data2VecVisionModel.from_pretrained(
+            model_name, **{"use_absolute_position_embeddings": True}
+        ).to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
-        inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
+        processor = BeitImageProcessor.from_pretrained(
+            "facebook/data2vec-vision-base-ft1k"
+        )
+        inputs = processor(
+            images=image, return_tensors="pt", size={"height": 480, "width": 480}
+        )
         pixel_values = inputs.pixel_values.to(torch_device)
 
         # with interpolate_pos_encoding being True the model should process the higher resolution image

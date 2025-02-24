@@ -217,7 +217,11 @@ class FlaxCLIPOutput(ModelOutput):
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            (
+                self[k]
+                if k not in ["text_model_output", "vision_model_output"]
+                else getattr(self, k).to_tuple()
+            )
             for k in self.keys()
         )
 
@@ -231,7 +235,9 @@ class FlaxCLIPVisionEmbeddings(nn.Module):
         image_size = self.config.image_size
         patch_size = self.config.patch_size
 
-        self.class_embedding = self.param("class_embedding", jax.nn.initializers.normal(stddev=0.02), (embed_dim,))
+        self.class_embedding = self.param(
+            "class_embedding", jax.nn.initializers.normal(stddev=0.02), (embed_dim,)
+        )
 
         self.patch_embedding = nn.Conv(
             embed_dim,
@@ -245,8 +251,12 @@ class FlaxCLIPVisionEmbeddings(nn.Module):
 
         self.num_patches = (image_size // patch_size) ** 2
         num_positions = self.num_patches + 1
-        self.position_embedding = nn.Embed(num_positions, embed_dim, embedding_init=jax.nn.initializers.normal())
-        self.position_ids = jnp.expand_dims(jnp.arange(0, num_positions, dtype="i4"), axis=0)
+        self.position_embedding = nn.Embed(
+            num_positions, embed_dim, embedding_init=jax.nn.initializers.normal()
+        )
+        self.position_ids = jnp.expand_dims(
+            jnp.arange(0, num_positions, dtype="i4"), axis=0
+        )
 
     def __call__(self, pixel_values):
         patch_embeds = self.patch_embedding(pixel_values)
@@ -267,9 +277,15 @@ class FlaxCLIPTextEmbeddings(nn.Module):
     def setup(self):
         embed_dim = self.config.hidden_size
 
-        self.token_embedding = nn.Embed(self.config.vocab_size, embed_dim, embedding_init=jax.nn.initializers.normal())
+        self.token_embedding = nn.Embed(
+            self.config.vocab_size,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(),
+        )
         self.position_embedding = nn.Embed(
-            self.config.max_position_embeddings, embed_dim, embedding_init=jax.nn.initializers.normal()
+            self.config.max_position_embeddings,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(),
         )
         self.position_ids = jnp.expand_dims(
             jnp.arange(0, self.config.max_position_embeddings, dtype="i4"), axis=(0, 1)
@@ -299,17 +315,37 @@ class FlaxCLIPAttention(nn.Module):
         self.scale = self.head_dim**-0.5
         self.dropout = self.config.attention_dropout
 
-        self.k_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
-        self.v_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
-        self.q_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
-        self.out_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.k_proj = nn.Dense(
+            self.embed_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.01),
+        )
+        self.v_proj = nn.Dense(
+            self.embed_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.01),
+        )
+        self.q_proj = nn.Dense(
+            self.embed_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.01),
+        )
+        self.out_proj = nn.Dense(
+            self.embed_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.01),
+        )
 
         self.causal = isinstance(self.config, CLIPTextConfig)
         if self.causal:
-            self.causal_mask = make_causal_mask(jnp.ones((1, self.config.max_position_embeddings), dtype="i4"))
+            self.causal_mask = make_causal_mask(
+                jnp.ones((1, self.config.max_position_embeddings), dtype="i4")
+            )
 
     def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
+        return hidden_states.reshape(
+            hidden_states.shape[:2] + (self.num_heads, self.head_dim)
+        )
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
@@ -332,11 +368,15 @@ class FlaxCLIPAttention(nn.Module):
         causal_attention_mask = None
         if self.causal:
             query_length, key_length = query.shape[1], key.shape[1]
-            causal_attention_mask = self.causal_mask[:, :, key_length - query_length : key_length, :key_length]
+            causal_attention_mask = self.causal_mask[
+                :, :, key_length - query_length : key_length, :key_length
+            ]
 
         if attention_mask is not None and causal_attention_mask is not None:
             attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-            attention_mask = combine_masks(attention_mask, causal_attention_mask, dtype="i4")
+            attention_mask = combine_masks(
+                attention_mask, causal_attention_mask, dtype="i4"
+            )
         elif causal_attention_mask is not None:
             attention_mask = causal_attention_mask
         elif attention_mask is not None:
@@ -346,7 +386,9 @@ class FlaxCLIPAttention(nn.Module):
             attention_bias = lax.select(
                 attention_mask > 0,
                 jnp.full(attention_mask.shape, 0.0).astype(self.dtype),
-                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
+                jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(
+                    self.dtype
+                ),
             )
         else:
             attention_bias = None
@@ -385,7 +427,11 @@ class FlaxCLIPMLP(nn.Module):
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(0.01),
         )
-        self.fc2 = nn.Dense(self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
+        self.fc2 = nn.Dense(
+            self.config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.01),
+        )
 
     def __call__(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
@@ -400,9 +446,13 @@ class FlaxCLIPEncoderLayer(nn.Module):
 
     def setup(self):
         self.self_attn = FlaxCLIPAttention(self.config, dtype=self.dtype)
-        self.layer_norm1 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.layer_norm1 = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.mlp = FlaxCLIPMLP(self.config, dtype=self.dtype)
-        self.layer_norm2 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.layer_norm2 = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -463,7 +513,10 @@ class FlaxCLIPLayerCollection(nn.Module):
                 all_hidden_states += (hidden_states,)
 
             layer_outputs = layer(
-                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
+                hidden_states,
+                attention_mask,
+                deterministic=deterministic,
+                output_attentions=output_attentions,
             )
             hidden_states = layer_outputs[0]
 
@@ -479,7 +532,9 @@ class FlaxCLIPLayerCollection(nn.Module):
             return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 
@@ -516,7 +571,9 @@ class FlaxCLIPTextTransformer(nn.Module):
     def setup(self):
         self.embeddings = FlaxCLIPTextEmbeddings(self.config, dtype=self.dtype)
         self.encoder = FlaxCLIPEncoder(self.config, dtype=self.dtype)
-        self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.final_layer_norm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
 
         # For `pooled_output` computation
         self.eos_token_id = self.config.eos_token_id
@@ -531,11 +588,19 @@ class FlaxCLIPTextTransformer(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
@@ -557,11 +622,14 @@ class FlaxCLIPTextTransformer(nn.Module):
             # ------------------------------------------------------------
             # text_embeds.shape = [batch_size, sequence_length, transformer.width]
             # take features from the EOS embedding (eos_token_id is the highest number in each sequence)
-            pooled_output = last_hidden_state[jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)]
+            pooled_output = last_hidden_state[
+                jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)
+            ]
         else:
             # (no need to cast from bool to int after comparing to `eos_token_id`)
             pooled_output = last_hidden_state[
-                jnp.arange(last_hidden_state.shape[0]), (input_ids == self.eos_token_id).argmax(axis=-1)
+                jnp.arange(last_hidden_state.shape[0]),
+                (input_ids == self.eos_token_id).argmax(axis=-1),
             ]
 
         if not return_dict:
@@ -581,9 +649,13 @@ class FlaxCLIPVisionTransformer(nn.Module):
 
     def setup(self):
         self.embeddings = FlaxCLIPVisionEmbeddings(self.config, dtype=self.dtype)
-        self.pre_layrnorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.pre_layrnorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
         self.encoder = FlaxCLIPEncoder(self.config, dtype=self.dtype)
-        self.post_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
+        self.post_layernorm = nn.LayerNorm(
+            epsilon=self.config.layer_norm_eps, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -593,11 +665,19 @@ class FlaxCLIPVisionTransformer(nn.Module):
         output_hidden_states=None,
         return_dict: bool = True,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.use_return_dict
+        )
 
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layrnorm(hidden_states)
@@ -639,18 +719,31 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensor
         input_ids = jnp.zeros(input_shape, dtype="i4")
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape)
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape
+        )
         attention_mask = jnp.ones_like(input_ids)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(rngs, input_ids, attention_mask, position_ids)["params"]
+        random_params = self.module.init(rngs, input_ids, attention_mask, position_ids)[
+            "params"
+        ]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -674,14 +767,24 @@ class FlaxCLIPTextPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -721,9 +824,18 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
         if input_shape is None:
             input_shape = (1, config.image_size, config.image_size, 3)
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensor
         pixel_values = jax.random.normal(rng, input_shape)
 
@@ -752,11 +864,19 @@ class FlaxCLIPVisionPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
@@ -790,14 +910,33 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         **kwargs,
     ):
         if input_shape is None:
-            input_shape = ((1, 1), (1, config.vision_config.image_size, config.vision_config.image_size, 3))
+            input_shape = (
+                (1, 1),
+                (
+                    1,
+                    config.vision_config.image_size,
+                    config.vision_config.image_size,
+                    3,
+                ),
+            )
         module = self.module_class(config=config, dtype=dtype, **kwargs)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
+        super().__init__(
+            config,
+            module,
+            input_shape=input_shape,
+            seed=seed,
+            dtype=dtype,
+            _do_init=_do_init,
+        )
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
+    def init_weights(
+        self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None
+    ) -> FrozenDict:
         # init input tensor
         input_ids = jnp.zeros(input_shape[0], dtype="i4")
-        position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0])
+        position_ids = jnp.broadcast_to(
+            jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_shape[0]
+        )
         attention_mask = jnp.ones_like(input_ids)
 
         pixel_values = jax.random.normal(rng, input_shape[1])
@@ -805,7 +944,9 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(rngs, input_ids, pixel_values, attention_mask, position_ids)["params"]
+        random_params = self.module.init(
+            rngs, input_ids, pixel_values, attention_mask, position_ids
+        )["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -830,14 +971,24 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
         )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -898,7 +1049,9 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         >>> text_features = model.get_text_features(**inputs)
         ```"""
         if position_ids is None:
-            position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
+            position_ids = jnp.broadcast_to(
+                jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape
+            )
 
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
@@ -908,7 +1061,9 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        def _get_features(module, input_ids, attention_mask, position_ids, deterministic):
+        def _get_features(
+            module, input_ids, attention_mask, position_ids, deterministic
+        ):
             text_outputs = module.text_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -930,7 +1085,11 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         )
 
     def get_image_features(
-        self, pixel_values, params: dict = None, dropout_rng: jax.random.PRNGKey = None, train=False
+        self,
+        pixel_values,
+        params: dict = None,
+        dropout_rng: jax.random.PRNGKey = None,
+        train=False,
     ):
         r"""
         Args:
@@ -967,7 +1126,9 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
             rngs["dropout"] = dropout_rng
 
         def _get_features(module, pixel_values, deterministic):
-            vision_outputs = module.vision_model(pixel_values=pixel_values, deterministic=deterministic)
+            vision_outputs = module.vision_model(
+                pixel_values=pixel_values, deterministic=deterministic
+            )
             pooled_output = vision_outputs[1]  # pooled_output
             image_features = module.visual_projection(pooled_output)
             return image_features
@@ -1032,9 +1193,13 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
     ```
 """
 
-overwrite_call_docstring(FlaxCLIPTextModel, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_DOCSTRING)
+overwrite_call_docstring(
+    FlaxCLIPTextModel, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_DOCSTRING
+)
 append_replace_return_docstrings(
-    FlaxCLIPTextModel, output_type=FlaxBaseModelOutputWithPooling, config_class=CLIPTextConfig
+    FlaxCLIPTextModel,
+    output_type=FlaxBaseModelOutputWithPooling,
+    config_class=CLIPTextConfig,
 )
 
 
@@ -1044,7 +1209,9 @@ class FlaxCLIPTextModelWithProjectionModule(nn.Module):
 
     def setup(self):
         self.text_model = FlaxCLIPTextTransformer(self.config, dtype=self.dtype)
-        self.text_projection = nn.Dense(self.config.projection_dim, use_bias=False, dtype=self.dtype)
+        self.text_projection = nn.Dense(
+            self.config.projection_dim, use_bias=False, dtype=self.dtype
+        )
 
     def __call__(
         self,
@@ -1103,10 +1270,13 @@ FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING = """
 """
 
 overwrite_call_docstring(
-    FlaxCLIPTextModelWithProjection, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING
+    FlaxCLIPTextModelWithProjection,
+    CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING,
 )
 append_replace_return_docstrings(
-    FlaxCLIPTextModelWithProjection, output_type=FlaxCLIPTextModelOutput, config_class=CLIPTextConfig
+    FlaxCLIPTextModelWithProjection,
+    output_type=FlaxCLIPTextModelOutput,
+    config_class=CLIPTextConfig,
 )
 
 
@@ -1162,9 +1332,13 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
     ```
 """
 
-overwrite_call_docstring(FlaxCLIPVisionModel, CLIP_VISION_INPUTS_DOCSTRING + FLAX_CLIP_VISION_MODEL_DOCSTRING)
+overwrite_call_docstring(
+    FlaxCLIPVisionModel, CLIP_VISION_INPUTS_DOCSTRING + FLAX_CLIP_VISION_MODEL_DOCSTRING
+)
 append_replace_return_docstrings(
-    FlaxCLIPVisionModel, output_type=FlaxBaseModelOutputWithPooling, config_class=CLIPVisionConfig
+    FlaxCLIPVisionModel,
+    output_type=FlaxBaseModelOutputWithPooling,
+    config_class=CLIPVisionConfig,
 )
 
 
@@ -1197,7 +1371,9 @@ class FlaxCLIPModule(nn.Module):
         )
 
         self.logit_scale = self.param(
-            "logit_scale", lambda _, shape: jnp.ones(shape) * self.config.logit_scale_init_value, []
+            "logit_scale",
+            lambda _, shape: jnp.ones(shape) * self.config.logit_scale_init_value,
+            [],
         )
 
     def __call__(
@@ -1211,7 +1387,9 @@ class FlaxCLIPModule(nn.Module):
         output_hidden_states=None,
         return_dict=None,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        return_dict = (
+            return_dict if return_dict is not None else self.config.return_dict
+        )
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -1238,7 +1416,9 @@ class FlaxCLIPModule(nn.Module):
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / jnp.linalg.norm(image_embeds, axis=-1, keepdims=True)
+        image_embeds = image_embeds / jnp.linalg.norm(
+            image_embeds, axis=-1, keepdims=True
+        )
         text_embeds = text_embeds / jnp.linalg.norm(text_embeds, axis=-1, keepdims=True)
 
         # cosine similarity as logits
@@ -1247,7 +1427,14 @@ class FlaxCLIPModule(nn.Module):
         logits_per_image = logits_per_text.T
 
         if not return_dict:
-            return (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            return (
+                logits_per_image,
+                logits_per_text,
+                text_embeds,
+                image_embeds,
+                text_outputs,
+                vision_outputs,
+            )
 
         return FlaxCLIPOutput(
             logits_per_image=logits_per_image,
@@ -1291,8 +1478,12 @@ FLAX_CLIP_MODEL_DOCSTRING = """
     ```
 """
 
-overwrite_call_docstring(FlaxCLIPModel, CLIP_INPUTS_DOCSTRING + FLAX_CLIP_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxCLIPModel, output_type=FlaxCLIPOutput, config_class=CLIPConfig)
+overwrite_call_docstring(
+    FlaxCLIPModel, CLIP_INPUTS_DOCSTRING + FLAX_CLIP_MODEL_DOCSTRING
+)
+append_replace_return_docstrings(
+    FlaxCLIPModel, output_type=FlaxCLIPOutput, config_class=CLIPConfig
+)
 
 
 __all__ = [

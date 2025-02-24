@@ -121,16 +121,22 @@ def process_outputs_for_training(
         if is_pos or is_cv:
             # filter with length for positives for both train and CV.
             # We also filter for length when CV negatives are processed.
-            outputs = filter_and_truncate(outputs, pos_truncation_length, eos_token_mask)
+            outputs = filter_and_truncate(
+                outputs, pos_truncation_length, eos_token_mask
+            )
         elif not is_pos and not is_cv:
-            outputs = filter_and_truncate(outputs, neg_truncation_length, eos_token_mask)
+            outputs = filter_and_truncate(
+                outputs, neg_truncation_length, eos_token_mask
+            )
 
         # If no filtered outputs skip this batch.
         if outputs.shape[0] == 0:
             continue
 
         # All outputs are padded to max-length with eos-tokens.
-        outputs = pad_to_len(outputs, max_length, False, tokenizer.eos_token_id, torch_device)
+        outputs = pad_to_len(
+            outputs, max_length, False, tokenizer.eos_token_id, torch_device
+        )
         # outputs shape [num_filtered_entries, max_length]
 
         eos_token_mask = logits_processor.compute_eos_token_mask(
@@ -144,7 +150,9 @@ def process_outputs_for_training(
 
         # context_repetition_mask of shape [num_filtered_entries, max_length -
         # (ngram_len - 1)].
-        context_repetition_mask = pad_to_len(context_repetition_mask, max_length, True, 0, torch_device)
+        context_repetition_mask = pad_to_len(
+            context_repetition_mask, max_length, True, 0, torch_device
+        )
         # We pad on left to get same max_length shape.
         # context_repetition_mask of shape [num_filtered_entries, max_length].
         combined_mask = context_repetition_mask * eos_token_mask
@@ -164,7 +172,9 @@ def process_outputs_for_training(
     return all_masks, all_g_values
 
 
-def tpr_at_fpr(detector, detector_inputs, w_true, minibatch_size, target_fpr=0.01) -> torch.Tensor:
+def tpr_at_fpr(
+    detector, detector_inputs, w_true, minibatch_size, target_fpr=0.01
+) -> torch.Tensor:
     """Calculates true positive rate (TPR) at false positive rate (FPR)=target_fpr."""
     positive_idxs = w_true == 1
     negative_idxs = w_true == 0
@@ -189,10 +199,14 @@ def tpr_at_fpr(detector, detector_inputs, w_true, minibatch_size, target_fpr=0.0
     # Note: percentile -> quantile
     fpr_threshold = torch.quantile(negative_scores, 1 - target_fpr)
     # Note: need to switch to FP32 since torch.mean doesn't work with torch.bool
-    return torch.mean((positive_scores >= fpr_threshold).to(dtype=torch.float32)).item()  # TPR
+    return torch.mean(
+        (positive_scores >= fpr_threshold).to(dtype=torch.float32)
+    ).item()  # TPR
 
 
-def update_fn_if_fpr_tpr(detector, g_values_val, mask_val, watermarked_val, minibatch_size):
+def update_fn_if_fpr_tpr(
+    detector, g_values_val, mask_val, watermarked_val, minibatch_size
+):
     """Loss function for negative TPR@FPR=1% as the validation loss."""
     tpr_ = tpr_at_fpr(
         detector=detector,
@@ -215,9 +229,13 @@ def process_raw_model_outputs(
     torch_device,
 ):
     # Split data into train and CV
-    train_wm_outputs, cv_wm_outputs = model_selection.train_test_split(tokenized_wm_outputs, test_size=test_size)
+    train_wm_outputs, cv_wm_outputs = model_selection.train_test_split(
+        tokenized_wm_outputs, test_size=test_size
+    )
 
-    train_uwm_outputs, cv_uwm_outputs = model_selection.train_test_split(tokenized_uwm_outputs, test_size=test_size)
+    train_uwm_outputs, cv_uwm_outputs = model_selection.train_test_split(
+        tokenized_uwm_outputs, test_size=test_size
+    )
 
     process_kwargs = {
         "logits_processor": logits_processor,
@@ -230,25 +248,37 @@ def process_raw_model_outputs(
 
     # Process both train and CV data for training
     wm_masks_train, wm_g_values_train = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_wm_outputs],
+        [
+            torch.tensor(outputs, device=torch_device, dtype=torch.long)
+            for outputs in train_wm_outputs
+        ],
         is_pos=True,
         is_cv=False,
         **process_kwargs,
     )
     wm_masks_cv, wm_g_values_cv = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_wm_outputs],
+        [
+            torch.tensor(outputs, device=torch_device, dtype=torch.long)
+            for outputs in cv_wm_outputs
+        ],
         is_pos=True,
         is_cv=True,
         **process_kwargs,
     )
     uwm_masks_train, uwm_g_values_train = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in train_uwm_outputs],
+        [
+            torch.tensor(outputs, device=torch_device, dtype=torch.long)
+            for outputs in train_uwm_outputs
+        ],
         is_pos=False,
         is_cv=False,
         **process_kwargs,
     )
     uwm_masks_cv, uwm_g_values_cv = process_outputs_for_training(
-        [torch.tensor(outputs, device=torch_device, dtype=torch.long) for outputs in cv_uwm_outputs],
+        [
+            torch.tensor(outputs, device=torch_device, dtype=torch.long)
+            for outputs in cv_uwm_outputs
+        ],
         is_pos=False,
         is_cv=True,
         **process_kwargs,
@@ -262,16 +292,24 @@ def process_raw_model_outputs(
 
     wm_masks_train, wm_g_values_train = pack(wm_masks_train, wm_g_values_train)
     # Note: Use float instead of bool. Otherwise, the entropy calculation doesn't work
-    wm_labels_train = torch.ones((wm_masks_train.shape[0],), dtype=torch.float, device=torch_device)
+    wm_labels_train = torch.ones(
+        (wm_masks_train.shape[0],), dtype=torch.float, device=torch_device
+    )
 
     wm_masks_cv, wm_g_values_cv = pack(wm_masks_cv, wm_g_values_cv)
-    wm_labels_cv = torch.ones((wm_masks_cv.shape[0],), dtype=torch.float, device=torch_device)
+    wm_labels_cv = torch.ones(
+        (wm_masks_cv.shape[0],), dtype=torch.float, device=torch_device
+    )
 
     uwm_masks_train, uwm_g_values_train = pack(uwm_masks_train, uwm_g_values_train)
-    uwm_labels_train = torch.zeros((uwm_masks_train.shape[0],), dtype=torch.float, device=torch_device)
+    uwm_labels_train = torch.zeros(
+        (uwm_masks_train.shape[0],), dtype=torch.float, device=torch_device
+    )
 
     uwm_masks_cv, uwm_g_values_cv = pack(uwm_masks_cv, uwm_g_values_cv)
-    uwm_labels_cv = torch.zeros((uwm_masks_cv.shape[0],), dtype=torch.float, device=torch_device)
+    uwm_labels_cv = torch.zeros(
+        (uwm_masks_cv.shape[0],), dtype=torch.float, device=torch_device
+    )
 
     # Concat pos and negatives data together.
     train_g_values = torch.cat((wm_g_values_train, uwm_g_values_train), dim=0).squeeze()
@@ -283,14 +321,18 @@ def process_raw_model_outputs(
     cv_masks = torch.cat((wm_masks_cv, uwm_masks_cv), axis=0).squeeze()
 
     # Shuffle data.
-    shuffled_idx = torch.randperm(train_g_values.shape[0])  # Use torch for GPU compatibility
+    shuffled_idx = torch.randperm(
+        train_g_values.shape[0]
+    )  # Use torch for GPU compatibility
 
     train_g_values = train_g_values[shuffled_idx]
     train_labels = train_labels[shuffled_idx]
     train_masks = train_masks[shuffled_idx]
 
     # Shuffle the cross-validation data
-    shuffled_idx_cv = torch.randperm(cv_g_values.shape[0])  # Use torch for GPU compatibility
+    shuffled_idx_cv = torch.randperm(
+        cv_g_values.shape[0]
+    )  # Use torch for GPU compatibility
     cv_g_values = cv_g_values[shuffled_idx_cv]
     cv_labels = cv_labels[shuffled_idx_cv]
     cv_masks = cv_masks[shuffled_idx_cv]
@@ -336,7 +378,12 @@ def get_tokenized_uwm_outputs(num_negatives, neg_batch_size, tokenizer, device):
             inputs = inputs[:, :padded_length]
         else:
             inputs = np.concatenate(
-                [inputs, np.ones((neg_batch_size, padded_length - inputs.shape[1])) * tokenizer.eos_token_id], axis=1
+                [
+                    inputs,
+                    np.ones((neg_batch_size, padded_length - inputs.shape[1]))
+                    * tokenizer.eos_token_id,
+                ],
+                axis=1,
             )
         tokenized_uwm_outputs.append(inputs)
         if len(tokenized_uwm_outputs) * neg_batch_size > num_negatives:
@@ -361,7 +408,9 @@ def get_tokenized_wm_outputs(
     wm_outputs = []
 
     for batch_id in tqdm.tqdm(range(num_pos_batches)):
-        prompts = eli5_prompts["train"]["title"][batch_id * pos_batch_size : (batch_id + 1) * pos_batch_size]
+        prompts = eli5_prompts["train"]["title"][
+            batch_id * pos_batch_size : (batch_id + 1) * pos_batch_size
+        ]
         prompts = [prompt.strip('"') for prompt in prompts]
         inputs = tokenizer(
             prompts,

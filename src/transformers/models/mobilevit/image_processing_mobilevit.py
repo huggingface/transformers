@@ -19,7 +19,12 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import flip_channel_order, get_resize_output_image_size, resize, to_channel_dimension_format
+from ...image_transforms import (
+    flip_channel_order,
+    get_resize_output_image_size,
+    resize,
+    to_channel_dimension_format,
+)
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
@@ -100,7 +105,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"shortest_edge": 224}
         size = get_size_dict(size, default_to_square=False)
-        crop_size = crop_size if crop_size is not None else {"height": 256, "width": 256}
+        crop_size = (
+            crop_size if crop_size is not None else {"height": 256, "width": 256}
+        )
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
         self.do_resize = do_resize
@@ -145,7 +152,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(
+                "Size must contain either 'shortest_edge' or 'height' and 'width'."
+            )
 
         output_size = get_resize_output_image_size(
             image,
@@ -179,7 +188,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        return flip_channel_order(image, data_format=data_format, input_data_format=input_data_format)
+        return flip_channel_order(
+            image, data_format=data_format, input_data_format=input_data_format
+        )
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
         """
@@ -204,13 +215,22 @@ class MobileViTImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+            image = self.resize(
+                image=image,
+                size=size,
+                resample=resample,
+                input_data_format=input_data_format,
+            )
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+            image = self.rescale(
+                image=image, scale=rescale_factor, input_data_format=input_data_format
+            )
 
         if do_center_crop:
-            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+            image = self.center_crop(
+                image=image, size=crop_size, input_data_format=input_data_format
+            )
 
         if do_flip_channel_order:
             image = self.flip_channel_order(image, input_data_format=input_data_format)
@@ -255,7 +275,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
-        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        image = to_channel_dimension_format(
+            image, data_format, input_channel_dim=input_data_format
+        )
 
         return image
 
@@ -278,7 +300,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         else:
             added_channel_dim = False
             if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
+                input_data_format = infer_channel_dimension_format(
+                    segmentation_map, num_channels=1
+                )
 
         segmentation_map = self._preprocess(
             image=segmentation_map,
@@ -361,10 +385,16 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
+        rescale_factor = (
+            rescale_factor if rescale_factor is not None else self.rescale_factor
+        )
+        do_center_crop = (
+            do_center_crop if do_center_crop is not None else self.do_center_crop
+        )
         do_flip_channel_order = (
-            do_flip_channel_order if do_flip_channel_order is not None else self.do_flip_channel_order
+            do_flip_channel_order
+            if do_flip_channel_order is not None
+            else self.do_flip_channel_order
         )
 
         size = size if size is not None else self.size
@@ -438,7 +468,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: List[Tuple] = None
+    ):
         """
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -471,13 +503,18 @@ class MobileViTImageProcessor(BaseImageProcessor):
 
             for idx in range(len(logits)):
                 resized_logits = torch.nn.functional.interpolate(
-                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                    logits[idx].unsqueeze(dim=0),
+                    size=target_sizes[idx],
+                    mode="bilinear",
+                    align_corners=False,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)
         else:
             semantic_segmentation = logits.argmax(dim=1)
-            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+            semantic_segmentation = [
+                semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])
+            ]
 
         return semantic_segmentation
 

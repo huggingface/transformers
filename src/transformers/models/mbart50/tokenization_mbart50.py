@@ -113,13 +113,21 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", []) or []
+        kwargs["additional_special_tokens"] = (
+            kwargs.get("additional_special_tokens", []) or []
+        )
         kwargs["additional_special_tokens"] += [
-            code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
+            code
+            for code in FAIRSEQ_LANGUAGE_CODES
+            if code not in kwargs["additional_special_tokens"]
         ]
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
@@ -140,13 +148,18 @@ class MBart50Tokenizer(PreTrainedTokenizer):
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+            code: self.sp_model_size + i + self.fairseq_offset
+            for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
+        self.fairseq_tokens_to_ids["<mask>"] = (
+            len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
+        )
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self.fairseq_ids_to_tokens = {
+            v: k for k, v in self.fairseq_tokens_to_ids.items()
+        }
 
         super().__init__(
             src_lang=src_lang,
@@ -168,7 +181,9 @@ class MBart50Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+        return (
+            len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1
+        )  # Plus 1 for the mask token
 
     @property
     def src_lang(self) -> str:
@@ -237,15 +252,21 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string.strip()
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+            save_directory,
+            (filename_prefix + "-" if filename_prefix else "")
+            + VOCAB_FILES_NAMES["vocab_file"],
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(
+            out_vocab_file
+        ) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
             with open(out_vocab_file, "wb") as fi:
@@ -255,7 +276,10 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         return (out_vocab_file,)
 
     def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self,
+        token_ids_0: List[int],
+        token_ids_1: Optional[List[int]] = None,
+        already_has_special_tokens: bool = False,
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -275,14 +299,21 @@ class MBart50Tokenizer(PreTrainedTokenizer):
 
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+                token_ids_0=token_ids_0,
+                token_ids_1=token_ids_1,
+                already_has_special_tokens=True,
             )
 
         prefix_ones = [1] * len(self.prefix_tokens)
         suffix_ones = [1] * len(self.suffix_tokens)
         if token_ids_1 is None:
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+        return (
+            prefix_ones
+            + ([0] * len(token_ids_0))
+            + ([0] * len(token_ids_1))
+            + suffix_ones
+        )
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -312,13 +343,25 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self,
+        raw_inputs,
+        return_tensors: str,
+        src_lang: Optional[str],
+        tgt_lang: Optional[str],
+        **extra_kwargs,
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
-            raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
+            raise ValueError(
+                "Translation requires a `src_lang` and a `tgt_lang` for this model"
+            )
         self.src_lang = src_lang
-        inputs = self(raw_inputs, add_special_tokens=True, return_tensors=return_tensors, **extra_kwargs)
+        inputs = self(
+            raw_inputs,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            **extra_kwargs,
+        )
         tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs

@@ -11,6 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .auto import AutoHfQuantizer, AutoQuantizationConfig, register_quantization_config, register_quantizer
+from .auto import (
+    AutoHfQuantizer,
+    AutoQuantizationConfig,
+    register_quantization_config,
+    register_quantizer,
+)
 from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name

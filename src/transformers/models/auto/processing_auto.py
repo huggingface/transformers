@@ -23,7 +23,10 @@ from collections import OrderedDict
 
 # Build the list of all feature extractors
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...image_processing_utils import ImageProcessingMixin
 from ...processing_utils import ProcessorMixin
@@ -254,7 +257,9 @@ class AutoProcessor:
         # First, let's see if we have a processor or preprocessor config.
         # Filter the kwargs for `get_file_from_repo`.
         get_file_from_repo_kwargs = {
-            key: kwargs[key] for key in inspect.signature(get_file_from_repo).parameters.keys() if key in kwargs
+            key: kwargs[key]
+            for key in inspect.signature(get_file_from_repo).parameters.keys()
+            if key in kwargs
         }
 
         # Let's start by checking whether the processor class is saved in a processor config
@@ -262,7 +267,9 @@ class AutoProcessor:
             pretrained_model_name_or_path, PROCESSOR_NAME, **get_file_from_repo_kwargs
         )
         if processor_config_file is not None:
-            config_dict, _ = ProcessorMixin.get_processor_dict(pretrained_model_name_or_path, **kwargs)
+            config_dict, _ = ProcessorMixin.get_processor_dict(
+                pretrained_model_name_or_path, **kwargs
+            )
             processor_class = config_dict.get("processor_class", None)
             if "AutoProcessor" in config_dict.get("auto_map", {}):
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
@@ -270,10 +277,14 @@ class AutoProcessor:
         if processor_class is None:
             # If not found, let's check whether the processor class is saved in an image processor config
             preprocessor_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, FEATURE_EXTRACTOR_NAME, **get_file_from_repo_kwargs
+                pretrained_model_name_or_path,
+                FEATURE_EXTRACTOR_NAME,
+                **get_file_from_repo_kwargs,
             )
             if preprocessor_config_file is not None:
-                config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+                config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                    pretrained_model_name_or_path, **kwargs
+                )
                 processor_class = config_dict.get("processor_class", None)
                 if "AutoProcessor" in config_dict.get("auto_map", {}):
                     processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
@@ -290,7 +301,9 @@ class AutoProcessor:
         if processor_class is None:
             # Next, let's check whether the processor class is saved in a tokenizer
             tokenizer_config_file = get_file_from_repo(
-                pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE, **get_file_from_repo_kwargs
+                pretrained_model_name_or_path,
+                TOKENIZER_CONFIG_FILE,
+                **get_file_from_repo_kwargs,
             )
             if tokenizer_config_file is not None:
                 with open(tokenizer_config_file, encoding="utf-8") as reader:
@@ -304,7 +317,9 @@ class AutoProcessor:
             # Otherwise, load config, if it can be loaded.
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
                 )
 
             # And check if the config contains the processor class.
@@ -316,9 +331,14 @@ class AutoProcessor:
             processor_class = processor_class_from_name(processor_class)
 
         has_remote_code = processor_auto_map is not None
-        has_local_code = processor_class is not None or type(config) in PROCESSOR_MAPPING
+        has_local_code = (
+            processor_class is not None or type(config) in PROCESSOR_MAPPING
+        )
         trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+            trust_remote_code,
+            pretrained_model_name_or_path,
+            has_local_code,
+            has_remote_code,
         )
 
         if has_remote_code and trust_remote_code:
@@ -329,33 +349,45 @@ class AutoProcessor:
             if os.path.isdir(pretrained_model_name_or_path):
                 processor_class.register_for_auto_class()
             return processor_class.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                pretrained_model_name_or_path,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
             )
         elif processor_class is not None:
             return processor_class.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                pretrained_model_name_or_path,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
             )
         # Last try: we use the PROCESSOR_MAPPING.
         elif type(config) in PROCESSOR_MAPPING:
-            return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
+            return PROCESSOR_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, **kwargs
+            )
 
         # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
         # tokenizer.
         try:
             return AutoTokenizer.from_pretrained(
-                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                pretrained_model_name_or_path,
+                trust_remote_code=trust_remote_code,
+                **kwargs,
             )
         except Exception:
             try:
                 return AutoImageProcessor.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
                 )
             except Exception:
                 pass
 
             try:
                 return AutoFeatureExtractor.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
                 )
             except Exception:
                 pass

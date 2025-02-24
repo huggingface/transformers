@@ -21,7 +21,12 @@ from parameterized import parameterized
 
 from transformers import AlbertConfig, AutoTokenizer, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_sdpa, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -106,19 +111,33 @@ class AlbertModelTester:
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor(
+                [self.batch_size, self.seq_length], self.type_vocab_size
+            )
 
         sequence_labels = None
         token_labels = None
         choice_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            sequence_labels = ids_tensor(
+                [self.batch_size], self.type_sequence_label_size
+            )
+            token_labels = ids_tensor(
+                [self.batch_size, self.seq_length], self.num_labels
+            )
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        )
 
     def get_config(self):
         return AlbertConfig(
@@ -137,19 +156,40 @@ class AlbertModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = AlbertModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(
+            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids
+        )
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.batch_size, self.seq_length, self.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.pooler_output.shape, (self.batch_size, self.hidden_size)
+        )
 
     def create_and_check_for_pretraining(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = AlbertForPreTraining(config=config)
         model.to(torch_device)
@@ -161,20 +201,46 @@ class AlbertModelTester:
             labels=token_labels,
             sentence_order_label=sequence_labels,
         )
-        self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        self.parent.assertEqual(result.sop_logits.shape, (self.batch_size, config.num_labels))
+        self.parent.assertEqual(
+            result.prediction_logits.shape,
+            (self.batch_size, self.seq_length, self.vocab_size),
+        )
+        self.parent.assertEqual(
+            result.sop_logits.shape, (self.batch_size, config.num_labels)
+        )
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = AlbertForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
+        )
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         model = AlbertForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -186,46 +252,91 @@ class AlbertModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(
+            result.start_logits.shape, (self.batch_size, self.seq_length)
+        )
+        self.parent.assertEqual(
+            result.end_logits.shape, (self.batch_size, self.seq_length)
+        )
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = AlbertForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_labels = self.num_labels
         model = AlbertForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.seq_length, self.num_labels)
+        )
 
     def create_and_check_for_multiple_choice(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
     ):
         config.num_choices = self.num_choices
         model = AlbertForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = (
+            input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_token_type_ids = (
+            token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
+        multiple_choice_input_mask = (
+            input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        )
         result = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.num_choices)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -238,7 +349,11 @@ class AlbertModelTester:
             token_labels,
             choice_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -273,12 +388,16 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        inputs_dict = super()._prepare_for_class(
+            inputs_dict, model_class, return_labels=return_labels
+        )
 
         if return_labels:
             if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
                 inputs_dict["sentence_order_label"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -287,11 +406,15 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AlbertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=AlbertConfig, hidden_size=37
+        )
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @unittest.skip("Albert requires `head_mask` which is currently not done in this test.")
+    @unittest.skip(
+        "Albert requires `head_mask` which is currently not done in this test."
+    )
     def test_eager_matches_sdpa_inference(self):
         pass
 
@@ -320,7 +443,9 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(
+            *config_and_inputs
+        )
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -340,17 +465,27 @@ class AlbertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head_absolute_embedding(self):
         model = AlbertModel.from_pretrained("albert/albert-base-v2")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        input_ids = torch.tensor(
+            [[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]]
+        )
         attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         with torch.no_grad():
             output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[-0.6513, 1.5035, -0.2766], [-0.6515, 1.5046, -0.2780], [-0.6512, 1.5049, -0.2784]]]
+            [
+                [
+                    [-0.6513, 1.5035, -0.2766],
+                    [-0.6515, 1.5046, -0.2780],
+                    [-0.6512, 1.5049, -0.2784],
+                ]
+            ]
         )
 
-        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_export(self):
@@ -390,6 +525,8 @@ class AlbertModelIntegrationTest(unittest.TestCase):
             strict=True,
         )
 
-        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        result = exported_program.module().forward(
+            inputs["input_ids"], inputs["attention_mask"]
+        )
         ep_predicted_mask = tokenizer.decode(result.logits[0, 4].topk(5).indices)
         self.assertEqual(eg_predicted_mask, ep_predicted_mask)

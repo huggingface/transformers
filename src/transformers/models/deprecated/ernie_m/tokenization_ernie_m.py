@@ -29,7 +29,10 @@ logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "sentencepiece_model_ckpt": "sentencepiece.bpe.model"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.txt",
+    "sentencepiece_model_ckpt": "sentencepiece.bpe.model",
+}
 
 RESOURCE_FILES_NAMES = {
     "sentencepiece_model_file": "sentencepiece.bpe.model",
@@ -98,7 +101,10 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         if vocab_file is not None:
             self.vocab = self.load_vocab(filepath=vocab_file)
         else:
-            self.vocab = {self.sp_model.id_to_piece(id): id for id in range(self.sp_model.get_piece_size())}
+            self.vocab = {
+                self.sp_model.id_to_piece(id): id
+                for id in range(self.sp_model.get_piece_size())
+            }
         self.reverse_vocab = {v: k for k, v in self.vocab.items()}
 
         super().__init__(
@@ -259,7 +265,9 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         _sep = [self.sep_token_id]
         return _cls + token_ids_0 + _sep + _sep + token_ids_1 + _sep
 
-    def build_offset_mapping_with_special_tokens(self, offset_mapping_0, offset_mapping_1=None):
+    def build_offset_mapping_with_special_tokens(
+        self, offset_mapping_0, offset_mapping_1=None
+    ):
         r"""
         Build offset map from a pair of offset map by concatenating and adding offsets of special tokens. An Ernie-M
         offset_mapping has the following format:
@@ -278,9 +286,13 @@ class ErnieMTokenizer(PreTrainedTokenizer):
         if offset_mapping_1 is None:
             return [(0, 0)] + offset_mapping_0 + [(0, 0)]
 
-        return [(0, 0)] + offset_mapping_0 + [(0, 0), (0, 0)] + offset_mapping_1 + [(0, 0)]
+        return (
+            [(0, 0)] + offset_mapping_0 + [(0, 0), (0, 0)] + offset_mapping_1 + [(0, 0)]
+        )
 
-    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
+    def get_special_tokens_mask(
+        self, token_ids_0, token_ids_1=None, already_has_special_tokens=False
+    ):
         r"""
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `encode` method.
@@ -303,10 +315,15 @@ class ErnieMTokenizer(PreTrainedTokenizer):
                     "You should not supply a second sequence if the provided sequence of "
                     "ids is already formatted with special tokens for the model."
                 )
-            return [1 if x in [self.sep_token_id, self.cls_token_id] else 0 for x in token_ids_0]
+            return [
+                1 if x in [self.sep_token_id, self.cls_token_id] else 0
+                for x in token_ids_0
+            ]
 
         if token_ids_1 is not None:
-            return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+            return (
+                [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
+            )
         return [1] + ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(
@@ -378,14 +395,20 @@ class ErnieMTokenizer(PreTrainedTokenizer):
 
         return token_to_idx
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(
+        self, save_directory: str, filename_prefix: Optional[str] = None
+    ) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "")
+                + VOCAB_FILES_NAMES["vocab_file"],
             )
         else:
-            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+            vocab_file = (
+                filename_prefix + "-" if filename_prefix else ""
+            ) + save_directory
         with open(vocab_file, "w", encoding="utf-8") as writer:
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
