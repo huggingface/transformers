@@ -48,6 +48,12 @@ from .utils import (
     TensorType,
     add_start_docstrings,
     is_torch_available,
+    is_torch_cuda_available,
+    is_torch_mlu_available,
+    is_torch_mps_available,
+    is_torch_musa_available,
+    is_torch_npu_available,
+    is_torch_xpu_available,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
@@ -70,6 +76,25 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
+
+
+def get_best_available_device() -> "torch.device":
+    """
+    Get the best available torch device.
+    """
+    if is_torch_mlu_available():
+        return torch.device("mlu:0")
+    if is_torch_musa_available():
+        return torch.device("musa:0")
+    if is_torch_cuda_available():
+        return torch.device("cuda:0")
+    if is_torch_npu_available():
+        return torch.device("npu:0")
+    if is_torch_xpu_available(check_device=True):
+        return torch.device("xpu:0")
+    if is_torch_mps_available():
+        return torch.device("mps:0")
+    return torch.device("cpu")
 
 
 def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
@@ -139,6 +164,7 @@ class DefaultFastImageProcessorInitKwargs(TypedDict, total=False):
     image_mean: Optional[Union[float, List[float]]]
     image_std: Optional[Union[float, List[float]]]
     do_convert_rgb: Optional[bool]
+    device: Optional["torch.device"]
 
 
 class DefaultFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorInitKwargs):
@@ -186,7 +212,9 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
             number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `self.image_std`):
-            Whether to convert the image to RGB."""
+            Whether to convert the image to RGB.
+        device (`torch.device`, *optional*):
+            The device to process the images on. If unset, it is set to the best available device."""
 
 BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
     Preprocess an image or batch of images.
@@ -499,7 +527,10 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # todo: yoni - check if we can parallelize this efficiently
         processed_images = []
         for image in images:
-            processed_images.append(process_image_fn(image))
+            if isinstance(image, (list, tuple)):
+                processed_images.extend([process_image_fn(img) for img in image])
+            else:
+                processed_images.append(process_image_fn(image))
 
         return processed_images
 
@@ -567,7 +598,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_convert_rgb = kwargs.pop("do_convert_rgb")
         input_data_format = kwargs.pop("input_data_format")
         device = kwargs.pop("device")
-
+        if device is None or device == "cpu" or device == torch.device("cpu"):
+            if (best_available_device := get_best_available_device()) != torch.device("cpu"):
+                logger.warning_once(
+                    f"`device` is 'cpu' or None in {self.__class__.__name__}, but {best_available_device} is available. "
+                    f"For faster image processing, set `device='{best_available_device}'` when instantiating or calling the image processor."
+                )
         images = self._prepare_input_images(
             images=images, do_convert_rgb=do_convert_rgb, input_data_format=input_data_format, device=device
         )
@@ -594,7 +630,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             image_mean=image_mean,
             image_std=image_std,
             data_format=data_format if data_format is not None else ChannelDimension.FIRST,
-            device=images[0].device,
+            device=images[0].device if not isinstance(images[0], (list, tuple)) else images[0][0].device,
             do_resize=kwargs.get("do_resize"),
             do_center_crop=kwargs.get("do_center_crop"),
             do_rescale=kwargs.get("do_rescale"),
@@ -658,6 +694,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def to_dict(self):
         encoder_dict = super().to_dict()
         encoder_dict.pop("_valid_processor_keys", None)
+        encoder_dict.pop("device", None)
         return encoder_dict
 
 
