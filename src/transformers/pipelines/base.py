@@ -1010,6 +1010,9 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             ):
                 self.generation_config.pad_token_id = self.tokenizer.pad_token_id
 
+            if self.generation_config.suppress_tokens == []:
+                self.generation_config.suppress_tokens = None
+
         self.call_count = 0
         self._batch_size = kwargs.pop("batch_size", None)
         self._num_workers = kwargs.pop("num_workers", None)
