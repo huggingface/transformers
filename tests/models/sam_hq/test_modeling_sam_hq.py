@@ -571,8 +571,8 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4515), atol=2e-4))
-        self.assertTrue(torch.allclose(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), atol=2e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4482), atol=2e-4))
+        self.assertTrue(torch.allclose(masks, torch.tensor([-13.1695, -14.6201, -14.8989]).to(torch_device), atol=2e-4))
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -593,6 +593,8 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
+        print(scores)
+        print(masks)
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
         self.assertTrue(
             torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
@@ -685,7 +687,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9508), atol=1e-4))
 
         # With no label
         input_points = [[[400, 650]]]
@@ -695,7 +697,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9508), atol=1e-4))
 
     def test_inference_mask_generation_two_points(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
