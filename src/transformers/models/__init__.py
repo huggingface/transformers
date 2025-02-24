@@ -264,6 +264,7 @@ from . import (
     t5,
     table_transformer,
     tapas,
+    telechat2,
     textnet,
     time_series_transformer,
     timesformer,
