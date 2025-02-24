@@ -785,17 +785,18 @@ def _load_state_dict_into_meta_model(
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
-    if device_map is None or '' not in device_map:
-        device_map = {'': torch.device("cpu")}
-    elif isinstance(device_map[''], int):
+    if device_map is None or "" not in device_map:
+        device_map = {"": torch.device("cpu")}
+    elif isinstance(device_map[""], int):
         pass
     else:
-        device_map[''] = device_map[''].index
-
-    foo = torch.empty((int(4e9),), dtype=torch.bfloat16, device=device_map[''])
+        device_map[""] = device_map[""].index
+    
+    # TODO remove once 
+    foo = torch.empty((int(4e9),), dtype=torch.bfloat16, device=device_map[""])
     del foo
 
-    with safe_open(shard_file, framework="pt", device=device_map['']) as file_pointer:
+    with safe_open(shard_file, framework="pt", device=device_map[""]) as file_pointer:
         error_msgs = []
 
         is_quantized = hf_quantizer is not None
@@ -809,7 +810,9 @@ def _load_state_dict_into_meta_model(
                 full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
         for param_name, empty_param in state_dict.items():
-            new_param_name, empty_param = list(model._fix_state_dict_keys_on_load({param_name: empty_param}).items())[0]
+            new_param_name, empty_param = list(model._fix_state_dict_keys_on_load({param_name: empty_param}).items())[
+                0
+            ]
 
             if new_param_name not in expected_keys:
                 continue
@@ -836,7 +839,7 @@ def _load_state_dict_into_meta_model(
             # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
             # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
             old_param = model
-            missing_keys, unexpected_keys, error_msgs = [],[],[]
+            missing_keys, unexpected_keys, error_msgs = [], [], []
             splits = param_name.split(".")
             for split in splits:
                 # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
@@ -854,8 +857,7 @@ def _load_state_dict_into_meta_model(
                 if old_param.is_contiguous():
                     _param_to_contiguous = True  # TODO not taking into account anymore
 
-
-            if device_mesh is not None: # In this case, the param is already on the correct device!
+            if device_mesh is not None:  # In this case, the param is already on the correct device!
                 layer = new_param_name.rsplit(".", 1)[0]
                 try:
                     module_to_tp: torch.nn.Module = model.get_submodule(layer)
@@ -887,22 +889,26 @@ def _load_state_dict_into_meta_model(
                         param = param[:]
                     module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype)
                 else:
-                    missing_keys, unexpected_keys = module_to_tp.load_state_dict({new_param_name.rsplit('.',1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True)
+                    missing_keys, unexpected_keys = module_to_tp.load_state_dict(
+                        {new_param_name.rsplit(".", 1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True
+                    )
             else:
                 if device_map is None:
                     param_device = "cpu"
                 else:
-                    module_name = module_name.rsplit("." ,1)[0]
+                    module_name = module_name.rsplit(".", 1)[0]
                     if module_name == "" or module_name not in device_map:
-                        if list(device_map.keys()) == ['']:
-                            param_device = device_map['']
+                        if list(device_map.keys()) == [""]:
+                            param_device = device_map[""]
                         else:
-                            raise ValueError(f"`device_map` is used, but {new_param_name} doesn't have any device set. {device_map}")
+                            raise ValueError(
+                                f"`device_map` is used, but {new_param_name} doesn't have any device set. {device_map}"
+                            )
                     else:
                         param_device = device_map[module_name]
 
                 if param_device == "disk" and not is_safetensors:
-                        offload_index = offload_weight(param[:], new_param_name, offload_folder, offload_index)
+                    offload_index = offload_weight(param[:], new_param_name, offload_folder, offload_index)
                 elif param_device == "cpu" and state_dict_index is not None:
                     state_dict_index = offload_weight(param[:], new_param_name, state_dict_folder, state_dict_index)
                 elif (
@@ -916,26 +922,34 @@ def _load_state_dict_into_meta_model(
                 ):
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                    module = model.get_submodule(new_param_name.rsplit('.', 1)[0])
-                    module._load_from_state_dict({"weight":param[:]}, "", {"assign_to_params_buffers": True}, True,  missing_keys, unexpected_keys, error_msgs)
+                    module = model.get_submodule(new_param_name.rsplit(".", 1)[0])
+                    module._load_from_state_dict(
+                        {"weight": param[:]},
+                        "",
+                        {"assign_to_params_buffers": True},
+                        True,
+                        missing_keys,
+                        unexpected_keys,
+                        error_msgs,
+                    )
                 else:
-                        hf_quantizer.create_quantized_param(
-                            model, param[:], new_param_name, param_device, state_dict, unexpected_keys
-                        )
-                        # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-                        # and then cast it to CPU to avoid excessive memory usage on each GPU
-                        # in comparison to the sharded model across GPUs.
-                        if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                            module, tensor_name = get_module_from_name(model, new_param_name)
-                            value = getattr(module, tensor_name)
-                            param_to = "cpu"
-                            if is_fsdp_enabled() and not is_local_dist_rank_0():
-                                param_to = "meta"
-                            val_kwargs = {}
-                            if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
-                                val_kwargs["requires_grad"] = False
-                            value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
-                            setattr(module, tensor_name, value)
+                    hf_quantizer.create_quantized_param(
+                        model, param[:], new_param_name, param_device, state_dict, unexpected_keys
+                    )
+                    # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+                    # and then cast it to CPU to avoid excessive memory usage on each GPU
+                    # in comparison to the sharded model across GPUs.
+                    if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                        module, tensor_name = get_module_from_name(model, new_param_name)
+                        value = getattr(module, tensor_name)
+                        param_to = "cpu"
+                        if is_fsdp_enabled() and not is_local_dist_rank_0():
+                            param_to = "meta"
+                        val_kwargs = {}
+                        if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                            val_kwargs["requires_grad"] = False
+                        value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                        setattr(module, tensor_name, value)
 
     return error_msgs, offload_index, state_dict_index
 
