@@ -73,7 +73,7 @@ if is_torch_available():
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
-        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded"]
+        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(CACHE_CONFIG_MAPPING.keys()) + ["offloaded"] + ["shared"]
     )
 
 
@@ -178,6 +178,7 @@ class GenerationConfig(PushToHubMixin):
             - `"static"`: [`StaticCache`]
             - `"offloaded_static"`: [`OffloadedStaticCache`]
             - `"sliding_window"`: [`SlidingWindowCache`]
+            - `"shared"`: [`SharedCache`]
             - `"hybrid"`: [`HybridCache`]
             - `"mamba"`: [`MambaCache`]
             - `"quantized"`: [`QuantizedCache`]
