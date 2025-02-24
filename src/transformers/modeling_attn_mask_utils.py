@@ -26,7 +26,7 @@ class AttentionMaskConverter:
         - Create a causal 4d mask
         - Create a causal 4d mask with slided window
         - Convert a 2d attention mask (batch_size, query_length) to a 4d attention mask (batch_size, 1, query_length,
-          key_value_length) that can be multiplied with attention scores
+          key_value_length) that can be added with attention scores
 
     Examples:
 
