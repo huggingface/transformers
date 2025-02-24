@@ -33,7 +33,7 @@ from functools import partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 from zipfile import is_zipfile
-
+from safetensors.torch import load
 import torch
 import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -392,6 +392,21 @@ def dtype_byte_size(dtype):
     bit_size = int(bit_search.groups()[0])
     return bit_size // 8
 
+torch_dtype_to_safe_str = {
+    torch.bool: "BOOL",
+    torch.uint8: "U8",
+    torch.int8: "I8",
+    torch.int16: "I16",
+    torch.uint16: "U16",
+    torch.float16: "F16",
+    torch.bfloat16: "BF16",
+    torch.int32: "I32",
+    torch.uint32: "U32",
+    torch.float32: "F32",
+    torch.float64: "F64",
+    torch.int64: "I64",
+    torch.uint64: "U64",
+}
 
 def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefix=""):
     """
@@ -421,7 +436,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
     # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
     first_key = next(iter(model_to_load.state_dict().keys()))
     if start_prefix + first_key in state_dict:
-        return state_dict[start_prefix + first_key].get_dtype() == model_to_load.state_dict()[first_key].dtype
+        return state_dict[start_prefix + first_key]["dtype"] == torch_dtype_to_safe_str[model_to_load.state_dict()[first_key].dtype]
 
     # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
     return False
@@ -533,7 +548,10 @@ def load_state_dict(
                 )
             state_dict = {}
             for k in f.keys():
-                state_dict[k] = f.get_slice(k).get_shape()
+                state_dict[k] = {
+                    "shape": f.get_slice(k).get_shape(),
+                    "dtype": f.get_slice(k).get_dtype(),
+                }
             return state_dict
     try:
         if map_location is None:
@@ -679,53 +697,6 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
-    # copy state_dict so _load_from_state_dict can modify it
-    metadata = getattr(state_dict, "_metadata", None)
-    state_dict = state_dict.copy()
-    if metadata is not None:
-        state_dict._metadata = metadata
-
-    error_msgs = []
-
-    # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
-    # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
-        local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
-
-        args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
-        # Parameters of module and children will start with prefix. We can exit early if there are none in this
-        # state_dict
-        if len([key for key in state_dict if key.startswith(prefix)]) > 0:
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-
-                # In sharded models, each shard has only part of the full state_dict, so only gather
-                # parameters that are in the current state_dict.
-                named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-                params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
-                if len(params_to_gather) > 0:
-                    # because zero3 puts placeholders in model params, this context
-                    # manager gathers (unpartitions) the params of the current layer, then loads from
-                    # the state dict and then re-partitions them again
-                    with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
-                        if torch.distributed.get_rank() == 0:
-                            module._load_from_state_dict(*args)
-            else:
-                module._load_from_state_dict(*args)
-
-        for name, child in module._modules.items():
-            if child is not None:
-                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
-
-    load(model_to_load, state_dict, prefix=start_prefix, assign_to_params_buffers=assign_to_params_buffers)
-    # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
-    # it's safe to delete it.
-    del state_dict
-
-    return error_msgs
-
 
 def find_submodule_and_param_name(model, long_key, start_prefix):
     """
@@ -827,7 +798,7 @@ def _load_state_dict_into_meta_model(
             for submodule in model.modules():
                 full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
-        for param_name, param_shape in state_dict.items():
+        for param_name, (param_shape, param_dtype) in state_dict.items():
             if param_name not in expected_keys:
                 continue
 
@@ -839,8 +810,8 @@ def _load_state_dict_into_meta_model(
             param = file_pointer.get_slice(param_name)
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
-            is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.get_dtype() == torch.float8_e4m3fn
-            if dtype is not None and "F" in param.get_dtype() and not is_param_float8_e4m3fn:
+            is_param_float8_e4m3fn = is_torch_e4m3fn_available and param_dtype == torch.float8_e4m3fn
+            if dtype is not None and "F" in param_dtype and not is_param_float8_e4m3fn:
                 if (
                     keep_in_fp32_modules is not None
                     and keep_in_fp32_modules.search(param_name)
@@ -3533,11 +3504,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
         device_mesh = None
-        # `device_map` pointing to the correct device
-        device_mesh = None
         if tp_plan is not None:
-            if not is_torch_greater_or_equal("2.5"):
-                raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
             if not is_torch_greater_or_equal("2.5"):
                 raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
             if not torch.distributed.is_initialized():
@@ -3550,10 +3517,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-
-            # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
 
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
@@ -3654,7 +3617,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 low_cpu_mem_usage = True
             elif not low_cpu_mem_usage:
                 raise ValueError("Passing along a `device_map` or a `tp_plan` requires `low_cpu_mem_usage=True`")
-                raise ValueError("Passing along a `device_map` or a `tp_plan` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
             if is_deepspeed_zero3_enabled():
@@ -3663,7 +3625,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             elif not is_accelerate_available():
                 raise ImportError(
-                    f"Using `low_cpu_mem_usage=True`, a `device_map` or a `tp_plan` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                     f"Using `low_cpu_mem_usage=True`, a `device_map` or a `tp_plan` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
 
@@ -3761,10 +3722,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_map = hf_quantizer.update_device_map(device_map)
 
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
-            if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
-            else:
-                user_agent["quant"] = hf_quantizer.quantization_config.quant_method
             if hasattr(hf_quantizer.quantization_config.quant_method, "value"):
                 user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
             else:
@@ -4248,9 +4205,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if device_mesh is not None and not model.supports_tp_plan:
             raise NotImplementedError("This model does not have a tensor parallel plan.")
 
-        if device_mesh is not None and not model.supports_tp_plan:
-            raise NotImplementedError("This model does not have a tensor parallel plan.")
-
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
@@ -4436,8 +4390,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
-        # harm performances)
         # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances)
         if device_map is not None and device_mesh is None:
@@ -4722,6 +4674,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
+                        # TODO the dictionnary being passed does not contains
                         hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
@@ -4768,7 +4721,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for name, param in model.named_parameters():
                 if keep_in_fp32_modules.search(name):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)
+                    param.data = param.data.to(torch.float32) # TODO @Cyrilvallez: we seem to do this twice
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
@@ -4807,21 +4760,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     elif add_prefix_to_model:
                         # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
                         model_key = ".".join(model_key.split(".")[1:])
-
+                    import math
                     if (
                         model_key in model_state_dict
-                        and state_dict[checkpoint_key] != model_state_dict[model_key].shape
+                        and state_dict[checkpoint_key]["shape"] != model_state_dict[model_key].shape
                     ):
                         if (
-                            state_dict[checkpoint_key][-1] == 1
-                            and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
+                            state_dict[checkpoint_key]["shape"][-1] == 1
+                            and math.prod(state_dict[checkpoint_key]["shape"]) * 2 == model_state_dict[model_key].numel()
                         ):
                             # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                             # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                             pass
                         else:
                             mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key], model_state_dict[model_key].shape)
+                                (checkpoint_key, state_dict[checkpoint_key]["shape"], model_state_dict[model_key].shape)
                             )
                             del state_dict[checkpoint_key]
             return mismatched_keys
@@ -4850,6 +4803,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             offload_index = None
 
+
+        error_msgs = []
         if state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
@@ -4889,17 +4844,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
+                with open(resolved_archive_file, "rb") as f:
+                    data = f.read()
+                state_dict = load(data)
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                error_msgs = _load_state_dict_into_model(
-                    model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
-                )
-
+                missing_keys, unexpected_keys = model_to_load.load_state_dict(fixed_state_dict, assign_to_params_buffers)
+                error_msg = missing_keys
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]
 
-            error_msgs = []
             mismatched_keys = []
             if not is_safetensors:
                 offload_index = {} if device_map is not None and "disk" in device_map.values() else None
@@ -4956,6 +4911,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                 )
                     else:
+                        import pdb;pdb.set_trace()
                         fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
@@ -4982,11 +4938,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         assign_to_params_buffers = check_support_param_buffer_assignment(
                             model_to_load, state_dict, start_prefix
                         )
+                    # properly read the state dict now:
+                    with open(resolved_archive_file, "rb") as f:
+                        data = f.read()
+                    state_dict = load(data)
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                    error_msgs += _load_state_dict_into_model(
-                        model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
-                    )
-
+                    error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign_to_params_buffers)
                 # force memory release
                 del state_dict
                 gc.collect()
