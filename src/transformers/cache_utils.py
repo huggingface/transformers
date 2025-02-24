@@ -369,11 +369,9 @@ class DynamicCache(Cache):
         # corresponds to a layer and contains tuples of key and values ( [(k_0, v_0), (k_1, v_1), ..., (k_n, v_n)],
         # where n is the number of caches gathered by torch.distributed, one cache per replica).
         if _distributed_cache_data is not None:
-            for cache_data in _distributed_cache_data:
-                key_states, value_states = zip(*cache_data)
-                # concat on the batch size dimension
-                self.key_cache.append(torch.cat(key_states, dim=0))
-                self.value_cache.append(torch.cat(value_states, dim=0))
+            for key_states, value_states in _distributed_cache_data:
+                self.key_cache.append(key_states)
+                self.value_cache.append(value_states)
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
