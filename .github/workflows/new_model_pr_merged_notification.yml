@@ -5,7 +5,7 @@ on:
   push:
     branches:
       - main
-      - action_to_notify_new_model_push
+      - action_to_notify_new_model_push_backup
 
 jobs:
   notify_new_model:
