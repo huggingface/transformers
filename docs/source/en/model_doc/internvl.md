@@ -93,7 +93,7 @@ This example demonstrates how to perform inference on a single image with the In
 ...     }
 ... ]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+>>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 >>> generate_ids = model.generate(**inputs, max_new_tokens=50)
 >>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -124,7 +124,7 @@ This example shows how to generate text using the InternVL model without providi
 ...     }
 ... ]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
+>>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
 
 >>> generate_ids = model.generate(**inputs, max_new_tokens=50)
 >>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -167,7 +167,7 @@ InternVL models also support batched image and text inputs.
 ... ]
 
 
->>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+>>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
 
@@ -211,7 +211,7 @@ This implementation of the InternVL models supports batched text-images inputs w
 ...     ],
 >>> ]
 
->>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
+>>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
 
@@ -252,8 +252,7 @@ TODO modify video loading
 ...     add_generation_prompt=True,
 ...     tokenize=True,
 ...     return_dict=True,
-...     sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
->>> ).to(model.device)
+>>> ).to(model.device, dtype=torch.float16)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
 
@@ -311,8 +310,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 ...     tokenize=True,
 ...     return_dict=True,
 ...     return_tensors="pt",
-...     sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
->>> ).to(model.device)
+>>> ).to(model.device, dtype=torch.bfloat16)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
 

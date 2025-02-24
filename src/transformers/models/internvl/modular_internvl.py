@@ -14,7 +14,8 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Tuple, Union
+import math
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -35,8 +36,6 @@ from transformers.models.beit.modeling_beit import (
     BeitPooler,
     BeitPreTrainedModel,
     BeitRelativePositionBias,
-    BeitSdpaSelfAttention,
-    BeitSelfAttention,
     BeitSelfOutput,
 )
 from transformers.models.llava.modeling_llava import (
@@ -46,13 +45,14 @@ from transformers.models.llava.modeling_llava import (
 )
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
@@ -62,7 +62,7 @@ from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
 
 if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -77,7 +77,49 @@ class InternVLVisionRelativePositionBias(BeitRelativePositionBias):
     pass
 
 
-class InternVLVisionSelfAttention(BeitSelfAttention):
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    head_mask: Optional[torch.Tensor] = None,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = key
+    value_states = value
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    # Mask heads if we want to
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class InternVLVisionSelfAttention(nn.Module):
     def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
         self.config = config
@@ -90,6 +132,8 @@ class InternVLVisionSelfAttention(BeitSelfAttention):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = 1 / math.sqrt(self.attention_head_size)
+        self.is_causal = False
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
@@ -105,6 +149,78 @@ class InternVLVisionSelfAttention(BeitSelfAttention):
                 f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
+
+    def transpose_for_scores(self, x):
+        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+        x = x.view(*new_x_shape)
+        return x.permute(0, 2, 1, 3)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        relative_position_bias: Optional[torch.Tensor] = None,
+        interpolate_pos_encoding: bool = False,
+        resolution: Optional[Tuple[int]] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
+        mixed_query_layer = self.query(hidden_states)
+
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(mixed_query_layer)
+
+        attn_bias = None
+        if self.has_relative_position_bias:
+            height, width = resolution
+            window_size = (height // self.config.patch_size, width // self.config.patch_size)
+            attn_bias = self.relative_position_bias(
+                window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
+            )
+
+        # Add shared relative position bias if provided.
+        if relative_position_bias is not None:
+            if attn_bias is None:
+                attn_bias = relative_position_bias
+            else:
+                attn_bias += relative_position_bias
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and (output_attentions or head_mask is not None):
+                logger.warning_once(
+                    "`sdpa` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
+                    "support `output_attentions=True` or `head_mask`. Falling back to the eager implementation, "
+                    "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                    'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            elif self.config._attn_implementation == "flash_attention_2" and head_mask is not None:
+                logger.warning_once(
+                    "`flash_attention_2` is used but it does not support `head_mask`. Falling back to the eager implementation, "
+                    "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                    'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
+            else:
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_bias,
+            output_attentions=output_attentions,
+            head_mask=head_mask,
+            dropout=0.0 if not self.training else self.config.attention_probs_dropout_prob,
+            scaling=self.scaling,
+            is_causal=self.is_causal,  # Force to `self.is_causal` for SDPA
+            **kwargs,
+        )
+
+        new_context_layer_shape = attn_output.size()[:-2] + (self.all_head_size,)
+        attn_output = attn_output.view(*new_context_layer_shape)
+        return attn_output, attn_weights
 
 
 class InternVLVisionPreTrainedModel(BeitPreTrainedModel):
@@ -127,126 +243,14 @@ class InternVLVisionEmbeddings(BeitEmbeddings):
     pass
 
 
-class InternVLVisionSdpaSelfAttention(BeitSdpaSelfAttention):
-    pass
-
-
-class InternVLVisionFlashSelfAttention2(InternVLVisionSelfAttention):
-    """
-    InternVLVisionFlashSelfAttention2 flash attention module. This module inherits from `InternVLVisionSelfAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        output_attentions = False
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.query(hidden_states)
-        key_states = self.key(hidden_states)
-        value_states = self.value(hidden_states)
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size)
-        key_states = key_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_attention_heads, self.attention_head_size).transpose(
-            1, 2
-        )
-
-        kv_seq_len = key_states.shape[-2]
-        if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        dropout_rate = self.config.attention_probs_dropout_prob if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (Idefics3VisionRMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
-            else:
-                target_dtype = self.query.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            q_len,
-            dropout=dropout_rate,
-            is_causal=False,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
-
-        attn_output = attn_output.reshape(bsz, q_len, self.all_head_size).contiguous()
-        # attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
 class InternVLVisionSelfOutput(BeitSelfOutput):
     pass
-
-
-INTERNVL_VISION_ATTENTION_CLASSES = {
-    "eager": InternVLVisionSelfAttention,
-    "sdpa": InternVLVisionSdpaSelfAttention,
-    "flash_attention_2": InternVLVisionFlashSelfAttention2,
-}
 
 
 class InternVLVisionAttention(BeitAttention):
     def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
-        self.attention = INTERNVL_VISION_ATTENTION_CLASSES[config._attn_implementation](
-            config, window_size=window_size
-        )
+        self.attention = InternVLVisionSelfAttention(config, window_size=window_size)
         self.output = InternVLVisionSelfOutput(config)
         self.pruned_heads = set()
 
