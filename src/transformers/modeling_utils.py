@@ -866,7 +866,9 @@ def _load_state_dict_into_meta_model(
                 if plan := re.search(full_tp_plan_, param_name_):
                     match = re.sub("[0-9]+", "*", plan[0])
                     current_module_plan = full_tp_plan[match]
+                # TODO currently this only supports weights, not bias
                 if current_module_plan is not None:
+                    # replace the linear module
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
                     rank = device_map[""].index
                     row, col = empty_param.shape
@@ -4423,6 +4425,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 and ("cpu" in device_map.values() or "disk" in device_map.values())
             ):
                 device_map_kwargs["offload_buffers"] = True
+
+        # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
+        # not part of the state_dict (persistent=False)
+        if device_mesh is not None:
+            for buffer in model.buffers():
+                if buffer.device != tp_device:
+                    buffer.data = buffer.to(tp_device)
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
