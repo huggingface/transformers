@@ -366,7 +366,8 @@ class DynamicCache(Cache):
 
         # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
         # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
-        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed.
+        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
+        # (shape=[global batch size, num_heads, seq_len, head_dim]).
         # WARNING: `_distributed_cache_data` must be the first argument in `__init__`, otherwise we'll break
         # compatibility. The name of the argument doesn't matter.
         if _distributed_cache_data is not None:
