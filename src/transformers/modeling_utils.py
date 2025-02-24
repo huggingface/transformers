@@ -786,6 +786,9 @@ def _load_state_dict_into_meta_model(
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
+    if device_map is None:
+        device_map = {"": "cpu"}
+
     with safe_open(shard_file, framework="pt", device=device_map[""]) as file_pointer:
         error_msgs = []
 
@@ -799,7 +802,7 @@ def _load_state_dict_into_meta_model(
             for submodule in model.modules():
                 full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
-        for param_name, (param_shape, param_dtype) in state_dict.items():
+        for param_name, empty_param in state_dict.items():
             if param_name not in expected_keys:
                 continue
 
@@ -811,8 +814,8 @@ def _load_state_dict_into_meta_model(
             param = file_pointer.get_slice(param_name)
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
-            is_param_float8_e4m3fn = is_torch_e4m3fn_available and param_dtype == torch.float8_e4m3fn
-            if dtype is not None and "F" in param_dtype and not is_param_float8_e4m3fn:
+            is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+            if dtype is not None and empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
                 if (
                     keep_in_fp32_modules is not None
                     and keep_in_fp32_modules.search(param_name)
@@ -867,7 +870,7 @@ def _load_state_dict_into_meta_model(
                         rank = device_map[""].index
                         translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
                         layer = model.get_submodule(param_name.rsplit(".", 1)[0])
-                        row, col = param_shape
+                        row, col = empty_param.shape
                         if "row" in current_module_plan or "down" in param_name:
                             param = param[:, rank * (col // device_mesh.size) : (rank + 1) * (col // device_mesh.size)]
                         else:
