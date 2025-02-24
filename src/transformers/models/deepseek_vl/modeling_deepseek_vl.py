@@ -98,10 +98,10 @@ class DeepseekVLSiglipVisionEncoder(nn.Module):
         self.resize = torchvision.transforms.Resize(config.image_size, antialias=True)
         self.norm = torchvision.transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         pixel_values = self.resize(pixel_values)
         pixel_values = self.norm(pixel_values)
-        output = self.model(pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        output = self.model(pixel_values=pixel_values)
         output = output[0] # last_hidden_state
         return output
 
@@ -118,11 +118,11 @@ class DeepseekVLVisionEncoder(nn.Module):
         if self.use_high_res:
             self.high_res_encoder = DeepseekVLSamVisionEncoder(config.high_res_config)
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, n_images, n_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * n_images, n_channels, height, width)
 
-        low_res_encodings = self.low_res_encoder(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        low_res_encodings = self.low_res_encoder(pixel_values)
         high_res_encodings = self.high_res_encoder(pixel_values) if self.use_high_res else None
 
         return low_res_encodings, high_res_encodings
@@ -201,7 +201,6 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ):
@@ -230,7 +229,6 @@ class DeepseekVLModel(DeepseekVLPreTrainedModel):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
             cache_position=cache_position,
         )
@@ -260,7 +258,6 @@ class DeepseekVLForVisionText2Text(DeepseekVLPreTrainedModel, GenerationMixin):
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
     ):
@@ -279,7 +276,6 @@ class DeepseekVLForVisionText2Text(DeepseekVLPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
             cache_position=cache_position,
         )
