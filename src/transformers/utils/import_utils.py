@@ -45,6 +45,11 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
     package_version = "N/A"
     if package_exists:
         try:
+            # TODO: Once python 3.9 support is dropped, `importlib.metadata.packages_distributions()`
+            # should be used here to map from package name to distribution names
+            # e.g. PIL -> Pillow, Pillow-SIMD; quark -> amd-quark; onnxruntime -> onnxruntime-gpu.
+            # `importlib.metadata.packages_distributions()` is not available in Python 3.9.
+
             # Primary method to get the package version
             package_version = importlib.metadata.version(pkg_name)
         except importlib.metadata.PackageNotFoundError:
@@ -61,6 +66,12 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> Union[
                         package_exists = False
                 except ImportError:
                     # If the package can't be imported, it's not available
+                    package_exists = False
+            elif pkg_name == "quark":
+                # TODO: remove once `importlib.metadata.packages_distributions()` is supported.
+                try:
+                    package_version = importlib.metadata.version("amd-quark")
+                except Exception:
                     package_exists = False
             else:
                 # For packages other than "torch", don't attempt the fallback and set as not available

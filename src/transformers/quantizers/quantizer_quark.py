@@ -108,10 +108,8 @@ class QuarkHfQuantizer(HfQuantizer):
         return model
 
     def is_serializable(self, safe_serialization=None):
-        # TODO: check serialization
         return False
 
     @property
     def is_trainable(self):
-        # TODO: check trainable
         return False

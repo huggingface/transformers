@@ -96,7 +96,7 @@ Use the table below to help you decide which quantization method to use.
 
 <Tip>
 
-**6:** Quark is hardware agnostic, and may not supported accelerated inference / kernels for every quantization scheme and every hardware and PyTorch distribution.
+**6:** Quark is hardware agnostic, and may not support accelerated inference / kernels for every quantization scheme, hardware and PyTorch distribution.
 
 </Tip>
 
