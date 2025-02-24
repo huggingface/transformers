@@ -43,15 +43,12 @@ class JanusImageProcessingTester:
         max_resolution=200,
         do_resize=True,
         size=None,
-        do_center_crop=True,
-        crop_size=None,
         do_normalize=True,
         image_mean=[1.0, 1.0, 1.0],
         image_std=[1.0, 1.0, 1.0],
         do_convert_rgb=True,
     ):
         size = size if size is not None else {"height": 384, "width": 384}
-        crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -60,8 +57,6 @@ class JanusImageProcessingTester:
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
-        self.do_center_crop = do_center_crop
-        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -71,17 +66,12 @@ class JanusImageProcessingTester:
         return {
             "do_resize": self.do_resize,
             "size": self.size,
-            "do_center_crop": self.do_center_crop,
-            "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "do_convert_rgb": self.do_convert_rgb,
         }
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.expected_output_image_shape
-    def expected_output_image_shape(self, images):
-        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -115,8 +105,6 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "center_crop"))
         self.assertTrue(hasattr(image_processing, "do_normalize"))
         self.assertTrue(hasattr(image_processing, "image_mean"))
         self.assertTrue(hasattr(image_processing, "image_std"))
@@ -125,11 +113,11 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
         self.assertEqual(image_processor.size, {"height": 384, "width": 384})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+        self.assertEqual(image_processor.image_mean, [1.0, 1.0, 1.0])
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"height": 384, "width": 384})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, image_mean=[1.0, 2.0, 1.0])
+        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+        self.assertEqual(image_processor.image_mean, [1.0, 2.0, 1.0])
 
     def test_call_pil(self):
         # Initialize image_processing
@@ -203,3 +191,12 @@ class JanusImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Image processor should return same pixel values, independently of input format
         self.assertTrue((encoded_images_nested == encoded_images).all())
+
+    @unittest.skip(reason="not supported")
+    # This test assumes the image processor can do center crop. Our processor is based on the one from Siglip
+    # which does not support it. Siglip test suite does not have this test, so we skip it too.
+    def test_call_numpy_4_channels(self):
+        pass
+
+    def test_image_processor_preprocess_arguments(self):
+        super().test_image_processor_preprocess_arguments()

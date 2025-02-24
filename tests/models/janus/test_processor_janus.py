@@ -382,3 +382,4 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="np",
         )
         self.assertLessEqual(out_dict[self.images_input_name][0][0].mean(), 0)
+
