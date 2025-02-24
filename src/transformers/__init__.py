@@ -425,6 +425,9 @@ _import_structure = {
         "DPRReaderTokenizer",
     ],
     "models.dpt": ["DPTConfig"],
+    "models.eagle_2": [
+        "Eagle2Config",
+    ],
     "models.efficientnet": ["EfficientNetConfig"],
     "models.electra": [
         "ElectraConfig",
@@ -1165,7 +1168,7 @@ else:
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
-
+    _import_structure["models.ealge_2"].extend(["AriaImageProcessor"])
 
 try:
     if not (is_sentencepiece_available() and is_tokenizers_available()):

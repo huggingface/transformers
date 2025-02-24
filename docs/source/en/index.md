@@ -136,6 +136,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [DonutSwin](model_doc/donut)                       |       ✅        |         ❌         |      ❌      |
 |                           [DPR](model_doc/dpr)                           |       ✅        |         ✅         |      ❌      |
 |                           [DPT](model_doc/dpt)                           |       ✅        |         ❌         |      ❌      |
+|                [Eagle-2](model_doc/eagle-2)                              |       ✅        |         ❌         |      ❌      |
 |               [EfficientFormer](model_doc/efficientformer)               |       ✅        |         ✅         |      ❌      |
 |                  [EfficientNet](model_doc/efficientnet)                  |       ✅        |         ❌         |      ❌      |
 |                       [ELECTRA](model_doc/electra)                       |       ✅        |         ✅         |      ✅      |
