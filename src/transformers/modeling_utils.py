@@ -803,7 +803,9 @@ def _load_state_dict_into_meta_model(
                 full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
         for param_name, empty_param in state_dict.items():
-            if param_name not in expected_keys:
+            new_param_name, empty_param = list(model._fix_state_dict_keys_on_load({param_name: empty_param}).items())[0]
+
+            if new_param_name not in expected_keys:
                 continue
 
             if param_name.startswith(start_prefix):
@@ -817,7 +819,7 @@ def _load_state_dict_into_meta_model(
             if dtype is not None and empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
                 if (
                     keep_in_fp32_modules is not None
-                    and keep_in_fp32_modules.search(param_name)
+                    and keep_in_fp32_modules.search(new_param_name)
                     and dtype == torch.float16
                 ):
                     param_casting_dtype = torch.float32
@@ -847,7 +849,7 @@ def _load_state_dict_into_meta_model(
 
             
             if device_mesh is not None: # In this case, the param is already on the correct device!
-                layer = param_name.rsplit(".", 1)[0]
+                layer = new_param_name.rsplit(".", 1)[0]
                 try:
                     module_to_tp: torch.nn.Module = model.get_submodule(layer)
                 except Exception:
@@ -857,7 +859,7 @@ def _load_state_dict_into_meta_model(
 
                 prefix = "model"
                 if prefix is not None:
-                    param_name_ = param_name.replace(f"{prefix}.", "")
+                    param_name_ = new_param_name.replace(f"{prefix}.", "")
 
                 current_module_plan = None
                 full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
@@ -868,14 +870,14 @@ def _load_state_dict_into_meta_model(
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
                     rank = device_map[""].index
                     row, col = empty_param.shape
-                    if "row" in current_module_plan or "down" in param_name:
+                    if "row" in current_module_plan or "down" in new_param_name:
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
 
                     module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype, non_blocking=True)
                 else:
-                    set_module_tensor_to_device(model, param_name, param_device, param[:].to(dtype=param_casting_dtype))
+                    set_module_tensor_to_device(model, new_param_name, param_device, param[:].to(dtype=param_casting_dtype))
 
             else:
                 if device_map is None:
@@ -886,35 +888,35 @@ def _load_state_dict_into_meta_model(
                         if list(device_map.keys()) == ['']:
                             param_device = device_map['']
                         else:
-                            raise ValueError(f"`device_map` is used, but {param_name} doesn't have any device set. {device_map}")
+                            raise ValueError(f"`device_map` is used, but {new_param_name} doesn't have any device set. {device_map}")
                     else:
                         param_device = device_map[module_name]
 
                 if param_device == "disk" and not is_safetensors:
-                        offload_index = offload_weight(param[:], param_name, offload_folder, offload_index)
+                        offload_index = offload_weight(param[:], new_param_name, offload_folder, offload_index)
                 elif param_device == "cpu" and state_dict_index is not None:
-                    state_dict_index = offload_weight(param[:], param_name, state_dict_folder, state_dict_index)
+                    state_dict_index = offload_weight(param[:], new_param_name, state_dict_folder, state_dict_index)
                 elif (
                     not is_quantized
                     or (not hf_quantizer.requires_parameters_quantization)
                     or (
                         not hf_quantizer.check_quantized_param(
-                            model, param, param_name, state_dict, param_device=param_device, device_map=device_map
+                            model, param, new_param_name, state_dict, param_device=param_device, device_map=device_map
                         )
                     )
                 ):
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                    set_module_tensor_to_device(model, param_name, param_device, param[:].to(dtype=param_casting_dtype))
+                    set_module_tensor_to_device(model, new_param_name, param_device, param[:].to(dtype=param_casting_dtype))
                 else:
                     hf_quantizer.create_quantized_param(
-                        model, param, param_name, param_device, state_dict, unexpected_keys
+                        model, param, new_param_name, param_device, state_dict, unexpected_keys
                     )
                     # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                     # and then cast it to CPU to avoid excessive memory usage on each GPU
                     # in comparison to the sharded model across GPUs.
                     if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                        module, tensor_name = get_module_from_name(model, param_name)
+                        module, tensor_name = get_module_from_name(model, new_param_name)
                         value = getattr(module, tensor_name)
                         param_to = "cpu"
                         if is_fsdp_enabled() and not is_local_dist_rank_0():
@@ -4852,7 +4854,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if state_dict is not None and next(iter(state_dict.values())).device == torch.device("meta"):
                     with open(resolved_archive_file, "rb") as f:
                         data = f.read()
-                    state_dict = load(data)
+                    state_dict.update(load(data))
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 missing_keys, unexpected_keys = model_to_load.load_state_dict(
                     fixed_state_dict, assign_to_params_buffers
@@ -4948,7 +4950,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # properly read the state dict now:
                     with open(resolved_archive_file, "rb") as f:
                         data = f.read()
-                    state_dict = load(data)
+                    state_dict.update(load(data))
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                     error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign_to_params_buffers)
                 # force memory release
