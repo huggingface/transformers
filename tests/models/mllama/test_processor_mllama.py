@@ -327,6 +327,11 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             processor(text=text, images=None, padding=True)
 
+        # see https://github.com/huggingface/transformers/pull/35934
+        images = [self.image1, self.image2]
+        with self.assertRaises(ValueError):
+            processor(text=text, images=None, padding=True)
+
     # Override as MllamaProcessor needs image tokens in prompts
     def prepare_text_inputs(self, batch_size: Optional[int] = None):
         if batch_size is None:
@@ -339,4 +344,33 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return ["lower newer <|image|>"]
         return ["lower newer <|image|>", "<|image|> upper older longer string"] + ["<|image|> lower newer"] * (
             batch_size - 2
+        )
+
+    def test_unstructured_kwargs_batched(self):
+        # Overriden because Mllama expects images in nested format. For 2 images it can't infer
+        # the correct nesting, so we better throw an error
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = [[image_input[0]], [image_input[1]]]
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertTrue(
+            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
+            and len(inputs[self.text_input_name][1]) < 76
         )
