@@ -145,6 +145,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [ERNIE](model_doc/ernie)                         |       ✅        |         ❌         |      ❌      |
 |                       [ErnieM](model_doc/ernie_m)                        |       ✅        |         ❌         |      ❌      |
 |                           [ESM](model_doc/esm)                           |       ✅        |         ✅         |      ❌      |
+|                        [Evolla](model_doc/evolla)                        |       ✅        |         ❌         |      ❌      |
 |              [FairSeq Machine-Translation](model_doc/fsmt)               |       ✅        |         ❌         |      ❌      |
 |                        [Falcon](model_doc/falcon)                        |       ✅        |         ❌         |      ❌      |
 |                       [Falcon3](model_doc/falcon3)                       |       ✅        |         ❌         |      ✅      |
