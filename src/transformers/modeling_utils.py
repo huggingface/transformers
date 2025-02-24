@@ -879,9 +879,9 @@ def _load_state_dict_into_meta_model(
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
                     rank = device_map[""]
                     row, col = empty_param.shape
-                    if current_module_plan == "rowwise":
+                    if "rowwise" in current_module_plan:
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
-                    elif current_module_plan == "colwise":
+                    elif "colwise" in current_module_plan:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                     else:
                         param = param[:]
