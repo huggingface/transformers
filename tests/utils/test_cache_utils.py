@@ -627,7 +627,7 @@ class CacheIntegrationTest(unittest.TestCase):
     def test_data_parallel_dynamic_cache(self):
         """
         Tests that the dynamic cache works with nn.DataParallel. Under the hood, `DynamicCache` is rebuilt from
-        multiple `DynamicCache`in the gather step.
+        multiple `DynamicCache` in the gather step.
         """
 
         model_repo = "hf-internal-testing/tiny-random-MistralForCausalLM"
