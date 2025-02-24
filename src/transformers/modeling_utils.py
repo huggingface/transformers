@@ -538,6 +538,7 @@ def load_state_dict(
 ):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
+    We don't actually load the weights yet, just create empty tensors
     """
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
         # Check format of the archive
@@ -777,8 +778,6 @@ def _load_state_dict_into_meta_model(
 
     It also initialize tensor parallelism for each module if needed.
 
-    It also initialize tensor parallelism for each module if needed.
-
     """
 
     # XXX: remaining features to implement to be fully compatible with _load_state_dict_into_model
@@ -787,9 +786,14 @@ def _load_state_dict_into_meta_model(
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
     if device_map is None or '' not in device_map:
-        device_map = {"": torch.device("cpu")}
+        device_map = {'': torch.device("cpu")}
+    elif isinstance(device_map[''], int):
+        pass
+    else:
+        device_map[''] = device_map[''].index
 
-    with safe_open(shard_file, framework="pt", device=device_map[""].index) as file_pointer:
+    with safe_open(shard_file, framework="pt", device=device_map['']) as file_pointer:
+    # with safe_open(shard_file, framework="pt") as file_pointer:
         error_msgs = []
 
         is_quantized = hf_quantizer is not None
@@ -830,6 +834,7 @@ def _load_state_dict_into_meta_model(
             # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
             # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
             old_param = model
+            a,b,c = [],[],[]
             splits = param_name.split(".")
             for split in splits:
                 # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
@@ -870,16 +875,20 @@ def _load_state_dict_into_meta_model(
                 if current_module_plan is not None:
                     # replace the linear module
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
-                    rank = device_map[""].index
+                    rank = device_map[""]
                     row, col = empty_param.shape
                     if "row" in current_module_plan or "down" in new_param_name:
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
 
-                    module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype, non_blocking=True)
+                    # module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype)
+                    module_to_tp._load_from_state_dict({'modelweight':param}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
                 else:
-                    set_module_tensor_to_device(model, new_param_name, param_device, param[:].to(dtype=param_casting_dtype))
+                    module_to_tp._load_from_state_dict({new_param_name.rsplit('.',1)[1]:param[:]}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
+                    if len(a)>0 :
+                        module_to_tp._load_from_state_dict({'modelweight':param[:]}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
+                    # set_module_tensor_to_device(model, new_param_name, param[:].device, param[:].to(dtype=param_casting_dtype))
 
             else:
                 if device_map is None:
@@ -909,10 +918,15 @@ def _load_state_dict_into_meta_model(
                 ):
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                    set_module_tensor_to_device(model, new_param_name, param_device, param[:].to(dtype=param_casting_dtype))
+
+                    model._load_from_state_dict({new_param_name:param[:]}, "", {"assign_to_params_buffers": True}, True, a, b, c) 
+                    print(a,b,c)
+                    if len(a)>0:
+                        print(a)
+                    # set_module_tensor_to_device(model, new_param_name, param_device, param[:].to(dtype=param_casting_dtype))
                 else:
                     hf_quantizer.create_quantized_param(
-                        model, param, new_param_name, param_device, state_dict, unexpected_keys
+                        model, param[:], new_param_name, param_device, state_dict, unexpected_keys
                     )
                     # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
                     # and then cast it to CPU to avoid excessive memory usage on each GPU
