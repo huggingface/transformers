@@ -365,9 +365,10 @@ class DynamicCache(Cache):
         self.value_cache: List[torch.Tensor] = []
 
         # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
-        # and #36373 for more information. In a nutshell, it contains zip(*caches), i.e. each item in the list
-        # corresponds to a layer and contains tuples of key and values ( [(k_0, v_0), (k_1, v_1), ..., (k_n, v_n)],
-        # where n is the number of caches gathered by torch.distributed, one cache per replica).
+        # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
+        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed.
+        # WARNING: `_distributed_cache_data` must be the first argument in `__init__`, otherwise we'll break
+        # compatibility. The name of the argument doesn't matter.
         if _distributed_cache_data is not None:
             for key_states, value_states in _distributed_cache_data:
                 self.key_cache.append(key_states)
