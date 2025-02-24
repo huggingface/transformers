@@ -976,19 +976,19 @@ class GPT2Model(GPT2PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        next_cache = past_key_values if use_cache else None
+        past_key_values = past_key_values if use_cache else None
         if return_legacy_cache:
-            next_cache = past_key_values.to_legacy_cache()
+            past_key_values = past_key_values.to_legacy_cache()
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions, all_cross_attentions]
+                for v in [hidden_states, past_key_values, all_hidden_states, all_self_attentions, all_cross_attentions]
                 if v is not None
             )
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
