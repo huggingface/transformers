@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_peft,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     slow,
     torch_device,
@@ -440,7 +441,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_save_quantized(self):
         """
@@ -479,7 +480,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     self.assertTrue("pytorch_model.bin" not in os.listdir(tmpdirname))
                     self.assertTrue("model.safetensors" not in os.listdir(tmpdirname))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     def test_peft_save_quantized_regression(self):
         """
