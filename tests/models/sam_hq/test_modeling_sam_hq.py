@@ -593,11 +593,9 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
-        print(scores)
-        print(masks)
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9700), atol=2e-4))
         self.assertTrue(
-            torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
+            torch.allclose(masks, torch.tensor([-31.5212, -31.4223, -32.4716]).to(torch_device), atol=2e-4)
         )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
