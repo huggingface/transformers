@@ -792,7 +792,7 @@ def _load_state_dict_into_meta_model(
     else:
         device_map[''] = device_map[''].index
     
-    foo = torch.empty((int(8e9),), dtype=torch.bfloat16, device=device_map[''])
+    foo = torch.empty((int(4e9),), dtype=torch.bfloat16, device=device_map[''])
     del foo
 
     with safe_open(shard_file, framework="pt", device=device_map['']) as file_pointer:
