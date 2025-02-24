@@ -4673,6 +4673,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
         if hf_quantizer is not None:
             missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+            unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
 
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
@@ -4992,6 +4993,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Load back temporarily offloaded state dict
                 load_offloaded_weights(model_to_load, state_dict_index, state_dict_folder)
                 shutil.rmtree(state_dict_folder)
+
+        if hf_quantizer is not None:
+            missing_keys = hf_quantizer.update_missing_keys_after_loading(model_to_load, missing_keys, prefix)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
