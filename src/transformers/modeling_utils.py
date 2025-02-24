@@ -787,9 +787,9 @@ def _load_state_dict_into_meta_model(
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
     if device_map is None:
-        device_map = {"": "cpu"}
+        device_map = {"": torch.device("cpu")}
 
-    with safe_open(shard_file, framework="pt", device=device_map[""]) as file_pointer:
+    with safe_open(shard_file, framework="pt", device=device_map[""].index) as file_pointer:
         error_msgs = []
 
         is_quantized = hf_quantizer is not None
@@ -866,25 +866,22 @@ def _load_state_dict_into_meta_model(
                     match = re.sub("[0-9]+", "*", plan[0])
                     current_module_plan = full_tp_plan[match]
                 if current_module_plan is not None:
-                    if current_module_plan is not None:
-                        rank = device_map[""].index
-                        translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
-                        layer = model.get_submodule(param_name.rsplit(".", 1)[0])
-                        row, col = empty_param.shape
-                        if "row" in current_module_plan or "down" in param_name:
-                            param = param[:, rank * (col // device_mesh.size) : (rank + 1) * (col // device_mesh.size)]
-                        else:
-                            param = param[rank * (row // device_mesh.size) : (rank + 1) * (row // device_mesh.size), :]
-                        with torch.no_grad():
-                            layer.weight._local_tensor = param.to(
-                                device_map[""], dtype=param_casting_dtype, non_blocking=True
-                            )
+                    translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
+                    layer = model.get_submodule(param_name.rsplit(".", 1)[0])
+                    rank = device_map[""].index
+                    row, col = empty_param.shape
+                    if "row" in current_module_plan or "down" in param_name:
+                        param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
                     else:
-                        setattr(
-                            model,
-                            param_name,
-                            param[:].to(dtype=param_casting_dtype, device=device_map[""], non_blocking=True),
-                        )
+                        param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
+
+                    layer.weight._local_tensor = param.to(dtype=param_casting_dtype, non_blocking=True)
+                else:
+                    setattr(
+                        model,
+                        param_name,
+                        param[:].to(dtype=param_casting_dtype, non_blocking=True),
+                    )
 
             else:
                 set_module_kwargs["param"] = param[:]
@@ -918,7 +915,7 @@ def _load_state_dict_into_meta_model(
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
                     # For backward compatibility with older versions of `accelerate` and for non-quantized params
-                    setattr(model, param_name, param[:].to(dtype=torch.float16, non_blocking=True))
+                    setattr(model, param_name, param[:].to(param_device, dtype=torch.float16, non_blocking=True))
                 else:
                     hf_quantizer.create_quantized_param(
                         model, param, param_name, param_device, state_dict, unexpected_keys
@@ -937,7 +934,7 @@ def _load_state_dict_into_meta_model(
                             val_kwargs["requires_grad"] = False
                         value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                         setattr(module, tensor_name, value)
-                    # TODO: consider removing used param_parts from state_dict before return
+
     return error_msgs, offload_index, state_dict_index
 
 
