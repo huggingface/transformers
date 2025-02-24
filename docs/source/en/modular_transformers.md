@@ -49,7 +49,7 @@ be moved to the new Modular Transformers format in the coming months.
 To generate a single file from the modular file, run the following command.
 
 ```bash
-python utils/modular_model_converter.py --files-to-parse src/transformers/models/<your_model>/modular_<your_model>.py
+python utils/modular_model_converter.py --files_to_parse src/transformers/models/<your_model>/modular_<your_model>.py
 ```
 
 The "linter", which unravels the inheritance and creates all single-files from the modular file, will flatten the 
