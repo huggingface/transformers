@@ -791,7 +791,7 @@ def _load_state_dict_into_meta_model(
         pass
     else:
         device_map[''] = device_map[''].index
-    
+
     foo = torch.empty((int(4e9),), dtype=torch.bfloat16, device=device_map[''])
     del foo
 
@@ -854,7 +854,7 @@ def _load_state_dict_into_meta_model(
                 if old_param.is_contiguous():
                     _param_to_contiguous = True  # TODO not taking into account anymore
 
-            
+
             if device_mesh is not None: # In this case, the param is already on the correct device!
                 layer = new_param_name.rsplit(".", 1)[0]
                 try:
@@ -4217,8 +4217,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         with ContextManagers(init_contexts):
             # Let's make sure we don't run the init function of buffer modules
-            torch.set_default_dtype(torch.bfloat16)
-
             model = cls(config, *model_args, **model_kwargs)
 
         if device_mesh is not None and not model.supports_tp_plan:
@@ -4749,13 +4747,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model.apply(model._initialize_weights)
 
         # Set some modules to fp32 if any
-        if keep_in_fp32_modules is not None and keep_in_fp32_modules != "":
+        if keep_in_fp32_modules is not None and keep_in_fp32_modules.strip() != []:
             keep_in_fp32_modules = re.compile("|".join(keep_in_fp32_modules))
             for name, param in model.named_parameters():
                 if keep_in_fp32_modules.search(name):
-                    continue
                     # param = param.to(torch.float32) does not work here as only in the local scope.
-                    # param.data = param.data.to(torch.float32)  # TODO @Cyrilvallez: we seem to do this twice
+                    param.data = param.data.to(torch.float32)  # TODO @Cyrilvallez: we seem to do this twice
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
