@@ -270,7 +270,7 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.49.0", raise_if_both_names=True)
+    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.51.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
@@ -392,7 +392,7 @@ class GPT2Block(nn.Module):
 
         self.mlp = GPT2MLP(inner_dim, config)
 
-    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.49.0", raise_if_both_names=True)
+    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.51.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
@@ -837,7 +837,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 return_legacy_cache = True
                 logger.warning_once(
                     "Passing `use_cache=True` and `past_key_values=None` will is produce cache output in legacy format.  "
-                    "This behavior is deprecated and will be changed in Transformers v4.49.0. "
+                    "This behavior is deprecated and will be changed in Transformers v4.51.0. "
                     "To obtain output past_key_values as `Cache` instance you should pass an instance of `Cache` instead, e.g. "
                     "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
                 )
@@ -845,7 +845,7 @@ class GPT2Model(GPT2PreTrainedModel):
             elif not isinstance(past_key_values, Cache):
                 return_legacy_cache = True
                 logger.warning_once(
-                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.49.0. "
+                    "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.51.0. "
                     "You should pass an instance of `Cache` instead, e.g. "
                     "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
                 )
