@@ -100,22 +100,22 @@ class StyleTextToSpeech2Tokenizer(PreTrainedTokenizer):
         "Returns vocab as a dict"
         return dict(self.encoder, **self.added_tokens_encoder)
 
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        # expand symbols
-        text = regex.sub(";", ",", text)
-        text = regex.sub(":", ",", text)
-        text = regex.sub("-", " ", text)
-        text = regex.sub("&", "and", text)
+    # def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+    #     # expand symbols
+    #     text = regex.sub(";", ",", text)
+    #     text = regex.sub(":", ",", text)
+    #     text = regex.sub("-", " ", text)
+    #     text = regex.sub("&", "and", text)
 
-        # strip unnecessary symbols
-        text = regex.sub(r"[\(\)\[\]\<\>\"]+", "", text)
+    #     # strip unnecessary symbols
+    #     text = regex.sub(r"[\(\)\[\]\<\>\"]+", "", text)
 
-        # strip whitespaces
-        text = regex.sub(r"\s+", " ", text)
+    #     # strip whitespaces
+    #     text = regex.sub(r"\s+", " ", text)
 
-        text = text.upper()
+    #     text = text.upper()
 
-        return text, kwargs
+    #     return text, kwargs
 
     def _tokenize(self, text):
         """Returns a tokenized string."""
