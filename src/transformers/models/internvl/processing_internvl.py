@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +14,18 @@
 # limitations under the License.
 
 
-from typing import List, Optional, Union
+from functools import partial
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from transformers.processing_utils import (
+    AllKwargsForChatTemplate,
+    ImagesKwargs,
+    ProcessingKwargs,
+    ProcessorMixin,
+    Unpack,
+)
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
@@ -46,6 +53,9 @@ class InternVLProcessorKwargs(ProcessingKwargs, total=False):
         },
         "images_kwargs": {
             "crop_to_patches": True,
+        },
+        "videos_kwargs": {
+            "crop_to_patches": False,
         },
     }
 
@@ -102,7 +112,8 @@ class InternVLProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-
+            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
@@ -146,7 +157,7 @@ class InternVLProcessor(ProcessorMixin):
             num_frames_per_video = [len(video) for video in videos]
             patch_indices = np.cumsum(num_frames_per_video)
             output_kwargs["images_kwargs"]["crop_to_patches"] = False
-            video_inputs = self.image_processor(images=videos, **output_kwargs["images_kwargs"])
+            video_inputs = self.image_processor(images=videos, **output_kwargs["videos_kwargs"])
             video_num_patches = video_inputs.pop("num_patches")
             video_pixel_values = video_inputs.pop("pixel_values")
             video_num_patches_indices = np.cumsum(video_num_patches)
@@ -254,6 +265,53 @@ class InternVLProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(tokenizer_input_names) + list(image_processor_input_names)
+
+    # Add model-specific video sampling method when applying the template
+    def apply_chat_template(
+        self,
+        conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
+        chat_template: Optional[str] = None,
+        num_frames: int = 8,
+        initial_shift: Union[bool, float, int] = True,
+        **kwargs: Unpack[AllKwargsForChatTemplate],
+    ):
+        """
+        Similar to the `apply_chat_template` method on tokenizers, this method applies a Jinja template to input
+        conversations to turn them into a single tokenizable string.
+
+        The input is expected to be in the following format, where each message content is a list consisting of text and
+        optionally image or video inputs. One can also provide an image, video, URL or local path which will be used to form
+        `pixel_values` when `return_dict=True`. If not provided, one will get only the formatted text, optionally tokenized text.
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "text", "text": "Please describe this image in detail."},
+                ],
+            },
+        ]
+
+        Args:
+            conversation (`Union[List[Dict, [str, str]], List[List[Dict[str, str]]]]`):
+                The conversation to format.
+            chat_template (`Optional[str]`, *optional*):
+                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
+                chat template is used.
+            num_frames (`int`, *optional*, defaults to 8):
+                Number of frames to sample from a video when using the default `sample_indices_fn`.
+            initial_shift (`bool`, `float` or `int`, defaults to `0`):
+                The initial shift to apply when sampling frames using the default `sample_indices_fn`.
+                If `True`, the shift is set so that frames are sampled from the middle of the video.
+        """
+        sample_indices_fn = kwargs.pop(
+            "sample_indices_fn", partial(self.sample_indices_fn, num_frames=num_frames, initial_shift=initial_shift)
+        )
+
+        return super().apply_chat_template(
+            conversation, chat_template, num_frames=num_frames, sample_indices_fn=sample_indices_fn, **kwargs
+        )
 
 
 __all__ = ["InternVLProcessor"]

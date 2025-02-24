@@ -147,7 +147,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("ijepa", "IJepaModel"),
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
-        ("internvl", "InternVLForConditionalGeneration"),
         ("internvl_vision", "InternVLVisionModel"),
         ("jamba", "JambaModel"),
         ("jetmoe", "JetMoeModel"),

@@ -53,6 +53,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -82,7 +83,7 @@ class InternVLVisionSelfAttention(BeitSelfAttention):
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -96,10 +97,14 @@ class InternVLVisionSelfAttention(BeitSelfAttention):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-        if window_size:
+        self.has_relative_position_bias = bool(window_size)
+        if self.has_relative_position_bias:
             self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
-        else:
-            self.relative_position_bias = None
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
 
 
 class InternVLVisionPreTrainedModel(BeitPreTrainedModel):
@@ -493,6 +498,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+               The tensors corresponding to the input images.
             vision_feature_layer (`int` or `List[int]`):
                 Layer index or list of layer indices to extract features from.
             downsample_ratio (`float`):
@@ -544,6 +550,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
     ) -> Union[Tuple, InternVLCausalLMOutputWithPast]:
         r"""
         Args:
@@ -619,13 +626,11 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values.to(inputs_embeds.dtype),
-                vision_feature_layer=vision_feature_layer,
-                downsample_ratio=downsample_ratio,
+                pixel_values=pixel_values, vision_feature_layer=vision_feature_layer, downsample_ratio=downsample_ratio
             )
-            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+            n_image_tokens = (input_ids == self.config.image_token_index).sum()
             n_image_features = image_features.shape[0] * image_features.shape[1]
-            if n_image_tokens != n_image_features:
+            if not is_torchdynamo_compiling() and n_image_tokens != n_image_features:
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                 )
@@ -645,6 +650,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **lm_kwargs,
         )
 
         logits = outputs[0]

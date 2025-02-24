@@ -16,7 +16,6 @@ import inspect
 import shutil
 import tempfile
 import unittest
-from functools import partial
 from typing import Optional
 
 from huggingface_hub import hf_hub_download
@@ -149,7 +148,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
-            sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
         )
 
         # Process non batched inputs to check if the pixel_values and input_ids are reconstructed in the correct order when batched together
@@ -162,7 +160,6 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_dict=True,
                 return_tensors="pt",
                 padding=True,
-                sample_indices_fn=partial(processor.sample_indices_fn, num_frames=8, initial_shift=True),
             )
             # We slice with [-inputs["input_ids"].shape[1] :] as the input_ids are left padded
             torch.testing.assert_close(
@@ -235,7 +232,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        # Only difference with common tests, InternVLProcessor returns flattened video features
+        # Difference with common tests, InternVLProcessor returns flattened video features
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), num_frames)
 
         # Load with `video_fps` arg
@@ -246,9 +243,11 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             tokenize=True,
             return_dict=True,
             video_fps=video_fps,
+            num_frames=None,  # force to use default num_frames
+            sample_indices_fn=None,  # force to use default sampling
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        # Only difference with common tests, InternVLProcessor returns flattened video features
+        # Difference with common tests, InternVLProcessor returns flattened video features
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), video_fps * 10)
 
         # Load with `video_fps` and `num_frames` args, should raise an error
@@ -260,6 +259,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 return_dict=True,
                 video_fps=video_fps,
                 num_frames=num_frames,
+                sample_indices_fn=None,  # force to use default sampling
             )
 
         # Load without any arg should load the whole video
@@ -268,9 +268,11 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
+            num_frames=None,  # force to use default num_frames
+            sample_indices_fn=None,  # force to use default sampling
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        # Only difference with common tests, InternVLProcessor returns flattened video features
+        # Difference with common tests, InternVLProcessor returns flattened video features
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 300)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
@@ -287,9 +289,11 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
+            num_frames=None,  # force to use default num_frames
+            sample_indices_fn=None,  # force to use default sampling
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        # Only difference with common tests, InternVLProcessor returns flattened video features
+        # Difference with common tests, InternVLProcessor returns flattened video features
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2)
 
     @require_av
@@ -338,7 +342,7 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             sample_indices_fn=dummmy_sample_indices_fn,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        # Only difference with common tests, InternVLProcessor returns flattened video features
+        # Difference with common tests, InternVLProcessor returns flattened video features
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2)
 
     @require_av
@@ -405,5 +409,5 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Check with `in` because we don't know how each template formats the prompt with BOS/EOS/etc
         formatted_text = processor.batch_decode(out_dict_with_video["input_ids"], skip_special_tokens=True)[0]
         self.assertTrue("Dummy prompt for preprocess testing" in formatted_text)
-        # Only difference with common tests, InternVLProcessor returns flattened video features
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 243)
+        # Difference with common tests, InternVLProcessor returns flattened video features, and uses 8 frames by default
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8)
