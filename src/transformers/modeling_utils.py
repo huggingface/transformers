@@ -4747,7 +4747,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model.apply(model._initialize_weights)
 
         # Set some modules to fp32 if any
-        if keep_in_fp32_modules is not None and keep_in_fp32_modules != []:
+        if keep_in_fp32_modules == []:
+            keep_in_fp32_modules = None
+        if keep_in_fp32_modules is not None:
             keep_in_fp32_modules = re.compile("|".join(keep_in_fp32_modules))
             for name, param in model.named_parameters():
                 if keep_in_fp32_modules.search(name):
