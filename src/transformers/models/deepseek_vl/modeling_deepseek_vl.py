@@ -112,9 +112,9 @@ class DeepseekVLVisionEncoder(nn.Module):
         self.config = config
         self.use_high_res = config.use_high_res
 
-        # Siglip is used for low resolution encoding
+        # siglip is used for low resolution encoding
         self.low_res_encoder = DeepseekVLSiglipVisionEncoder(config.low_res_config)
-        # Sam is used for high resolution encoding
+        # sam is used for high resolution encoding
         if self.use_high_res:
             self.high_res_encoder = DeepseekVLSamVisionEncoder(config.high_res_config)
 

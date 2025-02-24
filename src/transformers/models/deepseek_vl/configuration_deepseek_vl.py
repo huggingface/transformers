@@ -34,8 +34,6 @@ class DeepseekVLVisionConfig(PretrainedConfig):
             use_high_res=False,
             low_res_config=None,
             high_res_config=None,
-            proj_dims=4096,
-            proj_depth=2,
             **kwargs
         ):
         super().__init__(**kwargs)
@@ -51,8 +49,6 @@ class DeepseekVLVisionConfig(PretrainedConfig):
         self.use_high_res = use_high_res
         self.low_res_config = SiglipVisionConfig(**low_res_config)
         self.high_res_config = SamVisionConfig(**high_res_config)
-        self.proj_dims = proj_dims
-        self.proj_depth = proj_depth
 
 
 class DeepseekVLConfig(PretrainedConfig):
