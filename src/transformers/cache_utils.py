@@ -3,7 +3,7 @@ import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
@@ -358,11 +358,22 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self) -> None:
+    def __init__(self, _distributed_cache_data: Iterable = None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
+
+        # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
+        # and #36373 for more information. In a nutshell, it is `map(gather_map, zip(*caches))`, i.e. each item in the
+        # iterable contains the key and value states for a layer gathered across replicas by torch.distributed
+        # (shape=[global batch size, num_heads, seq_len, head_dim]).
+        # WARNING: `_distributed_cache_data` must be the first argument in `__init__`, otherwise we'll break
+        # compatibility. The name of the argument doesn't matter.
+        if _distributed_cache_data is not None:
+            for key_states, value_states in _distributed_cache_data:
+                self.key_cache.append(key_states)
+                self.value_cache.append(value_states)
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
