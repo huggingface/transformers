@@ -328,10 +328,11 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_eager_matches_sdpa_inference(self):
         pass
 
-    # @unittest.skip(reason="We cannot configure to output a smaller model.")
-    # def test_model_is_small(self):
-    #     pass
-
+    @unittest.skip(
+        "Evolla has a separate test runner for generation tests with complex inheritance, causing this check to fail"
+    )
+    def test_generation_tester_mixin_inheritance(self):
+        pass
 
 @require_torch
 class EvollaModelIntegrationTest(TestCasePlus):
