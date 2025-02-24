@@ -310,6 +310,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                    [RT-DETRv2](model_doc/rt_detr_v2)                     |       ✅        |         ❌         |      ❌      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
+|                        [SAM-HQ](model_doc/sam_hq)                        |       ✅        |         ❌         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |
 |                [SeamlessM4Tv2](model_doc/seamless_m4t_v2)                |       ✅        |         ❌         |      ❌      |
 |                     [SegFormer](model_doc/segformer)                     |       ✅        |         ✅         |      ❌      |

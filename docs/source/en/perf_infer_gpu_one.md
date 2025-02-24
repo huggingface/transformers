@@ -309,6 +309,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
 * [Qwen2.5VL](https://huggingface.co/docs/transformers/model_doc/qwen2_5_vl#transformers.Qwen2_5_VLModel)
 * [RoBERTa](https://huggingface.co/docs/transformers/model_doc/roberta#transformers.RobertaModel)
+* [SAM-HQ](https://huggingface.co/docs/transformers/model_doc/sam_hq#transformers.SamHQModel)
 * [Sew](https://huggingface.co/docs/transformers/main/en/model_doc/sew#transformers.SEWModel)
 * [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
 * [SigLIP2](https://huggingface.co/docs/transformers/model_doc/siglip2)
