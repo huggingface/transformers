@@ -27,7 +27,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
-    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...processing_utils import Unpack
@@ -36,7 +35,6 @@ from ...utils import (
 )
 from ..mixtral.configuration_mixtral import MixtralConfig
 from ..mixtral.modeling_mixtral import (
-    KwargsForCausalLM,
     MixtralAttention,
     MixtralDecoderLayer,
     MixtralForCausalLM,
@@ -45,7 +43,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralForTokenClassification,
     MixtralModel,
     MixtralRMSNorm,
-    load_balancing_loss_func,
 )
 
 
