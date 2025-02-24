@@ -641,10 +641,16 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # w/o DP
         no_parallelism_cache = model(**model_inputs).past_key_values
+        self.assertIsInstance(no_parallelism_cache, DynamicCache)
 
         # w DP
         model = torch.nn.DataParallel(model)
         parallelism_cache = model(**model_inputs).past_key_values
+        self.assertIsInstance(parallelism_cache, DynamicCache)
 
         # Check that the caches are the same
-        breakpoint()
+        for layer_idx in range(len(no_parallelism_cache)):
+            for kv_idx in range(2):  # 0 = key, 1 = value
+                torch.testing.assert_close(
+                    actual=no_parallelism_cache[layer_idx][kv_idx], expected=parallelism_cache[layer_idx][kv_idx]
+                )

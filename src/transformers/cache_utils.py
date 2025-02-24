@@ -3,7 +3,7 @@ import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
 from packaging import version
@@ -358,19 +358,19 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self, _distributed_cache_data=None) -> None:
+    def __init__(self, _distributed_cache_data: Iterable = None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
 
         # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
-        # and #36373 for more information. In a nutshell, it contains list(zip(*caches)), i.e. each item in the list
+        # and #36373 for more information. In a nutshell, it contains zip(*caches), i.e. each item in the list
         # corresponds to a layer and contains tuples of key and values ( [(k_0, v_0), (k_1, v_1), ..., (k_n, v_n)],
         # where n is the number of caches gathered by torch.distributed, one cache per replica).
         if _distributed_cache_data is not None:
-            for layer_idx in range(len(_distributed_cache_data)):
-                key_states, value_states = zip(*_distributed_cache_data[layer_idx])
+            for cache_data in _distributed_cache_data:
+                key_states, value_states = zip(*cache_data)
                 # concat on the batch size dimension
                 self.key_cache.append(torch.cat(key_states, dim=0))
                 self.value_cache.append(torch.cat(value_states, dim=0))
