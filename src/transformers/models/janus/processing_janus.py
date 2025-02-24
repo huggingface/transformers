@@ -80,7 +80,14 @@ class JanusProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
     image_processor_class = "JanusImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    """
+    The default from the original Janus codebase uses LlamaTokenizerFast, but not LlamaTokenizer.
+    Trying to load their HUB tokenizer config with LlamaTokenizer.from_pretrained(model_path)
+    throws an error due to the sentencepiece parameter not being found. Keeping the regular LlamaTokenizer here
+    results in errors when testing, as the ProcessorTesterMixin.get_component() method tries to load the tokenizer
+    using LlamaTokenizer.from_pretrained(model_path).
+    """
+    tokenizer_class = ("LlamaTokenizerFast")
 
     def __init__(self, image_processor, tokenizer, chat_template=None, use_default_system_prompt=True, **kwargs):
         if image_processor is None:
@@ -137,7 +144,7 @@ class JanusProcessor(ProcessorMixin):
 
         # Process images if pixel values are provided.
         if images is not None and self.generation_mode != "image":
-            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["common_kwargs"])[
+            data["pixel_values"] = self.image_processor(images=images, **output_kwargs["images_kwargs"])[
                 "pixel_values"
             ]
 
