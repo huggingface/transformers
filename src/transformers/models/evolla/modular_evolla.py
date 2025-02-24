@@ -20,25 +20,24 @@
 """PyTorch Evolla model."""
 
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
 )
-from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding, LlamaAttention, LlamaMLP, LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaMLP, LlamaRMSNorm, LlamaRotaryEmbedding
 from .configuration_evolla import EvollaConfig
 from .protein import ProteinEncoderModelOutput, SaProtProteinEncoder
 from .sequence_aligner import CrossAttention
@@ -126,10 +125,8 @@ class EvollaRotaryEmbedding(LlamaRotaryEmbedding):
         self.rope_scaling = config.rope_scaling
 
 
-
 class EvollaMLP(LlamaMLP):
     pass
-
 
 
 class EvollaAttention(LlamaAttention):
@@ -142,6 +139,7 @@ class EvollaAttention(LlamaAttention):
         assert (
             self.num_key_value_groups > 0
         ), f"In {self._get_name()} num_attention_heads ({config.num_attention_heads}) must be larger than num_key_value_heads ({config.num_key_value_heads})"
+
 
 # this was adapted from LlamaDecoderLayer
 class EvollaDecoderLayer(LlamaDecoderLayer):
@@ -162,6 +160,7 @@ class EvollaDecoderLayer(LlamaDecoderLayer):
         self.mlp = EvollaMLP(config=config)
         self.input_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
 
 LLAMA_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
