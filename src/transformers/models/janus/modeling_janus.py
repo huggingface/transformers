@@ -102,7 +102,7 @@ class JanusVisionPatchEmbeddings(nn.Module):
 @dataclass
 class JanusVQVAEOutput:
     """
-    Base class for Anole VQ-VAE mode model outputs.
+    Base class for Janus VQ-VAE mode model outputs.
     Args:
         decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             Reconstructed pixel values after encoding and decoding the input.
@@ -1255,6 +1255,7 @@ class JanusVQVAE(JanusPreTrainedModel):
         batch_size = pixel_values.shape[0]
         quant, emb_loss, indices = self.encode(pixel_values)
         decoded_pixel_values = self.decode(indices.view(batch_size, -1))
+        # Fix me as test fails ocz of not - test_save_load - TypeError: 'JanusVQVAEOutput' object is not subscriptable
         if not return_dict:
             return (decoded_pixel_values, emb_loss)
         return JanusVQVAEOutput(decoded_pixel_values, emb_loss)
@@ -1300,8 +1301,8 @@ class JanusModel(JanusPreTrainedModel):
         self.aligner = JanusVisionAlignerMLP(config.vision_config)
 
         self.vqmodel = JanusVQVAE(config.vq_config)
-        self.gen_aligner = JanusVQVAEAligner(config.vq_config)
         self.gen_embed = nn.Embedding(config.vq_config.num_embeddings, config.vq_config.embed_dim)
+        self.gen_aligner = JanusVQVAEAligner(config.vq_config)
         self.gen_head = JanusVQVAEHead(config.vq_config)
 
         self.language_model = AutoModel.from_config(config=config.text_config)
@@ -1403,7 +1404,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         self.model = JanusModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
-        # Initialize weights and apply final processing
+        # Initialize weights and apply final processing.
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1466,7 +1467,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             **kwargs,
         )
-
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
@@ -1564,7 +1564,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
     @torch.no_grad
     def generate(self, input_ids: torch.Tensor = None, **kwargs):
-        generation_config = kwargs.get("generation_config")
         generation_mode = kwargs.pop("generation_mode", None)
 
         if generation_mode is None:
@@ -1574,6 +1573,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # Perform usual auto-regressive text generation.
         if generation_mode == "text":
             return super().generate(input_ids=input_ids, **kwargs)
+
+        generation_config = kwargs.pop("generation_config", None)
         if generation_config is None:
             generation_config = self.generation_config
 
@@ -1597,19 +1598,20 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
         # If image is passed then perform custom pre and post processing on generated tokens.
         batch_size, seq_len = input_ids.shape
-        dtype = input_ids.dtype
 
-        input_tokens = input_ids.repeat(2, 1).to(dtype)  # Now (batch_size * 2, seq_len)
+        input_tokens = input_ids.repeat(2, 1)  # Now (batch_size * 2, seq_len)
 
         # Set the second half of tokens to pad_token_id. These would be used
         # for generating unconditional logits
         input_tokens[batch_size:, 1:-1] = generation_config.pad_token_id
 
         # Generate input_embeddings from the given prompt.
-        inputs_embeds = self.get_input_embeddings()(input_tokens)
+        inputs_embeds = self.get_input_embeddings()(input_tokens)  # (B,seq_len,embed_dim)
 
         # Placeholder to store generated tokens
-        generated_tokens = torch.zeros((batch_size, self.config.vision_config.num_image_tokens), dtype=dtype)
+        generated_tokens = torch.zeros(
+            (batch_size, self.config.vision_config.num_image_tokens), dtype=input_tokens.dtype
+        )
         outputs = None
 
         logit_processor = ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale)
@@ -1617,7 +1619,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # Loop through the number of image tokens that need to be generated
         for i in tqdm(range(self.config.vision_config.num_image_tokens)):
             # Pass the input embeddings through the language model
-            outputs = self.language_model.model(
+            outputs = self.model.language_model(
                 inputs_embeds=inputs_embeds,
                 use_cache=True,
                 past_key_values=outputs.past_key_values if i != 0 else None,
@@ -1627,7 +1629,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             hidden_state = outputs.last_hidden_state[:, -1, :]
 
             # Generate scores using the generation head.
-            scores = self.gen_head(hidden_state)
+            scores = self.model.gen_head(hidden_state)
 
             # Apply logit processor for controlled generation.
             logits = logit_processor(input_ids, scores)
@@ -1635,18 +1637,18 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
 
             # Sample the next token from the probability distribution.
             next_token = torch.multinomial(probs, num_samples=1)
-            generated_tokens[:, i] = next_token.squeeze(dim=-1)
+            generated_tokens[:, i] = next_token
 
             # Prepare embeddings for image generation.
-            next_token = next_token.to(dtype)
-            next_token = torch.cat([next_token.unsqueeze(dim=1), next_token.unsqueeze(dim=1)], dim=1).view(-1)
+            next_token = next_token
+            next_token = torch.cat([next_token, next_token], dim=1).view(-1)
 
             img_embeds = self.prepare_emeddings_for_image_generation(next_token)
 
             inputs_embeds = img_embeds.unsqueeze(dim=1)
 
         # Decode generated tokens using Janus VQ model.
-        decoded_image = self.vqmodel.decode(generated_tokens.to(dtype=torch.int))
+        decoded_image = self.model.vqmodel.decode(generated_tokens)
 
         # Convert tensor to numpy array and then normalize, reshape the decoded image.
         decoded_image = decoded_image.to(torch.float32).detach().numpy().transpose(0, 2, 3, 1)

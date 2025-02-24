@@ -20,6 +20,8 @@ from transformers import (
     JanusConfig,
     JanusForConditionalGeneration,
     JanusModel,
+    JanusVQVAE,
+    JanusVQVAEConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -90,12 +92,13 @@ class JanusVisionText2TextModelTester:
             "initializer_range": 0.02,
             "vision_feature_select_strategy": "default",
             "vision_feature_layer": -1,
+            "aligner_projection_size": 32, # Same as text model hidden size
+
         },
         use_cache=False,
         vq_num_embeds=12,
         vq_embed_dim=12,
-        vq_channel_multiplier=[1, 2],
-        vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
+        vq_channel_multiplier=[1, 1],
     ):
         self.parent = parent
         self.initializer_range = initializer_range
@@ -122,7 +125,6 @@ class JanusVisionText2TextModelTester:
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
         self.vq_channel_multiplier = vq_channel_multiplier
-        self.vq_img_token_start_id = vq_img_token_start_id
 
     def get_vq_config(self):
         return {
@@ -133,6 +135,8 @@ class JanusVisionText2TextModelTester:
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
             "channel_multiplier": self.vq_channel_multiplier,
             "initializer_range": self.initializer_range,
+            "aligner_projection_size": 10,
+            "image_token_embed_size":32, # Same as text model hidden size
         }
 
     def get_config(self):
@@ -228,3 +232,103 @@ class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, uni
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
+
+class JanusVQModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=5,
+        is_training=False,
+        initializer_range=0.02,
+        image_size=30,
+        num_embeds=12,
+        base_channels=32,  # we have a GroupNorm of 32 groups, so can't do less
+        embed_dim=12,
+        channel_multiplier=[1, 2],
+        patch_size=2,
+        scope=None,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.initializer_range = initializer_range
+        self.image_size = image_size
+        self.base_channels = base_channels
+        self.num_embeds = num_embeds
+        self.embed_dim = embed_dim
+        self.channel_multiplier = channel_multiplier
+        self.num_patches = image_size//patch_size
+
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
+        config = self.get_config()
+        return config, pixel_values
+
+    def get_config(self):
+        return JanusVQVAEConfig(
+            embed_dim=self.embed_dim,
+            num_embeddings=self.num_embeds,
+            latent_channels=self.embed_dim,
+            in_channels=3,
+            base_channels=self.base_channels,
+            channel_multiplier=self.channel_multiplier,
+            initializer_range=self.initializer_range,
+            resolution=self.image_size,
+            num_patches=self.num_patches
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (JanusVQVAE,) if is_torch_available() else ()
+    test_head_masking = False
+    test_pruning = False
+    fx_compatible = False
+    has_attentions = False
+    test_resize_embeddings = False
+
+    def setUp(self):
+        self.model_tester = JanusVQModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=JanusVQVAEConfig,
+            has_text_modality=False,
+            common_properties=["embed_dim", "num_embeddings"],
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    @unittest.skip("Janus VQ module cannot offload due to using `self.weight` directly")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("Janus VQ module cannot offload due to using `self.weight` directly")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip("Janus VQ module cannot offload due to using `self.weight` directly")
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip("Janus VQ module has no hidden states")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("Janus VQ module has no hidden states")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("Janus VQ module has no get/set embeddings method")
+    def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip("Janus VQ module has no hidden states")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
