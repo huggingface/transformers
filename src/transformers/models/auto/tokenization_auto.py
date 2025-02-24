@@ -306,7 +306,7 @@ else:
             ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("mgp-str", ("MgpstrTokenizer", None)),
             (
-                "minimax_text_01",
+                "minimax",
                 (
                     "GPT2Tokenizer" if is_sentencepiece_available() else None,
                     "GPT2TokenizerFast" if is_tokenizers_available() else None,

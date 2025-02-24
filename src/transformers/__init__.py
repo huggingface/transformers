@@ -609,7 +609,7 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mimi": ["MimiConfig"],
-    "models.minimax_text_01": ["MiniMaxText01Config"],
+    "models.minimax": ["MiniMaxConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
     "models.mllama": [
@@ -2915,14 +2915,14 @@ else:
             "MimiPreTrainedModel",
         ]
     )
-    _import_structure["models.minimax_text_01"].extend(
+    _import_structure["models.minimax"].extend(
         [
-            "MiniMaxText01ForCausalLM",
-            "MiniMaxText01ForQuestionAnswering",
-            "MiniMaxText01ForSequenceClassification",
-            "MiniMaxText01ForTokenClassification",
-            "MiniMaxText01Model",
-            "MiniMaxText01PreTrainedModel",
+            "MiniMaxForCausalLM",
+            "MiniMaxForQuestionAnswering",
+            "MiniMaxForSequenceClassification",
+            "MiniMaxForTokenClassification",
+            "MiniMaxModel",
+            "MiniMaxPreTrainedModel",
         ]
     )
     _import_structure["models.mistral"].extend(
@@ -5776,7 +5776,7 @@ if TYPE_CHECKING:
     from .models.mimi import (
         MimiConfig,
     )
-    from .models.minimax_text_01 import MiniMaxText01Config
+    from .models.minimax import MiniMaxConfig
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
     from .models.mllama import (
@@ -7815,13 +7815,13 @@ if TYPE_CHECKING:
             MimiModel,
             MimiPreTrainedModel,
         )
-        from .models.minimax_text_01 import (
-            MiniMaxText01ForCausalLM,
-            MiniMaxText01ForQuestionAnswering,
-            MiniMaxText01ForSequenceClassification,
-            MiniMaxText01ForTokenClassification,
-            MiniMaxText01Model,
-            MiniMaxText01PreTrainedModel,
+        from .models.minimax import (
+            MiniMaxForCausalLM,
+            MiniMaxForQuestionAnswering,
+            MiniMaxForSequenceClassification,
+            MiniMaxForTokenClassification,
+            MiniMaxModel,
+            MiniMaxPreTrainedModel,
         )
         from .models.mistral import (
             MistralForCausalLM,

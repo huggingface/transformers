@@ -230,7 +230,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                 [Megatron-GPT2](model_doc/megatron_gpt2)                 |       ✅        |         ✅         |      ✅      |
 |                       [MGP-STR](model_doc/mgp-str)                       |       ✅        |         ❌         |      ❌      |
 |                          [Mimi](model_doc/mimi)                          |       ✅        |         ❌         |      ❌      |
-|                [MiniMaxText01](model_doc/minimax_text_01)                |       ✅        |         ❌         |      ❌      |
+|                       [MiniMax](model_doc/minimax)                       |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](model_doc/mistral)                       |       ✅        |         ✅         |      ✅      |
 |                       [Mixtral](model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
 |                        [Mllama](model_doc/mllama)                        |       ✅        |         ❌         |      ❌      |

@@ -191,7 +191,7 @@ rendered properly in your Markdown viewer.
 |                       [MGP-STR](../en/model_doc/mgp-str)                       |       ✅        |         ❌         |      ❌      |
 |                       [Mistral](../en/model_doc/mistral)                       |       ✅        |         ❌         |      ✅      |
 |                       [Mixtral](../en/model_doc/mixtral)                       |       ✅        |         ❌         |      ❌      |
-|                 [MiniMaxText01](../en/model_doc/minimax_text_01)                       |       ✅        |         ❌         |      ❌      |
+|                 [MiniMax](../en/model_doc/minimax)                       |       ✅        |         ❌         |      ❌      |
 |                         [mLUKE](../en/model_doc/mluke)                         |       ✅        |         ❌         |      ❌      |
 |                           [MMS](../en/model_doc/mms)                           |       ✅        |         ✅         |      ✅      |
 |                    [MobileBERT](../en/model_doc/mobilebert)                    |       ✅        |         ✅         |      ❌      |

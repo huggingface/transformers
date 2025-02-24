@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# MiniMaxText01
+# MiniMax
 
 ## Overview
 
@@ -28,15 +28,15 @@ The abstract from the paper is the following:
 <img src="https://raw.githubusercontent.com/MiniMax-AI/MiniMax-01/main/figures/TextBench.png"
 alt="drawing" width="600"/>
 
-<small> Text benchmark for MiniMaxText01. Taken from the <a href="https://github.com/MiniMax-AI/MiniMax-01" target="_blank">official code</a>. </small>
+<small> Text benchmark for MiniMax. Taken from the <a href="https://github.com/MiniMax-AI/MiniMax-01" target="_blank">official code</a>. </small>
 
 This model was contributed by [geetu040](https://github.com/geetu040). The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/tree/main).
 
 ### Architectural details
 
-MiniMax-Text-01 is a powerful language model with 456 billion total parameters, of which 45.9 billion are activated per token. To better unlock the long context capabilities of the model, MiniMax-Text-01 adopts a hybrid architecture that combines Lightning Attention, Softmax Attention and Mixture-of-Experts (MoE). Leveraging advanced parallel strategies and innovative compute-communication overlap methods—such as Linear Attention Sequence Parallelism Plus (LASP+), varlen ring attention, Expert Tensor Parallel (ETP), etc., MiniMax-Text-01's training context length is extended to 1 million tokens, and it can handle a context of up to 4 million tokens during the inference. On various academic benchmarks, MiniMax-Text-01 also demonstrates the performance of a top-tier model.
+MiniMax is a powerful language model with 456 billion total parameters, of which 45.9 billion are activated per token. To better unlock the long context capabilities of the model, MiniMax adopts a hybrid architecture that combines Lightning Attention, Softmax Attention and Mixture-of-Experts (MoE). Leveraging advanced parallel strategies and innovative compute-communication overlap methods—such as Linear Attention Sequence Parallelism Plus (LASP+), varlen ring attention, Expert Tensor Parallel (ETP), etc., MiniMax's training context length is extended to 1 million tokens, and it can handle a context of up to 4 million tokens during the inference. On various academic benchmarks, MiniMax also demonstrates the performance of a top-tier model.
 
-The architecture of MiniMax-Text-01 is briefly described as follows:
+The architecture of MiniMax is briefly described as follows:
 
 - Total Parameters: 456B
 - Activated Parameters per Token: 45.9B
@@ -56,7 +56,7 @@ For more details refer to the [release blog post](https://www.minimaxi.com/en/ne
 
 ### License
 
-`MiniMaxText01` is released under the MINIMAX MODEL LICENSE AGREEMENT.
+`MiniMax` is released under the MINIMAX MODEL LICENSE AGREEMENT.
 
 ## Usage tips
 
@@ -83,7 +83,7 @@ The pre-trained model can be used as follows:
 
 As can be seen, the instruction-tuned model requires a [chat template](../chat_templating) to be applied to make sure the inputs are prepared in the right format.
 
-## Speeding up MiniMaxText01 by using Flash Attention
+## Speeding up MiniMax by using Flash Attention
 
 The code snippets above showcase inference without any optimization tricks. However, one can drastically speed up the model by leveraging [Flash Attention](../perf_train_gpu_one#flash-attention-2), which is a faster implementation of the attention mechanism used inside the model.
 
@@ -121,9 +121,9 @@ To enable sliding window attention, just make sure to have a `flash-attn` versio
 
 The Flash Attention-2 model uses also a more memory efficient cache slicing mechanism - as recommended per the official implementation of Mistral model that use rolling cache mechanism we keep the cache size fixed (`self.config.sliding_window`), support batched generation only for `padding_side="left"` and use the absolute position of the current token to compute the positional embedding.
 
-## Shrinking down MiniMaxText01 using quantization
+## Shrinking down MiniMax using quantization
 
-As the MiniMaxText01 model has 456 billion parameters, that would require about 912GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter), about 228 GB of RAM is required.
+As the MiniMax model has 456 billion parameters, that would require about 912GB of GPU RAM in half precision (float16), since each parameter is stored in 2 bytes. However, one can shrink down the size of the model using [quantization](../quantization.md). If the model is quantized to 4 bits (or half a byte per parameter), about 228 GB of RAM is required.
 
 Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization.md) for alternative quantization methods):
 
@@ -157,41 +157,41 @@ Quantizing a model is as simple as passing a `quantization_config` to the model.
 ```
 
 This model was contributed by [geetu040](https://github.com/geetu040).
-The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/blob/main/modeling_minimax_text_01.py).
+The original code can be found [here](https://huggingface.co/MiniMaxAI/MiniMax-Text-01/blob/main/modeling_minimax.py).
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with MiniMaxText01. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with MiniMax. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
 <PipelineTag pipeline="text-generation"/>
 
 - The [Alignment Handbook](https://github.com/huggingface/alignment-handbook) by Hugging Face includes scripts and recipes to perform supervised fine-tuning (SFT) and direct preference optimization with Mistral-7B. This includes scripts for full fine-tuning, QLoRa on a single GPU as well as multi-GPU fine-tuning.
 - [Causal language modeling task guide](../tasks/language_modeling)
 
-## MiniMaxText01Config
+## MiniMaxConfig
 
-[[autodoc]] MiniMaxText01Config
+[[autodoc]] MiniMaxConfig
 
-## MiniMaxText01Model
+## MiniMaxModel
 
-[[autodoc]] MiniMaxText01Model
+[[autodoc]] MiniMaxModel
     - forward
 
-## MiniMaxText01ForCausalLM
+## MiniMaxForCausalLM
 
-[[autodoc]] MiniMaxText01ForCausalLM
+[[autodoc]] MiniMaxForCausalLM
     - forward
 
-## MiniMaxText01ForSequenceClassification
+## MiniMaxForSequenceClassification
 
-[[autodoc]] MiniMaxText01ForSequenceClassification
+[[autodoc]] MiniMaxForSequenceClassification
     - forward
 
-## MiniMaxText01ForTokenClassification
+## MiniMaxForTokenClassification
 
-[[autodoc]] MiniMaxText01ForTokenClassification
+[[autodoc]] MiniMaxForTokenClassification
     - forward
 
-## MiniMaxText01ForQuestionAnswering
-[[autodoc]] MiniMaxText01ForQuestionAnswering
+## MiniMaxForQuestionAnswering
+[[autodoc]] MiniMaxForQuestionAnswering
     - forward

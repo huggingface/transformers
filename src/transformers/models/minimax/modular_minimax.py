@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch MiniMax-Text-01 model."""
+"""PyTorch MiniMax model."""
 
 from typing import List, Optional, Tuple, Union
 
@@ -33,11 +33,9 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings_to_model_forward,
     logging,
 )
 from ..mixtral.modeling_mixtral import (
-    MIXTRAL_INPUTS_DOCSTRING,
     KwargsForCausalLM,
     MixtralAttention,
     MixtralDecoderLayer,
@@ -55,14 +53,14 @@ logger = logging.get_logger(__name__)
 
 
 _CHECKPOINT_FOR_DOC = "MiniMaxAI/MiniMax-Text-01"
-_CONFIG_FOR_DOC = "MiniMaxText01Config"
+_CONFIG_FOR_DOC = "MiniMaxConfig"
 
 
-class MiniMaxText01Config(PretrainedConfig):
+class MiniMaxConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MiniMaxText01Model`]. It is used to instantiate an
-    MiniMaxText01 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the MiniMaxText01.
+    This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
+    MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the MiniMax.
 
     [MiniMaxAI/MiniMax-Text-01](https://huggingface.co/MiniMaxAI/MiniMax-Text-01)
 
@@ -72,8 +70,8 @@ class MiniMaxText01Config(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
-            Vocabulary size of the MiniMaxText01 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MiniMaxText01Model`]
+            Vocabulary size of the MiniMax model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`MiniMaxModel`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 14336):
@@ -94,7 +92,7 @@ class MiniMaxText01Config(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
-            The maximum sequence length that this model might ever be used with. MiniMaxText01's sliding window attention
+            The maximum sequence length that this model might ever be used with. MiniMax's sliding window attention
             allows sequence of up to 4096*32 tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -151,19 +149,19 @@ class MiniMaxText01Config(PretrainedConfig):
             Weight for hidden state value in residual connection after MLP.
 
     ```python
-    >>> from transformers import MiniMaxText01Model, MiniMaxText01Config
+    >>> from transformers import MiniMaxModel, MiniMaxConfig
 
-    >>> # Initializing a MiniMaxText01 style configuration
-    >>> configuration = MiniMaxText01Config()
+    >>> # Initializing a MiniMax style configuration
+    >>> configuration = MiniMaxConfig()
 
-    >>> # Initializing a model from the MiniMaxText01 style configuration
-    >>> model = MiniMaxText01Model(configuration)
+    >>> # Initializing a model from the MiniMax style configuration
+    >>> model = MiniMaxModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "minimax_text_01"
+    model_type = "minimax"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
@@ -242,11 +240,11 @@ class MiniMaxText01Config(PretrainedConfig):
         )
 
 
-class MiniMaxText01RMSNorm(MixtralRMSNorm):
+class MiniMaxRMSNorm(MixtralRMSNorm):
     pass
 
 
-class MiniMaxText01Cache(DynamicCache):
+class MiniMaxCache(DynamicCache):
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         super().__init__()
         self.config = config
@@ -299,11 +297,11 @@ class MiniMaxText01Cache(DynamicCache):
         return new_cache
 
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
-        raise NotImplementedError("MiniMaxText01Cache does not have a legacy cache equivalent.")
+        raise NotImplementedError("MiniMaxCache does not have a legacy cache equivalent.")
 
     @classmethod
     def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
-        raise NotImplementedError("MiniMaxText01Cache does not have a legacy cache equivalent.")
+        raise NotImplementedError("MiniMaxCache does not have a legacy cache equivalent.")
 
     def __len__(self):
         """
@@ -319,7 +317,7 @@ class MiniMaxText01Cache(DynamicCache):
             len(self.key_cache) == 0  # no cache in any layer
             or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
             or len(self.key_cache[layer_idx]) == 0  # the layer has no cache
-            or self.key_cache[layer_idx].dim() == 2  # specific to MiniMaxText01
+            or self.key_cache[layer_idx].dim() == 2  # specific to MiniMax
         )
         layer_seq_length = self.key_cache[layer_idx].shape[-2] if not is_empty_layer else 0
         return layer_seq_length
@@ -343,8 +341,8 @@ class MiniMaxText01Cache(DynamicCache):
                 self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
-class MiniMaxText01LightningAttentionDecay(nn.Module):
-    def __init__(self, config: MiniMaxText01Config, layer_idx: int):
+class MiniMaxLightningAttentionDecay(nn.Module):
+    def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -389,8 +387,8 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         return key_decay, query_decay, diagonal_decay, block_decay
 
 
-class MiniMaxText01LightningAttention(nn.Module):
-    def __init__(self, config: MiniMaxText01Config, layer_idx: int):
+class MiniMaxLightningAttention(nn.Module):
+    def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -400,11 +398,11 @@ class MiniMaxText01LightningAttention(nn.Module):
         self.block_size = config.block_size
 
         self.act_fn = ACT2FN[config.hidden_act]
-        self.norm = MiniMaxText01RMSNorm(self.head_dim * self.num_heads)
+        self.norm = MiniMaxRMSNorm(self.head_dim * self.num_heads)
         self.qkv_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim * 3, bias=False)
         self.out_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
         self.output_gate = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.decay_factors = MiniMaxText01LightningAttentionDecay(config, layer_idx)
+        self.decay_factors = MiniMaxLightningAttentionDecay(config, layer_idx)
 
     def forward(
         self,
@@ -501,12 +499,12 @@ class MiniMaxText01LightningAttention(nn.Module):
         return attn_output, kv_cache
 
 
-class MiniMaxText01Attention(MixtralAttention):
+class MiniMaxAttention(MixtralAttention):
     pass
 
 
-class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
-    def __init__(self, config: MiniMaxText01Config, layer_idx: int):
+class MiniMaxDecoderLayer(MixtralDecoderLayer):
+    def __init__(self, config: MiniMaxConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
         self.layer_idx = layer_idx
@@ -520,11 +518,11 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         self.attn_type = config.attn_type_list[layer_idx]
 
         if self.attn_type == 0:
-            self.self_attn = MiniMaxText01LightningAttention(config, layer_idx)
+            self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.layernorm_alpha = self.layernorm_linear_attention_alpha
             self.layernorm_beta = self.layernorm_linear_attention_beta
         else:
-            self.self_attn = MiniMaxText01Attention(config, layer_idx)
+            self.self_attn = MiniMaxAttention(config, layer_idx)
             self.layernorm_alpha = self.layernorm_full_attention_alpha
             self.layernorm_beta = self.layernorm_full_attention_beta
 
@@ -602,17 +600,13 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         return outputs
 
 
-MINIMAX_TEXT_01_INPUTS_DOCSTRING = MIXTRAL_INPUTS_DOCSTRING
-
-
-class MiniMaxText01Model(MixtralModel):
-    def __init__(self, config: MiniMaxText01Config):
+class MiniMaxModel(MixtralModel):
+    def __init__(self, config: MiniMaxConfig):
         super().__init__(config)
         self.layers = nn.ModuleList(
-            [MiniMaxText01DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [MiniMaxDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-    @add_start_docstrings_to_model_forward(MINIMAX_TEXT_01_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -653,13 +647,13 @@ class MiniMaxText01Model(MixtralModel):
         batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
         dtype = input_ids.dtype if input_ids is not None else inputs_embeds.dtype
         if use_cache and past_key_values is None:
-            past_key_values = MiniMaxText01Cache(
+            past_key_values = MiniMaxCache(
                 config=config,
                 batch_size=batch_size,
                 dtype=dtype,
             )
-        elif use_cache and not isinstance(past_key_values, MiniMaxText01Cache):
-            past_key_values = MiniMaxText01Cache.from_dynamic_cache(
+        elif use_cache and not isinstance(past_key_values, MiniMaxCache):
+            past_key_values = MiniMaxCache.from_dynamic_cache(
                 past_key_values,
                 config=config,
                 batch_size=batch_size,
@@ -752,12 +746,12 @@ class MiniMaxText01Model(MixtralModel):
         return output if return_dict else output.to_tuple()
 
 
-class MiniMaxText01ForCausalLM(MixtralForCausalLM):
+class MiniMaxForCausalLM(MixtralForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = MiniMaxText01Model(config)
+        self.model = MiniMaxModel(config)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
@@ -798,9 +792,9 @@ class MiniMaxText01ForCausalLM(MixtralForCausalLM):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, MiniMaxText01ForCausalLM
+        >>> from transformers import AutoTokenizer, MiniMaxForCausalLM
 
-        >>> model = MiniMaxText01ForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01")
+        >>> model = MiniMaxForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01")
         >>> tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
@@ -875,13 +869,13 @@ class MiniMaxText01ForCausalLM(MixtralForCausalLM):
         )
 
 
-class MiniMaxText01ForSequenceClassification(MixtralForSequenceClassification):
+class MiniMaxForSequenceClassification(MixtralForSequenceClassification):
     pass
 
 
-class MiniMaxText01ForTokenClassification(MixtralForTokenClassification):
+class MiniMaxForTokenClassification(MixtralForTokenClassification):
     pass
 
 
-class MiniMaxText01ForQuestionAnswering(MixtralForQuestionAnswering):
+class MiniMaxForQuestionAnswering(MixtralForQuestionAnswering):
     pass

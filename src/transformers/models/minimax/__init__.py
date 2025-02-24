@@ -23,7 +23,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_minimax_text_01": ["MiniMaxText01Config"],
+    "configuration_minimax": ["MiniMaxConfig"],
 }
 
 
@@ -33,18 +33,18 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_minimax_text_01"] = [
-        "MiniMaxText01ForCausalLM",
-        "MiniMaxText01ForQuestionAnswering",
-        "MiniMaxText01Model",
-        "MiniMaxText01PreTrainedModel",
-        "MiniMaxText01ForSequenceClassification",
-        "MiniMaxText01ForTokenClassification",
+    _import_structure["modeling_minimax"] = [
+        "MiniMaxForCausalLM",
+        "MiniMaxForQuestionAnswering",
+        "MiniMaxModel",
+        "MiniMaxPreTrainedModel",
+        "MiniMaxForSequenceClassification",
+        "MiniMaxForTokenClassification",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_minimax_text_01 import MiniMaxText01Config
+    from .configuration_minimax import MiniMaxConfig
 
     try:
         if not is_torch_available():
@@ -52,13 +52,13 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_minimax_text_01 import (
-            MiniMaxText01ForCausalLM,
-            MiniMaxText01ForQuestionAnswering,
-            MiniMaxText01ForSequenceClassification,
-            MiniMaxText01ForTokenClassification,
-            MiniMaxText01Model,
-            MiniMaxText01PreTrainedModel,
+        from .modeling_minimax import (
+            MiniMaxForCausalLM,
+            MiniMaxForQuestionAnswering,
+            MiniMaxForSequenceClassification,
+            MiniMaxForTokenClassification,
+            MiniMaxModel,
+            MiniMaxPreTrainedModel,
         )
 
 

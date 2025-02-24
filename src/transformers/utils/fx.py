@@ -150,7 +150,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "megatron-bert",
     "mistral",
     "mixtral",
-    "minimax_text_01",
+    "minimax",
     "mobilebert",
     "mt5",
     "nezha",

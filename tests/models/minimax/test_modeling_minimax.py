@@ -12,13 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch MiniMaxText01 model."""
+"""Testing suite for the PyTorch MiniMax model."""
 
 import unittest
 
 import pytest
 
-from transformers import MiniMaxText01Config, is_torch_available
+from transformers import MiniMaxConfig, is_torch_available
 from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     require_flash_attn,
@@ -38,17 +38,17 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    # from transformers.models.minimax_text_01.modular_minimax_text_01 import (
+    # from transformers.models.minimax.modular_minimax import (
     from transformers import (
-        MiniMaxText01ForCausalLM,
-        MiniMaxText01ForQuestionAnswering,
-        MiniMaxText01ForSequenceClassification,
-        MiniMaxText01ForTokenClassification,
-        MiniMaxText01Model,
+        MiniMaxForCausalLM,
+        MiniMaxForQuestionAnswering,
+        MiniMaxForSequenceClassification,
+        MiniMaxForTokenClassification,
+        MiniMaxModel,
     )
 
 
-class MiniMaxText01ModelTester:
+class MiniMaxModelTester:
     def __init__(
         self,
         parent,
@@ -134,7 +134,7 @@ class MiniMaxText01ModelTester:
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return MiniMaxText01Config(
+        return MiniMaxConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -157,18 +157,18 @@ class MiniMaxText01ModelTester:
             block_size=self.block_size,
         )
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->MiniMaxText01
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->MiniMax
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = MiniMaxText01Model(config=config)
+        model = MiniMaxModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->MiniMaxText01
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model_as_decoder with Llama->MiniMax
     def create_and_check_model_as_decoder(
         self,
         config,
@@ -182,7 +182,7 @@ class MiniMaxText01ModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = MiniMaxText01Model(config)
+        model = MiniMaxModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -199,7 +199,7 @@ class MiniMaxText01ModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->MiniMaxText01
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_for_causal_lm with Llama->MiniMax
     def create_and_check_for_causal_lm(
         self,
         config,
@@ -212,13 +212,13 @@ class MiniMaxText01ModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = MiniMaxText01ForCausalLM(config=config)
+        model = MiniMaxForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->MiniMaxText01
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_decoder_model_past_large_inputs with Llama->MiniMax
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -233,7 +233,7 @@ class MiniMaxText01ModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = MiniMaxText01ForCausalLM(config=config)
+        model = MiniMaxForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -281,7 +281,7 @@ class MiniMaxText01ModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->MiniMaxText01
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.prepare_config_and_inputs_for_common with Llama->MiniMax
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -298,27 +298,27 @@ class MiniMaxText01ModelTester:
 
 
 @require_torch
-# Copied from tests.models.mixtral.test_modeling_mixtral.MixtralModelTest with Mixtral->MiniMaxText01
-class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+# Copied from tests.models.mixtral.test_modeling_mixtral.MixtralModelTest with Mixtral->MiniMax
+class MiniMaxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            MiniMaxText01Model,
-            MiniMaxText01ForCausalLM,
-            MiniMaxText01ForSequenceClassification,
-            MiniMaxText01ForTokenClassification,
-            MiniMaxText01ForQuestionAnswering,
+            MiniMaxModel,
+            MiniMaxForCausalLM,
+            MiniMaxForSequenceClassification,
+            MiniMaxForTokenClassification,
+            MiniMaxForQuestionAnswering,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MiniMaxText01Model,
-            "text-classification": MiniMaxText01ForSequenceClassification,
-            "token-classification": MiniMaxText01ForTokenClassification,
-            "text-generation": MiniMaxText01ForCausalLM,
-            "zero-shot": MiniMaxText01ForSequenceClassification,
-            "question-answering": MiniMaxText01ForQuestionAnswering,
+            "feature-extraction": MiniMaxModel,
+            "text-classification": MiniMaxForSequenceClassification,
+            "token-classification": MiniMaxForTokenClassification,
+            "text-generation": MiniMaxForCausalLM,
+            "zero-shot": MiniMaxForSequenceClassification,
+            "question-answering": MiniMaxForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -341,8 +341,8 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         return True
 
     def setUp(self):
-        self.model_tester = MiniMaxText01ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MiniMaxText01Config, hidden_size=37)
+        self.model_tester = MiniMaxModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MiniMaxConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -360,33 +360,33 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_torch_fx_output_loss(self):
         super().test_torch_fx_output_loss()
 
-    def test_MiniMaxText01_sequence_classification_model(self):
+    def test_MiniMax_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         print(config)
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = MiniMaxText01ForSequenceClassification(config)
+        model = MiniMaxForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_MiniMaxText01_sequence_classification_model_for_single_label(self):
+    def test_MiniMax_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "single_label_classification"
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
-        model = MiniMaxText01ForSequenceClassification(config)
+        model = MiniMaxForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    def test_MiniMaxText01_sequence_classification_model_for_multi_label(self):
+    def test_MiniMax_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         config.problem_type = "multi_label_classification"
@@ -395,20 +395,20 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         sequence_labels = ids_tensor(
             [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
         ).to(torch.float)
-        model = MiniMaxText01ForSequenceClassification(config)
+        model = MiniMaxForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->MiniMaxText01,llama->MiniMaxText01
-    def test_MiniMaxText01_token_classification_model(self):
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with Llama->MiniMax,llama->MiniMax
+    def test_MiniMax_token_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
-        model = MiniMaxText01ForTokenClassification(config=config)
+        model = MiniMaxForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
@@ -417,11 +417,11 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
         )
 
-    @unittest.skip(reason="MiniMaxText01 buffers include complex numbers, which breaks this test")
+    @unittest.skip(reason="MiniMax buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="MiniMaxText01 uses GQA on all models so the KV cache is a non standard format")
+    @unittest.skip(reason="MiniMax uses GQA on all models so the KV cache is a non standard format")
     def test_past_key_values_format(self):
         pass
 
@@ -430,7 +430,7 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="MiniMaxText01 flash attention does not support right padding")
+        self.skipTest(reason="MiniMax flash attention does not support right padding")
 
     # Ignore copy
     def test_load_balancing_loss(self):
@@ -443,7 +443,7 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         config.output_router_logits = True
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = MiniMaxText01ForCausalLM(config)
+        model = MiniMaxForCausalLM(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=attention_mask)
@@ -523,7 +523,7 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
                 self.assertEqual(decoder_past_key_values.value_cache[layer_idx].shape, key_value_cache_expected_shape)
 
     # Ignore copy
-    @unittest.skip(reason="MiniMaxText01Cache doesnot support cropping, needed for low memory sequential generation")
+    @unittest.skip(reason="MiniMaxCache doesnot support cropping, needed for low memory sequential generation")
     def test_contrastive_generate_low_memory(self):
         pass
 
@@ -531,14 +531,14 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 @require_torch
 @require_torch_accelerator
 @slow
-class MiniMaxText01IntegrationTest(unittest.TestCase):
+class MiniMaxIntegrationTest(unittest.TestCase):
     def test_small_model_logits(self):
-        model_id = "geetu040/MiniMax-Text-01-tiny"
+        model_id = "geetu040/MiniMax-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MiniMaxText01ForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
-        ).to(torch_device)
+        model = MiniMaxForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
+            torch_device
+        )
         expected_slice = (
             torch.Tensor([[0.4180, 0.7266, 0.0815], [-0.4805, -0.2812, -0.3730], [0.0654, -0.7773, -0.7812]])
             .to(torch.bfloat16)

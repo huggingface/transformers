@@ -6308,42 +6308,42 @@ class MimiPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01ForCausalLM(metaclass=DummyObject):
+class MiniMaxForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01ForQuestionAnswering(metaclass=DummyObject):
+class MiniMaxForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01ForSequenceClassification(metaclass=DummyObject):
+class MiniMaxForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01ForTokenClassification(metaclass=DummyObject):
+class MiniMaxForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01Model(metaclass=DummyObject):
+class MiniMaxModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01PreTrainedModel(metaclass=DummyObject):
+class MiniMaxPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
