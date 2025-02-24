@@ -477,8 +477,9 @@ class RopeTest(unittest.TestCase):
 
         # input sanity checks: if these change, the output will also change
         config = EfficientLoFTRConfig()
-        config.rope_scaling = {"rope_type": "linear", "dim": 64}
         self.assertEqual(config.rope_theta, 10000.0)
+        self.assertEqual(config.rope_scaling["rope_type"], "2d")
+        self.assertEqual(config.rope_scaling["dim"], 64)
 
         rope_fn = ROPE_INIT_FUNCTIONS["2d"]
         inv_freq, attention_scale = rope_fn(config=config, device=torch_device)

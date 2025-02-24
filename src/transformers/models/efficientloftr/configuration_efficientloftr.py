@@ -174,7 +174,9 @@ class EfficientLoFTRConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
 
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
+        self.rope_scaling = (
+            rope_scaling if rope_scaling is not None else {"rope_type": "2d", "dim": self.hidden_size // 4}
+        )
         rope_config_validation(self)
 
         self.initializer_range = initializer_range
