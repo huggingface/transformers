@@ -258,6 +258,10 @@ alt="drawing" width="600"/>
 
 [[autodoc]] GotOcr2ImageProcessor
 
+## GotOcr2ImageProcessorFast
+
+[[autodoc]] GotOcr2ImageProcessorFast
+
 ## GotOcr2Processor
 
 [[autodoc]] GotOcr2Processor
