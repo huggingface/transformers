@@ -23,7 +23,6 @@ from parameterized import parameterized
 from transformers import BitsAndBytesConfig, IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     TestCasePlus,
-    is_pt_tf_cross_test,
     require_bitsandbytes,
     require_torch,
     require_torch_sdpa,
@@ -327,6 +326,8 @@ class IdeficsModelTester:
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
+    # Doesn't run generation tests here -- idefics has a dedicated tester for generation tests below
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
         if is_torch_available()
@@ -573,11 +574,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @is_pt_tf_cross_test
-    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
-        self.has_attentions = False
-        super().test_pt_tf_model_equivalence(allow_missing_keys=allow_missing_keys)
 
     @slow
     def test_model_from_pretrained(self):
@@ -872,6 +868,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip("Idefics has a hard requirement on SDPA")
     def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
+
+    @unittest.skip(
+        "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
+    )
+    def test_generation_tester_mixin_inheritance(self):
         pass
 
 
