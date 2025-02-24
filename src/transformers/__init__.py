@@ -731,6 +731,10 @@ _import_structure = {
         "Qwen2VLConfig",
         "Qwen2VLProcessor",
     ],
+    "models.colqwen2": [
+        "ColQwen2Config",
+        "ColQwen2Processor",
+    ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
     "models.reformer": ["ReformerConfig"],
@@ -3373,6 +3377,12 @@ else:
             "Qwen2VLPreTrainedModel",
         ]
     )
+    _import_structure["models.colqwen2"].extend(
+        [
+            "ColQwen2ForRetrieval",
+            "ColQwen2PreTrainedModel",
+        ]
+    )
     _import_structure["models.rag"].extend(
         [
             "RagModel",
@@ -5438,6 +5448,10 @@ if TYPE_CHECKING:
         ColPaliConfig,
         ColPaliProcessor,
     )
+    from .models.colqwen2 import (
+        ColQwen2Config,
+        ColQwen2Processor,
+    )
     from .models.conditional_detr import (
         ConditionalDetrConfig,
     )
@@ -6979,6 +6993,10 @@ if TYPE_CHECKING:
         from .models.colpali import (
             ColPaliForRetrieval,
             ColPaliPreTrainedModel,
+        )
+        from .models.colqwen2 import (
+            ColQwen2ForRetrieval,
+            ColQwen2PreTrainedModel,
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from typing import ClassVar, List, Optional, Union
+from typing import List, Optional, Union
 
 from transformers.models.paligemma.processing_paligemma import (
     IMAGE_TOKEN,
@@ -73,10 +73,21 @@ class ColPaliProcessor(PaliGemmaProcessor):
             The tokenizer is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        visual_prompt_prefix (`str`, *optional*): A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*): A prefix to be used for the query.
     """
 
-    visual_prompt_prefix: ClassVar[str] = "Describe the image."
-    query_prefix: ClassVar[str] = "Question: "
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        visual_prompt_prefix: str = "Describe the image.",
+        query_prefix: str = "Question: ",
+    ):
+        super().__init__(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
+        self.visual_prompt_prefix = visual_prompt_prefix
+        self.query_prefix = query_prefix
 
     @property
     def query_augmentation_token(self) -> str:
@@ -96,7 +107,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is custom
+        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
         wrapper around the PaliGemmaProcessor's [`~PaliGemmaProcessor.__call__`] method adapted for the ColPali model. It cannot process
         both text and images at the same time.
 
@@ -196,12 +207,10 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
             if suffix is None:
                 suffix = self.query_augmentation_token * 10
-            texts_query: List[str] = []
 
+            texts_query: List[str] = []
             for query in text:
-                query = self.tokenizer.bos_token + self.query_prefix + query
-                query += suffix  # add suffix (pad tokens)
-                query += "\n"  # make input ISO to PaliGemma's processor
+                query = self.tokenizer.bos_token + self.query_prefix + query + suffix + "\n"
                 texts_query.append(query)
 
             output_kwargs["text_kwargs"]["max_length"] = output_kwargs["text_kwargs"].get("max_length", 50)
