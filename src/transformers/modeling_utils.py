@@ -35,8 +35,10 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVa
 from zipfile import is_zipfile
 
 import torch
+import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
+from safetensors.torch import load
 from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
@@ -511,6 +513,23 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "U16": torch.uint16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "U32": torch.uint32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "U64": torch.uint64,
+}
+
+
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
@@ -519,17 +538,23 @@ def load_state_dict(
 ):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
+    We don't actually load the weights yet, just create empty tensors
     """
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
         # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
-        if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
-            raise OSError(
-                f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
-                "you save your model with the `save_pretrained` method."
-            )
-        return safe_load_file(checkpoint_file)
+
+            if metadata is not None and metadata.get("format") not in ["pt", "tf", "flax", "mlx"]:
+                raise OSError(
+                    f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
+                    "you save your model with the `save_pretrained` method."
+                )
+            state_dict = {}
+            for k in f.keys():
+                dtype = str_to_torch_dtype[f.get_slice(k).get_dtype()]
+                state_dict[k] = torch.empty(size=f.get_slice(k).get_shape(), dtype=dtype, device="meta")
+            return state_dict
     try:
         if map_location is None:
             if (
@@ -674,54 +699,6 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_to_params_buffers=False):
-    # copy state_dict so _load_from_state_dict can modify it
-    metadata = getattr(state_dict, "_metadata", None)
-    state_dict = state_dict.copy()
-    if metadata is not None:
-        state_dict._metadata = metadata
-
-    error_msgs = []
-
-    # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
-    # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
-        local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-        local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
-
-        args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
-        # Parameters of module and children will start with prefix. We can exit early if there are none in this
-        # state_dict
-        if len([key for key in state_dict if key.startswith(prefix)]) > 0:
-            if is_deepspeed_zero3_enabled():
-                import deepspeed
-
-                # In sharded models, each shard has only part of the full state_dict, so only gather
-                # parameters that are in the current state_dict.
-                named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-                params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
-                if len(params_to_gather) > 0:
-                    # because zero3 puts placeholders in model params, this context
-                    # manager gathers (unpartitions) the params of the current layer, then loads from
-                    # the state dict and then re-partitions them again
-                    with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
-                        if torch.distributed.get_rank() == 0:
-                            module._load_from_state_dict(*args)
-            else:
-                module._load_from_state_dict(*args)
-
-        for name, child in module._modules.items():
-            if child is not None:
-                load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
-
-    load(model_to_load, state_dict, prefix=start_prefix, assign_to_params_buffers=assign_to_params_buffers)
-    # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
-    # it's safe to delete it.
-    del state_dict
-
-    return error_msgs
-
-
 def find_submodule_and_param_name(model, long_key, start_prefix):
     """
     A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
@@ -772,8 +749,8 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 
 
 def _load_state_dict_into_meta_model(
-    model,
-    state_dict,
+    model: torch.nn.Module,
+    state_dict: Dict[str, torch.Tensor],
     start_prefix,
     expected_keys,
     device_map=None,
@@ -788,6 +765,8 @@ def _load_state_dict_into_meta_model(
     unexpected_keys=None,  # passing `unexpected` for cleanup from quantization items
     pretrained_model_name_or_path=None,  # for flagging the user when the model contains renamed keys
     device_mesh=None,
+    prefix=None,
+    shard_file=None,
 ):
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -805,162 +784,172 @@ def _load_state_dict_into_meta_model(
     # - deepspeed zero 3 support
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
+    # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
+    if device_map is None or '' not in device_map:
+        device_map = {'': torch.device("cpu")}
+    elif isinstance(device_map[''], int):
+        pass
+    else:
+        device_map[''] = device_map[''].index
 
-    error_msgs = []
+    with safe_open(shard_file, framework="pt", device=device_map['']) as file_pointer:
+    # with safe_open(shard_file, framework="pt") as file_pointer:
+        error_msgs = []
 
-    is_quantized = hf_quantizer is not None
+        is_quantized = hf_quantizer is not None
 
-    is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
 
-    # we need this later to initialize tensor parallelism
-    if device_mesh is not None:
-        full_tp_plan = model.config.base_model_tp_plan
-        for submodule in model.modules():
-            full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
-
-    for param_name, param in state_dict.items():
-        if param_name not in expected_keys:
-            continue
-
-        if param_name.startswith(start_prefix):
-            param_name = param_name[len(start_prefix) :]
-
-        module_name = param_name
-        set_module_kwargs = {}
-
-        # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
-        # in int/uint/bool and not cast them.
-        is_param_float8_e4m3fn = is_torch_e4m3fn_available and param.dtype == torch.float8_e4m3fn
-        if dtype is not None and torch.is_floating_point(param) and not is_param_float8_e4m3fn:
-            if (
-                keep_in_fp32_modules is not None
-                and any(
-                    module_to_keep_in_fp32 in param_name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
-                )
-                and dtype == torch.float16
-            ):
-                param = param.to(torch.float32)
-
-                # For backward compatibility with older versions of `accelerate`
-                # TODO: @sgugger replace this check with version check at the next `accelerate` release
-                if "dtype" in list(inspect.signature(set_module_tensor_to_device).parameters):
-                    set_module_kwargs["dtype"] = torch.float32
-            else:
-                param = param.to(dtype)
-
-        # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
-        # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
-        # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
-
-        old_param = model
-        splits = param_name.split(".")
-        for split in splits:
-            # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
-            old_param = getattr(old_param, split, None)
-            if old_param is None:
-                break
-
-        if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
-            old_param = None
-
-        if old_param is not None:
-            if dtype is None:
-                param = param.to(old_param.dtype)
-
-            if old_param.is_contiguous():
-                param = param.contiguous()
-
-        set_module_kwargs["value"] = param
-
-        if device_map is None:
-            param_device = "cpu"
-        else:
-            # find next higher level module that is defined in device_map:
-            # bert.lm_head.weight -> bert.lm_head -> bert -> ''
-            while len(module_name) > 0 and module_name not in device_map:
-                module_name = ".".join(module_name.split(".")[:-1])
-            if module_name == "" and "" not in device_map:
-                # TODO: group all errors and raise at the end.
-                raise ValueError(f"{param_name} doesn't have any device set.")
-            param_device = device_map[module_name]
-
-        if param_device == "disk":
-            if not is_safetensors:
-                offload_index = offload_weight(param, param_name, offload_folder, offload_index)
-        elif param_device == "cpu" and state_dict_index is not None:
-            state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
-        elif (
-            not is_quantized
-            or (not hf_quantizer.requires_parameters_quantization)
-            or (
-                not hf_quantizer.check_quantized_param(
-                    model, param, param_name, state_dict, param_device=param_device, device_map=device_map
-                )
-            )
-        ):
-            if is_fsdp_enabled():
-                param_device = "cpu" if is_local_dist_rank_0() else "meta"
-
-            # For backward compatibility with older versions of `accelerate` and for non-quantized params
-            set_module_tensor_to_device(model, param_name, param_device, **set_module_kwargs)
-        else:
-            hf_quantizer.create_quantized_param(model, param, param_name, param_device, state_dict, unexpected_keys)
-            # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-            # and then cast it to CPU to avoid excessive memory usage on each GPU
-            # in comparison to the sharded model across GPUs.
-            if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                module, tensor_name = get_module_from_name(model, param_name)
-                value = getattr(module, tensor_name)
-                param_to = "cpu"
-                if is_fsdp_enabled() and not is_local_dist_rank_0():
-                    param_to = "meta"
-                val_kwargs = {}
-                if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
-                    val_kwargs["requires_grad"] = False
-                value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
-                setattr(module, tensor_name, value)
-            # TODO: consider removing used param_parts from state_dict before return
-
-        # In this case, let's parallelize the modules!
+        # we need this later to initialize tensor parallelism
         if device_mesh is not None:
-            # Immediate parent
-            split_parent_module_name = param_name.split(".")[:-1]
-            parent_module_name = ".".join(split_parent_module_name)
-            parent_module = model
-            for name in split_parent_module_name:
-                parent_module = getattr(parent_module, name)
+            full_tp_plan = model.config.base_model_tp_plan
+            for submodule in model.modules():
+                full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
-            # Check if we are part of the tp_plan
-            current_module_plan = None
-            for param, plan in full_tp_plan.items():
-                # "*" are a placeholder for layer indices, so we replace them by "[0-9]+" in the regex pattern
-                pattern = param.replace("*", "[0-9]+")
-                if re.search(pattern, parent_module_name):
-                    current_module_plan = plan
+        for param_name, empty_param in state_dict.items():
+            new_param_name, empty_param = list(model._fix_state_dict_keys_on_load({param_name: empty_param}).items())[0]
+
+            if new_param_name not in expected_keys:
+                continue
+
+            if param_name.startswith(start_prefix):
+                param_name = param_name[len(start_prefix) :]
+
+            module_name = param_name
+            param = file_pointer.get_slice(param_name)
+            # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
+            # in int/uint/bool and not cast them.
+            is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+            if dtype is not None and empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+                if (
+                    keep_in_fp32_modules is not None
+                    and keep_in_fp32_modules.search(new_param_name)
+                    and dtype == torch.float16
+                ):
+                    param_casting_dtype = torch.float32
+                else:
+                    param_casting_dtype = dtype
+
+            # For compatibility with PyTorch load_state_dict which converts state dict dtype to existing dtype in model, and which
+            # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
+            # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
+            old_param = model
+            a,b,c = [],[],[]
+            splits = param_name.split(".")
+            for split in splits:
+                # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
+                old_param = getattr(old_param, split, None)
+                if old_param is None:
                     break
 
-            # We can only apply the tp_plan after all parameters of the current module have been correctly initialized (e.g.
-            # if we have bias, we need both `weights` and `bias` of a nn.Linear to be initialized)
-            process_device = list(device_map.values())[0]
-            all_module_parameters_initialized = all(
-                m.device == process_device for m in parent_module.parameters(recurse=False)
-            ) and all(m.device == process_device for m in parent_module.buffers(recurse=False))
-            if current_module_plan is not None and all_module_parameters_initialized:
-                torch.distributed.tensor.parallel.parallelize_module(
-                    parent_module,
-                    device_mesh=device_mesh,
-                    parallelize_plan=translate_to_torch_parallel_style(current_module_plan),
-                )
+            if not isinstance(old_param, (torch.nn.Parameter, torch.Tensor)):
+                old_param = None
+
+            if old_param is not None:
+                if param_casting_dtype is None:
+                    param_casting_dtype = old_param.dtype
+
+                if old_param.is_contiguous():
+                    _param_to_contiguous = True  # TODO not taking into account anymore
+
+            
+            if device_mesh is not None: # In this case, the param is already on the correct device!
+                layer = new_param_name.rsplit(".", 1)[0]
+                try:
+                    module_to_tp: torch.nn.Module = model.get_submodule(layer)
+                except Exception:
+                    raise ValueError(
+                        "The config tp plan is wrong because the layer is not a liner layer, nor an embedding"
+                    )
+
+                prefix = "model"
+                if prefix is not None:
+                    param_name_ = new_param_name.replace(f"{prefix}.", "")
+
+                current_module_plan = None
+                full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
+                if plan := re.search(full_tp_plan_, param_name_):
+                    match = re.sub("[0-9]+", "*", plan[0])
+                    current_module_plan = full_tp_plan[match]
+                # TODO currently this only supports weights, not bias
+                if current_module_plan is not None:
+                    # replace the linear module
+                    translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
+                    rank = device_map[""]
+                    row, col = empty_param.shape
+                    if "row" in current_module_plan or "down" in new_param_name:
+                        param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
+                    else:
+                        param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
+
+                    # module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype)
+                    module_to_tp._load_from_state_dict({'modelweight':param}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
+                else:
+                    module_to_tp._load_from_state_dict({new_param_name.rsplit('.',1)[1]:param[:]}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
+                    if len(a)>0 :
+                        module_to_tp._load_from_state_dict({'modelweight':param[:]}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
+                    # set_module_tensor_to_device(model, new_param_name, param[:].device, param[:].to(dtype=param_casting_dtype))
+
+            else:
+                if device_map is None:
+                    param_device = "cpu"
+                else:
+                    module_name = module_name.rsplit("." ,1)[0]
+                    if module_name == "" or module_name not in device_map:
+                        if list(device_map.keys()) == ['']:
+                            param_device = device_map['']
+                        else:
+                            raise ValueError(f"`device_map` is used, but {new_param_name} doesn't have any device set. {device_map}")
+                    else:
+                        param_device = device_map[module_name]
+
+                if param_device == "disk" and not is_safetensors:
+                        offload_index = offload_weight(param[:], new_param_name, offload_folder, offload_index)
+                elif param_device == "cpu" and state_dict_index is not None:
+                    state_dict_index = offload_weight(param[:], new_param_name, state_dict_folder, state_dict_index)
+                elif (
+                    not is_quantized
+                    or (not hf_quantizer.requires_parameters_quantization)
+                    or (
+                        not hf_quantizer.check_quantized_param(
+                            model, param, new_param_name, state_dict, param_device=param_device, device_map=device_map
+                        )
+                    )
+                ):
+                    if is_fsdp_enabled():
+                        param_device = "cpu" if is_local_dist_rank_0() else "meta"
+
+                    model._load_from_state_dict({new_param_name:param[:]}, "", {"assign_to_params_buffers": True}, True, a, b, c) 
+                    print(a,b,c)
+                    if len(a)>0:
+                        print(a)
+                    # set_module_tensor_to_device(model, new_param_name, param_device, param[:].to(dtype=param_casting_dtype))
+                else:
+                    hf_quantizer.create_quantized_param(
+                        model, param[:], new_param_name, param_device, state_dict, unexpected_keys
+                    )
+                    # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+                    # and then cast it to CPU to avoid excessive memory usage on each GPU
+                    # in comparison to the sharded model across GPUs.
+                    if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                        module, tensor_name = get_module_from_name(model, new_param_name)
+                        value = getattr(module, tensor_name)
+                        param_to = "cpu"
+                        if is_fsdp_enabled() and not is_local_dist_rank_0():
+                            param_to = "meta"
+                        val_kwargs = {}
+                        if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                            val_kwargs["requires_grad"] = False
+                        value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                        setattr(module, tensor_name, value)
 
     return error_msgs, offload_index, state_dict_index
 
 
 def _add_variant(weights_name: str, variant: Optional[str] = None) -> str:
     if variant is not None:
-        splits = weights_name.split(".")
-        splits = splits[:-1] + [variant] + splits[-1:]
-        weights_name = ".".join(splits)
-
+        path, name = weights_name.rsplit(".")
+        weights_name = f"{path}.{variant}.{name}"
     return weights_name
 
 
@@ -3532,7 +3521,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_torch_greater_or_equal("2.5"):
                 raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
             if not torch.distributed.is_initialized():
-                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
+                try:
+                    logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
+                    rank = int(os.environ["RANK"])
+                    world_size = int(os.environ["WORLD_SIZE"])
+
+                    torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
+                    torch.cuda.set_device(rank)
+                except Exception as e:
+                    raise EnvironmentError(
+                        "We tried to initialize torch.distributed for you, but it failed, make"
+                        "sure you init torch distributed in your script to use `tp_plan='auto'`"
+                    ) from e
 
             # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
             device_type = torch._C._get_accelerator().type
@@ -4440,9 +4440,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ):
                 device_map_kwargs["offload_buffers"] = True
 
-            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-                dispatch_model(model, **device_map_kwargs)
-
         # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
         # not part of the state_dict (persistent=False)
         if device_mesh is not None:
@@ -4709,6 +4706,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
+                        # TODO the dictionnary being passed does not contains
                         hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
@@ -4751,10 +4749,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Set some modules to fp32 if any
         if keep_in_fp32_modules is not None:
+            keep_in_fp32_modules = re.compile("|".join(keep_in_fp32_modules))
             for name, param in model.named_parameters():
-                if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
+                if keep_in_fp32_modules.search(name):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)
+                    param.data = param.data.to(torch.float32)  # TODO @Cyrilvallez: we seem to do this twice
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
@@ -4836,6 +4835,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             offload_index = None
 
+        error_msgs = []
         if state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
@@ -4867,23 +4867,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     keep_in_fp32_modules=keep_in_fp32_modules,
                     unexpected_keys=unexpected_keys,
                     device_mesh=device_mesh,
+                    prefix=cls.base_model_prefix,
+                    resolved_archive_file=resolved_archive_file,
                 )
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
+                if state_dict is not None and next(iter(state_dict.values())).device == torch.device("meta"):
+                    with open(resolved_archive_file, "rb") as f:
+                        data = f.read()
+                    state_dict.update(load(data))
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                error_msgs = _load_state_dict_into_model(
-                    model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
+                missing_keys, unexpected_keys = model_to_load.load_state_dict(
+                    fixed_state_dict, assign_to_params_buffers
                 )
-
+                error_msg = missing_keys
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
                 resolved_archive_file = [resolved_archive_file]
 
-            error_msgs = []
             mismatched_keys = []
             if not is_safetensors:
                 offload_index = {} if device_map is not None and "disk" in device_map.values() else None
@@ -4957,6 +4962,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             keep_in_fp32_modules=keep_in_fp32_modules,
                             unexpected_keys=unexpected_keys,
                             device_mesh=device_mesh,
+                            shard_file=shard_file,
                         )
                         error_msgs += new_error_msgs
                 else:
@@ -4965,11 +4971,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         assign_to_params_buffers = check_support_param_buffer_assignment(
                             model_to_load, state_dict, start_prefix
                         )
+                    # properly read the state dict now:
+                    with open(resolved_archive_file, "rb") as f:
+                        data = f.read()
+                    state_dict.update(load(data))
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                    error_msgs += _load_state_dict_into_model(
-                        model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
-                    )
-
+                    error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign_to_params_buffers)
                 # force memory release
                 del state_dict
                 gc.collect()
@@ -5237,6 +5244,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def tensor_parallel(self, device_mesh):
         """
+        Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
+        was already loaded in memory, note however that this means that each process will first initialize the whole model,
+        then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
+
+        Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
+        so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
         Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
         was already loaded in memory, note however that this means that each process will first initialize the whole model,
         then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
