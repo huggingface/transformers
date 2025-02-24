@@ -4444,9 +4444,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
 
-        for buffer in model.buffers():
-            buffer.data = buffer.to("cuda:0")
-
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
