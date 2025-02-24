@@ -247,7 +247,6 @@ class FalconMambaModelTester:
 # Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FalconMambaModel, FalconMambaForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (FalconMambaForCausalLM,) if is_torch_available() else ()
     has_attentions = False  # FalconMamba does not support attentions
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker

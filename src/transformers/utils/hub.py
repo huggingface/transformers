@@ -18,10 +18,8 @@ Hub utilities: utilities related to download and cache models
 import json
 import os
 import re
-import shutil
 import sys
 import tempfile
-import traceback
 import warnings
 from concurrent import futures
 from pathlib import Path
@@ -40,7 +38,6 @@ from huggingface_hub import (
     create_branch,
     create_commit,
     create_repo,
-    get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
     try_to_load_from_cache,
@@ -86,7 +83,6 @@ def is_offline_mode():
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 default_cache_path = constants.default_cache_path
-old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 
 # Determine default cache directory. Lots of legacy environment variables to ensure backward compatibility.
 # The best way to set the cache path is with the environment variable HF_HOME. For more details, checkout this
@@ -99,23 +95,6 @@ old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", constants.HF_HUB_CACHE)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
-
-# Onetime move from the old location to the new one if no ENV variable has been set.
-if (
-    os.path.isdir(old_default_cache_path)
-    and not os.path.isdir(constants.HF_HUB_CACHE)
-    and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
-    and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
-    and "TRANSFORMERS_CACHE" not in os.environ
-):
-    logger.warning(
-        "In Transformers v4.22.0, the default path to cache downloaded models changed from"
-        " '~/.cache/torch/transformers' to '~/.cache/huggingface/hub'. Since you don't seem to have"
-        " overridden and '~/.cache/torch/transformers' is a directory that exists, we're moving it to"
-        " '~/.cache/huggingface/hub' to avoid redownloading models you have already in the cache. You should"
-        " only see this message once."
-    )
-    shutil.move(old_default_cache_path, constants.HF_HUB_CACHE)
 
 HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(constants.HF_HOME, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
@@ -1087,47 +1066,6 @@ def get_checkpoint_shard_files(
     return cached_filenames, sharded_metadata
 
 
-# All what is below is for conversion between old cache format and new cache format.
-
-
-def get_all_cached_files(cache_dir=None):
-    """
-    Returns a list for all files cached with appropriate metadata.
-    """
-    if cache_dir is None:
-        cache_dir = TRANSFORMERS_CACHE
-    else:
-        cache_dir = str(cache_dir)
-    if not os.path.isdir(cache_dir):
-        return []
-
-    cached_files = []
-    for file in os.listdir(cache_dir):
-        meta_path = os.path.join(cache_dir, f"{file}.json")
-        if not os.path.isfile(meta_path):
-            continue
-
-        with open(meta_path, encoding="utf-8") as meta_file:
-            metadata = json.load(meta_file)
-            url = metadata["url"]
-            etag = metadata["etag"].replace('"', "")
-            cached_files.append({"file": file, "url": url, "etag": etag})
-
-    return cached_files
-
-
-def extract_info_from_url(url):
-    """
-    Extract repo_name, revision and filename from an url.
-    """
-    search = re.search(r"^https://huggingface\.co/(.*)/resolve/([^/]*)/(.*)$", url)
-    if search is None:
-        return None
-    repo, revision, filename = search.groups()
-    cache_repo = "--".join(["models"] + repo.split("/"))
-    return {"repo": cache_repo, "revision": revision, "filename": filename}
-
-
 def create_and_tag_model_card(
     repo_id: str,
     tags: Optional[List[str]] = None,
@@ -1168,88 +1106,6 @@ def create_and_tag_model_card(
     return model_card
 
 
-def clean_files_for(file):
-    """
-    Remove, if they exist, file, file.json and file.lock
-    """
-    for f in [file, f"{file}.json", f"{file}.lock"]:
-        if os.path.isfile(f):
-            os.remove(f)
-
-
-def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
-    """
-    Move file to repo following the new huggingface hub cache organization.
-    """
-    os.makedirs(repo, exist_ok=True)
-
-    # refs
-    os.makedirs(os.path.join(repo, "refs"), exist_ok=True)
-    if revision != commit_hash:
-        ref_path = os.path.join(repo, "refs", revision)
-        with open(ref_path, "w") as f:
-            f.write(commit_hash)
-
-    # blobs
-    os.makedirs(os.path.join(repo, "blobs"), exist_ok=True)
-    blob_path = os.path.join(repo, "blobs", etag)
-    shutil.move(file, blob_path)
-
-    # snapshots
-    os.makedirs(os.path.join(repo, "snapshots"), exist_ok=True)
-    os.makedirs(os.path.join(repo, "snapshots", commit_hash), exist_ok=True)
-    pointer_path = os.path.join(repo, "snapshots", commit_hash, filename)
-    huggingface_hub.file_download._create_relative_symlink(blob_path, pointer_path)
-    clean_files_for(file)
-
-
-def move_cache(cache_dir=None, new_cache_dir=None, token=None):
-    if new_cache_dir is None:
-        new_cache_dir = TRANSFORMERS_CACHE
-    if cache_dir is None:
-        # Migrate from old cache in .cache/huggingface/transformers
-        old_cache = Path(TRANSFORMERS_CACHE).parent / "transformers"
-        if os.path.isdir(str(old_cache)):
-            cache_dir = str(old_cache)
-        else:
-            cache_dir = new_cache_dir
-    cached_files = get_all_cached_files(cache_dir=cache_dir)
-    logger.info(f"Moving {len(cached_files)} files to the new cache system")
-
-    hub_metadata = {}
-    for file_info in tqdm(cached_files):
-        url = file_info.pop("url")
-        if url not in hub_metadata:
-            try:
-                hub_metadata[url] = get_hf_file_metadata(url, token=token)
-            except requests.HTTPError:
-                continue
-
-        etag, commit_hash = hub_metadata[url].etag, hub_metadata[url].commit_hash
-        if etag is None or commit_hash is None:
-            continue
-
-        if file_info["etag"] != etag:
-            # Cached file is not up to date, we just throw it as a new version will be downloaded anyway.
-            clean_files_for(os.path.join(cache_dir, file_info["file"]))
-            continue
-
-        url_info = extract_info_from_url(url)
-        if url_info is None:
-            # Not a file from huggingface.co
-            continue
-
-        repo = os.path.join(new_cache_dir, url_info["repo"])
-        move_to_new_cache(
-            file=os.path.join(cache_dir, file_info["file"]),
-            repo=repo,
-            filename=url_info["filename"],
-            revision=url_info["revision"],
-            etag=etag,
-            commit_hash=commit_hash,
-        )
-
-
 class PushInProgress:
     """
     Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
@@ -1271,55 +1127,3 @@ class PushInProgress:
             # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
             if not (job.cancel() or job.done())
         ]
-
-
-cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")
-if not os.path.isfile(cache_version_file):
-    cache_version = 0
-else:
-    with open(cache_version_file) as f:
-        try:
-            cache_version = int(f.read())
-        except ValueError:
-            cache_version = 0
-
-cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSFORMERS_CACHE)) > 0
-
-if cache_version < 1 and cache_is_not_empty:
-    if is_offline_mode():
-        logger.warning(
-            "You are offline and the cache for model files in Transformers v4.22.0 has been updated while your local "
-            "cache seems to be the one of a previous version. It is very likely that all your calls to any "
-            "`from_pretrained()` method will fail. Remove the offline mode and enable internet connection to have "
-            "your cache be updated automatically, then you can go back to offline mode."
-        )
-    else:
-        logger.warning(
-            "The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a "
-            "one-time only operation. You can interrupt this and resume the migration later on by calling "
-            "`transformers.utils.move_cache()`."
-        )
-    try:
-        if TRANSFORMERS_CACHE != constants.HF_HUB_CACHE:
-            # Users set some env variable to customize cache storage
-            move_cache(TRANSFORMERS_CACHE, TRANSFORMERS_CACHE)
-        else:
-            move_cache()
-    except Exception as e:
-        trace = "\n".join(traceback.format_tb(e.__traceback__))
-        logger.error(
-            f"There was a problem when trying to move your cache:\n\n{trace}\n{e.__class__.__name__}: {e}\n\nPlease "
-            "file an issue at https://github.com/huggingface/transformers/issues/new/choose and copy paste this whole "
-            "message and we will do our best to help."
-        )
-
-if cache_version < 1:
-    try:
-        os.makedirs(TRANSFORMERS_CACHE, exist_ok=True)
-        with open(cache_version_file, "w") as f:
-            f.write("1")
-    except Exception:
-        logger.warning(
-            f"There was a problem when trying to write in your cache folder ({TRANSFORMERS_CACHE}). You should set "
-            "the environment variable TRANSFORMERS_CACHE to a writable directory."
-        )

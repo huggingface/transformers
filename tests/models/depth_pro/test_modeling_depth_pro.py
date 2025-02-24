@@ -182,7 +182,7 @@ class DepthProModelTester:
         model_name = model.__class__.__name__
         self.parent.assertTrue(
             diff <= 1e-03,
-            msg=(f"Batched and Single row outputs are not equal in {model_name} for fov. " f"Difference={diff}."),
+            msg=(f"Batched and Single row outputs are not equal in {model_name} for fov. Difference={diff}."),
         )
 
     def prepare_config_and_inputs_for_common(self):

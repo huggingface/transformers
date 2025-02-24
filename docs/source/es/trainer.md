@@ -362,6 +362,30 @@ use_cpu: false
 ```
 
 </hfoption>
+
+<hfoption id="Tensor Parallelism with PyTorch 2">
+
+```yml
+compute_environment: LOCAL_MACHINE
+tp_config:
+  tp_size: 4
+distributed_type: TP
+downcast_bf16: 'no'
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 4
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
+
+```
+
+</hfoption>
 </hfoptions>
 
 El comando [`accelerate_launch`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-launch) es la forma recomendada de lanzar tu script de entrenamiento en un sistema distribuido con Accelerate y [`Trainer`] con los parámetros especificados en `config_file.yaml`. Este archivo se guarda en la carpeta de caché de Accelerate y se carga automáticamente cuando ejecutas `accelerate_launch`.

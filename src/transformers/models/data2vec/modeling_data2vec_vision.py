@@ -16,6 +16,7 @@
 
 import collections.abc
 import math
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -195,12 +196,16 @@ class Data2VecVisionEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: Optional[bool] = None,
     ) -> torch.Tensor:
+        if self.position_embeddings is not None and interpolate_pos_encoding is not None:
+            warnings.warn(
+                "`interpolate_pos_encoding` argument has no effect for BEiTEmbeddings, embeddings are always "
+                "interpolated to the input image size. The argument will be removed in transformers v4.51.0."
+            )
+
         _, _, height, width = pixel_values.shape
-        embeddings, (patch_height, patch_width) = self.patch_embeddings(
-            pixel_values, self.position_embeddings[:, 1:, :] if self.position_embeddings is not None else None
-        )
+        embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
         if bool_masked_pos is not None:
@@ -210,13 +215,10 @@ class Data2VecVisionEmbeddings(nn.Module):
             embeddings = embeddings * (1 - w) + mask_tokens * w
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        if self.position_embeddings is not None:
-            if interpolate_pos_encoding:
-                cls_tokens = cls_tokens + self.interpolate_pos_encoding(embeddings, height, width)
-            else:
-                cls_tokens = cls_tokens + self.position_embeddings[:, :1, :]
-
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        if self.position_embeddings is not None:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
         embeddings = self.dropout(embeddings)
 
@@ -248,11 +250,7 @@ class Data2VecVisionPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        position_embedding: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -261,17 +259,6 @@ class Data2VecVisionPatchEmbeddings(nn.Module):
 
         embeddings = self.projection(pixel_values)
         patch_height, patch_width = embeddings.shape[2], embeddings.shape[3]
-
-        if position_embedding is not None:
-            # interpolate the position embedding to the corresponding size
-            position_embedding = position_embedding.view(1, self.patch_shape[0], self.patch_shape[1], -1).permute(
-                0, 3, 1, 2
-            )
-            position_embedding = nn.functional.interpolate(
-                position_embedding, size=(patch_height, patch_width), mode="bicubic"
-            )
-            embeddings = embeddings + position_embedding
-
         embeddings = embeddings.flatten(2).transpose(1, 2)
 
         return embeddings, (patch_height, patch_width)
@@ -284,7 +271,7 @@ class Data2VecVisionSelfAttention(nn.Module):
         self.config = config
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {(config.hidden_size,)} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
@@ -902,9 +889,7 @@ class Data2VecVisionModel(Data2VecVisionPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output, _ = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(

@@ -28,14 +28,11 @@ if is_torch_available():
 
 
 if is_flute_available():
-    import flute.utils
+    from flute.integrations.higgs import prepare_data_transposed
+    from flute.tune import TuneMetaData, qgemm_v2
 
 if is_hadamard_available():
     from fast_hadamard_transform import hadamard_transform
-
-if is_flute_available():
-    import flute.utils
-    from flute.integrations.higgs import prepare_data_transposed
 
 
 def pad_to_block(tensor, dims, had_block_size, value=0):
@@ -464,14 +461,14 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
 
     # Quantize
     codes = torch.empty(weight.shape[:-1], device=device, dtype=torch.uint8)
-    for i in range(0, weight.shape[0], 64):
-        codes[i : i + 64] = torch.argmax(2 * weight[i : i + 64] @ grid.T - grid_norm_2, dim=-1).to(torch.uint8)
+    for i in range(0, weight.shape[0], 16):
+        codes[i : i + 16] = torch.argmax(2 * weight[i : i + 16] @ grid.T - grid_norm_2, dim=-1).to(torch.uint8)
     del weight
 
     codes = codes.reshape(codes.shape[0], -1)
     scales = scales / sqrt(hadamard_size)
 
-    weight, scales, tables, tables2 = prepare_data_transposed(
+    weight, scales, tables, tables2, tune_metadata = prepare_data_transposed(
         codes,
         torch.repeat_interleave(scales.to(dtype), hadamard_size // group_size, dim=1),
         grid.to(dtype),
@@ -480,6 +477,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
         vector_size=p,
         dtype=dtype,
         device=device,
+        check_correctness=False,
     )
 
     return {
@@ -487,6 +485,7 @@ def quantize_with_higgs(weight, bits: int = 4, p: int = 2, group_size: int = 256
         "scales": scales,
         "tables": tables,
         "tables2": tables2.view(dtype=torch.float16),
+        "tune_metadata": tune_metadata,
     }
 
 
@@ -508,7 +507,6 @@ class HiggsLinear(torch.nn.Module):
         self.num_bits = num_bits
         self.group_size = group_size
         self.hadamard_size = hadamard_size
-        self.num_sms_packed = nn.Parameter(torch.tensor(-1, dtype=torch.int32, device=device), requires_grad=False)
 
         assert in_features % group_size == 0
         assert num_bits in [2, 3, 4]
@@ -531,6 +529,7 @@ class HiggsLinear(torch.nn.Module):
             self.register_parameter("bias", None)
 
         self.workspace = None  # must be set externally to be reused among layers
+        self.tune_metadata: TuneMetaData = None  # must be set externally because architecture dependent
 
     def forward(self, x):
         x = pad_to_block(x, [-1], self.hadamard_size)
@@ -538,16 +537,15 @@ class HiggsLinear(torch.nn.Module):
         if self.workspace is None:
             raise Exception("Workspace must be set before calling forward")
 
-        return flute.qgemm_hadamard(
+        return qgemm_v2(
             x,
             self.weight,
             self.scales,
             self.tables,
             self.tables2.view(dtype=torch.float32),
             self.workspace,
-            self.num_bits,
-            self.group_size,
-            self.hadamard_size,
+            self.tune_metadata,
+            hadamard_size=self.hadamard_size,
         )
 
 
