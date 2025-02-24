@@ -198,6 +198,11 @@ class Idefics2Processor(ProcessorMixin):
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
+            add_special_tokens = True
+            if self.bos_token is not None and text[0].startswith(self.bos_token):
+                add_special_tokens = False
+            output_kwargs["text_kwargs"]["add_special_tokens"] = add_special_tokens
+
             # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
             fake_image_token = self.fake_image_token.content
             image_token = self.image_token.content
