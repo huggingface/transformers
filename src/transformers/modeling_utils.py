@@ -786,7 +786,7 @@ def _load_state_dict_into_meta_model(
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
-    if device_map is None:
+    if device_map is None or '' not in device_map:
         device_map = {"": torch.device("cpu")}
 
     with safe_open(shard_file, framework="pt", device=device_map[""].index) as file_pointer:
