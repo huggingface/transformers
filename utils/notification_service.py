@@ -527,16 +527,16 @@ class Message:
             with open(file_path, "w", encoding="UTF-8") as fp:
                 fp.write(failure_text)
 
-            # upload results to Hub dataset
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            commit_info = api.upload_file(
-                path_or_fileobj=file_path,
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
-            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
+            # # upload results to Hub dataset
+            # file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            # commit_info = api.upload_file(
+            #     path_or_fileobj=file_path,
+            #     path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
+            #     repo_id="hf-internal-testing/transformers_daily_ci",
+            #     repo_type="dataset",
+            #     token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            # )
+            # url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
 
             # extra processing to save to json format
             new_failed_tests = {}
@@ -1228,14 +1228,14 @@ if __name__ == "__main__":
             json.dump(model_results, fp, indent=4, ensure_ascii=False)
 
         # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
-        if is_scheduled_ci_run:
-            api.upload_file(
-                path_or_fileobj=f"ci_results_{job_name}/model_results.json",
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
+        # if is_scheduled_ci_run:
+        #     api.upload_file(
+        #         path_or_fileobj=f"ci_results_{job_name}/model_results.json",
+        #         path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
+        #         repo_id="hf-internal-testing/transformers_daily_ci",
+        #         repo_type="dataset",
+        #         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        #     )
 
     # Must have the same keys as in `additional_results`.
     # The values are used as the file names where to save the corresponding CI job results.
@@ -1250,25 +1250,25 @@ if __name__ == "__main__":
             json.dump(job_result, fp, indent=4, ensure_ascii=False)
 
         # upload results to Hub dataset (only for the scheduled daily CI run on `main`)
-        if is_scheduled_ci_run:
-            api.upload_file(
-                path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
-                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
-                repo_id="hf-internal-testing/transformers_daily_ci",
-                repo_type="dataset",
-                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
-            )
+        # if is_scheduled_ci_run:
+        #     api.upload_file(
+        #         path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
+        #         path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
+        #         repo_id="hf-internal-testing/transformers_daily_ci",
+        #         repo_type="dataset",
+        #         token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+        #     )
 
     prev_ci_artifacts = None
-    if is_scheduled_ci_run:
-        if job_name == "run_models_gpu":
-            # Get the last previously completed CI's failure tables
-            artifact_names = [f"ci_results_{job_name}"]
-            output_dir = os.path.join(os.getcwd(), "previous_reports")
-            os.makedirs(output_dir, exist_ok=True)
-            prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
-            )
+    # if is_scheduled_ci_run:
+    if job_name == "run_models_gpu":
+        # Get the last previously completed CI's failure tables
+        artifact_names = [f"ci_results_{job_name}"]
+        output_dir = os.path.join(os.getcwd(), "previous_reports")
+        os.makedirs(output_dir, exist_ok=True)
+        prev_ci_artifacts = get_last_daily_ci_reports(
+            artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+        )
 
     message = Message(
         title,
