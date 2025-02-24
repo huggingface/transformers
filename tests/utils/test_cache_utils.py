@@ -652,5 +652,5 @@ class CacheIntegrationTest(unittest.TestCase):
         for layer_idx in range(len(no_parallelism_cache)):
             for kv_idx in range(2):  # 0 = key, 1 = value
                 torch.testing.assert_close(
-                    actual=no_parallelism_cache[layer_idx][kv_idx], expected=parallelism_cache[layer_idx][kv_idx]
+                    actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
                 )
