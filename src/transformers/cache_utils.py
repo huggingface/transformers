@@ -371,8 +371,9 @@ class DynamicCache(Cache):
         if _distributed_cache_data is not None:
             for layer_idx in range(len(_distributed_cache_data)):
                 key_states, value_states = zip(*_distributed_cache_data[layer_idx])
-                self.key_cache.append(torch.cat(key_states, dim=-2))
-                self.value_cache.append(torch.cat(value_states, dim=-2))
+                # concat on the batch size dimension
+                self.key_cache.append(torch.cat(key_states, dim=0))
+                self.value_cache.append(torch.cat(value_states, dim=0))
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
