@@ -24,7 +24,6 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -35,6 +34,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     logging,
 )
+from ..mixtral.configuration_mixtral import MixtralConfig
 from ..mixtral.modeling_mixtral import (
     KwargsForCausalLM,
     MixtralAttention,
@@ -56,7 +56,7 @@ _CHECKPOINT_FOR_DOC = "MiniMaxAI/MiniMax-Text-01"
 _CONFIG_FOR_DOC = "MiniMaxConfig"
 
 
-class MiniMaxConfig(PretrainedConfig):
+class MiniMaxConfig(MixtralConfig):
     r"""
     This is the configuration class to store the configuration of a [`MiniMaxModel`]. It is used to instantiate an
     MiniMax model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -201,26 +201,30 @@ class MiniMaxConfig(PretrainedConfig):
         layernorm_mlp_beta=1,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.attention_dropout = attention_dropout
-        self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.num_experts_per_tok = num_experts_per_tok
-        self.num_local_experts = num_local_experts
-        self.output_router_logits = output_router_logits
-        self.router_aux_loss_coef = router_aux_loss_coef
-        self.router_jitter_noise = router_jitter_noise
+        super().__init__(
+            vocab_size=vocab_size,
+            max_position_embeddings=max_position_embeddings,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            sliding_window=sliding_window,
+            num_key_value_heads=num_key_value_heads,
+            hidden_act=hidden_act,
+            initializer_range=initializer_range,
+            rms_norm_eps=rms_norm_eps,
+            use_cache=use_cache,
+            rope_theta=rope_theta,
+            attention_dropout=attention_dropout,
+            head_dim=head_dim,
+            num_experts_per_tok=num_experts_per_tok,
+            num_local_experts=num_local_experts,
+            output_router_logits=output_router_logits,
+            router_aux_loss_coef=router_aux_loss_coef,
+            router_jitter_noise=router_jitter_noise,
+            **kwargs,
+        )
+
         self.attn_type_list = attn_type_list
         self.block_size = block_size
         self.postnorm = postnorm
@@ -230,14 +234,6 @@ class MiniMaxConfig(PretrainedConfig):
         self.layernorm_linear_attention_beta = layernorm_linear_attention_beta
         self.layernorm_mlp_alpha = layernorm_mlp_alpha
         self.layernorm_mlp_beta = layernorm_mlp_beta
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):
