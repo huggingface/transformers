@@ -539,6 +539,7 @@ class RecurrentGemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["RecurrentGemmaDecoderLayer"]
     _skip_keys_device_placement = ["cache"]
     _supports_flash_attn_2 = False
+    _supports_flash_attn_3 = False
     _supports_sdpa = False  # we can't compare with eager for now
     _supports_cache_class = True
     _supports_quantized_cache = True
