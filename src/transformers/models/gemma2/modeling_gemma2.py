@@ -841,7 +841,6 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         **loss_kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
-        Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -859,9 +858,9 @@ class Gemma2ForCausalLM(Gemma2PreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, GemmaForCausalLM
+        >>> from transformers import AutoTokenizer, Gemma2ForCausalLM
 
-        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma2ForCausalLM.from_pretrained("google/gemma-2-9b")
         >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
 
         >>> prompt = "What is your favorite condiment?"
