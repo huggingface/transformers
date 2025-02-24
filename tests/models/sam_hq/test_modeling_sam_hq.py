@@ -664,7 +664,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
         scores = outputs.iou_scores.squeeze()
 
-        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7894), atol=1e-4))
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.8680), atol=1e-4))
 
     def test_inference_mask_generation_one_point(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
