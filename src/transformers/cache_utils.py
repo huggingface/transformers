@@ -340,12 +340,6 @@ class DynamicCache(Cache):
     It stores the Key and Value states as a list of tensors, one for each layer. The expected shape for each tensor is
     `[batch_size, num_heads, seq_len, head_dim]`.
 
-    Args:
-        cache_data (`Tuple[List[torch.Tensor], List[torch.Tensor]]]`, *optional*):
-            A tuple containing the key and value states for each layer, where each layer's data is an item in the list.
-            This is used to initialize the cache with pre-existing key and value states. If not provided, the cache
-            will be initialized with empty lists.
-
     Example:
 
         ```python
@@ -364,17 +358,21 @@ class DynamicCache(Cache):
         ```
     """
 
-    def __init__(self, cache_data: Optional[Tuple[List[torch.Tensor], List[torch.Tensor]]] = None) -> None:
+    def __init__(self, _distributed_cache_data=None) -> None:
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self.key_cache: List[torch.Tensor] = []
+        self.value_cache: List[torch.Tensor] = []
 
-        # `cache_data` was originally added for compatibility with `torch.distributed`. See #36121 and #36373 for more
-        # information. Some training methods, like prefix tuning, require the cache to be passed to the model's forward
-        if cache_data is not None:
-            self.key_cache, self.value_cache = cache_data
-        else:
-            self.key_cache: List[torch.Tensor] = []
-            self.value_cache: List[torch.Tensor] = []
+        # `_distributed_cache_data` was originally added for compatibility with `torch.distributed` (DDP). See #36121
+        # and #36373 for more information. In a nutshell, it contains list(zip(*caches)), i.e. each item in the list
+        # corresponds to a layer and contains tuples of key and values ( [(k_0, v_0), (k_1, v_1), ..., (k_n, v_n)],
+        # where n is the number of caches gathered by torch.distributed, one cache per replica).
+        if _distributed_cache_data is not None:
+            for layer_idx in range(len(_distributed_cache_data)):
+                key_states, value_states = zip(*_distributed_cache_data[layer_idx])
+                self.key_cache.append(torch.cat(key_states, dim=-2))
+                self.value_cache.append(torch.cat(value_states, dim=-2))
 
     def __getitem__(self, layer_idx: int) -> List[Tuple[torch.Tensor]]:
         """
