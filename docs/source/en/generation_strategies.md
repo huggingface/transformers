@@ -196,7 +196,7 @@ statistically to obtain that amount of "green" tokens for human-generated text. 
 ["On the Reliability of Watermarks for Large Language Models"](https://arxiv.org/abs/2306.04634). For more information on
 the inner functioning of watermarking, it is recommended to refer to the paper.
 
-The watermarking can be used with any generative model in `tranformers` and does not require an extra classification model
+The watermarking can be used with any generative model in `transformers` and does not require an extra classification model
 to detect watermarked text. To trigger watermarking, pass in a [`WatermarkingConfig`] with needed arguments directly to the
 `.generate()` method or add it to the [`GenerationConfig`]. Watermarked text can be later detected with a [`WatermarkDetector`].
 

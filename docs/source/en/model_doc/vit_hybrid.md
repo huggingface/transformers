@@ -35,7 +35,7 @@ by leveraging a convolutional backbone (specifically, [BiT](bit)) whose features
 
 The abstract from the paper is the following:
 
-*While the Transformer architecture has become the de-facto standard for natural language processing tasks, its
+*While the Transformer architecture has become the de facto standard for natural language processing tasks, its
 applications to computer vision remain limited. In vision, attention is either applied in conjunction with
 convolutional networks, or used to replace certain components of convolutional networks while keeping their overall
 structure in place. We show that this reliance on CNNs is not necessary and a pure transformer applied directly to

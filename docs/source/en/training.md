@@ -375,7 +375,7 @@ Lastly, specify `device` to use a GPU if you have access to one. Otherwise, trai
 
 <Tip>
 
-Get free access to a cloud GPU if you don't have one with a hosted notebook like [Colaboratory](https://colab.research.google.com/) or [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
+Get free access to a cloud GPU if you don't have one with a hosted notebook like [Collaboratory](https://colab.research.google.com/) or [SageMaker StudioLab](https://studiolab.sagemaker.aws/).
 
 </Tip>
 

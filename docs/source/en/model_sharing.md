@@ -59,7 +59,7 @@ Before sharing a model to the Hub, you will need your Hugging Face credentials. 
 huggingface-cli login
 ```
 
-If you are using a notebook like Jupyter or Colaboratory, make sure you have the [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) library installed. This library allows you to programmatically interact with the Hub.
+If you are using a notebook like Jupyter or Collaboratory, make sure you have the [`huggingface_hub`](https://huggingface.co/docs/hub/adding-a-library) library installed. This library allows you to programmatically interact with the Hub.
 
 ```bash
 pip install huggingface_hub
