@@ -845,8 +845,8 @@ def _load_state_dict_into_meta_model(
                 if old_param.is_contiguous():
                     _param_to_contiguous = True  # TODO not taking into account anymore
 
-            # In this case, let's parallelize the modules!
-            if device_mesh is not None:
+            
+            if device_mesh is not None: # In this case, the param is already on the correct device!
                 layer = param_name.rsplit(".", 1)[0]
                 try:
                     module_to_tp: torch.nn.Module = model.get_submodule(layer)
@@ -875,11 +875,7 @@ def _load_state_dict_into_meta_model(
 
                     module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype, non_blocking=True)
                 else:
-                    setattr(
-                        model,
-                        param_name,
-                        param[:].to(dtype=param_casting_dtype, non_blocking=True),
-                    )
+                    set_module_tensor_to_device(model, param_name, param_device, param[:].to(dtype=param_casting_dtype))
 
             else:
                 if device_map is None:
