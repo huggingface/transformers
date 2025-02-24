@@ -90,7 +90,7 @@ class StyleTextToSpeech2Processor(ProcessorMixin):
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             torch.save(voice_preset, save_path)
         
-        with open(os.path.join(save_directory, voice_presets_path), "w") as fp:
+        with open(voice_presets_path, "w") as fp:
             voice_presets_config = self.voice_presets_config.copy()
             voice_presets_config["path_or_repo"] = save_directory
             json.dump(self.voice_presets_config, fp)
