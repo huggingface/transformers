@@ -74,6 +74,9 @@ class TrainerState:
             The list of logs done since the beginning of training.
         best_metric (`float`, *optional*):
             When tracking the best model, the value of the best metric encountered so far.
+        best_global_step (`int`, *optional*):
+            When tracking the best model, the step at which the best metric was encountered.
+            Used for setting `best_model_checkpoint`.
         best_model_checkpoint (`str`, *optional*):
             When tracking the best model, the value of the name of the checkpoint for the best model encountered so
             far.
@@ -103,6 +106,7 @@ class TrainerState:
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
+    best_global_step: Optional[int] = None
     best_model_checkpoint: Optional[str] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
