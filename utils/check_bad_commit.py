@@ -166,6 +166,11 @@ if __name__ == "__main__":
     if len({args.test is None, args.file is None}) != 2:
         raise ValueError("Exactly one argument `test` or `file` must be specified.")
 
+    print(args.file)
+
+    with open(args.output_file, "w", encoding="UTF-8") as fp:
+        json.dump({}, fp, ensure_ascii=False, indent=4)
+
     if args.test is not None:
         commit = find_bad_commit(target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit)
         with open(args.output_file, "w", encoding="UTF-8") as fp:
@@ -194,6 +199,8 @@ if __name__ == "__main__":
 
         # remove the models without any test failure
         reports = {k: v for k, v in reports.items() if len(v) > 0}
+
+        print(reports)
 
         with open(args.output_file, "w", encoding="UTF-8") as fp:
             json.dump(reports, fp, ensure_ascii=False, indent=4)
