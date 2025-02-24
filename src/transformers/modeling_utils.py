@@ -392,21 +392,6 @@ def dtype_byte_size(dtype):
     bit_size = int(bit_search.groups()[0])
     return bit_size // 8
 
-torch_dtype_to_safe_str = {
-    torch.bool: "BOOL",
-    torch.uint8: "U8",
-    torch.int8: "I8",
-    torch.int16: "I16",
-    torch.uint16: "U16",
-    torch.float16: "F16",
-    torch.bfloat16: "BF16",
-    torch.int32: "I32",
-    torch.uint32: "U32",
-    torch.float32: "F32",
-    torch.float64: "F64",
-    torch.int64: "I64",
-    torch.uint64: "U64",
-}
 
 def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefix=""):
     """
@@ -436,7 +421,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
     # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
     first_key = next(iter(model_to_load.state_dict().keys()))
     if start_prefix + first_key in state_dict:
-        return state_dict[start_prefix + first_key]["dtype"] == torch_dtype_to_safe_str[model_to_load.state_dict()[first_key].dtype]
+        return state_dict[start_prefix + first_key].dtype== model_to_load.state_dict()[first_key].dtype
 
     # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
     return False
@@ -527,6 +512,23 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     return torch.nn.modules.module._IncompatibleKeys(missing_keys, unexpected_keys)
 
 
+str_to_torch_dtype = {
+    "BOOL": torch.bool,
+    "U8": torch.uint8,
+    "I8": torch.int8,
+    "I16": torch.int16,
+    "U16": torch.uint16,
+    "F16": torch.float16,
+    "BF16": torch.bfloat16,
+    "I32": torch.int32,
+    "U32": torch.uint32,
+    "F32": torch.float32,
+    "F64": torch.float64,
+    "I64": torch.int64,
+    "U64": torch.uint64,
+}
+
+
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
@@ -548,10 +550,8 @@ def load_state_dict(
                 )
             state_dict = {}
             for k in f.keys():
-                state_dict[k] = {
-                    "shape": f.get_slice(k).get_shape(),
-                    "dtype": f.get_slice(k).get_dtype(),
-                }
+                dtype = str_to_torch_dtype[f.get_slice(k).get_dtype()]
+                state_dict[k] = torch.empty(size=f.get_slice(k).get_shape(), dtype=dtype, device="meta")
             return state_dict
     try:
         if map_location is None:
@@ -749,7 +749,7 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 
 def _load_state_dict_into_meta_model(
     model: torch.nn.Module,
-    state_dict,
+    state_dict: Dict[str, torch.Tensor],
     start_prefix,
     expected_keys,
     device_map=None,
@@ -785,6 +785,7 @@ def _load_state_dict_into_meta_model(
     # - deepspeed zero 3 support
     # - need to copy metadata if any - see _load_state_dict_into_model
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
+    # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
     with safe_open(shard_file, framework="pt", device=device_map[""]) as file_pointer:
         error_msgs = []
 
@@ -4760,21 +4761,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     elif add_prefix_to_model:
                         # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
                         model_key = ".".join(model_key.split(".")[1:])
-                    import math
+
                     if (
                         model_key in model_state_dict
-                        and state_dict[checkpoint_key]["shape"] != model_state_dict[model_key].shape
+                        and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
                     ):
                         if (
-                            state_dict[checkpoint_key]["shape"][-1] == 1
-                            and math.prod(state_dict[checkpoint_key]["shape"]) * 2 == model_state_dict[model_key].numel()
+                            state_dict[checkpoint_key].shape[-1] == 1
+                            and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
                         ):
                             # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                             # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                             pass
                         else:
                             mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key]["shape"], model_state_dict[model_key].shape)
+                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
                             )
                             del state_dict[checkpoint_key]
             return mismatched_keys
@@ -4844,9 +4845,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
-                with open(resolved_archive_file, "rb") as f:
-                    data = f.read()
-                state_dict = load(data)
+                if state_dict is not None and next(iter(state_dict.values())).device == torch.device("meta"):
+                    with open(resolved_archive_file, "rb") as f:
+                        data = f.read()
+                    state_dict = load(data)
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 missing_keys, unexpected_keys = model_to_load.load_state_dict(fixed_state_dict, assign_to_params_buffers)
                 error_msg = missing_keys
@@ -4911,7 +4913,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                 )
                     else:
-                        import pdb;pdb.set_trace()
                         fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
