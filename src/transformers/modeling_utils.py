@@ -33,11 +33,12 @@ from functools import partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 from zipfile import is_zipfile
-from safetensors.torch import load
+
 import torch
 import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
+from safetensors.torch import load
 from torch import Tensor, nn
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
@@ -421,7 +422,7 @@ def check_support_param_buffer_assignment(model_to_load, state_dict, start_prefi
     # If the model does, the incoming `state_dict` and the `model_to_load` must be the same dtype
     first_key = next(iter(model_to_load.state_dict().keys()))
     if start_prefix + first_key in state_dict:
-        return state_dict[start_prefix + first_key].dtype== model_to_load.state_dict()[first_key].dtype
+        return state_dict[start_prefix + first_key].dtype == model_to_load.state_dict()[first_key].dtype
 
     # For cases when the `state_dict` doesn't contain real weights to the model (`test_model_weights_reload_no_missing_tied_weights`)
     return False
@@ -697,7 +698,6 @@ def _find_identical(tensors: List[Set[str]], state_dict: Dict[str, torch.Tensor]
     return shared_tensors, identical
 
 
-
 def find_submodule_and_param_name(model, long_key, start_prefix):
     """
     A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
@@ -880,7 +880,11 @@ def _load_state_dict_into_meta_model(
                                 device_map[""], dtype=param_casting_dtype, non_blocking=True
                             )
                     else:
-                        setattr(model,param_name, param[:].to(dtype=param_casting_dtype,device=device_map[""], non_blocking=True))
+                        setattr(
+                            model,
+                            param_name,
+                            param[:].to(dtype=param_casting_dtype, device=device_map[""], non_blocking=True),
+                        )
 
             else:
                 set_module_kwargs["param"] = param[:]
@@ -914,7 +918,7 @@ def _load_state_dict_into_meta_model(
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
 
                     # For backward compatibility with older versions of `accelerate` and for non-quantized params
-                    setattr(model,param_name, param[:].to(dtype=torch.float16, non_blocking=True))
+                    setattr(model, param_name, param[:].to(dtype=torch.float16, non_blocking=True))
                 else:
                     hf_quantizer.create_quantized_param(
                         model, param, param_name, param_device, state_dict, unexpected_keys
@@ -3512,7 +3516,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_torch_greater_or_equal("2.5"):
                 raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
             if not torch.distributed.is_initialized():
-                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
+                try:
+                    logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
+                    rank = int(os.environ["RANK"])
+                    world_size = int(os.environ["WORLD_SIZE"])
+
+                    torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
+                    torch.cuda.set_device(rank)
+                except Exception as e:
+                    raise EnvironmentError(
+                        "We tried to initialize torch.distributed for you, but it failed, make"
+                        "sure you init torch distributed in your script to use `tp_plan='auto'`"
+                    ) from e
 
             # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
             device_type = torch._C._get_accelerator().type
@@ -4725,7 +4740,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             for name, param in model.named_parameters():
                 if keep_in_fp32_modules.search(name):
                     # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32) # TODO @Cyrilvallez: we seem to do this twice
+                    param.data = param.data.to(torch.float32)  # TODO @Cyrilvallez: we seem to do this twice
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
@@ -4807,7 +4822,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             offload_index = None
 
-
         error_msgs = []
         if state_dict is not None:
             # Whole checkpoint
@@ -4853,7 +4867,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         data = f.read()
                     state_dict = load(data)
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                missing_keys, unexpected_keys = model_to_load.load_state_dict(fixed_state_dict, assign_to_params_buffers)
+                missing_keys, unexpected_keys = model_to_load.load_state_dict(
+                    fixed_state_dict, assign_to_params_buffers
+                )
                 error_msg = missing_keys
         else:
             # This should always be a list but, just to be sure.
