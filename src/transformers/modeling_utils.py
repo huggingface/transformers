@@ -793,7 +793,6 @@ def _load_state_dict_into_meta_model(
         device_map[''] = device_map[''].index
 
     with safe_open(shard_file, framework="pt", device=device_map['']) as file_pointer:
-    # with safe_open(shard_file, framework="pt") as file_pointer:
         error_msgs = []
 
         is_quantized = hf_quantizer is not None
@@ -834,7 +833,7 @@ def _load_state_dict_into_meta_model(
             # uses `param.copy_(input_param)` that preserves the contiguity of the parameter in the model.
             # Reference: https://github.com/pytorch/pytorch/blob/db79ceb110f6646523019a59bbd7b838f43d4a86/torch/nn/modules/module.py#L2040C29-L2040C29
             old_param = model
-            a,b,c = [],[],[]
+            missing_keys, unexpected_keys, error_msgs = [],[],[]
             splits = param_name.split(".")
             for split in splits:
                 # We shouldn't hit the default value unless for quant methods like hqq that modifies expected_keys.
@@ -877,19 +876,15 @@ def _load_state_dict_into_meta_model(
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
                     rank = device_map[""]
                     row, col = empty_param.shape
-                    if "row" in current_module_plan or "down" in new_param_name:
+                    if current_module_plan == "rowwise":
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
-                    else:
+                    elif current_module_plan == "colwise":
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
-
-                    # module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype)
-                    module_to_tp._load_from_state_dict({'modelweight':param}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
+                    else:
+                        param = param[:]
+                    module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype)
                 else:
-                    module_to_tp._load_from_state_dict({new_param_name.rsplit('.',1)[1]:param[:]}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
-                    if len(a)>0 :
-                        module_to_tp._load_from_state_dict({'modelweight':param[:]}, prefix,{"assign_to_params_buffers": True}, True, a, b, c)
-                    # set_module_tensor_to_device(model, new_param_name, param[:].device, param[:].to(dtype=param_casting_dtype))
-
+                    missing_keys, unexpected_keys = module_to_tp.load_state_dict({new_param_name.rsplit('.',1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True)
             else:
                 if device_map is None:
                     param_device = "cpu"
@@ -918,30 +913,26 @@ def _load_state_dict_into_meta_model(
                 ):
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
-
-                    model._load_from_state_dict({new_param_name:param[:]}, "", {"assign_to_params_buffers": True}, True, a, b, c) 
-                    print(a,b,c)
-                    if len(a)>0:
-                        print(a)
-                    # set_module_tensor_to_device(model, new_param_name, param_device, param[:].to(dtype=param_casting_dtype))
+                    module = model.get_submodule(new_param_name.rsplit('.', 1)[0])
+                    module._load_from_state_dict({"weight":param[:]}, "", {"assign_to_params_buffers": True}, True,  missing_keys, unexpected_keys, error_msgs)
                 else:
-                    hf_quantizer.create_quantized_param(
-                        model, param[:], new_param_name, param_device, state_dict, unexpected_keys
-                    )
-                    # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
-                    # and then cast it to CPU to avoid excessive memory usage on each GPU
-                    # in comparison to the sharded model across GPUs.
-                    if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
-                        module, tensor_name = get_module_from_name(model, new_param_name)
-                        value = getattr(module, tensor_name)
-                        param_to = "cpu"
-                        if is_fsdp_enabled() and not is_local_dist_rank_0():
-                            param_to = "meta"
-                        val_kwargs = {}
-                        if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
-                            val_kwargs["requires_grad"] = False
-                        value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
-                        setattr(module, tensor_name, value)
+                        hf_quantizer.create_quantized_param(
+                            model, param[:], new_param_name, param_device, state_dict, unexpected_keys
+                        )
+                        # For quantized modules with FSDP/DeepSpeed Stage 3, we need to quantize the parameter on the GPU
+                        # and then cast it to CPU to avoid excessive memory usage on each GPU
+                        # in comparison to the sharded model across GPUs.
+                        if is_fsdp_enabled() or is_deepspeed_zero3_enabled():
+                            module, tensor_name = get_module_from_name(model, new_param_name)
+                            value = getattr(module, tensor_name)
+                            param_to = "cpu"
+                            if is_fsdp_enabled() and not is_local_dist_rank_0():
+                                param_to = "meta"
+                            val_kwargs = {}
+                            if hasattr(module, "weight") and module.weight.__class__.__name__ == "Int8Params":
+                                val_kwargs["requires_grad"] = False
+                            value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
+                            setattr(module, tensor_name, value)
 
     return error_msgs, offload_index, state_dict_index
 
@@ -4221,9 +4212,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config = cls._autoset_attn_implementation(
                 config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
             )
-
         with ContextManagers(init_contexts):
             # Let's make sure we don't run the init function of buffer modules
+            torch.set_default_dtype(torch.bfloat16)
+
             model = cls(config, *model_args, **model_kwargs)
 
         if device_mesh is not None and not model.supports_tp_plan:
@@ -4301,6 +4293,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
+            print(target_dtype)
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
 
             if hf_quantizer is not None:
@@ -4351,8 +4344,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise
         elif from_pt:
             # restore default dtype
-            if dtype_orig is not None:
-                torch.set_default_dtype(dtype_orig)
+            # if dtype_orig is not None:
+            #     torch.set_default_dtype(dtype_orig)
 
             (
                 model,
@@ -4440,12 +4433,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ):
                 device_map_kwargs["offload_buffers"] = True
 
+            # if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+            #     dispatch_model(model, **device_map_kwargs)
+
         # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
         # not part of the state_dict (persistent=False)
         if device_mesh is not None:
             for buffer in model.buffers():
                 if buffer.device != tp_device:
                     buffer.data = buffer.to(tp_device)
+
+        for buffer in model.buffers():
+            buffer.data = buffer.to("cuda:0")
 
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
@@ -4747,12 +4746,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 model.apply(model._initialize_weights)
 
         # Set some modules to fp32 if any
-        if keep_in_fp32_modules is not None:
+        if keep_in_fp32_modules is not None and keep_in_fp32_modules != "":
             keep_in_fp32_modules = re.compile("|".join(keep_in_fp32_modules))
             for name, param in model.named_parameters():
                 if keep_in_fp32_modules.search(name):
+                    continue
                     # param = param.to(torch.float32) does not work here as only in the local scope.
-                    param.data = param.data.to(torch.float32)  # TODO @Cyrilvallez: we seem to do this twice
+                    # param.data = param.data.to(torch.float32)  # TODO @Cyrilvallez: we seem to do this twice
 
         # Make sure we are able to load base models as well as derived models (with heads)
         start_prefix = ""
