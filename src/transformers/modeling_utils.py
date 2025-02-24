@@ -4818,8 +4818,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             folder = os.path.sep.join(resolved_archive_file[0].split(os.path.sep)[:-1])
         else:
             folder = None
+
+        if device_map is not None:
+            expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
+            caching_allocator_warmup(model, expanded_device_map, dtype)
+
         if device_map is not None and is_safetensors:
-            param_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
+            param_device_map = expanded_device_map
             str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
             if sharded_metadata is None:
                 archive_file = (
@@ -4833,14 +4838,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             offload_index = {
                 p[len(start_prefix) :]: {"safetensors_file": f, "weight_name": p, "dtype": str_dtype}
                 for p, f in weight_map.items()
-                if p.startswith(start_prefix) and param_device_map[p[len(start_prefix) :]] == "disk"
+                if p.startswith(start_prefix) and expanded_device_map[p[len(start_prefix) :]] == "disk"
             }
         else:
             offload_index = None
-
-        if device_map is not None:
-            expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
-            caching_allocator_warmup(model, expanded_device_map, dtype)
 
         if state_dict is not None:
             # Whole checkpoint
@@ -5822,7 +5823,6 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     dtype = dtype if dtype is not None else torch.float32
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
-        # Not necesarily cuda here, refine with correct accelerator
         _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
