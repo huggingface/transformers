@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 import copy
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -45,6 +45,7 @@ from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_available,
+    is_torchdynamo_compiling,
     logging,
     torch_int,
 )
@@ -1044,8 +1045,17 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        # (we can't check exception 3 while compiling)
+        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            elif (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -1054,7 +1064,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             pixel_values = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
+        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             model_inputs = {"input_ids": input_ids, "inputs_embeds": None}
@@ -1092,9 +1102,14 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         return model_inputs
 
     @torch.no_grad
-    def generate(self, input_ids: torch.Tensor, generation_config = None, **kwargs):
+    def generate(self, input_ids: torch.Tensor = None, **kwargs):
         generation_config = kwargs.get("generation_config")
-        generation_mode = kwargs.pop("generation_mode", "text")
+        generation_mode = kwargs.pop("generation_mode", None)
+
+        if generation_mode is None:
+            logger.info("Generation mode argument is not passed. Defaulting to `Text`generation.")
+            generation_mode = "text"
+
         # Perform usual auto-regressive text generation.
         if generation_mode == "text":
             return super().generate(input_ids=input_ids, **kwargs)
@@ -1105,9 +1120,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         model_kwargs = generation_config.update(**kwargs)  # All unused kwargs must be model kwargs
 
         # Fix me: Better way to pass generation config params rather than hardcoding.
-        generation_config.temperature=1
-        generation_config.pad_token_id=100002
-        generation_config.guidance_scale=5
+        generation_config.temperature = 1
+        generation_config.pad_token_id = 100002
+        generation_config.guidance_scale = 5
 
         generation_mode = generation_config.get_generation_mode()
         if generation_mode not in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
@@ -1123,7 +1138,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         batch_size, seq_len = input_ids.shape
         dtype = input_ids.dtype
 
-        input_tokens = torch.zeros((batch_size * 2, seq_len), dtype=dtype)
         input_tokens = input_ids.repeat(2, 1).to(dtype)  # Now (batch_size * 2, seq_len)
 
         # Set the second half of tokens to pad_token_id. These would be used
