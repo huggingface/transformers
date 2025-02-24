@@ -845,6 +845,7 @@ class JanusVQVAEVectorQuantizer(nn.Module):
 
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
+        # l2 normalization on the last dimension
         hidden_state_quant = F.normalize(hidden_state_quant, p=2, dim=-1)
 
         # reshape back to match original input shape
@@ -1293,6 +1294,15 @@ class JanusVQVAEHead(nn.Module):
 
 
 class JanusModel(JanusPreTrainedModel):
+    # Add modules that should not be split across GPUs during parallelization
+    _no_split_modules = [
+        "JanusVisionTransformer",
+        "JanusVisionAlignerMLP",
+        "JanusVQVAE",
+        "JanusVQVAEAligner",
+        "JanusVQVAEHead",
+    ]
+
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
@@ -1396,6 +1406,14 @@ class JanusModel(JanusPreTrainedModel):
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
+    # Add modules that should not be split across GPUs during parallelization
+    _no_split_modules = [
+        "JanusVisionTransformer",
+        "JanusVisionAlignerMLP",
+        "JanusVQVAE",
+        "JanusVQVAEAligner",
+        "JanusVQVAEHead",
+    ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
