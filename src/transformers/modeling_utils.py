@@ -810,7 +810,6 @@ def _load_state_dict_into_meta_model(
                 param_name = param_name[len(start_prefix) :]
 
             module_name = param_name
-            set_module_kwargs = {}
             param = file_pointer.get_slice(param_name)
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
@@ -867,7 +866,6 @@ def _load_state_dict_into_meta_model(
                     current_module_plan = full_tp_plan[match]
                 if current_module_plan is not None:
                     translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
-                    layer = model.get_submodule(param_name.rsplit(".", 1)[0])
                     rank = device_map[""].index
                     row, col = empty_param.shape
                     if "row" in current_module_plan or "down" in param_name:
@@ -875,7 +873,7 @@ def _load_state_dict_into_meta_model(
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
 
-                    layer.weight._local_tensor = param.to(dtype=param_casting_dtype, non_blocking=True)
+                    module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype, non_blocking=True)
                 else:
                     setattr(
                         model,
@@ -884,24 +882,22 @@ def _load_state_dict_into_meta_model(
                     )
 
             else:
-                set_module_kwargs["param"] = param[:]
                 if device_map is None:
                     param_device = "cpu"
                 else:
-                    # find next higher level module that is defined in device_map:
-                    # bert.lm_head.weight -> bert.lm_head -> bert -> ''
-                    while len(module_name) > 0 and module_name not in device_map:
-                        module_name = ".".join(module_name.split(".")[:-1])
-                    if module_name == "" and "" not in device_map:
-                        # TODO: group all errors and raise at the end.
-                        raise ValueError(f"{param_name} doesn't have any device set.")
-                    param_device = device_map[module_name]
+                    module_name = module_name.rsplit("." ,1)[0]
+                    if module_name == "" or module_name not in device_map:
+                        if list(device_map.keys()) == ['']:
+                            param_device = device_map['']
+                        else:
+                            raise ValueError(f"`device_map` is used, but {param_name} doesn't have any device set. {device_map}")
+                    else:
+                        param_device = device_map[module_name]
 
-                if param_device == "disk":
-                    if not is_safetensors:
-                        offload_index = offload_weight(param, param_name, offload_folder, offload_index)
+                if param_device == "disk" and not is_safetensors:
+                        offload_index = offload_weight(param[:], param_name, offload_folder, offload_index)
                 elif param_device == "cpu" and state_dict_index is not None:
-                    state_dict_index = offload_weight(param, param_name, state_dict_folder, state_dict_index)
+                    state_dict_index = offload_weight(param[:], param_name, state_dict_folder, state_dict_index)
                 elif (
                     not is_quantized
                     or (not hf_quantizer.requires_parameters_quantization)
@@ -913,9 +909,7 @@ def _load_state_dict_into_meta_model(
                 ):
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
-
-                    # For backward compatibility with older versions of `accelerate` and for non-quantized params
-                    setattr(model, param_name, param[:].to(param_device, dtype=torch.float16, non_blocking=True))
+                    set_module_tensor_to_device(model, param_name, param_device, param[:].to(dtype=param_casting_dtype))
                 else:
                     hf_quantizer.create_quantized_param(
                         model, param, param_name, param_device, state_dict, unexpected_keys
