@@ -5,8 +5,7 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'src/transformers/models/*/modeling_*'
+      - action_to_notify_new_model_push
 
 jobs:
   notify_new_model:
@@ -59,7 +58,7 @@ jobs:
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "<https://github.com/huggingface/transformers/commit/${{ env.COMMIT_SHA }}|New model: ${{ env.NEW_MODEL }}> GH_ArthurZucker, GH_lysandrejik, GH_ydshieh"
+                    "text": "<https://github.com/huggingface/transformers/commit/${{ env.COMMIT_SHA }}|New model: ${{ env.NEW_MODEL }}> GH_ydshieh"
                   }
                 }
               ]
