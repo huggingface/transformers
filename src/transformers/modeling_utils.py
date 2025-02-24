@@ -21,11 +21,13 @@ import importlib.metadata
 import inspect
 import itertools
 import json
+import math
 import os
 import re
 import shutil
 import tempfile
 import warnings
+from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -5806,14 +5808,16 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
     Calling this function allows to cut the model loading time by a very large margin.
     """
     # Remove disk and cpu devices, and cast to proper torch.device
-    device_map = {param: torch.device(device) for param, device in expanded_device_map if device not in ["cpu", "disk"]}
+    accelerator_device_map = {
+        param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
+    }
     parameter_count = defaultdict(lambda: 0)
-    for param_name, device in expanded_device_map.items():
+    for param_name, device in accelerator_device_map.items():
         try:
             param = model.get_parameter(param_name)
         except AttributeError:
             param = model.get_buffer(param_name)
-        parameter_count[device] += math.prod(*param.shape)
+        parameter_count[device] += math.prod(param.shape)
 
     dtype = dtype if dtype is not None else torch.float32
     # This will kick off the caching allocator to avoid having to Malloc afterwards
