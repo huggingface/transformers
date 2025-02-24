@@ -1664,7 +1664,7 @@ jinja2`. Please note that you may need to restart your runtime after installatio
 """
 
 RICH_IMPORT_ERROR = """
-{0} requires the jinja library but it was not found in your environment. You can install it with pip: `pip install
+{0} requires the rich library but it was not found in your environment. You can install it with pip: `pip install
 rich`. Please note that you may need to restart your runtime after installation.
 """
 
