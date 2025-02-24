@@ -39,20 +39,6 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-# Copied from transformers.models.idefics2.processing_idefics2.is_url
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
-# Copied from transformers.models.idefics2.processing_idefics2.is_image_or_image_url
-def is_image_or_image_url(elem):
-    return is_url(elem) or is_valid_image(elem)
-
-
-def _is_str_or_image(elem):
-    return isinstance(elem, (str)) or is_image_or_image_url(elem)
-
-
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
     # see processing_utils.ProcessingKwargs documentation for usage.
     _defaults = {

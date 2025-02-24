@@ -1131,7 +1131,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         batch_size, seq_len = input_ids.shape
         dtype = input_ids.dtype
 
-        input_tokens = torch.zeros((batch_size * 2, seq_len), dtype=dtype)
         input_tokens = input_ids.repeat(2, 1).to(dtype)  # Now (batch_size * 2, seq_len)
 
         # Set the second half of tokens to pad_token_id. These would be used
