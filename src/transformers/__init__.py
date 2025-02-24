@@ -403,6 +403,7 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.depth_pro": ["DepthProConfig"],
     "models.detr": ["DetrConfig"],
+    "models.d_fine": ["DFineConfig", "DFineResNetConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
@@ -2202,6 +2203,15 @@ else:
             "DepthProForDepthEstimation",
             "DepthProModel",
             "DepthProPreTrainedModel",
+        ]
+    )
+    _import_structure["models.d_fine"].extend(
+        [
+            "DFineForObjectDetection",
+            "DFineModel",
+            "DFinePreTrainedModel",
+            "DFineResNetBackbone",
+            "DFineResNetPreTrainedModel",
         ]
     )
     _import_structure["models.detr"].extend(
@@ -5458,6 +5468,7 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.d_fine import DFineConfig, DFineResNetConfig
     from .models.dab_detr import (
         DabDetrConfig,
     )
@@ -7023,6 +7034,11 @@ if TYPE_CHECKING:
             CvtForImageClassification,
             CvtModel,
             CvtPreTrainedModel,
+        )
+        from .models.d_fine import (
+            DFineForObjectDetection,
+            DFineModel,
+            DFinePreTrainedModel,
         )
         from .models.dab_detr import (
             DabDetrForObjectDetection,
