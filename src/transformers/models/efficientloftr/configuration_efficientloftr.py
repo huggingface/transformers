@@ -17,9 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List
+from typing import Dict, List
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 
 
 class EfficientLoFTRConfig(PretrainedConfig):
@@ -77,11 +78,17 @@ class EfficientLoFTRConfig(PretrainedConfig):
             Kernel size used for the fine feature matching
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        rope_type (`str`, *optional*, defaults to `"2d"`):
-            The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-            'llama3', '2d'], with 'default' being the original RoPE implementation.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3', '2d'], with 'default' being the original RoPE implementation.
+                `dim` (`int`): The dimension of the RoPE embeddings.
         fine_matching_slicedim (`int`, *optional*, defaults to 8):
             The size of the slice used to divide the fine features for the first and second fine matching stages.
         fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
@@ -127,8 +134,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
         coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
-        rope_type: str = "2d",
         rope_theta: float = 10000.0,
+        rope_scaling: Dict = None,
         fine_matching_slicedim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
         initializer_range: float = 0.02,
@@ -166,8 +173,9 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
         self.num_key_value_heads = num_key_value_heads
 
-        self.rope_type = rope_type
         self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         self.initializer_range = initializer_range
 

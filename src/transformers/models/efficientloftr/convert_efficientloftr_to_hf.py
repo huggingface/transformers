@@ -53,16 +53,14 @@ def verify_model_outputs(model, device):
 
     predicted_number_of_matches = torch.sum(outputs.matches[0][0] != -1).item()
 
-    expected_max_number_keypoints = 501
-    expected_matches_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
-    expected_matching_scores_shape = torch.Size((len(images), 2, expected_max_number_keypoints))
+    expected_number_of_matches = 354
+    expected_matches_shape = torch.Size((len(images), 2, expected_number_of_matches))
+    expected_matching_scores_shape = torch.Size((len(images), 2, expected_number_of_matches))
 
     expected_matches_values = torch.tensor([20, 21, 22, 23, 24, 25, 26, 27, 28, 29], dtype=torch.int64).to(device)
     expected_matching_scores_values = torch.tensor(
-        [0.4148, 0.4459, 0.4732, 0.4315, 0.3388, 0.5651, 0.4266, 0.4288, 0.6642, 0.5476]
+        [0.9265, 0.3528, 0.2955, 0.3347, 0.6368, 0.5757, 0.8364, 0.6762, 0.3934, 0.4729]
     ).to(device)
-
-    expected_number_of_matches = 501
 
     assert outputs.matches.shape == expected_matches_shape
     assert outputs.matching_scores.shape == expected_matching_scores_shape
@@ -140,7 +138,7 @@ def write_model(
     # EfficientLoFTR config
     # ------------------------------------------------------------
 
-    config = EfficientLoFTRConfig()
+    config = EfficientLoFTRConfig(rope_scaling={"rope_type": "2d", "dim": 64})
     config.architectures = ["EfficientLoFTRForKeypointMatching"]
     config.save_pretrained(model_path)
     print("Model config saved successfully...")

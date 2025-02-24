@@ -72,7 +72,7 @@ class EfficientLoFTRModelTester:
         self.fine_kernel_size = fine_kernel_size
 
     def prepare_config_and_inputs(self):
-        # SuperGlue expects a grayscale image as input
+        # EfficientLoFTR expects a grayscale image as input
         pixel_values = floats_tensor([self.batch_size, 2, 3, self.image_height, self.image_width])
         config = self.get_config()
         return config, pixel_values
@@ -139,35 +139,35 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching does not use inputs_embeds")
+    @unittest.skip(reason="EfficientLoFTRForKeypointMatching does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching does not support input and output embeddings")
+    @unittest.skip(reason="EfficientLoFTRForKeypointMatching does not support input and output embeddings")
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching does not use feedforward chunking")
+    @unittest.skip(reason="EfficientLoFTRForKeypointMatching does not use feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SuperGlue does not output any loss term in the forward pass")
+    @unittest.skip(reason="EfficientLoFTR does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 

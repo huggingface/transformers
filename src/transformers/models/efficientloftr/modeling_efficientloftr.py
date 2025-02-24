@@ -79,7 +79,10 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig, device="cpu") -> None:
         super().__init__()
         self.config = config
-        self.rope_type = config.rope_type
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type")
+        else:
+            self.rope_type = "2d"
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
@@ -107,10 +110,6 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
 
         sin = sin.repeat_interleave(2, dim=-1)
         cos = cos.repeat_interleave(2, dim=-1)
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
 
         sin = sin.to(device=x.device, dtype=x.dtype)
         cos = cos.to(device=x.device, dtype=x.dtype)

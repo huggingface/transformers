@@ -13,7 +13,7 @@
 # limitations under the License.
 import math
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -22,7 +22,7 @@ from torch.nn.utils.rnn import pad_sequence
 from ...activations import ACT2CLS, ACT2FN
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
@@ -232,11 +232,17 @@ class EfficientLoFTRConfig(PretrainedConfig):
             Kernel size used for the fine feature matching
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        rope_type (`str`, *optional*, defaults to `"2d"`):
-            The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-            'llama3', '2d'], with 'default' being the original RoPE implementation.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
+            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
+            accordingly.
+            Expected contents:
+                `rope_type` (`str`):
+                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
+                    'llama3', '2d'], with 'default' being the original RoPE implementation.
+                `dim` (`int`): The dimension of the RoPE embeddings.
         fine_matching_slicedim (`int`, *optional*, defaults to 8):
             The size of the slice used to divide the fine features for the first and second fine matching stages.
         fine_matching_regress_temperature (`float`, *optional*, defaults to 10.0):
@@ -282,8 +288,8 @@ class EfficientLoFTRConfig(PretrainedConfig):
         coarse_matching_border_removal: int = 2,
         fine_kernel_size: int = 8,
         batch_norm_eps: float = 1e-5,
-        rope_type: str = "2d",
         rope_theta: float = 10000.0,
+        rope_scaling: Dict = None,
         fine_matching_slicedim: int = 8,
         fine_matching_regress_temperature: float = 10.0,
         initializer_range: float = 0.02,
@@ -321,8 +327,9 @@ class EfficientLoFTRConfig(PretrainedConfig):
 
         self.num_key_value_heads = num_key_value_heads
 
-        self.rope_type = rope_type
         self.rope_theta = rope_theta
+        self.rope_scaling = rope_scaling
+        rope_config_validation(self)
 
         self.initializer_range = initializer_range
 
@@ -371,7 +378,10 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig, device="cpu") -> None:
         super().__init__()
         self.config = config
-        self.rope_type = config.rope_type
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type")
+        else:
+            self.rope_type = "2d"
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
@@ -399,10 +409,6 @@ class EfficientLoFTRRotaryEmbedding(nn.Module):
 
         sin = sin.repeat_interleave(2, dim=-1)
         cos = cos.repeat_interleave(2, dim=-1)
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
 
         sin = sin.to(device=x.device, dtype=x.dtype)
         cos = cos.to(device=x.device, dtype=x.dtype)
