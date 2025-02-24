@@ -175,7 +175,7 @@ class JanusVQVAEConfig(PretrainedConfig):
 
 class JanusConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JanusForConditionalGeneration`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`JanusModel`]. It is used to instantiate an
     Janus model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Janus-9B.
 

@@ -40,11 +40,12 @@ from ...utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_available,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
     torch_int,
 )
-from ..auto import AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
 
 
@@ -844,7 +845,6 @@ class JanusVQVAEVectorQuantizer(nn.Module):
 
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
-        # l2 normalization on the last dimension
         hidden_state_quant = F.normalize(hidden_state_quant, p=2, dim=-1)
 
         # reshape back to match original input shape
@@ -1292,18 +1292,7 @@ class JanusVQVAEHead(nn.Module):
         return hidden_states
 
 
-class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["language_model.lm_head.weight"]
-    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
-    # Add modules that should not be split across GPUs during parallelization
-    _no_split_modules = [
-        "JanusVisionTransformer",
-        "JanusVisionAlignerMLP",
-        "JanusVQVAE",
-        "JanusVQVAEAligner",
-        "JanusVQVAEHead",
-    ]
-
+class JanusModel(JanusPreTrainedModel):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
@@ -1315,8 +1304,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         self.gen_embed = nn.Embedding(config.vq_config.num_embeddings, config.vq_config.embed_dim)
         self.gen_head = JanusVQVAEHead(config.vq_config)
 
-        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
+        self.language_model = AutoModel.from_config(config=config.text_config)
 
+        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1330,11 +1320,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         image_embeds = self.vision_model(pixel_values)
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
-
-    def prepare_embeddings_for_image_generation(self, inputs):
-        hidden_state = self.gen_embed(inputs)
-        hidden_state = self.gen_aligner(hidden_state)
-        return hidden_state
 
     def forward(
         self,
@@ -1364,6 +1349,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
@@ -1384,7 +1376,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_embeds)
 
-        outputs = self.language_model(
+        output = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1392,13 +1384,93 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             labels=labels,
             **kwargs,
         )
-        logits = outputs.logits
+
+        return output if return_dict else output.to_tuple()
+
+
+class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
+
+    def __init__(self, config: JanusConfig):
+        super().__init__(config)
+        self.config = config
+        self.model = JanusModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.language_model.set_input_embeddings(value)
+
+    def prepare_emeddings_for_image_generation(self, inputs):
+        hidden_state = self.model.gen_embed(inputs)
+        hidden_state = self.model.gen_aligner(hidden_state)
+        return hidden_state
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1434,8 +1506,17 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
         # Exception 1: when passing input_embeds, input_ids may be missing entries
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        # (we can't check exception 3 while compiling)
+        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
+            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            elif (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
                 input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
@@ -1444,7 +1525,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             pixel_values = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
+        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             model_inputs = {"input_ids": input_ids, "inputs_embeds": None}
@@ -1481,11 +1562,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    # ToDo: How to restrict the image generation to only few generation startegies.
     @torch.no_grad
-    def generate(self, input_ids: torch.Tensor, generation_config=None, **kwargs):
+    def generate(self, input_ids: torch.Tensor = None, **kwargs):
         generation_config = kwargs.get("generation_config")
-        generation_mode = kwargs.pop("generation_mode", "text")
+        generation_mode = kwargs.pop("generation_mode", None)
+
+        if generation_mode is None:
+            logger.info("Generation mode argument is not passed. Defaulting to `Text`generation.")
+            generation_mode = "text"
+
         # Perform usual auto-regressive text generation.
         if generation_mode == "text":
             return super().generate(input_ids=input_ids, **kwargs)
@@ -1514,7 +1599,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         batch_size, seq_len = input_ids.shape
         dtype = input_ids.dtype
 
-        input_tokens = torch.zeros((batch_size * 2, seq_len), dtype=dtype)
         input_tokens = input_ids.repeat(2, 1).to(dtype)  # Now (batch_size * 2, seq_len)
 
         # Set the second half of tokens to pad_token_id. These would be used
@@ -1572,4 +1656,4 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         return decoded_image
 
 
-__all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration"]
+__all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration", "JanusModel", "JanusVQVAE"]

@@ -2770,6 +2770,8 @@ else:
     )
     _import_structure["models.janus"].extend(
         [
+            "JanusModel",
+            "JanusVQVAE",
             "JanusForConditionalGeneration",
             "JanusPreTrainedModel",
         ]
@@ -7623,10 +7625,7 @@ if TYPE_CHECKING:
             JambaModel,
             JambaPreTrainedModel,
         )
-        from .models.janus import (
-            JanusForConditionalGeneration,
-            JanusPreTrainedModel,
-        )
+        from .models.janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel, JanusVQVAE
         from .models.jetmoe import (
             JetMoeForCausalLM,
             JetMoeForSequenceClassification,
