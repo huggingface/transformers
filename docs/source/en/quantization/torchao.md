@@ -20,9 +20,14 @@ Install torchao with the following command.
 pip install --upgrade torch torchao transformers
 ```
 
-torchao supports int8 weight quantization and int8 dynamic quantization of weights. Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of the weights to quantize.
+torchao supports many quantization types for different data types (int4, float8, weight only, etc.), but the Transformers integration only currently supports int8 weight quantization and int8 dynamic quantization of weights.
 
-Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method.
+You can manually choose the quantization types and settings or automatically select the quantization types.
+
+<hfoptions id="torchao">
+<hfoption id="manual">
+
+Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of the weights to quantize. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method.
 
 ```py
 import torch
@@ -44,6 +49,79 @@ input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
+
+Run the code below to benchmark the quantized models performance.
+
+```py
+from torch._inductor.utils import do_bench_using_profiling
+from typing import Callable
+
+def benchmark_fn(func: Callable, *args, **kwargs) -> float:
+    """Thin wrapper around do_bench_using_profiling"""
+    no_args = lambda: func(*args, **kwargs)
+    time = do_bench_using_profiling(no_args)
+    return time * 1e3
+
+MAX_NEW_TOKENS = 1000
+print("int4wo-128 model:", benchmark_fn(quantized_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
+
+bf16_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype=torch.bfloat16)
+output = bf16_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static") # auto-compile
+print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
+```
+
+</hfoption>
+<hfoption id="automatic">
+
+The [autoquant](https://pytorch.org/ao/stable/generated/torchao.quantization.autoquant.html#torchao.quantization.autoquant) API automatically chooses a quantization type for quantizable layers (`nn.Linear`) by micro-benchmarking on input type and shape and compiling a single linear layer.
+
+Create a [`TorchAoConfig`] and set to `"autoquant"`. Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method. Finally, call `finalize_autoquant` on the quantized model to finalize the quantization and log the input shapes. 
+
+```py
+import torch
+from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+
+quantization_config = TorchAoConfig("autoquant", min_sqnr=None)
+quantized_model = AutoModelForCausalLM.from_pretrained(
+    "meta-llama/Meta-Llama-3-8B",
+    torch_dtype="auto",
+    device_map="auto",
+    quantization_config=quantization_config
+)
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+# explicitly call `finalize_autoquant` (may be refactored and removed in the future)
+quantized_model.finalize_autoquant()
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+Run the code below to benchmark the quantized models performance.
+
+```py
+from torch._inductor.utils import do_bench_using_profiling
+from typing import Callable
+
+def benchmark_fn(func: Callable, *args, **kwargs) -> float:
+    """Thin wrapper around do_bench_using_profiling"""
+    no_args = lambda: func(*args, **kwargs)
+    time = do_bench_using_profiling(no_args)
+    return time * 1e3
+
+MAX_NEW_TOKENS = 1000
+print("autoquantized model:", benchmark_fn(quantized_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
+
+bf16_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype=torch.bfloat16)
+output = bf16_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static") # auto-compile
+print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
+```
+
+</hfoption>
+</hfoptions>
 
 ## Serialization
 
