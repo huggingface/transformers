@@ -19,6 +19,7 @@ import unittest
 from transformers import (
     JanusConfig,
     JanusForConditionalGeneration,
+    JanusModel,
     is_torch_available,
     is_vision_available,
 )
@@ -143,7 +144,6 @@ class JanusVisionText2TextModelTester:
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        # print(config)
         pixel_values = floats_tensor(
             [
                 self.batch_size,
@@ -169,21 +169,17 @@ class JanusVisionText2TextModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": input_ids,
+            "generation_mode": "text",
         }
         return config, inputs_dict
 
 
 @require_torch
-class JanusForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    """
-    Model tester for `PaliGemmaForConditionalGeneration`.
-    """
-
-    all_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": JanusForConditionalGeneration}
+class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
-    test_torchscript = False
     test_head_masking = False
     _is_composite = True
 
@@ -211,3 +207,24 @@ class JanusForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
 
             with torch.no_grad():
                 model(**inputs)
+
+    # Overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs.
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            torch.testing.assert_close(out_embeds, out_ids)

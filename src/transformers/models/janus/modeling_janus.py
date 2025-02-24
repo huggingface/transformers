@@ -45,7 +45,7 @@ from ...utils import (
     replace_return_docstrings,
     torch_int,
 )
-from ..auto import AutoModelForCausalLM
+from ..auto import AutoModel
 from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
 
 
@@ -1292,10 +1292,7 @@ class JanusVQVAEHead(nn.Module):
         return hidden_states
 
 
-class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["language_model.lm_head.weight"]
-    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
-
+class JanusModel(JanusPreTrainedModel):
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
@@ -1307,8 +1304,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         self.gen_embed = nn.Embedding(config.vq_config.num_embeddings, config.vq_config.embed_dim)
         self.gen_head = JanusVQVAEHead(config.vq_config)
 
-        self.language_model = AutoModelForCausalLM.from_config(config=config.text_config)
+        self.language_model = AutoModel.from_config(config=config.text_config)
 
+        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1322,11 +1320,6 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         image_embeds = self.vision_model(pixel_values)
         image_embeds = self.aligner(image_embeds.last_hidden_state)
         return image_embeds
-
-    def prepare_emeddings_for_image_generation(self, inputs):
-        hidden_state = self.gen_embed(inputs)
-        hidden_state = self.gen_aligner(hidden_state)
-        return hidden_state
 
     def forward(
         self,
@@ -1356,6 +1349,13 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
                 "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
             )
 
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
         if pixel_values is not None and inputs_embeds is not None:
             raise ValueError(
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
@@ -1376,7 +1376,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_attention_mask, image_embeds)
 
-        outputs = self.language_model(
+        output = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1384,13 +1384,93 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             labels=labels,
             **kwargs,
         )
-        logits = outputs.logits
+
+        return output if return_dict else output.to_tuple()
+
+
+class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
+    _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
+
+    def __init__(self, config: JanusConfig):
+        super().__init__(config)
+        self.config = config
+        self.model = JanusModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.language_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.language_model.set_input_embeddings(value)
+
+    def prepare_emeddings_for_image_generation(self, inputs):
+        hidden_state = self.model.gen_embed(inputs)
+        hidden_state = self.model.gen_aligner(hidden_state)
+        return hidden_state
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def get_decoder(self):
+        return self.model
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1576,4 +1656,4 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         return decoded_image
 
 
-__all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration"]
+__all__ = ["JanusPreTrainedModel", "JanusForConditionalGeneration", "JanusModel", "JanusVQVAE"]
