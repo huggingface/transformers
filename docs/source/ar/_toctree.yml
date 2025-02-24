@@ -454,8 +454,6 @@
 #         title: Mistral
 #       - local: model_doc/mixtral
 #         title: Mixtral
-#       - local: model_doc/minimax
-#         title: MiniMax
 #       - local: model_doc/mluke
 #         title: mLUKE
 #       - local: model_doc/mobilebert
