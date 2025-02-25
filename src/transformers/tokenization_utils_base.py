@@ -1702,13 +1702,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if continue_final_message:
                 final_message = chat[-1]["content"]
                 if isinstance(final_message, (list, tuple)):
-                    final_message = final_message[-1]["text"]
-                try:
-                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
-                except:  # noqa: E722
-                    # Some chat templates like Llama-3.1 trim messages before rendering, so we must do the same here.
-                    final_message = final_message.strip()
-                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
+                    for content_block in reversed(final_message):
+                        if "text" in content_block:
+                            # Pick the last text block in the message (the first one we hit while iterating in reverse)
+                            final_message = content_block["text"]
+                            break
+                        else:
+                            raise ValueError(
+                                "continue_final_message is set but we could not find any text to continue"
+                                "in the final message!"
+                            )
+                final_msg_loc = rendered_chat.rindex(final_message.strip())
+                if rendered_chat[final_msg_loc : final_msg_loc + len(final_message)] == final_message:
+                    # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
+                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message)]
+                else:
+                    # The message has trailing spacing that was trimmed, so we must be more cautious
+                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message.strip())]
             rendered.append(rendered_chat)
 
         if not is_batched:
