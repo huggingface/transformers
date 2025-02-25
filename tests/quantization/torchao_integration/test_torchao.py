@@ -117,7 +117,7 @@ class TorchAoTest(unittest.TestCase):
     EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     device = "cpu"
-    quant_scheme_kwargs = {"group_size": 32, "layout": Int4CPULayout()}
+    quant_scheme_kwargs = {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0") else {"group_size": 32}
 
     def tearDown(self):
         gc.collect()
@@ -279,11 +279,11 @@ class TorchAoGPUTest(TorchAoTest):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             torch_dtype=torch.bfloat16,
-            device_map=torch_device,
+            device_map=self.device,
             quantization_config=quant_config,
         )
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        input_ids = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        input_ids = tokenizer(self.input_text, return_tensors="pt").to(self.device)
         output = quantized_model.generate(
             **input_ids, max_new_tokens=self.max_new_tokens, cache_implementation="static"
         )
@@ -308,7 +308,7 @@ class TorchAoSerializationTest(unittest.TestCase):
     SERIALIZED_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     quant_scheme = "int4_weight_only"
-    quant_scheme_kwargs = {"group_size": 32, "layout": Int4CPULayout()}
+    quant_scheme_kwargs = {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0") else {"group_size": 32}
     device = "cpu"
 
     # called only once for all test in this class
