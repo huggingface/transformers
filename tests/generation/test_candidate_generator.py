@@ -248,13 +248,19 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         self.model_kwargs = {
             "attention_mask": torch.ones_like(self.input_ids).to(torch_device),
         }
+        target_tokenizer = self.main_tokenizer
+        assistant_tokenizer = self.assistant_tokenizer
+        atm_translator = AssistantVocabTranslatorCache.get_translator(
+            target_tokenizer, assistant_tokenizer, self.config.vocab_size, torch_device
+        )
         self.generator = UniversalSpeculativeDecodingGenerator(
             input_ids=self.input_ids,
             assistant_model=self.assistant_model,
-            target_tokenizer=self.main_tokenizer,
-            assistant_tokenizer=self.assistant_tokenizer,
+            target_tokenizer=target_tokenizer,
+            assistant_tokenizer=assistant_tokenizer,
             generation_config=self.generation_config,
             model_kwargs=self.model_kwargs,
+            atm_translator=atm_translator,
         )
 
     def test_basic_generation(self):
