@@ -51,9 +51,11 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_llama import LlamaConfig
 
+
 if is_torch_flex_attn_available():
-    from ...integrations.flex_attention import make_flex_block_causal_mask
     from torch.nn.attention.flex_attention import BlockMask
+
+    from ...integrations.flex_attention import make_flex_block_causal_mask
 
 
 logger = logging.get_logger(__name__)
