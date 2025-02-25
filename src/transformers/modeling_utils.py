@@ -40,7 +40,7 @@ import torch
 import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
-from torch.distributed.tensor import DTensor, Shard, Replicate
+from torch.distributed.tensor import DTensor, Shard, Replicate, Partial
 from safetensors.torch import load
 from torch import Tensor, nn
 from torch.distributions import constraints
@@ -751,6 +751,99 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
             setattr(submodule, param_name, new_val)
 
 
+def distribute_module(
+    module: nn.Module,
+    device_mesh  = None,
+    partition_fn= None,
+    input_fn= None,
+    output_fn= None,
+) -> nn.Module:
+    """
+    This function expose three functions to control the parameters/inputs/outputs of the module:
+
+    1. To perform sharding on the module before runtime execution by specifying the
+    ``partition_fn`` (i.e. allow user to convert Module parameters to :class:`DTensor`
+    parameters according to the `partition_fn` specified).
+    2. To control the inputs or outputs of the module during runtime execution by
+    specifying the ``input_fn`` and ``output_fn``. (i.e. convert the input to
+    :class:`DTensor`, convert the output back to ``torch.Tensor``)
+
+    Args:
+        module (:class:`nn.Module`): user module to be partitioned.
+        device_mesh (:class:`DeviceMesh`): the device mesh to place the module.
+        partition_fn (Callable): the function to partition parameters (i.e. shard certain
+            parameters across the ``device_mesh``). If ``partition_fn`` is not specified,
+            by default we replicate all module parameters of ``module`` across the mesh.
+        input_fn (Callable): specify the input distribution, i.e. could control how the
+            input of the module is sharded. ``input_fn`` will be installed as a module
+            ``forward_pre_hook`` (pre forward hook).
+        output_fn (Callable): specify the output distribution, i.e. could control how the
+            output is sharded, or convert it back to torch.Tensor. ``output_fn`` will be
+            installed as a module ``forward_hook`` (post forward hook).
+
+    Returns:
+        A module that contains parameters/buffers that are all ``DTensor`` s.
+
+    .. note::
+        When initialize the DeviceMesh with the ``xla`` device_type, ``distribute_module``
+        return nn.Module with PyTorch/XLA SPMD annotated parameters. See
+        `this issue <https://github.com/pytorch/pytorch/issues/92909>`__
+        for more details. The XLA integration is experimental and subject to change.
+
+    """
+
+    torch._C._log_api_usage_once("torch.dtensor.distribute_module")
+
+    device_mesh = device_mesh
+    device_type = device_mesh.device_type
+
+    # register input_fn as module forward pre hook
+    if input_fn is not None:
+        # check the input_fn signature
+        num_args = len(inspect.signature(input_fn).parameters)
+        if num_args == 2:
+            # input_fn only takes in inputs and device mesh
+            warnings.warn(
+                "Deprecating input_fn that takes two arguments (inputs, device_mesh), "
+                "please use input_fn that takes in (module, inputs, device_mesh) instead!",
+                FutureWarning,
+                stacklevel=2,
+            )
+            module.register_forward_pre_hook(lambda _, inputs: input_fn(inputs, device_mesh))  # type: ignore[call-arg]
+        elif num_args == 3:
+            # input_fn takes in module, inputs, device mesh
+            module.register_forward_pre_hook(
+                lambda mod, inputs: input_fn(mod, inputs, device_mesh)
+            )
+        else:
+            raise ValueError(
+                f"input_fn should take in 3 arguments, but got {num_args} arguments!"
+            )
+    # register output_fn as module forward hook
+    if output_fn is not None:
+        num_args = len(inspect.signature(output_fn).parameters)
+        if num_args == 2:
+            # output_fn only takes in outputs and device mesh
+            warnings.warn(
+                "Deprecating output_fn that takes two arguments (inputs, device_mesh), "
+                "please use output_fn that takes in (module, inputs, device_mesh) instead!",
+                FutureWarning,
+                stacklevel=2,
+            )
+            module.register_forward_hook(
+                lambda mod, inputs, outputs: output_fn(outputs, device_mesh)  # type: ignore[call-arg]
+            )
+        elif num_args == 3:
+            module.register_forward_hook(
+                lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh)
+            )
+        else:
+            raise ValueError(
+                f"output_fn should take in 3 arguments, but got {num_args} arguments!"
+            )
+
+    return module
+
 def _load_state_dict_into_meta_model(
     model: torch.nn.Module,
     state_dict: Dict[str, torch.Tensor],
@@ -872,33 +965,33 @@ def _load_state_dict_into_meta_model(
                 if current_module_plan is not None:
                     # replace the linear module
                     tp_layer = translate_to_torch_parallel_style(current_module_plan) # we dont apply!
+                    
                     rank = device_map[""]
                     row, col = empty_param.shape
-                    if "rowwise" in current_module_plan:
+                    if "rowwise" == current_module_plan:
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
                         shard = Shard(1)
-                    elif "colwise" in current_module_plan:
+                        local_parameter = DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]*device_mesh.ndim)
+                        if isinstance(module_to_tp.weight, nn.Parameter):
+                            local_parameter = torch.nn.Parameter(local_parameter)
+                        module_to_tp.weight = local_parameter
+                        tp_layer.desired_input_layouts = (Shard(-1),)
+                    elif "colwise" == current_module_plan:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
-                        tp_layer.desired_input_layouts = (Shard(-1),)
+                        module_to_tp.weight = torch.nn.Parameter(DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]*device_mesh.ndim))
                     else:
-                        param = param[:]
-                        shard = Replicate()
-                    module_to_tp.weight = torch.nn.Parameter(DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]))
+                        param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
+                        shard = Shard(0)
+                        module_to_tp.weight = torch.nn.Parameter(DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]*device_mesh.ndim))
+                    
                     input_fn = partial(
                         tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts
                     )
                     output_fn = partial(
                         tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output
                     )
-                    
-                    # register input_fn as module forward pre hook
-                    module_to_tp.register_forward_pre_hook(
-                        lambda mod, inputs: input_fn(mod, inputs, device_mesh)
-                    )
-                    module_to_tp.register_forward_hook(
-                        lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh)
-                    )
+                    distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
                 else:
                     missing_keys, unexpected_keys = module_to_tp.load_state_dict(
                         {new_param_name.rsplit(".", 1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True
