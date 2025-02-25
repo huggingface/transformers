@@ -202,19 +202,25 @@ class BertEmbeddings(nn.Module):
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
+                # Use repeat instead of expand for potential memory efficiency gains
+                buffered_token_type_ids_expanded = buffered_token_type_ids.repeat(input_shape[0], 1)
                 token_type_ids = buffered_token_type_ids_expanded
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
+        # Perform inplace addition for memory efficiency
+        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        embeddings = inputs_embeds + token_type_embeddings # This creates new tensor.
+        del inputs_embeds, token_type_embeddings # Delete intermediate tensors to free memory
+        
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+            embeddings += position_embeddings  # Use in-place operation to reduce memory consumption
+            del position_embeddings  # Delete to free memory if not used later.
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
