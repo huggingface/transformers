@@ -12,6 +12,7 @@ from transformers.generation.candidate_generator import (
     AssistantVocabTranslatorCache,
     UniversalSpeculativeDecodingGenerator,
 )
+from transformers.testing_utils import torch_device
 
 
 class TestAssistantToTargetTranslator(unittest.TestCase):
@@ -26,7 +27,7 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
 
         self.target_tokenizer.get_vocab.return_value = self.target_vocab
         self.assistant_tokenizer.get_vocab.return_value = self.assistant_vocab
-        self.assistant_model_device = "cpu"
+        self.assistant_model_device = torch_device
         self.target_vocab_size = 6
 
         # Instantiate the class under test
@@ -105,7 +106,7 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
         self.assistant_tokenizer = MockTokenizer({"hello": 0, "world": 1, "foo": 2})
         self.other_target_tokenizer = MockTokenizer({"foo": 2, "bar": 3})
         self.other_assistant_tokenizer = MockTokenizer({"baz": 4, "qux": 5})
-        self.assistant_model_device = "cpu"
+        self.assistant_model_device = torch_device
         self.target_vocab_size = 6
 
     def test_same_instance_for_same_tokenizers(self):
@@ -227,12 +228,11 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
 
 
 class TestUniversalSpeculativeDecoding(unittest.TestCase):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     @classmethod
     def setUpClass(cls):
         cls.assistant_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(
-            cls.device
+            torch_device
         )
         cls.main_tokenizer = AutoTokenizer.from_pretrained("allenai/Llama-3.1-Tulu-3-8B-SFT")
         cls.assistant_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
