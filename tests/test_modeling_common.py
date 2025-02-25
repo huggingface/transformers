@@ -224,6 +224,7 @@ class ModelTesterMixin:
                 attr = getattr(cls, attr_name)
                 if callable(attr):
                     setattr(cls, attr_name, hub_retry(attr))
+
     @property
     def all_generative_model_classes(self):
         return tuple(model_class for model_class in self.all_model_classes if model_class.can_generate())
