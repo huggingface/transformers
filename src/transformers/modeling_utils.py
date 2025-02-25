@@ -3509,6 +3509,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         if torch.distributed.is_initialized() and device_map == "auto" and tp_plan is None:
             tp_plan = "auto"  # device_map = "auto" in torchrun equivalent to TP plan = AUTO!
+            device_map = None
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
@@ -4436,7 +4437,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map_kwargs["offload_buffers"] = True
 
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-                print(device_map_kwargs)
                 dispatch_model(model, **device_map_kwargs)
             # TODO @ArthurZucker not sure if we need this for all cases, this errors out in some of my tests
 
@@ -5827,12 +5827,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             param = model.get_parameter(param_name)
         except AttributeError:
             param = model.get_buffer(param_name)
-        parameter_count[device] += math.prod(param.shape) * 2
+        parameter_count[device] += math.prod(param.shape)
 
     dtype = dtype if dtype is not None else torch.float32
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
-        _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
+        _ = torch.empty(int(param_count * 1.15), dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
