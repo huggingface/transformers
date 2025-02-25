@@ -256,12 +256,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
     model_input_names = ["pixel_values"]
     valid_init_kwargs = DefaultFastImageProcessorInitKwargs
     valid_preprocess_kwargs = DefaultFastImageProcessorPreprocessKwargs
+    # Child classes should try to support the base processing methods as much as possible.
+    # If they can't, the corresponding unused kwargs should be added to this list.
+    unused_kwargs = []
 
     def __init__(
         self,
         **kwargs: Unpack[DefaultFastImageProcessorInitKwargs],
     ) -> None:
         super().__init__(**kwargs)
+        kwargs = self.filter_out_unused_kwargs(kwargs)
         size = kwargs.pop("size", self.size)
         self.size = (
             get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
@@ -429,6 +433,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return convert_to_rgb(image)
 
+    def filter_out_unused_kwargs(self, kwargs: dict):
+        """
+        Filter out the unused kwargs from the kwargs dictionary.
+        """
+        for kwarg_name in self.unused_kwargs:
+            if kwarg_name in kwargs:
+                logger.warning_once(f"This processor does not use the `{kwarg_name}` parameter. It will be ignored.")
+                kwargs[kwarg_name] = None
+        return kwargs
+
     def _prepare_images_structure(
         self,
         images: ImageInput,
@@ -555,6 +569,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         images: ImageInput,
         **kwargs: Unpack[DefaultFastImageProcessorPreprocessKwargs],
     ) -> BatchFeature:
+        kwargs = self.filter_out_unused_kwargs(kwargs)
         validate_kwargs(
             captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
         )
@@ -627,6 +642,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]],
         image_std: Optional[Union[float, List[float]]],
         return_tensors: Optional[Union[str, TensorType]],
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
