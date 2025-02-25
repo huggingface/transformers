@@ -14,7 +14,7 @@
 # limitations under the License.
 
 """
-StyleTTS-2 model.
+StyleTTS 2 model.
 
 This implementation is based on the original StyleTTS 2 paper (https://arxiv.org/abs/2306.07691) and code (https://github.com/yl4579/StyleTTS2).
 """
@@ -175,7 +175,7 @@ class AcousticTextEncoderLayer(nn.Module):
         return hidden_states_conv
 
 @add_start_docstrings(
-    """StyleTTS-2 acoustic text encoder.""",
+    """StyleTTS 2 acoustic text encoder.""",
     STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
 )
 class StyleTextToSpeech2AcousticTextEncoder(StyleTextToSpeech2PretrainedModel):
@@ -838,7 +838,7 @@ class StyleTextToSpeech2Generator(nn.Module):
 
 
 @add_start_docstrings(
-    """StyleTTS-2 prosodic style predictor.""",
+    """StyleTTS 2 prosodic style predictor.""",
     STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
 )
 class StyleTextToSpeech2Predictor(StyleTextToSpeech2PretrainedModel):
@@ -904,7 +904,7 @@ class StyleTextToSpeech2Predictor(StyleTextToSpeech2PretrainedModel):
 
 
 @add_start_docstrings(
-    """StyleTTS-2 iSTFTNet based decoder.""",
+    """StyleTTS 2 iSTFTNet based decoder.""",
     STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
 )
 class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
@@ -998,12 +998,12 @@ class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
 
 
 @add_start_docstrings(
-    """StyleTTS-2 model.""",
+    """StyleTTS 2 model.""",
     STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
 )
 class StyleTextToSpeech2Model(StyleTextToSpeech2PretrainedModel):
     """
-    The complete StyleTTS-2 text-to-speech model.
+    The complete StyleTTS 2 text-to-speech model.
 
     This model is composed of:
     - An acoustic text encoder that processes phoneme sequences into acoustic hidden states
