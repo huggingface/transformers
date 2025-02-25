@@ -436,6 +436,11 @@ _import_structure = {
         "Emu3TextConfig",
         "Emu3VQVAEConfig",
     ],
+    "models.cosmos": [
+        "CosmosConfig",
+        "CosmosTextConfig",
+        "CosmosVQVAEConfig",
+    ],
     "models.encodec": [
         "EncodecConfig",
         "EncodecFeatureExtractor",
@@ -2310,6 +2315,13 @@ else:
             "Emu3PreTrainedModel",
             "Emu3TextModel",
             "Emu3VQVAE",
+        ]
+    )
+    _import_structure["models.cosmos"].extend(
+        [
+            "CosmosForConditionalGeneration",
+            "CosmosTextModel",
+            "CosmosVQVAE",
         ]
     )
     _import_structure["models.encodec"].extend(
@@ -5449,6 +5461,11 @@ if TYPE_CHECKING:
     from .models.convnextv2 import (
         ConvNextV2Config,
     )
+    from .models.cosmos import (
+        CosmosConfig,
+        CosmosTextConfig,
+        CosmosVQVAEConfig,
+    )
     from .models.cpmant import (
         CpmAntConfig,
         CpmAntTokenizer,
@@ -7007,6 +7024,11 @@ if TYPE_CHECKING:
             ConvNextV2ForImageClassification,
             ConvNextV2Model,
             ConvNextV2PreTrainedModel,
+        )
+        from .models.cosmos import (
+            CosmosForConditionalGeneration,
+            CosmosTextModel,
+            CosmosVQVAE,
         )
         from .models.cpmant import (
             CpmAntForCausalLM,
