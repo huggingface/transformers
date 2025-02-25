@@ -213,9 +213,9 @@ class BertEmbeddings(nn.Module):
 
         # Perform inplace addition for memory efficiency
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
-        embeddings = inputs_embeds + token_type_embeddings # This creates new tensor.
-        del inputs_embeds, token_type_embeddings # Delete intermediate tensors to free memory
-        
+        embeddings = inputs_embeds + token_type_embeddings  # This creates new tensor.
+        del inputs_embeds, token_type_embeddings  # Delete intermediate tensors to free memory
+
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings  # Use in-place operation to reduce memory consumption
@@ -367,72 +367,74 @@ class BertSdpaSelfAttention(BertSelfAttention):
         self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
 
     # Adapted from BertSelfAttention
-def forward(
-    self,
-    hidden_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
-    head_mask: Optional[torch.FloatTensor] = None,
-    encoder_hidden_states: Optional[torch.FloatTensor] = None,
-    encoder_attention_mask: Optional[torch.FloatTensor] = None,
-    past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-    output_attentions: Optional[bool] = False,
-) -> Tuple[torch.Tensor]:
-    bsz, tgt_len, _ = hidden_states.size()
 
-    query_layer = self.transpose_for_scores(self.query(hidden_states))
 
-    # If this is instantiated as a cross-attention module, the keys and values come from an encoder; the attention
-    # mask needs to be such that the encoder's padding tokens are not attended to.
-    is_cross_attention = encoder_hidden_states is not None
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        bsz, tgt_len, _ = hidden_states.size()
 
-    current_states = encoder_hidden_states if is_cross_attention else hidden_states
-    attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
 
-    # Check `seq_length` of `past_key_value` == `len(current_states)` to support prefix tuning
-    if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
-        key_layer, value_layer = past_key_value
-    else:
-        key_layer = self.transpose_for_scores(self.key(current_states))
-        value_layer = self.transpose_for_scores(self.value(current_states))
-        if past_key_value is not None and not is_cross_attention:
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+        # If this is instantiated as a cross-attention module, the keys and values come from an encoder; the attention
+        # mask needs to be such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
 
-    if self.is_decoder:
-        past_key_value = (key_layer, value_layer)
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
 
-    # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
-    # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
-    # Reference: https://github.com/pytorch/pytorch/issues/112577
-    if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
-        query_layer = query_layer.contiguous()
-        key_layer = key_layer.contiguous()
-        value_layer = value_layer.contiguous()
+        # Check `seq_length` of `past_key_value` == `len(current_states)` to support prefix tuning
+        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
+            key_layer, value_layer = past_key_value
+        else:
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
+            if past_key_value is not None and not is_cross_attention:
+                key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+                value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
 
-    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-    # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
-    # a causal mask in case tgt_len == 1.
-    is_causal = (
-        True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
-    )
+        if self.is_decoder:
+            past_key_value = (key_layer, value_layer)
 
-    attn_output = torch.nn.functional.scaled_dot_product_attention(
-        query_layer,
-        key_layer,
-        value_layer,
-        attn_mask=attention_mask,
-        dropout_p=self.dropout_prob if self.training else 0.0,
-        is_causal=is_causal,
-    )
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
 
-    attn_output = attn_output.transpose(1, 2)
-    attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
+        # a causal mask in case tgt_len == 1.
+        is_causal = (
+            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
+        )
 
-    outputs = (attn_output,)
-    if self.is_decoder:
-        outputs = outputs + (past_key_value,)
-    return outputs
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout_prob if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
+
+        outputs = (attn_output,)
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
 
 
 class BertSelfOutput(nn.Module):
@@ -576,10 +578,12 @@ class BertLayer(nn.Module):
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = tuple(self_attention_outputs[1:-1])  # Convert to tuple for consistency
-            present_key_value = tuple(self_attention_outputs[-1]) # convert to tuple
+            present_key_value = tuple(self_attention_outputs[-1])  # convert to tuple
 
         else:
-            outputs = tuple(self_attention_outputs[1:])  # add self attentions if we output attention weights, convert to tuple
+            outputs = tuple(
+                self_attention_outputs[1:]
+            )  # add self attentions if we output attention weights, convert to tuple
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -592,7 +596,7 @@ class BertLayer(nn.Module):
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             # Explicitly handle the case where past_key_value is None
             cross_attn_past_key_value = tuple(past_key_value[-2:]) if past_key_value is not None else None
-            
+
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -603,14 +607,15 @@ class BertLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + tuple(cross_attention_outputs[1:-1])  # add cross attentions if we output attention weights, convert to tuple
+            outputs = outputs + tuple(
+                cross_attention_outputs[1:-1]
+            )  # add cross attentions if we output attention weights, convert to tuple
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = tuple(cross_attention_outputs[-1]) # convert to tuple
+            cross_attn_present_key_value = tuple(cross_attention_outputs[-1])  # convert to tuple
 
-             # Ensure present_key_value is a tuple before adding
-            present_key_value =  present_key_value + cross_attn_present_key_value
-
+            # Ensure present_key_value is a tuple before adding
+            present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
