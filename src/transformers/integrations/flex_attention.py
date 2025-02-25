@@ -22,8 +22,10 @@ from ..utils import is_torch_flex_attn_available
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import (
         BlockMask,
-        create_block_mask as create_block_causal_mask_flex,
         flex_attention,
+    )
+    from torch.nn.attention.flex_attention import (
+        create_block_mask as create_block_causal_mask_flex,
     )
 
 
@@ -55,9 +57,7 @@ class WrappedFlexAttention:
         return self._compiled_flex_attention
 
 
-def make_flex_block_causal_mask(
-    attention_mask_2d: torch.Tensor
-) -> BlockMask:
+def make_flex_block_causal_mask(attention_mask_2d: torch.Tensor) -> BlockMask:
     """
     Create a block causal document mask for a batch of sequences, both packed and unpacked.
     Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
@@ -120,7 +120,6 @@ def compile_friendly_flex_attention(
     value: torch.Tensor,
     **kwargs,
 ) -> torch.Tensor:
-
     # First call initialise singleton wrapper object, second call invokes the object method to return compiled flex attention
     flex_attention_compiled = WrappedFlexAttention()()
     return flex_attention_compiled(
@@ -142,7 +141,6 @@ def flex_attention_forward(
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-
     block_mask = None
     causal_mask = None
     if isinstance(attention_mask, BlockMask):
