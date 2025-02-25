@@ -740,7 +740,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
             special_video_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
             special_video_mask = special_video_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
-            if not is_torchdynamo_compiling() and inputs_embeds[special_image_mask].numel() != video_features.numel():
+            if not is_torchdynamo_compiling() and inputs_embeds[special_video_mask].numel() != video_features.numel():
                 n_video_tokens = (input_ids == self.config.video_token_index).sum()
                 n_video_features = video_features.shape[0]
                 raise ValueError(
