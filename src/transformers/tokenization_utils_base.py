@@ -2479,7 +2479,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             f.write(template)
                         logger.info(f"chat template saved in {template_filepath}")
                         saved_raw_chat_template_files.append(template_filepath)
-                saved_raw_chat_template = True
                 if "chat_template" in tokenizer_config:
                     tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
             elif isinstance(self.chat_template, dict):
