@@ -5948,12 +5948,12 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             param = model.get_parameter(param_name)
         except AttributeError:
             param = model.get_buffer(param_name)
-        parameter_count[device] += math.prod(param.shape)
+        parameter_count[device] += int(math.prod(param.shape) * 2)
 
     dtype = dtype if dtype is not None else torch.float32
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, param_count in parameter_count.items():
-        _ = torch.empty(int(param_count * 1.25), dtype=dtype, device=device, requires_grad=False)
+        _ = torch.empty(int(param_count), dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
