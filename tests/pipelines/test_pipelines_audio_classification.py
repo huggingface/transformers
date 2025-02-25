@@ -144,12 +144,15 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         audio = np.ones((8000,))
         output = audio_classifier(audio, top_k=4)
 
+        # Expected outputs are collected running the test on torch 2.6 in few scenarios.
+        # Running on CUDA A100 and on XPU PVC (note: using stock torch xpu, NOT using IPEX):
         EXPECTED_OUTPUT = [
             {"score": 0.0833, "label": "go"},
             {"score": 0.0833, "label": "off"},
             {"score": 0.0833, "label": "stop"},
             {"score": 0.0833, "label": "on"},
         ]
+        # Running on CPU:
         EXPECTED_OUTPUT_PT_2 = [
             {"score": 0.0839, "label": "no"},
             {"score": 0.0837, "label": "go"},
