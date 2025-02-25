@@ -21,9 +21,9 @@ from ..utils import is_torch_flex_attn_available
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import (
-        flex_attention,
         BlockMask,
         create_block_mask as create_block_causal_mask_flex,
+        flex_attention,
     )
 
 
