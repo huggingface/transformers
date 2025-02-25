@@ -26,8 +26,6 @@ RUN echo torch=$VERSION
 # Currently, let's just use their latest releases (when `torch` is installed with a release version)
 RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
-
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
 # needed in bnb and awq
@@ -83,6 +81,9 @@ RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submod
 
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors
+
+# Add transformers in editable mode
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
