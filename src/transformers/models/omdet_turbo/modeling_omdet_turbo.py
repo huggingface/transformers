@@ -143,22 +143,24 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
             The predicted class of the objects from the encoder.
         encoder_extracted_states (`torch.FloatTensor`):
             The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
-        decoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`):
+        decoder_hidden_states (`Tuple[torch.FloatTensor]`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        decoder_attentions (`Optional[Tuple[Tuple[torch.FloatTensor]]]`):
+        decoder_attentions (`Tuple[Tuple[torch.FloatTensor]]`, *optional*):
             Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
             weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
-        encoder_hidden_states (`Optional[Tuple[torch.FloatTensor]]`):
+        encoder_hidden_states (`Tuple[torch.FloatTensor]`, *optional*):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of shape
             `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
-        encoder_attentions (`Optional[Tuple[Tuple[torch.FloatTensor]]]`):
+        encoder_attentions (`Tuple[Tuple[torch.FloatTensor]]`, *optional*):
             Tuple of tuples of `torch.FloatTensor` (one for attention for each layer) of shape `(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
             weighted average in the self-attention, cross-attention and multi-scale deformable attention heads.
+        classes_structure (`torch.LongTensor`, *optional*):
+            The number of queried classes for each image.
     """
 
     loss: torch.FloatTensor = None
@@ -173,6 +175,7 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    classes_structure: Optional[torch.LongTensor] = None
 
 
 # Copied from models.deformable_detr.load_cuda_kernels
@@ -1655,9 +1658,11 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_backbone.model.set_input_embeddings(value)
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
+    def resize_token_embeddings(
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None, mean_resizing: bool = True
+    ) -> nn.Embedding:
         model_embeds = self.language_backbone.model.resize_token_embeddings(
-            new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
+            new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of, mean_resizing=mean_resizing
         )
         self.config.text_config.vocab_size = model_embeds.num_embeddings
         self.vocab_size = model_embeds.num_embeddings
@@ -1667,16 +1672,16 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
     @replace_return_docstrings(output_type=OmDetTurboObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values: Tensor,
-        classes_input_ids: Tensor,
-        classes_attention_mask: Tensor,
-        tasks_input_ids: Tensor,
-        tasks_attention_mask: Tensor,
-        classes_structure: Tensor,
-        labels: Optional[Tensor] = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        pixel_values: torch.FloatTensor,
+        classes_input_ids: torch.LongTensor,
+        classes_attention_mask: torch.LongTensor,
+        tasks_input_ids: torch.LongTensor,
+        tasks_attention_mask: torch.LongTensor,
+        classes_structure: torch.LongTensor,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.FloatTensor], OmDetTurboObjectDetectionOutput]:
         r"""
         Returns:
@@ -1770,6 +1775,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
                     decoder_outputs[2],
                     encoder_outputs[1],
                     encoder_outputs[2],
+                    classes_structure,
                 ]
                 if output is not None
             )
@@ -1787,4 +1793,8 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
             decoder_attentions=decoder_outputs.attentions,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            classes_structure=classes_structure,
         )
+
+
+__all__ = ["OmDetTurboForObjectDetection", "OmDetTurboPreTrainedModel"]

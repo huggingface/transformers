@@ -23,7 +23,7 @@ from datasets import load_dataset
 
 from transformers import Wav2Vec2ConformerConfig, is_torch_available
 from transformers.testing_utils import (
-    is_pt_flax_cross_test,
+    is_flaky,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -452,6 +452,12 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2ConformerGumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
     def test_model_with_relative(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(position_embeddings_type="relative")
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -526,16 +532,6 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
 
     @unittest.skip(reason="Wav2Vec2Conformer has not inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
-    def test_equivalence_flax_to_pt(self):
-        pass
-
-    @is_pt_flax_cross_test
-    @unittest.skip(reason="Non-robust architecture does not exist in Flax")
-    def test_equivalence_pt_to_flax(self):
         pass
 
     def test_retain_grad_hidden_states_attentions(self):

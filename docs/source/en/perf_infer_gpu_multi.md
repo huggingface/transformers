@@ -54,6 +54,16 @@ torchrun --nproc-per-node 4 demo.py
 
 PyTorch tensor parallel is currently supported for the following models:
 * [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel)
+* [Gemma](https://huggingface.co/docs/transformers/en/model_doc/gemma), [Gemma2](https://huggingface.co/docs/transformers/en/model_doc/gemma2)
+* [Granite](https://huggingface.co/docs/transformers/en/model_doc/granite)
+* [Mistral](https://huggingface.co/docs/transformers/en/model_doc/mistral)
+* [Qwen2](https://huggingface.co/docs/transformers/en/model_doc/qwen2), [Qwen2MoE](https://huggingface.co/docs/transformers/en/model_doc/qwen2_moe), [Qwen2-VL](https://huggingface.co/docs/transformers/v4.48.0/en/model_doc/qwen2_vl)
+* [Starcoder2](https://huggingface.co/docs/transformers/en/model_doc/starcoder2)
+* [Cohere](https://huggingface.co/docs/transformers/en/model_doc/cohere), [Cohere2](https://huggingface.co/docs/transformers/en/model_doc/cohere2)
+* [GLM](https://huggingface.co/docs/transformers/en/model_doc/glm)
+* [Mixtral](https://huggingface.co/docs/transformers/en/model_doc/mixtral)
+* [OLMo](https://huggingface.co/docs/transformers/en/model_doc/olmo), [OLMo2](https://huggingface.co/docs/transformers/en/model_doc/olmo2)
+* [Phi](https://huggingface.co/docs/transformers/en/model_doc/phi), [Phi-3](https://huggingface.co/docs/transformers/en/model_doc/phi3)
 
 You can request to add tensor parallel support for another model by opening a GitHub Issue or Pull Request.
 
@@ -64,5 +74,5 @@ You can benefit from considerable speedups for inference, especially for inputs 
 For a single forward pass on [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel) with a sequence length of 512 and various batch sizes, the expected speedup is as follows:
 
 <div style="text-align: center">
-<img src="huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct, seqlen = 512, python, w_ compile.png">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct%2C%20seqlen%20%3D%20512%2C%20python%2C%20w_%20compile.png">
 </div>

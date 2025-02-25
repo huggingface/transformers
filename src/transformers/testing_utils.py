@@ -14,6 +14,7 @@
 
 import collections
 import contextlib
+import copy
 import doctest
 import functools
 import gc
@@ -28,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from collections import defaultdict
@@ -44,6 +46,7 @@ import huggingface_hub.utils
 import requests
 import urllib3
 from huggingface_hub import delete_repo
+from packaging import version
 
 from transformers import logging as transformers_logging
 
@@ -61,6 +64,7 @@ from .utils import (
     GGUF_MIN_VERSION,
     is_accelerate_available,
     is_apex_available,
+    is_apollo_torch_available,
     is_aqlm_available,
     is_auto_awq_available,
     is_auto_gptq_available,
@@ -78,12 +82,16 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flax_available,
+    is_flute_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
+    is_hadamard_available,
+    is_hqq_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -113,8 +121,9 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_availble,
+    is_soundfile_available,
     is_spacy_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -130,6 +139,7 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_deterministic,
     is_torch_fp16_available_on_device,
+    is_torch_greater_or_equal,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_sdpa_available,
@@ -142,6 +152,7 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    is_vptq_available,
     strtobool,
 )
 
@@ -221,63 +232,11 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
-_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=True)
-_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
-_tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
-
-
-def get_device_count():
-    import torch
-
-    if is_torch_xpu_available():
-        num_devices = torch.xpu.device_count()
-    else:
-        num_devices = torch.cuda.device_count()
-
-    return num_devices
-
-
-def is_pt_tf_cross_test(test_case):
-    """
-    Decorator marking a test as a test that control interactions between PyTorch and TensorFlow.
-
-    PT+TF tests are skipped by default and we can run only them by setting RUN_PT_TF_CROSS_TESTS environment variable
-    to a truthy value and selecting the is_pt_tf_cross_test pytest mark.
-
-    """
-    if not _run_pt_tf_cross_tests or not is_torch_available() or not is_tf_available():
-        return unittest.skip(reason="test is PT+TF test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pt_tf_cross_test()(test_case)
-
-
-def is_pt_flax_cross_test(test_case):
-    """
-    Decorator marking a test as a test that control interactions between PyTorch and Flax
-
-    PT+FLAX tests are skipped by default and we can run only them by setting RUN_PT_FLAX_CROSS_TESTS environment
-    variable to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
-
-    """
-    if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
-        return unittest.skip(reason="test is PT+FLAX test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pt_flax_cross_test()(test_case)
 
 
 def is_staging_test(test_case):
@@ -395,6 +354,14 @@ def require_galore_torch(test_case):
     https://github.com/jiaweizzhao/GaLore
     """
     return unittest.skipUnless(is_galore_torch_available(), "test requires GaLore")(test_case)
+
+
+def require_apollo_torch(test_case):
+    """
+    Decorator marking a test that requires GaLore. These tests are skipped when APOLLO isn't installed.
+    https://github.com/zhuhanqing/APOLLO
+    """
+    return unittest.skipUnless(is_apollo_torch_available(), "test requires APOLLO")(test_case)
 
 
 def require_lomo(test_case):
@@ -548,6 +515,21 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_torch_greater_or_equal(version: str):
+    """
+    Decorator marking a test that requires PyTorch version >= `version`.
+
+    These tests are skipped when PyTorch version is less than `version`.
+    """
+
+    def decorator(test_case):
+        return unittest.skipUnless(is_torch_greater_or_equal(version), f"test requires PyTorch version >= {version}")(
+            test_case
+        )
+
+    return decorator
 
 
 def require_flash_attn(test_case):
@@ -764,17 +746,17 @@ def require_spacy(test_case):
 
 def require_torch_multi_gpu(test_case):
     """
-    Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
-    multiple GPUs.
+    Decorator marking a test that requires a multi-GPU CUDA setup (in PyTorch). These tests are skipped on a machine without
+    multiple CUDA GPUs.
 
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    device_count = get_device_count()
+    import torch
 
-    return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
+    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple CUDA GPUs")(test_case)
 
 
 def require_torch_multi_accelerator(test_case):
@@ -972,6 +954,18 @@ def require_torchao(test_case):
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
 
 
+def require_torchao_version_greater_or_equal(torchao_version):
+    def decorator(test_case):
+        correct_torchao_version = is_torchao_available() and version.parse(
+            version.parse(importlib.metadata.version("torchao")).base_version
+        ) >= version.parse(torchao_version)
+        return unittest.skipUnless(
+            correct_torchao_version, f"Test requires torchao with the version greater than {torchao_version}."
+        )(test_case)
+
+    return decorator
+
+
 def require_torch_tensorrt_fx(test_case):
     """Decorator marking a test that requires Torch-TensorRT FX"""
     return unittest.skipUnless(is_torch_tensorrt_fx_available(), "test requires Torch-TensorRT FX")(test_case)
@@ -980,6 +974,17 @@ def require_torch_tensorrt_fx(test_case):
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
+
+
+def require_torch_large_gpu(test_case, memory: float = 20):
+    """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
+    if torch_device != "cuda":
+        return unittest.skip(reason=f"test requires a CUDA GPU with more than {memory} GiB of memory")(test_case)
+
+    return unittest.skipUnless(
+        torch.cuda.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU with more than {memory} GiB of memory",
+    )(test_case)
 
 
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
@@ -1118,7 +1123,7 @@ def require_soundfile(test_case):
     These tests are skipped when soundfile isn't installed.
 
     """
-    return unittest.skipUnless(is_soundfile_availble(), "test requires soundfile")(test_case)
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -1140,6 +1145,20 @@ def require_aqlm(test_case):
     Decorator marking a test that requires aqlm
     """
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
+
+
+def require_vptq(test_case):
+    """
+    Decorator marking a test that requires vptq
+    """
+    return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
+
+
+def require_spqr(test_case):
+    """
+    Decorator marking a test that requires spqr
+    """
+    return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
 
 
 def require_eetq(test_case):
@@ -1195,11 +1214,20 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_auto_gptq(test_case):
+def require_gptq(test_case):
     """
     Decorator for auto_gptq dependency
     """
-    return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+    return unittest.skipUnless(
+        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
+    )(test_case)
+
+
+def require_hqq(test_case):
+    """
+    Decorator for hqq dependency
+    """
+    return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
 
 
 def require_auto_awq(test_case):
@@ -1228,6 +1256,15 @@ def require_fbgemm_gpu(test_case):
     Decorator for fbgemm_gpu dependency
     """
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
+
+
+def require_flute_hadamard(test_case):
+    """
+    Decorator marking a test that requires higgs and hadamard
+    """
+    return unittest.skipUnless(
+        is_flute_available() and is_hadamard_available(), "test requires flute and fast_hadamard_transform"
+    )(test_case)
 
 
 def require_phonemizer(test_case):
@@ -1386,6 +1423,94 @@ def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
+
+
+def set_model_tester_for_less_flaky_test(test_case):
+    target_num_hidden_layers = 1
+    # TODO (if possible): Avoid exceptional cases
+    exceptional_classes = [
+        "ZambaModelTester",
+        "Zamba2ModelTester",
+        "RwkvModelTester",
+        "AriaVisionText2TextModelTester",
+        "GPTNeoModelTester",
+        "DPTModelTester",
+    ]
+    if test_case.model_tester.__class__.__name__ in exceptional_classes:
+        target_num_hidden_layers = None
+    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
+        target_num_hidden_layers = None
+
+    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
+        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
+    if (
+        hasattr(test_case.model_tester, "vision_config")
+        and "num_hidden_layers" in test_case.model_tester.vision_config
+        and target_num_hidden_layers is not None
+    ):
+        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
+        if isinstance(test_case.model_tester.vision_config, dict):
+            test_case.model_tester.vision_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.vision_config.num_hidden_layers = 1
+    if (
+        hasattr(test_case.model_tester, "text_config")
+        and "num_hidden_layers" in test_case.model_tester.text_config
+        and target_num_hidden_layers is not None
+    ):
+        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
+        if isinstance(test_case.model_tester.text_config, dict):
+            test_case.model_tester.text_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.text_config.num_hidden_layers = 1
+
+    # A few model class specific handling
+
+    # For Albert
+    if hasattr(test_case.model_tester, "num_hidden_groups"):
+        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
+
+
+def set_config_for_less_flaky_test(config):
+    target_attrs = [
+        "rms_norm_eps",
+        "layer_norm_eps",
+        "norm_eps",
+        "norm_epsilon",
+        "layer_norm_epsilon",
+        "batch_norm_eps",
+    ]
+    for target_attr in target_attrs:
+        setattr(config, target_attr, 1.0)
+
+    # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
+    # (We don't need the original epsilon values to check eager/sdpa matches)
+    attrs = ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]
+    for attr in attrs:
+        if hasattr(config, attr):
+            for target_attr in target_attrs:
+                setattr(getattr(config, attr), target_attr, 1.0)
+
+
+def set_model_for_less_flaky_test(model):
+    # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
+    target_names = (
+        "LayerNorm",
+        "GroupNorm",
+        "BatchNorm",
+        "RMSNorm",
+        "BatchNorm2d",
+        "BatchNorm1d",
+        "BitGroupNormActivation",
+        "WeightStandardizedConv2d",
+    )
+    target_attrs = ["eps", "epsilon", "variance_epsilon"]
+    if is_torch_available() and isinstance(model, torch.nn.Module):
+        for module in model.modules():
+            if type(module).__name__.endswith(target_names):
+                for attr in target_attrs:
+                    if hasattr(module, attr):
+                        setattr(module, attr, 1.0)
 
 
 class CaptureStd:
@@ -2040,7 +2165,7 @@ def pytest_terminal_summary_main(tr, id):
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
                 if rep.duration < durations_min:
-                    f.write(f"{len(dlist)-i} durations < {durations_min} secs were omitted")
+                    f.write(f"{len(dlist) - i} durations < {durations_min} secs were omitted")
                     break
                 f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
@@ -2312,12 +2437,28 @@ class RequestCounter:
 
     def __enter__(self):
         self._counter = defaultdict(int)
-        self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=urllib3.connectionpool.log.debug)
+        self._thread_id = threading.get_ident()
+        self._extra_info = []
+
+        def patched_with_thread_info(func):
+            def wrap(*args, **kwargs):
+                self._extra_info.append(threading.get_ident())
+                return func(*args, **kwargs)
+
+            return wrap
+
+        self.patcher = patch.object(
+            urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
+        )
         self.mock = self.patcher.start()
         return self
 
     def __exit__(self, *args, **kwargs) -> None:
-        for call in self.mock.call_args_list:
+        assert len(self.mock.call_args_list) == len(self._extra_info)
+
+        for thread_id, call in zip(self._extra_info, self.mock.call_args_list):
+            if thread_id != self._thread_id:
+                continue
             log = call.args[0] % call.args[1:]
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
                 if method in log:
@@ -2453,7 +2594,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     process.join(timeout=timeout)
 
     if results["error"] is not None:
-        test_case.fail(f'{results["error"]}')
+        test_case.fail(f"{results['error']}")
 
 
 def run_test_using_subprocess(func):

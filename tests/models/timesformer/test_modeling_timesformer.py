@@ -167,6 +167,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     test_torchscript = False
     test_resize_embeddings = False
     test_head_masking = False
+    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = TimesformerModelTester(self)
@@ -352,4 +353,4 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-0.3016, -0.7713, -0.4205]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

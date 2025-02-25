@@ -347,7 +347,6 @@ class FlaxGenerationMixin:
             eos_token_id = generation_config.eos_token_id
             if isinstance(eos_token_id, list):
                 eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             generation_config.pad_token_id = eos_token_id
 
         if generation_config.decoder_start_token_id is None and self.config.is_encoder_decoder:
@@ -397,7 +396,7 @@ class FlaxGenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-        else:  # by default let's always generate 10 new tokens
+        else:  # by default let's always generate 20 new tokens
             if generation_config.max_length == GenerationConfig().max_length:
                 generation_config.max_length = generation_config.max_length + input_ids_seq_length
                 max_position_embeddings = getattr(self.config, "max_position_embeddings", None)

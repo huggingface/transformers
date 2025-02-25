@@ -553,6 +553,32 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> model.fit(tf_dataset)  # doctest: +SKIP
    ```
 
+
+## Chat with text generation models
+
+If you're working with a model that generates text as an output, you can also engage in a multi-turn conversation with
+it through the `transformers-cli chat` command. This is the fastest way to interact with a model, e.g. for a
+qualitative assessment (aka vibe check).
+
+This CLI is implemented on top of our `AutoClass` abstraction, leveraging our [text generation](llm_tutorial.md) and
+[chat](chat_templating.md) tooling, and thus will be compatible with any 🤗 Transformers model. If you have the library
+[installed](installation.md), you can launch the chat session on your terminal with
+
+```bash
+transformers-cli chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+```
+
+For a full list of options to launch the chat, type
+
+```bash
+transformers-cli chat -h
+```
+
+After the chat is launched, you will enter an interactive session with the model. There are special commands for this
+session as well, such as `clear` to reset the conversation. Type `help` at any moment to display all special chat
+commands, and `exit` to terminate the session.
+
+
 ## What's next?
 
 Now that you've completed the 🤗 Transformers quick tour, check out our guides and learn how to do more specific things like writing a custom model, fine-tuning a model for a task, and how to train a model with a script. If you're interested in learning more about 🤗 Transformers core concepts, grab a cup of coffee and take a look at our Conceptual Guides!

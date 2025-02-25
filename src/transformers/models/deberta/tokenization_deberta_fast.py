@@ -14,10 +14,7 @@
 # limitations under the License.
 """Fast Tokenization class for model DeBERTa."""
 
-import json
 from typing import List, Optional, Tuple
-
-from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -132,14 +129,6 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
         )
         self.add_bos_token = kwargs.pop("add_bos_token", False)
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
-
     @property
     def mask_token(self) -> str:
         """
@@ -245,3 +234,6 @@ class DebertaTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
+
+
+__all__ = ["DebertaTokenizerFast"]
