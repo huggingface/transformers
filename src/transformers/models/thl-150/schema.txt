@@ -1,0 +1,48 @@
+thl_150/
+├── __init__.py
+├── configuration_thl_150.py
+├── modeling_thl_150.py
+├── tokenization_thl_150.py 
+└── tokenization_thl_150_fast.py
+
+File Structure Explanation:
+
+1. Core Modules:
+- __init__.py: Package initialization and API exports
+- configuration_thl_150.py: Model architecture configuration
+- modeling_thl_150.py: PyTorch implementation with all model variants
+- tokenization_*.py: Slow + fast tokenizer implementations
+
+2. Support Utilities:
+- rope_utils.py: Rotary Position Embedding helpers
+- attention_utils.py: Mask generation & attention ops
+- cache_utils.py: KV cache management
+
+3. Testing:
+- Model behavior verification
+- Configuration validation
+- Tokenizer edge cases
+
+
+5. Root Files:
+- LICENSE: Model/distribution terms
+
+Key Implementation Files:
+- modeling_thl_150.py (Main model logic)
+- configuration_thl_150.py (Architecture parameters)
+- tokenization_thl_150_fast.py (Optimized tokenizer)
+- utils/rope_utils.py (Positional encoding core)
+
+Test Coverage:
+- Layer-wise gradient checks
+- Attention pattern validation
+- Tokenizer roundtrip tests
+- Max sequence length handling
+- Mixed precision compatibility
+
+To use this structure:
+1. Create directories with `mkdir -p thl_150/{utils,tests,docs}`
+2. Place corresponding files in each directory
+3. Add __init__.py files to make Python packages
+4. Implement utility modules in utils/
+5. Add test cases in tests/
