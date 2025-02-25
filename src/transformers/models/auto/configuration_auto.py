@@ -94,6 +94,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("depth_anything", "DepthAnythingConfig"),
         ("depth_pro", "DepthProConfig"),
         ("deta", "DetaConfig"),
+        ("deepseek_v2", "DeepseekV2Config"),
         ("detr", "DetrConfig"),
         ("diffllama", "DiffLlamaConfig"),
         ("dinat", "DinatConfig"),
