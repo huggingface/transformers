@@ -51,6 +51,7 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    hub_retry,
     is_staging_test,
     require_accelerate,
     require_flax,
@@ -326,6 +327,18 @@ class ModelUtilsTest(TestCasePlus):
     def tearDown(self):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
+
+    def test_hub_error(self):
+        @hub_retry(max_attempts=2)
+        def test_func():
+            # First attempt will fail with a connection error
+            if not hasattr(test_func, "attempt"):
+                test_func.attempt = 1
+                raise requests.exceptions.ConnectionError("Connection failed")
+            # Second attempt will succeed
+            return True
+
+        self.assertTrue(test_func())
 
     @slow
     def test_model_from_pretrained(self):

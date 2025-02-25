@@ -2529,7 +2529,7 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
         def wrapper(*args, **kwargs):
             retry_count = 1
 
-            while retry_count < max_attempts:
+            while retry_count <= max_attempts:
                 try:
                     return test_func_ref(*args, **kwargs)
                 # We catch all exceptions related to network issues from requests
@@ -2540,7 +2540,7 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
                     requests.exceptions.HTTPError,
                     requests.exceptions.RequestException,
                 ) as err:
-                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
+                    logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
                     if wait_before_retry is not None:
                         time.sleep(wait_before_retry)
                     retry_count += 1
