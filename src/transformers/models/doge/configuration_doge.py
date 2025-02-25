@@ -144,9 +144,12 @@ class DogeConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.dt_proj": "rowwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise",
+        "layers.*.feed_forward.queries_proj": "colwise",
+        "layers.*.feed_forward.down_embed": "rowwise",
+        "layers.*.feed_forward.up_embed": "rowwise",
     }
 
     def __init__(
