@@ -53,7 +53,7 @@ class WrappedFlexAttention:
 
     def __call__(self):
         return self._compiled_flex_attention
-  
+
 
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor
