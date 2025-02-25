@@ -3507,7 +3507,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
-        if torch.distributed.is_initialized and device_map == "auto" and tp_plan is None:
+        if torch.distributed.is_initialized() and device_map == "auto" and tp_plan is None:
             tp_plan = "auto"  # device_map = "auto" in torchrun equivalent to TP plan = AUTO!
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
