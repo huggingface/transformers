@@ -201,6 +201,8 @@ else:
     IS_ROCM_SYSTEM = False
     IS_CUDA_SYSTEM = False
 
+logger = transformers_logging.get_logger(__name__)
+
 
 def parse_flag_from_env(key, default=False):
     try:
@@ -2498,7 +2500,7 @@ def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None, d
                     return test_func_ref(*args, **kwargs)
 
                 except Exception as err:
-                    print(f"Test failed with {err} at try {retry_count}/{max_attempts}.", file=sys.stderr)
+                    logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
                     if wait_before_retry is not None:
                         time.sleep(wait_before_retry)
                     retry_count += 1
