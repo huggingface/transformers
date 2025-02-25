@@ -561,7 +561,9 @@ class BertLayer(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        # Explicitly handle the case where past_key_value is None
+        self_attn_past_key_value = tuple(past_key_value[:2]) if past_key_value is not None else None
+
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -573,10 +575,11 @@ class BertLayer(nn.Module):
 
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
+            outputs = tuple(self_attention_outputs[1:-1])  # Convert to tuple for consistency
+            present_key_value = tuple(self_attention_outputs[-1]) # convert to tuple
+
         else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+            outputs = tuple(self_attention_outputs[1:])  # add self attentions if we output attention weights, convert to tuple
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
@@ -587,7 +590,9 @@ class BertLayer(nn.Module):
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            # Explicitly handle the case where past_key_value is None
+            cross_attn_past_key_value = tuple(past_key_value[-2:]) if past_key_value is not None else None
+            
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -598,11 +603,14 @@ class BertLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            outputs = outputs + tuple(cross_attention_outputs[1:-1])  # add cross attentions if we output attention weights, convert to tuple
 
             # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
+            cross_attn_present_key_value = tuple(cross_attention_outputs[-1]) # convert to tuple
+
+             # Ensure present_key_value is a tuple before adding
+            present_key_value =  present_key_value + cross_attn_present_key_value
+
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
@@ -611,7 +619,7 @@ class BertLayer(nn.Module):
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
-            outputs = outputs + (present_key_value,)
+            outputs = outputs + (present_key_value,)  # Ensure present_key_value is a tuple
 
         return outputs
 
