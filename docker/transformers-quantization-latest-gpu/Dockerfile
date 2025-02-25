@@ -22,6 +22,11 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 
 RUN [ ${#PYTORCH} -gt 0 ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
 RUN echo torch=$VERSION
+# `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
+# Currently, let's just use their latest releases (when `torch` is installed with a release version)
+RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA
+
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
@@ -62,7 +67,8 @@ RUN python3 -m pip install --no-cache-dir gguf
 
 # Add autoawq for quantization testing
 # New release v0.2.8
-RUN python3 -m pip install --no-cache-dir autoawq
+RUN python3 -m pip install --no-cache-dir autoawq[kernels]
+RUN python3 -m pip install --no-cache-dir autoawq[kernels]
 
 # Add quanto for quantization testing
 RUN python3 -m pip install --no-cache-dir optimum-quanto
@@ -70,20 +76,13 @@ RUN python3 -m pip install --no-cache-dir optimum-quanto
 # Add eetq for quantization testing
 RUN git clone https://github.com/NetEase-FuXi/EETQ.git && cd EETQ/ && git submodule update --init --recursive && pip install .
 
-# Add flute-kernel and fast_hadamard_transform for quantization testing
-RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
-# RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
-RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
+# # Add flute-kernel and fast_hadamard_transform for quantization testing
+# RUN python3 -m pip install --no-cache-dir flute-kernel==0.4.1
+# # RUN python3 -m pip install --no-cache-dir fast_hadamard_transform==1.0.4.post1
+# RUN python3 -m pip install --no-cache-dir git+https://github.com/Dao-AILab/fast-hadamard-transform.git
 
 # Add compressed-tensors for quantization testing
 RUN python3 -m pip install --no-cache-dir compressed-tensors
-
-
-# `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
-# Currently, let's just use their latest releases (when `torch` is installed with a release version)
-RUN python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
-
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
