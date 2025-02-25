@@ -2545,10 +2545,6 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: Optional[float] = 2):
                         time.sleep(wait_before_retry)
                     retry_count += 1
 
-                # Raise any other errors
-                except Exception:
-                    raise
-
             return test_func_ref(*args, **kwargs)
 
         return wrapper
