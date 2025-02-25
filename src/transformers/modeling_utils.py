@@ -40,6 +40,7 @@ import torch
 import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
+from torch.distributed.tensor import DTensor, Shard, Replicate
 from safetensors.torch import load
 from torch import Tensor, nn
 from torch.distributions import constraints
@@ -870,16 +871,34 @@ def _load_state_dict_into_meta_model(
                 # TODO currently this only supports weights, not bias
                 if current_module_plan is not None:
                     # replace the linear module
-                    translate_to_torch_parallel_style(current_module_plan)._apply(module_to_tp, device_mesh)
+                    tp_layer = translate_to_torch_parallel_style(current_module_plan) # we dont apply!
                     rank = device_map[""]
                     row, col = empty_param.shape
                     if "rowwise" in current_module_plan:
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
+                        shard = Shard(1)
                     elif "colwise" in current_module_plan:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
+                        shard = Shard(0)
+                        tp_layer.desired_input_layouts = (Shard(-1),)
                     else:
                         param = param[:]
-                    module_to_tp.weight._local_tensor = param.to(dtype=param_casting_dtype)
+                        shard = Replicate()
+                    module_to_tp.weight = torch.nn.Parameter(DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]))
+                    input_fn = partial(
+                        tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts
+                    )
+                    output_fn = partial(
+                        tp_layer._prepare_output_fn, tp_layer.output_layouts, tp_layer.use_local_output
+                    )
+                    
+                    # register input_fn as module forward pre hook
+                    module_to_tp.register_forward_pre_hook(
+                        lambda mod, inputs: input_fn(mod, inputs, device_mesh)
+                    )
+                    module_to_tp.register_forward_hook(
+                        lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh)
+                    )
                 else:
                     missing_keys, unexpected_keys = module_to_tp.load_state_dict(
                         {new_param_name.rsplit(".", 1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True
