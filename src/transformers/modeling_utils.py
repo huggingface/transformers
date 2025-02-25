@@ -788,10 +788,6 @@ def _load_state_dict_into_meta_model(
     elif device_map[""] is not None:
         device_map[""] = device_map[""].index
     
-    # TODO remove once @CyrilVallez's PR is merged
-    foo = torch.empty((int(4e9),), dtype=torch.bfloat16, device=device_map[""])
-    del foo
-
     with safe_open(shard_file, framework="pt", device=device_map[""]) as file_pointer:
         error_msgs = []
 
@@ -5259,9 +5255,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
         was already loaded in memory, note however that this means that each process will first initialize the whole model,
         then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
-
-        Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
-        so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
 
         Args:
             device_mesh (`torch.distributed.DeviceMesh`):
