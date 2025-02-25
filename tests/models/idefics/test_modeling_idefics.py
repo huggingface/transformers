@@ -326,6 +326,8 @@ class IdeficsModelTester:
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
+    # Doesn't run generation tests here -- idefics has a dedicated tester for generation tests below
+    all_generative_model_classes = ()
     pipeline_model_mapping = (
         {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
         if is_torch_available()
@@ -866,6 +868,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip("Idefics has a hard requirement on SDPA")
     def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
+
+    @unittest.skip(
+        "Idefics has a separate test runner for generation tests with complex inheritance, causing this check to fail"
+    )
+    def test_generation_tester_mixin_inheritance(self):
         pass
 
 
