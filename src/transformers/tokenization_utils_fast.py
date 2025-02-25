@@ -427,7 +427,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         max_length: int,
         stride: int,
         pad_to_multiple_of: Optional[int],
-        padding_side: Optional[bool],
+        padding_side: Optional[str],
     ):
         """
         Define the truncation and the padding strategies for fast tokenizers (provided by HuggingFace tokenizers
@@ -507,7 +507,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[str] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
@@ -597,7 +597,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         stride: int = 0,
         is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[bool] = None,
+        padding_side: Optional[str] = None,
         return_tensors: Optional[bool] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,

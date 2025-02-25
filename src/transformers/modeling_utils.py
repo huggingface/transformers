@@ -1685,16 +1685,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def can_generate(cls) -> bool:
         """
-        Returns whether this model can generate sequences with `.generate()`.
+        Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
 
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Directly inherits `GenerationMixin` -> can generate
         if "GenerationMixin" in str(cls.__bases__):
-            return True
-        # Model class overwrites `generate` (e.g. time series models) -> can generate
-        if str(cls.__name__) in str(cls.generate):
             return True
         # The class inherits from a class that can generate (recursive check) -> can generate
         for base in cls.__bases__:
@@ -4677,16 +4674,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
         if hf_quantizer is not None:
             missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+            unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
 
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
         if low_cpu_mem_usage:
             for key in missing_keys:
-                if key in list(model_state_dict.keys()):
+                if key in model_state_dict:
                     key = key
-                elif f"{prefix}.{key}" in list(model_state_dict.keys()):
+                elif f"{prefix}.{key}" in model_state_dict:
                     key = f"{prefix}.{key}"
-                elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict.keys()):
+                elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in model_state_dict:
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
 
@@ -4917,7 +4915,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     device_map is not None
                     and hf_quantizer is not None
                     and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                    and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
+                    and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
                 state_dict = load_state_dict(
@@ -4996,6 +4994,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Load back temporarily offloaded state dict
                 load_offloaded_weights(model_to_load, state_dict_index, state_dict_folder)
                 shutil.rmtree(state_dict_folder)
+
+        if hf_quantizer is not None:
+            missing_keys = hf_quantizer.update_missing_keys_after_loading(model_to_load, missing_keys, prefix)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)

@@ -57,6 +57,7 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+    MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
@@ -104,6 +105,8 @@ from transformers.utils import (
     is_torch_sdpa_available,
 )
 from transformers.utils.generic import ContextManagers
+
+from .generation.test_utils import GenerationTesterMixin
 
 
 if is_accelerate_available():
@@ -262,6 +265,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
@@ -1173,6 +1177,10 @@ class ModelTesterMixin:
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
+                    elif "Siglip2" in model_class.__name__:
+                        outputs = model(**inputs)
+                        example_inputs = [t for t in inputs.values() if isinstance(t, torch.Tensor)]
+                        traced_model = torch.jit.trace(model, example_inputs, check_trace=False)
                     else:
                         main_input = inputs[main_input_name]
 
@@ -3033,6 +3041,7 @@ class ModelTesterMixin:
                 "wav2vec2.masked_spec_embed",
                 "Wav2Vec2ForSequenceClassification",
                 "CLIPForImageClassification",
+                "Siglip2ForImageClassification",
                 "RegNetForImageClassification",
                 "ResNetForImageClassification",
                 "UniSpeechSatForSequenceClassification",
@@ -4409,6 +4418,33 @@ class ModelTesterMixin:
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(inputs_dict["input_ids"].to(torch_device))
+
+    def test_generation_tester_mixin_inheritance(self):
+        """
+        Ensures that we have the generation tester mixin if the model can generate. The test will fail otherwise,
+        forcing the mixin to be added -- and ensuring proper test coverage
+        """
+        if len(self.all_generative_model_classes) > 0:
+            self.assertTrue(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can call `generate` from `GenerationMixin`, so one of two things must happen: 1) the "
+                    "tester must inherit from `GenerationTesterMixin` to run `generate` tests, or 2) if the model "
+                    "doesn't fully support the original `generate` or has a custom `generate` with partial feature "
+                    "support, the tester must overwrite `all_generative_model_classes` to skip the failing classes "
+                    "(make sure to comment why). If `all_generative_model_classes` is overwritten as `()`, then we "
+                    "need to remove the `GenerationTesterMixin` inheritance -- no `generate` tests are being run."
+                ),
+            )
+        else:
+            self.assertFalse(
+                issubclass(self.__class__, GenerationTesterMixin),
+                msg=(
+                    "This model can't call `generate`, so its tester can't inherit `GenerationTesterMixin`. (If you "
+                    "think the model should be able to `generate`, the model may be missing the `GenerationMixin` "
+                    "inheritance)"
+                ),
+            )
 
 
 global_rng = random.Random()
