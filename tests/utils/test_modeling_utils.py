@@ -328,7 +328,7 @@ class ModelUtilsTest(TestCasePlus):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
 
-    def test_hub_error(self):
+    def test_hub_retry(self):
         @hub_retry(max_attempts=2)
         def test_func():
             # First attempt will fail with a connection error
