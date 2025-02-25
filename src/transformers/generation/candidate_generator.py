@@ -614,6 +614,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         return new_target_ids
 
+
 class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):
     """
     `CandidateGenerator` class to be used for Universal Speculative Decoding (USD): speculative decoding with different tokenizers

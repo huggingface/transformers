@@ -340,6 +340,7 @@ GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderO
 GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
 GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
 
+
 class AssistantToTargetTranslator:
     """
     Translates token ids and logits between assistant and target model vocabularies. This class is used to handle
@@ -366,8 +367,8 @@ class AssistantToTargetTranslator:
         self,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
-        target_vocab_size: int, # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
-        assistant_model_device: str = "cpu"
+        target_vocab_size: int,  # required since target_vocab_size can be different from the length of target_tokenizer.get_vocab()
+        assistant_model_device: str = "cpu",
     ):
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
@@ -1028,7 +1029,9 @@ class GenerationMixin:
             )
         elif different_tokenizers:
             if generation_config.do_sample is True:
-                atm_translator = AssistantVocabTranslatorCache.get_translator(target_tokenizer, assistant_tokenizer, self.config.vocab_size, assistant_model.device)
+                atm_translator = AssistantVocabTranslatorCache.get_translator(
+                    target_tokenizer, assistant_tokenizer, self.config.vocab_size, assistant_model.device
+                )
                 candidate_generator = UniversalSpeculativeDecodingGenerator(
                     input_ids=input_ids,
                     assistant_model=assistant_model,

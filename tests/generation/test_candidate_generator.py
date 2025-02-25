@@ -228,7 +228,6 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
 
 
 class TestUniversalSpeculativeDecoding(unittest.TestCase):
-
     @classmethod
     def setUpClass(cls):
         cls.assistant_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(
