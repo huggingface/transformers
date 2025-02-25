@@ -779,20 +779,14 @@ def _load_state_dict_into_meta_model(
     It also initialize tensor parallelism for each module if needed.
 
     """
-
-    # XXX: remaining features to implement to be fully compatible with _load_state_dict_into_model
-    # - deepspeed zero 3 support
-    # - need to copy metadata if any - see _load_state_dict_into_model
-    # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
-    # MAKE SURE TO ALLOW LOADING WHEN STATE DICT IS ALREADY MATERIALIZED
     if device_map is None or "" not in device_map:
-        device_map = {"": torch.device("cpu")}
+        device_map[""] = None
     elif isinstance(device_map[""], int):
         pass
-    else:
+    elif device_map[""] is not None:
         device_map[""] = device_map[""].index
     
-    # TODO remove once 
+    # TODO remove once @CyrilVallez's PR is merged
     foo = torch.empty((int(4e9),), dtype=torch.bfloat16, device=device_map[""])
     del foo
 
@@ -897,15 +891,14 @@ def _load_state_dict_into_meta_model(
                     param_device = "cpu"
                 else:
                     module_name = module_name.rsplit(".", 1)[0]
-                    if module_name == "" or module_name not in device_map:
-                        if list(device_map.keys()) == [""]:
-                            param_device = device_map[""]
-                        else:
-                            raise ValueError(
-                                f"`device_map` is used, but {new_param_name} doesn't have any device set. {device_map}"
-                            )
+                    device_map_regex = "|".join(device_map.keys())
+                    module_layer = re.search(device_map_regex, module_name)
+                    if module_name == "" or device_map_regex is None:
+                        raise ValueError(
+                            f"`device_map` is used, but {new_param_name} doesn't have any device set. {device_map}"
+                        )
                     else:
-                        param_device = device_map[module_name]
+                        param_device = device_map[module_layer.group()]
 
                 if param_device == "disk" and not is_safetensors:
                     offload_index = offload_weight(param[:], new_param_name, offload_folder, offload_index)
@@ -923,14 +916,8 @@ def _load_state_dict_into_meta_model(
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
                     module = model.get_submodule(new_param_name.rsplit(".", 1)[0])
-                    module._load_from_state_dict(
-                        {"weight": param[:]},
-                        "",
-                        {"assign_to_params_buffers": True},
-                        True,
-                        missing_keys,
-                        unexpected_keys,
-                        error_msgs,
+                    _, unexpected_keys = module.load_state_dict(
+                        {new_param_name.rsplit(".", 1)[1]: param[:].to(param_device, dtype=param_casting_dtype)}, False, True
                     )
                 else:
                     hf_quantizer.create_quantized_param(
@@ -4308,7 +4295,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
-            print(target_dtype)
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
 
             if hf_quantizer is not None:
@@ -4359,8 +4345,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise
         elif from_pt:
             # restore default dtype
-            # if dtype_orig is not None:
-            #     torch.set_default_dtype(dtype_orig)
+            if dtype_orig is not None:
+                torch.set_default_dtype(dtype_orig)
 
             (
                 model,
@@ -4448,8 +4434,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ):
                 device_map_kwargs["offload_buffers"] = True
 
-            # if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
-            #     dispatch_model(model, **device_map_kwargs)
+            if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+                dispatch_model(model, **device_map_kwargs)
+            # TODO @ArthurZucker not sure if we need this for all cases, this errors out in some of my tests
 
         # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
         # not part of the state_dict (persistent=False)
@@ -4716,7 +4703,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        # TODO the dictionnary being passed does not contains
                         hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
@@ -4895,7 +4881,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 missing_keys, unexpected_keys = model_to_load.load_state_dict(
                     fixed_state_dict, assign_to_params_buffers
                 )
-                error_msg = missing_keys
+                error_msg += missing_keys
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
