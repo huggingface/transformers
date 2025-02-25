@@ -784,7 +784,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
 
         # Generate and process outputs using translator
         if self._atm_translator.logits_processors is not None:
-            generation_args["logits_processor"].append(self._atm_translator.logits_processors)
+            generation_args["logits_processor"] = self._atm_translator.logits_processors
         self._prev_assistant_ids, assistant_candidate_logits = self._generate_candidates(generation_args)
 
         # Use translator to convert tokens and logits
