@@ -593,6 +593,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # Note: for now, don't deal with num_items_in_batch
+        kwargs.pop("num_items_in_batch", None)
         kwargs_encoder = {argument: value for argument, value in kwargs.items() if not argument.startswith("decoder_")}
 
         kwargs_decoder = {
