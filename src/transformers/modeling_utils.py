@@ -40,9 +40,9 @@ import torch
 import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
-from torch.distributed.tensor import DTensor, Shard, Replicate, Partial
 from safetensors.torch import load
 from torch import Tensor, nn
+from torch.distributed.tensor import DTensor, Shard
 from torch.distributions import constraints
 from torch.nn import CrossEntropyLoss, Identity
 from torch.utils.checkpoint import checkpoint
@@ -753,10 +753,10 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
 
 def distribute_module(
     module: nn.Module,
-    device_mesh  = None,
-    partition_fn= None,
-    input_fn= None,
-    output_fn= None,
+    device_mesh=None,
+    partition_fn=None,
+    input_fn=None,
+    output_fn=None,
 ) -> nn.Module:
     """
     This function expose three functions to control the parameters/inputs/outputs of the module:
@@ -812,13 +812,9 @@ def distribute_module(
             module.register_forward_pre_hook(lambda _, inputs: input_fn(inputs, device_mesh))  # type: ignore[call-arg]
         elif num_args == 3:
             # input_fn takes in module, inputs, device mesh
-            module.register_forward_pre_hook(
-                lambda mod, inputs: input_fn(mod, inputs, device_mesh)
-            )
+            module.register_forward_pre_hook(lambda mod, inputs: input_fn(mod, inputs, device_mesh))
         else:
-            raise ValueError(
-                f"input_fn should take in 3 arguments, but got {num_args} arguments!"
-            )
+            raise ValueError(f"input_fn should take in 3 arguments, but got {num_args} arguments!")
     # register output_fn as module forward hook
     if output_fn is not None:
         num_args = len(inspect.signature(output_fn).parameters)
@@ -834,15 +830,12 @@ def distribute_module(
                 lambda mod, inputs, outputs: output_fn(outputs, device_mesh)  # type: ignore[call-arg]
             )
         elif num_args == 3:
-            module.register_forward_hook(
-                lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh)
-            )
+            module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
         else:
-            raise ValueError(
-                f"output_fn should take in 3 arguments, but got {num_args} arguments!"
-            )
+            raise ValueError(f"output_fn should take in 3 arguments, but got {num_args} arguments!")
 
     return module
+
 
 def _load_state_dict_into_meta_model(
     model: torch.nn.Module,
@@ -964,14 +957,18 @@ def _load_state_dict_into_meta_model(
                 # TODO currently this only supports weights, not bias
                 if current_module_plan is not None:
                     # replace the linear module
-                    tp_layer = translate_to_torch_parallel_style(current_module_plan) # we dont apply!
-                    
+                    tp_layer = translate_to_torch_parallel_style(current_module_plan)  # we dont apply!
+
                     rank = device_map[""]
                     row, col = empty_param.shape
                     if "rowwise" == current_module_plan:
                         param = param[:, rank * (col // device_mesh.size()) : (rank + 1) * (col // device_mesh.size())]
                         shard = Shard(1)
-                        local_parameter = DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]*device_mesh.ndim)
+                        local_parameter = DTensor.from_local(
+                            param.to(dtype=param_casting_dtype),
+                            device_mesh=device_mesh,
+                            placements=[shard] * device_mesh.ndim,
+                        )
                         if isinstance(module_to_tp.weight, nn.Parameter):
                             local_parameter = torch.nn.Parameter(local_parameter)
                         module_to_tp.weight = local_parameter
@@ -979,12 +976,24 @@ def _load_state_dict_into_meta_model(
                     elif "colwise" == current_module_plan:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
-                        module_to_tp.weight = torch.nn.Parameter(DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]*device_mesh.ndim))
+                        module_to_tp.weight = torch.nn.Parameter(
+                            DTensor.from_local(
+                                param.to(dtype=param_casting_dtype),
+                                device_mesh=device_mesh,
+                                placements=[shard] * device_mesh.ndim,
+                            )
+                        )
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
-                        module_to_tp.weight = torch.nn.Parameter(DTensor.from_local(param.to(dtype=param_casting_dtype), device_mesh=device_mesh, placements=[shard]*device_mesh.ndim))
-                    
+                        module_to_tp.weight = torch.nn.Parameter(
+                            DTensor.from_local(
+                                param.to(dtype=param_casting_dtype),
+                                device_mesh=device_mesh,
+                                placements=[shard] * device_mesh.ndim,
+                            )
+                        )
+
                     input_fn = partial(
                         tp_layer._prepare_input_fn, tp_layer.input_layouts, tp_layer.desired_input_layouts
                     )
