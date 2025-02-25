@@ -311,7 +311,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         image_mean = tuple(image_mean) if image_mean is not None else None
         image_std = tuple(image_std) if image_std is not None else None
 
-        image_mean, image_std, interpolation = self._prepare_process_arguments(
+        image_mean, image_std, do_rescale, interpolation = self._prepare_process_arguments(
             do_resize=do_resize,
             size=size,
             resample=resample,

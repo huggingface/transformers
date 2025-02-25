@@ -381,12 +381,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         Rescale and normalize images.
         """
-        if do_rescale and do_normalize:
+        # if/elif as we fuse rescale and normalize in `_prepare_process_arguments`
+        if do_normalize:
             images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
         elif do_rescale:
-            images = images * rescale_factor
-        elif do_normalize:
-            images = self.normalize(images, image_mean, image_std)
+            images = self.rescale(images, rescale_factor)
 
         return images
 
@@ -542,12 +541,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
             # Fused rescale and normalize
             image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
             image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
+            do_rescale = False
 
         interpolation = (
             pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
         )
 
-        return image_mean, image_std, interpolation
+        return image_mean, image_std, do_rescale, interpolation
 
     @add_start_docstrings(BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS)
     def preprocess(
@@ -577,6 +577,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         size = kwargs.pop("size")
         crop_size = kwargs.pop("crop_size")
         image_mean = kwargs.pop("image_mean")
+        do_rescale = kwargs.pop("do_rescale")
         image_std = kwargs.pop("image_std")
         data_format = kwargs.pop("data_format")
         resample = kwargs.pop("resample")
@@ -587,17 +588,17 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
-        image_mean, image_std, interpolation = self._prepare_process_arguments(
+        image_mean, image_std, do_rescale, interpolation = self._prepare_process_arguments(
             size=size,
             crop_size=crop_size,
             resample=resample,
             image_mean=image_mean,
             image_std=image_std,
+            do_rescale=do_rescale,
             data_format=data_format if data_format is not None else ChannelDimension.FIRST,
             device=images[0].device,
             do_resize=kwargs.get("do_resize"),
             do_center_crop=kwargs.get("do_center_crop"),
-            do_rescale=kwargs.get("do_rescale"),
             rescale_factor=kwargs.get("rescale_factor"),
             do_normalize=kwargs.get("do_normalize"),
             return_tensors=kwargs.get("return_tensors"),
@@ -609,6 +610,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             crop_size=crop_size,
             interpolation=interpolation,
             image_mean=image_mean,
+            do_rescale=do_rescale,
             image_std=image_std,
             **kwargs,
         )
