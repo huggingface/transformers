@@ -2184,7 +2184,7 @@ class Trainer:
             (args.fp16_full_eval or args.bf16_full_eval)
             and not args.do_train
             and not self.is_model_parallel
-            and self.model is not None  # might be None after hp search trial
+            and self.model_init is None
         ):
             self._move_model_to_device(self.model, args.device)
 
