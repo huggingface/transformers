@@ -117,7 +117,11 @@ class TorchAoTest(unittest.TestCase):
     EXPECTED_OUTPUT = "What are we having for dinner?\n- 1. What is the temperature outside"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     device = "cpu"
-    quant_scheme_kwargs = {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0") else {"group_size": 32}
+    quant_scheme_kwargs = (
+        {"group_size": 32, "layout": Int4CPULayout()}
+        if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+        else {"group_size": 32}
+    )
 
     def tearDown(self):
         gc.collect()
@@ -308,7 +312,11 @@ class TorchAoSerializationTest(unittest.TestCase):
     SERIALIZED_EXPECTED_OUTPUT = "What are we having for dinner?\n\nJessica: (smiling)"
     model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
     quant_scheme = "int4_weight_only"
-    quant_scheme_kwargs = {"group_size": 32, "layout": Int4CPULayout()} if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0") else {"group_size": 32}
+    quant_scheme_kwargs = (
+        {"group_size": 32, "layout": Int4CPULayout()}
+        if is_torchao_available() and version.parse(importlib.metadata.version("torchao")) >= version.parse("0.8.0")
+        else {"group_size": 32}
+    )
     device = "cpu"
 
     # called only once for all test in this class
