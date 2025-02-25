@@ -59,7 +59,7 @@ def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor
 ) -> BlockMask:
     """
-    Create a block causal document mask for a batch of sequences, both packed and unpacked. 
+    Create a block causal document mask for a batch of sequences, both packed and unpacked.
     Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
     The resultant BlockMask is a compressed representation of the full block causal
     mask. BlockMask is essential for performant computation of flex attention.
@@ -72,11 +72,11 @@ def make_flex_block_causal_mask(
         For unpacked sequence:
         [[1, 1, 1, 1, 0, 0, 0],
          [1, 1, 1, 1, 1, 0, 0]]
-        
+
         For packed sequence:
         [[1, 1, 1, 2, 2, 2, 0],
          [1, 1, 2, 2, 2, 3, 3]]
-    
+
     Returns:
         BlockMask
     """
@@ -105,7 +105,7 @@ def make_flex_block_causal_mask(
 
     return create_block_causal_mask_flex(
         mask_mod=causal_mask_mod,
-        B=batch_size, 
+        B=batch_size,
         H=None,  # attention head
         Q_LEN=total_seq_len,
         KV_LEN=total_seq_len,
