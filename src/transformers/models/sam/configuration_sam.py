@@ -135,7 +135,7 @@ class SamMaskDecoderConfig(PretrainedConfig):
 
 class SamVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM
+    This is the configuration class to store the configuration of a [`SamVisionEncoder`]. It is used to instantiate a SAM
     vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
     defaults will yield a similar configuration to that of the SAM ViT-h
     [facebook/sam-vit-huge](https://huggingface.co/facebook/sam-vit-huge) architecture.
@@ -183,7 +183,24 @@ class SamVisionConfig(PretrainedConfig):
         mlp_dim (`int`, *optional*):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
-    """
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     SamVisionConfig,
+    ...     SamVisionEncoder,
+    ... )
+
+    >>> # Initializing a SamVisionConfig with `"facebook/sam-vit-huge"` style configuration
+    >>> configuration = SamVisionConfig()
+
+    >>> # Initializing a SamVisionEncoder (with random weights) from the `"facebook/sam-vit-huge"` style configuration
+    >>> model = SamVisionEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     base_config_key = "vision_config"
 

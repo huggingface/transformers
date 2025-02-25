@@ -8576,6 +8576,13 @@ class RwkvPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SamVisionEncoder(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SamModel(metaclass=DummyObject):
     _backends = ["torch"]
 
