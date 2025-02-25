@@ -17,7 +17,7 @@ import fnmatch
 import re
 
 import torch
-from torch import nn
+import torch.nn as nn
 
 from transformers import (
     DacConfig,
