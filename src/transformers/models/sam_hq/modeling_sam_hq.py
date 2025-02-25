@@ -1251,7 +1251,9 @@ class SamHQMaskDecoder(nn.Module):
         upscaled_embedding_hq = self.mask_conv2(upscaled_embedding_hq)
 
         if hq_features.shape[0] == 1:
-            hq_features = hq_features.repeat(batch_size, 1, 1, 1)
+            hq_features = hq_features.repeat(batch_size * point_batch_size, 1, 1, 1)
+        elif hq_features.shape[0] == batch_size and batch_size * point_batch_size != batch_size:
+             hq_features = hq_features.repeat_interleave(point_batch_size, 0)
         upscaled_embedding_hq = upscaled_embedding_hq + hq_features
 
         hyper_in_list = []
@@ -1283,14 +1285,7 @@ class SamHQMaskDecoder(nn.Module):
         if multimask_output:
             mask_slice = slice(1, self.num_mask_tokens - 1)
             iou_pred = iou_pred[:, :, mask_slice]
-
-            iou_pred, max_iou_idx = torch.max(iou_pred, dim=1)
-            iou_pred = iou_pred.unsqueeze(1)
-
-            masks_multi = masks[:, :, mask_slice, :, :]
-            batch_indices = torch.arange(masks_multi.size(0)).unsqueeze(1).expand(-1, masks_multi.size(1))
-            point_indices = torch.arange(masks_multi.size(1)).unsqueeze(0).expand(masks_multi.size(0), -1)
-            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(1)
+            masks_sam = masks[:, :, mask_slice, :, :]
         else:
             mask_slice = slice(0, 1)
             iou_pred = iou_pred[:, :, mask_slice]
