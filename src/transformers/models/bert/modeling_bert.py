@@ -368,7 +368,6 @@ class BertSdpaSelfAttention(BertSelfAttention):
 
     # Adapted from BertSelfAttention
 
-
     def forward(
         self,
         hidden_states: torch.Tensor,
