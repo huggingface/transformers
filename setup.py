@@ -485,3 +485,6 @@ extras["tests_examples_tf"] = deps_list()
 extras["tests_custom_tokenizers"] = deps_list()
 extras["tests_exotic_models"] = deps_list()
 extras["consistency"] = deps_list()
+
+# No changes required to the existing setup.py
+# THL-150 implementation uses existing dependencies
