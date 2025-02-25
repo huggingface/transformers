@@ -260,7 +260,7 @@ class Siglip2ImageProcessorFast(BaseImageProcessorFast):
         image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
-        image_mean, image_std, interpolation = self._prepare_process_arguments(
+        image_mean, image_std, do_rescale, interpolation = self._prepare_process_arguments(
             do_normalize=do_normalize,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
