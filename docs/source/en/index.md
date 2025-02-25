@@ -101,6 +101,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
 |                    [ConvNeXTV2](model_doc/convnextv2)                    |       ✅        |         ✅         |      ❌      |
+|                        [Cosmos](model_doc/cosmos)                        |       ✅        |         ✅         |      ✅      |
 |                           [CPM](model_doc/cpm)                           |       ✅        |         ✅         |      ✅      |
 |                       [CPM-Ant](model_doc/cpmant)                        |       ✅        |         ❌         |      ❌      |
 |                          [CTRL](model_doc/ctrl)                          |       ✅        |         ✅         |      ❌      |
