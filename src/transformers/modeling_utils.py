@@ -787,7 +787,7 @@ def _load_state_dict_into_meta_model(
         pass
     elif device_map[""] is not None:
         device_map[""] = device_map[""].index
-    
+
     with safe_open(shard_file, framework="pt", device=device_map[""]) as file_pointer:
         error_msgs = []
 
@@ -915,7 +915,9 @@ def _load_state_dict_into_meta_model(
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
                     module = model.get_submodule(new_param_name.rsplit(".", 1)[0])
                     _, unexpected_keys = module.load_state_dict(
-                        {new_param_name.rsplit(".", 1)[1]: param[:].to(param_device, dtype=param_casting_dtype)}, False, True
+                        {new_param_name.rsplit(".", 1)[1]: param[:].to(param_device, dtype=param_casting_dtype)},
+                        False,
+                        True,
                     )
                 else:
                     hf_quantizer.create_quantized_param(
@@ -3501,11 +3503,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if tp_plan is not None and tp_plan != "auto":
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
-
         if tp_plan is not None and device_map is not None:
             raise ValueError(
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
+        if torch.distributed.is_initialized and device_map == "auto" and tp_plan is None:
+            tp_plan = "auto"  # device_map = "auto" in torchrun equivalent to TP plan = AUTO!
 
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device
@@ -4885,7 +4888,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 missing_keys, unexpected_keys = model_to_load.load_state_dict(
                     fixed_state_dict, assign=assign_to_params_buffers
                 )
-                error_msg += missing_keys
+                error_msgs += missing_keys
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
