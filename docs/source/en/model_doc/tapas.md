@@ -174,7 +174,7 @@ inputs to be fine-tuned:
 >>> model_name = "google/tapas-base"
 >>> tokenizer = TapasTokenizer.from_pretrained(model_name)
 
->>> data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
+>>> data = {"Actors": ["Brad Pitt", "Leonardo DiCaprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}
 >>> queries = [
 ...     "What is the name of the first actor?",
 ...     "How many movies has George Clooney played in?",

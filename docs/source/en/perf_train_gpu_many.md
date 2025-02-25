@@ -581,7 +581,7 @@ parallelisation to use where.
 One very important aspect is that FlexFlow is designed for optimizing DNN parallelizations for models with static and 
 fixed workloads, since models with dynamic behavior may prefer different parallelization strategies across iterations.
 
-So the promise is very attractive - it runs a 30min simulation on the cluster of choice and it comes up with the best 
+So the promise is very attractive - it runs a 30 min simulation on the cluster of choice and it comes up with the best 
 strategy to utilise this specific environment. If you add/remove/replace any parts it'll run and re-optimize the plan 
 for that. And then you can train. A different setup will have its own custom optimization.
 

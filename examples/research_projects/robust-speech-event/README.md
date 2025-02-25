@@ -228,7 +228,7 @@ the community week, please fork the datasets repository and follow the instructi
 [here](https://github.com/huggingface/datasets/blob/master/CONTRIBUTING.md#how-to-create-a-pull-request).
 
 To verify that all libraries are correctly installed, you can run the following command in a Python shell.
-It verifies that both `transformers` and `datasets` have been correclty installed.
+It verifies that both `transformers` and `datasets` have been correctly installed.
 
 ```python
 from transformers import AutoModelForCTC, AutoProcessor

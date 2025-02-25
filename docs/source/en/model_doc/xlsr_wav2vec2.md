@@ -25,7 +25,7 @@ The abstract from the paper is the following:
 
 *This paper presents XLSR which learns cross-lingual speech representations by pretraining a single model from the raw
 waveform of speech in multiple languages. We build on wav2vec 2.0 which is trained by solving a contrastive task over
-masked latent speech representations and jointly learns a quantization of the latents shared across languages. The
+masked latent speech representations and jointly learns a quantization of the latest shared across languages. The
 resulting model is fine-tuned on labeled data and experiments show that cross-lingual pretraining significantly
 outperforms monolingual pretraining. On the CommonVoice benchmark, XLSR shows a relative phoneme error rate reduction
 of 72% compared to the best known results. On BABEL, our approach improves word error rate by 16% relative compared to

@@ -640,7 +640,7 @@ deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
 DeepSpeed is still useful with just 1 GPU because you can:
 
 1. Offload some computations and memory to the CPU to make more GPU resources available to your model to use a larger batch size or fit a very large model that normally won't fit.
-2. Minimize memory fragmentation with it's smart GPU memory management system which also allows you to fit bigger models and data batches.
+2. Minimize memory fragmentation with its smart GPU memory management system which also allows you to fit bigger models and data batches.
 
 <Tip>
 

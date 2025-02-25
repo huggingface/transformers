@@ -146,7 +146,7 @@ with open("coco_dataset/valid_dataset.json", "w") as f:
     f.write("\n".join(valid_line))
 ```
 
-> Note: The data loading and processing part of this script can still be improved for maximum performance. In particular one should decode the images beforehand and use those instead decoding them each time. If the dataset is small or if you have huge disk space the you could also pre-process all the dataset beforehand and then use it.
+> Note: The data loading and processing part of this script can still be improved for maximum performance. In particular one should decode the images beforehand and use those instead decoding them each time. If the dataset is small or if you have huge disk space you could also pre-process all the dataset beforehand and then use it.
 
 ## Train the model
 Next we can run the example script to train the model:

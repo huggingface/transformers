@@ -25,7 +25,7 @@ The `partition.py` file defines the `PyTree` of `ParitionSpec` for the GPTNeo mo
 The actual sharding is auto-matically handled by `pjit`. The weights are sharded across all local devices.
 To adapt the script for other models, we need to also change the `ParitionSpec` accordingly.
 
-TODO: Add more explantion.
+TODO: Add more explanation.
 
 Before training, let's prepare our model first. To be able to shard the model, the sharded dimension needs to be a multiple of devices it'll be sharded on. But GPTNeo's vocab size is 50257, so we need to resize the embeddings accordingly. 
 
