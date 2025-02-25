@@ -1060,7 +1060,9 @@ class Trainer:
                 )
             else:
                 lengths = None
-            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
+            model_input_name = (
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+            )
             return LengthGroupedSampler(
                 self.args.eval_batch_size,
                 dataset=eval_dataset,
