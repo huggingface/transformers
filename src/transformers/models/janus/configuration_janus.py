@@ -236,13 +236,16 @@ class JanusConfig(PretrainedConfig):
     }
 
     def __init__(self, text_config=None, vision_config=None, vq_config=None, **kwargs):
+
+        super().__init__(**kwargs)
+
         if isinstance(text_config, dict):
             text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
 
         elif text_config is None:
-            logger.info("`text_config` is None. Initializing with default JanusTextConfig values")
-            text_config = CONFIG_MAPPING["llama"](
+            logger.info("`text_config` is None. Initializing with default values")
+            self.text_config = CONFIG_MAPPING["llama"](
                 hidden_size=2048,
                 num_hidden_layers=24,
                 num_attention_heads=16,
@@ -251,26 +254,37 @@ class JanusConfig(PretrainedConfig):
                 num_key_value_heads=16,
                 vocab_size=102400,
             )
+        elif isinstance(text_config, PretrainedConfig):
+            self.text_config = text_config
+        else:
+            raise ValueError(f"Invalid type for `text_config`. Must be either `dict` or `LlamaConfig`."
+                             f" Type found: {type(text_config)}")
 
-        if isinstance(vision_config, dict):
-            vision_config = JanusVisionConfig(**vision_config)
-        elif vision_config is None:
+        if vision_config is None:
             logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
-            vision_config = JanusVisionConfig()
+            self.vision_config = JanusVisionConfig()
+        elif isinstance(vision_config, dict):
+            self.vision_config = JanusVisionConfig(**vision_config)
+        elif isinstance(vision_config, JanusVisionConfig):
+            self.vision_config = vision_config
+        else:
+            raise ValueError(f"Invalid type for `vision_config`. Must be either `dict` or `JanusVisionConfig`."
+                             f" Type found: {type(vision_config)}")
 
-        if isinstance(vq_config, dict):
-            vq_config = JanusVQVAEConfig(**vq_config)
-        elif vq_config is None:
+        if vq_config is None:
             logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
-            vq_config = JanusVQVAEConfig()
+            self.vq_config = JanusVQVAEConfig()
+        elif isinstance(vq_config, dict):
+            self.vq_config = JanusVQVAEConfig(**vq_config)
+        elif isinstance(vq_config, JanusVQVAEConfig):
+            self.vq_config = vq_config
+        else:
+            raise ValueError(f"Invalid type for `vq_config`. Must be either `dict` or `JanusVQVAEConfig`."
+                             f" Type found: {type(vq_config)}")
 
-        super().__init__(**kwargs)
+        # This dimension is required when decoding discrete image tokens to continuous input.
+        self.vq_config.num_patches = self.vision_config.image_size//self.vision_config.patch_size
 
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.vq_config = vq_config
-
-        self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
 
 
 __all__ = ["JanusVQVAEConfig", "JanusVisionConfig", "JanusConfig"]

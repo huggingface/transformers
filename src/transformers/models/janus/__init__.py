@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_janus import *
     from .modeling_janus import *
     from .processing_janus import *
+    from .image_processing_janus import *
 else:
     import sys
 

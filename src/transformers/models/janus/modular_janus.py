@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import copy
-from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -30,12 +29,12 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, StaticCache
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode
 from ...image_transforms import (
-    resize,
+    resize, to_channel_dimension_format,
 )
 from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
-    to_numpy_array,
+    to_numpy_array, infer_channel_dimension_format,
 )
 from ...modeling_outputs import (
     CausalLMOutputWithPast,
@@ -620,6 +619,7 @@ class JanusVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
 
         # get quantized latent vectors
         hidden_state_quant = self.embedding(image_tokens)
+        # l2 normalization on the last dimension
         hidden_state_quant = F.normalize(hidden_state_quant, p=2, dim=-1)
 
         # reshape back to match original input shape
@@ -912,6 +912,13 @@ class JanusVQVAEHead(nn.Module):
 
 
 class JanusModel(JanusPreTrainedModel):
+    # Add modules that should not be split across GPUs during parallelization
+    _no_split_modules = ["JanusVisionTransformer",
+                         "JanusVisionAlignerMLP",
+                         "JanusVQVAE",
+                         "JanusVQVAEAligner",
+                         "JanusVQVAEHead"
+                         ]
     def __init__(self, config: JanusConfig):
         super().__init__(config)
         self.config = config
@@ -1015,6 +1022,13 @@ class JanusModel(JanusPreTrainedModel):
 class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["model.language_model.embed_tokens.weight", "lm_head.weight"]
     _supports_static_cache = False  # `get_image_tokens()`, called when `pixel_values` is passed, is not compilable.
+    # Add modules that should not be split across GPUs during parallelization
+    _no_split_modules = ["JanusVisionTransformer",
+                         "JanusVisionAlignerMLP",
+                         "JanusVQVAE",
+                         "JanusVQVAEAligner",
+                         "JanusVQVAEHead"
+                         ]
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -1315,7 +1329,7 @@ class JanusImageProcessor(BlipImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Dict[str, int],
+        size: Union[Dict[str, int], int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -1334,7 +1348,7 @@ class JanusImageProcessor(BlipImageProcessor):
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+                - `None`: will be inferred from input
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the input image. If unset, the channel dimension format is inferred
                 from the input image. Can be one of:
@@ -1345,7 +1359,20 @@ class JanusImageProcessor(BlipImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        height, width, _ = image.shape
+
+        # For consistency with parent method
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(image)
+
+        if input_data_format == ChannelDimension.FIRST:
+            _, height, width = image.shape
+        elif input_data_format == ChannelDimension.LAST:
+            height, width, _ = image.shape
+        else:
+            raise ValueError(
+                f"Invalid `input_data_format`. Must be one of {ChannelDimension.FIRST}, {ChannelDimension.LAST}")
+
         max_size = max(height, width)
 
         if isinstance(size, dict):
@@ -1353,29 +1380,39 @@ class JanusImageProcessor(BlipImageProcessor):
                 raise ValueError(
                     f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}"
                 )
-            image_size = size["height"]  # Assign height as image_size assuming height=width
-        else:
-            image_size = size
+            if size["height"] != size["width"]:
+                raise ValueError(
+                    f"Output height and width must be the same. Got height={size['height']} and width={size['width']}"
+                )
+            # The original implementation assumes the output height and width are the same
+            size = size["height"]
+        elif not isinstance(size, int):
+                ValueError(f"Expected `size` to be of type `int` or `dict`. Got {type(size)}")
 
-        output_size = [
-            max(int(height / max_size * image_size), self.min_size),
-            max(int(width / max_size * image_size), self.min_size),
+        delta = size / max_size
+
+        # Largest side becomes `size` and the other side is scaled according to the aspect ratio
+        output_size_nonpadded = [
+            max(int(height * delta), self.min_size),
+            max(int(width * delta), self.min_size),
         ]
 
         image = resize(
             image,
-            size=output_size,
+            size=output_size_nonpadded,
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
             return_numpy=False,
             **kwargs,
         )
-        # expand and pad the images
+        # expand and pad the images to obtain a square image of dimensions `size x size`
         image = expand2square(image, self.background_color)
-        image = to_numpy_array(image)
+        # PS: to_numpy_array puts the channel dimension last
+        image = to_channel_dimension_format(to_numpy_array(image),
+                                            data_format if data_format is not None else input_data_format,
+                                            input_channel_dim=ChannelDimension.LAST)
         return image
-
 
 __all__ = [
     "JanusImageProcessor",
