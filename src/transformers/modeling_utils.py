@@ -4436,6 +4436,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map_kwargs["offload_buffers"] = True
 
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
+                print(device_map_kwargs)
                 dispatch_model(model, **device_map_kwargs)
             # TODO @ArthurZucker not sure if we need this for all cases, this errors out in some of my tests
 
