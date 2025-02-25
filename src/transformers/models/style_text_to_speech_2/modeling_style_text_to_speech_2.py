@@ -12,6 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+"""
+StyleTTS-2 model.
+
+This implementation is based on the original StyleTTS 2 paper (https://arxiv.org/abs/2306.07691) and code (https://github.com/yl4579/StyleTTS2).
+"""
+
 import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union, List
@@ -21,7 +28,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, logging
+from ...utils import ModelOutput, logging, add_start_docstrings, replace_return_docstrings
 from .configuration_style_text_to_speech_2 import (
     StyleTextToSpeech2AcousticTextEncoderConfig,
     StyleTextToSpeech2PredictorConfig,
@@ -34,19 +41,65 @@ from ..auto import AutoModel
 logger = logging.get_logger(__name__)
 
 
-@dataclass
+_CONFIG_FOR_DOC = "StyleTextToSpeech2Config"
+
+
+STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`StyleTextToSpeech2Config`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@dataclass 
 class StyleTextToSpeech2PredictorOutput(ModelOutput):
-    durations: torch.Tensor = None
-    pitch: torch.Tensor = None
-    energy: torch.Tensor = None
+    """
+    Output type of [`StyleTextToSpeech2Predictor`].
+
+    Args:
+        durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Predicted duration (in frames) for each input token.
+        pitch (`torch.FloatTensor` of shape `(batch_size, 1, output_length)`):
+            Predicted pitch contour.
+        energy (`torch.FloatTensor` of shape `(batch_size, 1, output_length)`):
+            Predicted energy contour.
+    """
+    durations: torch.LongTensor = None
+    pitch: torch.FloatTensor = None
+    energy: torch.FloatTensor = None
 
 
 @dataclass
 class StyleTextToSpeech2ModelOutput(ModelOutput):
-    durations: Optional[torch.Tensor] = None
-    pitch: Optional[torch.Tensor] = None
-    energy: Optional[torch.Tensor] = None
-    waveform: torch.Tensor = None
+    """
+    Output type of [`StyleTextToSpeech2Model`].
+
+    Args:
+        durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Predicted duration (in frames) for each input token.
+        pitch (`torch.FloatTensor` of shape `(batch_size, 1, output_length)`, *optional*):
+            Predicted pitch contour.
+        energy (`torch.FloatTensor` of shape `(batch_size, 1, output_length)`, *optional*):
+            Predicted energy contour.
+        waveform (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+            Generated audio waveform.
+        lengths (`List[int]`):
+            Length of each generated audio in the batch.
+    """
+    durations: Optional[torch.LongTensor] = None
+    pitch: Optional[torch.FloatTensor] = None
+    energy: Optional[torch.FloatTensor] = None
+    waveform: torch.FloatTensor = None
     lengths: List[int] = None
 
 
@@ -98,11 +151,13 @@ class AcousticTextEncoderLayer(nn.Module):
 
         weight_norm(self.conv)
 
-    def forward(self, hidden_states, input_lengths):
+    def forward(self, hidden_states, input_lengths=None):
         # TODO: this op does not give the same output when batched and padded, but close output.
         # let's do a sequential alternative for now.
-        # hidden_states = self.conv(hidden_states.transpose(1, -1))
-        hidden_states = self._batched_conv(hidden_states, input_lengths)
+        if input_lengths is None:
+            hidden_states = self.conv(hidden_states.transpose(1, -1))
+        else:
+            hidden_states = self._batched_conv(hidden_states, input_lengths)
 
         hidden_states = self.norm(hidden_states.transpose(1, -1))
         hidden_states = F.leaky_relu(hidden_states, self.leaky_relu_slope)
@@ -119,7 +174,10 @@ class AcousticTextEncoderLayer(nn.Module):
             
         return hidden_states_conv
 
-
+@add_start_docstrings(
+    """StyleTTS-2 acoustic text encoder.""",
+    STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
+)
 class StyleTextToSpeech2AcousticTextEncoder(StyleTextToSpeech2PretrainedModel):
     base_model_prefix = "acoustic_text_encoder"
     config_class = StyleTextToSpeech2AcousticTextEncoderConfig
@@ -140,9 +198,20 @@ class StyleTextToSpeech2AcousticTextEncoder(StyleTextToSpeech2PretrainedModel):
 
     def forward(
         self, 
-        input_ids: torch.Tensor, 
-        input_lengths: torch.Tensor,
-    ):
+        input_ids: torch.LongTensor, 
+        input_lengths: Optional[List[int]] = None,
+    ) -> torch.FloatTensor:
+        """
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input phoneme sequence. 
+            input_lengths (`List[int]`, *optional*):
+                Length of each input sequence.
+
+        Returns:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Acoustic hidden states.
+        """
         hidden_states = self.embed_tokens(input_ids)
         hidden_states = _mask_hidden_states(hidden_states, input_lengths)
 
@@ -151,7 +220,10 @@ class StyleTextToSpeech2AcousticTextEncoder(StyleTextToSpeech2PretrainedModel):
             hidden_states = _mask_hidden_states(hidden_states, input_lengths)
 
         hidden_states = nn.utils.rnn.pack_padded_sequence(
-            hidden_states, input_lengths, batch_first=True, enforce_sorted=False
+            hidden_states, 
+            [hidden_states.shape[1]] * hidden_states.shape[0] if input_lengths is None else input_lengths,
+            batch_first=True, 
+            enforce_sorted=False
         )
         self.lstm.flatten_parameters()
         hidden_states, _ = self.lstm(hidden_states)
@@ -169,14 +241,15 @@ class StyleTextToSpeech2ProsodicTextEncoder(nn.Module):
             config.hidden_size
         )
 
-    def forward(self, input_ids, input_lengths):
+    def forward(self, input_ids, input_lengths=None):
         batch_size, seq_len = input_ids.shape
-        attention_mask = _mask_from_lengths(batch_size, seq_len, input_lengths, device=input_ids.device)
+        if input_lengths is None:
+            attention_mask = torch.ones_like(input_ids).to(input_ids.device)
+        else:
+            attention_mask = _mask_from_lengths(batch_size, seq_len, input_lengths, device=input_ids.device)
         bert_out = self.bert_model(input_ids, attention_mask=attention_mask)
         hidden_states = self.proj_out(bert_out.last_hidden_state)
 
-        # # # TODO: NOT REALLY NECESSARY 
-        # hidden_states = _mask_hidden_states(hidden_states, input_lengths)
         return hidden_states
 
 
@@ -191,6 +264,7 @@ class StyleTextToSpeech2AdaLayerNorm(nn.Module):
     def forward(self, hidden_states, style, input_lengths=None):     
         hidden_style = self.proj(style)
         gamma, beta = torch.chunk(hidden_style, chunks=2, dim=-1)
+
         if self.use_instance_norm:
             if hidden_states.shape[0] > 1 and input_lengths is None:
                 raise ValueError("input_lengths must be provided when batch size > 1")
@@ -200,6 +274,7 @@ class StyleTextToSpeech2AdaLayerNorm(nn.Module):
                 hidden_states = self._batched_instance_norm(hidden_states, input_lengths)
         else:
             hidden_states = F.layer_norm(hidden_states, (self.hidden_size,))
+            
         hidden_states = (1 + gamma) * hidden_states + beta
         hidden_states = _mask_hidden_states(hidden_states, input_lengths)
 
@@ -223,9 +298,12 @@ class StyleTextToSpeech2ProsodyEncoderLayer(nn.Module):
         self.ada_layer_norm = StyleTextToSpeech2AdaLayerNorm(config.hidden_size, config.style_hidden_size)
         self.dropout = nn.Dropout(config.prosody_encoder_dropout)
 
-    def forward(self, hidden_states, style, input_lengths):
+    def forward(self, hidden_states, style, input_lengths=None):
         hidden_states = nn.utils.rnn.pack_padded_sequence(
-            hidden_states, input_lengths, batch_first=True, enforce_sorted=False
+            hidden_states, 
+            [hidden_states.shape[1]] * hidden_states.shape[0] if input_lengths is None else input_lengths,
+            batch_first=True, 
+            enforce_sorted=False
         )
         self.lstm.flatten_parameters()
         hidden_states, _ = self.lstm(hidden_states)
@@ -243,16 +321,16 @@ class StyleTextToSpeech2ProsodyEncoder(nn.Module):
             [StyleTextToSpeech2ProsodyEncoderLayer(config) for _ in range(config.prosody_encoder_num_layers)]
         )  
     
-    def _concat_style(self, hidden_states, style, input_lengths):
+    def _concat_style(self, hidden_states, style, input_lengths=None):
         bsz, seq_len, _ = hidden_states.shape
         hidden_states = torch.cat(
             (hidden_states, style.expand(bsz, seq_len, -1)),
             dim=-1
-        ) 
+        )
         hidden_states = _mask_hidden_states(hidden_states, input_lengths)
         return hidden_states
 
-    def forward(self, hidden_states, style, input_lengths):
+    def forward(self, hidden_states, style, input_lengths=None):
         hidden_states = self._concat_style(hidden_states, style, input_lengths)
         for layer in self.layers:
             hidden_states = layer(hidden_states, style, input_lengths)
@@ -267,9 +345,12 @@ class StyleTextToSpeech2DurationProjector(nn.Module):
         self.lstm = nn.LSTM(config.hidden_size + config.style_hidden_size, config.hidden_size // 2, 1, batch_first=True, bidirectional=True)
         self.duration_proj = nn.Linear(config.hidden_size, config.duration_projector_max_duration)
 
-    def forward(self, hidden_states, speed, input_lengths):
+    def forward(self, hidden_states, speed, input_lengths=None):
         hidden_states = nn.utils.rnn.pack_padded_sequence(
-            hidden_states, input_lengths, batch_first=True, enforce_sorted=False
+            hidden_states, 
+            [hidden_states.shape[1]] * hidden_states.shape[0] if input_lengths is None else input_lengths,
+            batch_first=True, 
+            enforce_sorted=False
         )
         self.lstm.flatten_parameters()
         hidden_states, _ = self.lstm(hidden_states)
@@ -278,9 +359,10 @@ class StyleTextToSpeech2DurationProjector(nn.Module):
         hidden_states = self.duration_proj(hidden_states)
         durations = torch.sigmoid(hidden_states).sum(axis=-1) / speed  
         durations = torch.round(durations).clamp(min=1).long()
-   
-        mask = torch.arange(durations.size(1), device=durations.device)[None, :] < torch.tensor(input_lengths, device=durations.device)[:, None]
-        durations = durations * mask
+
+        if input_lengths is not None:
+            mask = torch.arange(durations.size(1), device=durations.device)[None, :] < torch.tensor(input_lengths, device=durations.device)[:, None]
+            durations = durations * mask
         
         return durations
 
@@ -325,7 +407,7 @@ class StyleTextToSpeech2AdainResBlock1d(nn.Module):
         hidden_states = self.pool(hidden_states.transpose(1, -1)).transpose(1, -1)
 
         if self.do_upsample:
-            input_lengths = [l * 2 for l in input_lengths]
+            input_lengths = [l * 2 for l in input_lengths] if input_lengths is not None else None
             hidden_states = _mask_hidden_states(hidden_states, input_lengths)
             
         hidden_states = self.dropout(hidden_states)
@@ -346,7 +428,7 @@ class StyleTextToSpeech2AdainResBlock1d(nn.Module):
 
         return hidden_states
 
-    def forward(self, hidden_states, style, input_lengths):
+    def forward(self, hidden_states, style, input_lengths=None):
         hidden_states_residual = self._residual(hidden_states, style, input_lengths)
         hidden_states_shortcut = self._shortcut(hidden_states)
         hidden_states = (hidden_states_residual + hidden_states_shortcut) / 2.0**0.5
@@ -379,11 +461,11 @@ class StyleTextToSpeech2ProsodyBlock(nn.Module):
         )
         self.conv_out = nn.Conv1d(config.hidden_size // 2, 1, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_states, style, input_lengths):
+    def forward(self, hidden_states, style, input_lengths=None):
         hidden_states = self.adain_res_1d_1(hidden_states, style, input_lengths)
         hidden_states = self.adain_res_1d_2(hidden_states, style, input_lengths)
 
-        input_lengths = [l * 2 for l in input_lengths]
+        input_lengths = [l * 2 for l in input_lengths] if input_lengths is not None else None
         hidden_states = self.adain_res_1d_3(hidden_states, style, input_lengths)
         hidden_states = self.conv_out(hidden_states.transpose(1, -1))
 
@@ -400,9 +482,12 @@ class StyleTextToSpeech2ProsodyPredictor(nn.Module):
         self.pitch_block = StyleTextToSpeech2ProsodyBlock(config)
         self.energy_block = StyleTextToSpeech2ProsodyBlock(config)
     
-    def forward(self, hidden_states, style, input_lengths):
+    def forward(self, hidden_states, style, input_lengths=None):
         hidden_states = nn.utils.rnn.pack_padded_sequence(
-            hidden_states, input_lengths, batch_first=True, enforce_sorted=False
+            hidden_states, 
+            [hidden_states.shape[1]] * hidden_states.shape[0] if input_lengths is None else input_lengths, 
+            batch_first=True, 
+            enforce_sorted=False
         )
         self.lstm.flatten_parameters() 
         hidden_states, _ = self.lstm(hidden_states)
@@ -456,7 +541,7 @@ class StyleTextToSpeech2AdainResBlock(nn.Module):
             StyleTextToSpeech2AdainResBlockLayer(channels, style_size, kernel_size, dilation) for dilation in dilations
         ])
 
-    def forward(self, hidden_states, style, input_lengths):
+    def forward(self, hidden_states, style, input_lengths=None):
         for layer in self.layers:
             hidden_states = layer(hidden_states, style, input_lengths)
         return hidden_states
@@ -621,7 +706,7 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
         else:
             return [l + 1 for l in input_lengths]
 
-    def forward(self, hidden_states, hidden_states_source, style, input_lengths, source_lengths):
+    def forward(self, hidden_states, hidden_states_source, style, input_lengths=None, source_lengths=None):
         hidden_states = F.leaky_relu(hidden_states, 0.1)
         hidden_states_source = self.noise_conv(hidden_states_source.transpose(1, -1)).transpose(1, -1)
         source_lengths = self._noise_conv_out_length(source_lengths)
@@ -704,13 +789,15 @@ class StyleTextToSpeech2Generator(nn.Module):
     def _stft_output_length(self, length):
         return 1 + length // self.hop_length
         
-    def forward(self, hidden_states, style, f0, input_lengths):
+    def forward(self, hidden_states, style, f0, input_lengths=None):
         with torch.no_grad():
             f0 = self.f0_upsamp(f0[:, None]).transpose(1, 2)  # bs,n,t
             har_source = self.m_source(f0)
-            har_source_lengths = [l * self.scale_factor for l in input_lengths]
+
+            har_source_lengths = [l * self.scale_factor for l in input_lengths] if input_lengths is not None else None
             har_source = _mask_hidden_states(har_source, har_source_lengths)
             har_source = har_source.transpose(1, 2).squeeze(1)
+
             har_transform = torch.stft(
                 har_source,
                 self.n_fft,
@@ -719,9 +806,11 @@ class StyleTextToSpeech2Generator(nn.Module):
                 self.window.to(har_source.device),
                 return_complex=True
             )
-            har_transform_lengths = [self._stft_output_length(l) for l in har_source_lengths]
+
+            har_transform_lengths = [self._stft_output_length(l) for l in har_source_lengths] if har_source_lengths is not None else None
             har_transform = _mask_hidden_states(har_transform.transpose(1, -1), har_transform_lengths)
             har_transform = har_transform.transpose(1, -1)
+
             har_spec, har_phase = har_transform.abs(), har_transform.angle()
             har = torch.cat([har_spec, har_phase], dim=1).transpose(1, -1)
 
@@ -748,6 +837,10 @@ class StyleTextToSpeech2Generator(nn.Module):
         return inverse_transform, har_source_lengths
 
 
+@add_start_docstrings(
+    """StyleTTS-2 prosodic style predictor.""",
+    STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
+)
 class StyleTextToSpeech2Predictor(StyleTextToSpeech2PretrainedModel):
     base_model_prefix = "predictor"
     config_class = StyleTextToSpeech2PredictorConfig
@@ -760,14 +853,32 @@ class StyleTextToSpeech2Predictor(StyleTextToSpeech2PretrainedModel):
         self.duration_projector = StyleTextToSpeech2DurationProjector(config)
         self.prosody_predictor = StyleTextToSpeech2ProsodyPredictor(config)
 
+    @replace_return_docstrings(output_type=StyleTextToSpeech2PredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.Tensor,
         prosodic_style: torch.Tensor, 
-        input_lengths: List[int],
+        input_lengths: Optional[List[int]] = None,
         return_dict: bool = True,
         speed: Optional[float] = 1.0,
-    ):
+    ) -> Union[Tuple, StyleTextToSpeech2PredictorOutput]:
+        """
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input phoneme sequence.
+            prosodic_style (`torch.FloatTensor` of shape `(batch_size, style_size)`):
+                Prosodic style.
+            input_lengths (`List[int]`, *optional*):
+                Length of each input sequence.
+            return_dict (`bool`, *optional*):
+                Whether to return a [`StyleTextToSpeech2PredictorOutput`] instead of a tuple.
+            speed (`float`, *optional*, defaults to 1.0):
+                Speaking speed adjustment factor.
+        
+        Returns:
+
+        """
+        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # encode prosody
@@ -792,13 +903,14 @@ class StyleTextToSpeech2Predictor(StyleTextToSpeech2PretrainedModel):
         )
 
 
+@add_start_docstrings(
+    """StyleTTS-2 iSTFTNet based decoder.""",
+    STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
+)
 class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
-    """
-    iSTFTNet based decoder
-    """
     base_model_prefix = "decoder"
     config_class = StyleTextToSpeech2DecoderConfig
-    main_input_name = "hidden_states" # ???
+    main_input_name = "hidden_states"
 
     def __init__(self, config):
         super().__init__(config)
@@ -838,9 +950,28 @@ class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
         acoustic_hidden_states: torch.Tensor, 
         pitch: torch.Tensor, 
         energy: torch.Tensor, 
-        style: torch.Tensor,
-        lengths: List[int],
-    ) -> torch.Tensor:
+        acoustic_style: torch.Tensor,
+        lengths: Optional[List[int]] = None,
+    ) -> Tuple[torch.Tensor, List[int]]:
+        """
+        Args:
+            acoustic_hidden_states (`torch.FloatTensor` of shape `(batch_size, aligned_sequence_length, hidden_size)`):
+                Acoustic-aligned hidden states.
+            pitch (`torch.FloatTensor` of shape `(batch_size, 1, output_length)`):
+                Predicted pitch contour.
+            energy (`torch.FloatTensor` of shape `(batch_size, 1, output_length)`):
+                Predicted energy contour.
+            acoustic_style (`torch.FloatTensor` of shape `(batch_size, acoustic_style_size)`):
+                Acoustic style.
+            lengths (`List[int]`, *optional*):
+                Length of each generated audio in the batch.
+
+        Returns:
+            waveform (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+                Generated audio waveform.
+            lengths (`List[int]`):
+                Length of each generated audio in the batch.
+        """
         
         pitch_processed = self.pitch_conv(pitch).transpose(1, -1)
         pitch_processed = _mask_hidden_states(pitch_processed, lengths)
@@ -852,21 +983,33 @@ class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
         acoustic_hidden_states_res = _mask_hidden_states(acoustic_hidden_states_res, lengths)
 
         acoustic_hidden_states = torch.cat([acoustic_hidden_states, pitch_processed, energy_processed], dim=-1)
-        acoustic_hidden_states = self.acoustic_encoder(acoustic_hidden_states, style, lengths)
+        acoustic_hidden_states = self.acoustic_encoder(acoustic_hidden_states, acoustic_style, lengths)
         
         residual = True
         for block in self.decoder:
             if residual:
                 acoustic_hidden_states = torch.cat([acoustic_hidden_states, acoustic_hidden_states_res, pitch_processed, energy_processed], dim=-1)
-            acoustic_hidden_states = block(acoustic_hidden_states, style, lengths)
+            acoustic_hidden_states = block(acoustic_hidden_states, acoustic_style, lengths)
             if block.do_upsample:
                 residual = False
         
-        waveform, lengths = self.generator(acoustic_hidden_states, style, pitch.squeeze(1), [l * 2 for l in lengths])
+        waveform, lengths = self.generator(acoustic_hidden_states, acoustic_style, pitch.squeeze(1), [l * 2 for l in lengths])
         return waveform, lengths
 
 
+@add_start_docstrings(
+    """StyleTTS-2 model.""",
+    STYLE_TEXT_TO_SPEECH_2_START_DOCSTRING,
+)
 class StyleTextToSpeech2Model(StyleTextToSpeech2PretrainedModel):
+    """
+    The complete StyleTTS-2 text-to-speech model.
+
+    This model is composed of:
+    - An acoustic text encoder that processes phoneme sequences into acoustic hidden states
+    - A predictor that estimates duration, pitch and energy given a prosodic style 
+    - A decoder that generates audio waveforms given acoustic-aligned hidden states, pitch, energy and acoustic style
+    """
     config_class = StyleTextToSpeech2Config
     
     def __init__(self, config):
@@ -876,17 +1019,61 @@ class StyleTextToSpeech2Model(StyleTextToSpeech2PretrainedModel):
         self.decoder = StyleTextToSpeech2Decoder(config.decoder_config)
 
     @torch.no_grad()
+    @replace_return_docstrings(output_type=StyleTextToSpeech2ModelOutput, config_class=_CONFIG_FOR_DOC)
     def generate(
-        self, 
-        input_ids: torch.Tensor,
-        style: torch.Tensor, 
-        attention_mask: Optional[torch.Tensor] = None,
+        self,
+        input_ids: torch.LongTensor,
+        style: torch.FloatTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
         speed: Optional[float] = 1.0,
         return_dict: Optional[bool] = None,
         output_durations: Optional[bool] = None,
         output_pitch: Optional[bool] = None,
         output_energy: Optional[bool] = None,
     ) -> Union[Tuple, StyleTextToSpeech2ModelOutput]:
+        """
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Input phoneme sequence.
+            style (`torch.FloatTensor` of shape `(batch_size, style_size)`):
+                Style from reference audio.
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid attention on padding tokens. The mask should be causal, meaning all tokens up to and
+                including the last attended token should have a value of 1.
+            speed (`float`, *optional*, defaults to 1.0):
+                Speaking speed adjustment factor.
+            return_dict (`bool`, *optional*):
+                Whether to return a [`StyleTextToSpeech2ModelOutput`] instead of a tuple.
+            output_durations (`bool`, *optional*):
+                Whether to include duration predictions in the output.
+            output_pitch (`bool`, *optional*):
+                Whether to include pitch predictions in the output.
+            output_energy (`bool`, *optional*):
+                Whether to include energy predictions in the output.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import StyleTextToSpeech2Processor, StyleTextToSpeech2Model
+        >>> import soundfile as sf
+
+        >>> text = "Kokoro is an open-weight TTS model with 82 million parameters, delivering comparable quality to larger models while being significantly faster and more cost-efficient."
+
+        >>> model = StyleTextToSpeech2Model.from_pretrained("eustlb/kokoro")
+        >>> processor = StyleTextToSpeech2Processor.from_pretrained("eustlb/kokoro")
+
+        >>> inputs = processor(text, return_tensors="pt")
+        >>> outputs = model.generate(**inputs)
+
+        >>> waveform = outputs.waveform
+        >>> lengths = outputs.lengths
+        >>> sr = model.decoder.config.sampling_rate
+
+        >>> sf.write("output.wav", waveform[0][:lengths[0]], sr)
+        ```
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if attention_mask is not None:
@@ -894,8 +1081,7 @@ class StyleTextToSpeech2Model(StyleTextToSpeech2PretrainedModel):
             last_valid_token_idxs = [(mask == 1).nonzero()[-1].item() + 1 for mask in attention_mask]
             if any(lengths < idx  for lengths, idx in zip(input_lengths, last_valid_token_idxs)):
                 logger.warning(
-                    "`attention_mask` seems to be incorrect, it is expected to be causal."
-                    " The attention mask should be causal, meaning all tokens up to and"
+                    "`attention_mask` seems to be incorrect, it is expected to be causal, meaning all tokens up to and"
                     " including the last attended token should have a value of 1."
                 )
         else:
@@ -941,14 +1127,19 @@ def _batched_repeat_interleave(hidden_states: torch.Tensor, durations: torch.Ten
     Repeat hidden_states for each duration.
 
     Args:
-        hidden_states: (batch_size, seq_len, hidden_size)
-        durations: (batch_size, seq_len)
+        hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`)
+        durations (`torch.Tensor` of shape `(batch_size, seq_len)`)
 
     Returns:
-        (batch_size, new_seq_len, hidden_size)
+        `torch.Tensor` of shape `(batch_size, new_seq_len, hidden_size)`
     """
 
     batch_size, seq_len, _ = hidden_states.shape
+
+    # fallback to torch's default repeat_interleave if bs == 1
+    if batch_size == 1:
+        return hidden_states.repeat_interleave(durations[0], dim=1)
+
     new_seq_len = durations.sum(dim=-1).max()
     mask = torch.zeros(batch_size, seq_len, new_seq_len, dtype=torch.float, device=hidden_states.device)
     
@@ -961,18 +1152,46 @@ def _batched_repeat_interleave(hidden_states: torch.Tensor, durations: torch.Ten
     return torch.bmm(mask.transpose(1, -1), hidden_states)
 
 
-def _mask_hidden_states(hidden_states: torch.Tensor, lengths: Optional[List[int]] = None) -> torch.Tensor:
-    """Create boolean mask and multiply"""
+def _mask_hidden_states(hidden_states: torch.FloatTensor, lengths: Optional[List[int]] = None) -> torch.FloatTensor:
+    """Create boolean mask based on given input lengths and apply it to the hidden states.
+
+    Args:
+        hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Hidden states to mask.
+        lengths (`List[int]`, *optional*):
+            List of sequence lengths for each batch element. If None, no masking is applied.
+
+    Returns:
+        `torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`:
+            Masked hidden states where values beyond each sequence length are set to 0.
+    """
+
     if lengths is None:
         return hidden_states
+
     _, seq_len, hidden_dim = hidden_states.shape
     mask = torch.arange(seq_len, device=hidden_states.device)[None, :] < torch.tensor(lengths, device=hidden_states.device)[:, None]
     mask = mask.unsqueeze(-1).expand(-1, -1, hidden_dim)
     return hidden_states * mask
 
 
-def _mask_from_lengths(batch_size: int, seq_len: int, lengths: List[int], device=None) -> torch.Tensor:
-    """Create a mask from input lengths"""
+def _mask_from_lengths(batch_size: int, seq_len: int, lengths: List[int], device=None) -> torch.BoolTensor:
+    """Create a mask from input lengths.
+
+    Args:
+        batch_size (`int`):
+            Size of the batch.
+        seq_len (`int`): 
+            Maximum sequence length.
+        lengths (`List[int]`):
+            List of actual sequence lengths for each batch element.
+        device (`torch.device`, *optional*):
+            Device to create tensors on.
+
+    Returns:
+        `torch.BoolTensor` of shape `(batch_size, seq_len)`:
+            Boolean mask where True values correspond to valid positions within each sequence length.
+    """
     lengths = torch.tensor(lengths, device=device)
     positions = torch.arange(seq_len, device=device).expand(batch_size, seq_len)
     return positions < lengths.unsqueeze(1)
