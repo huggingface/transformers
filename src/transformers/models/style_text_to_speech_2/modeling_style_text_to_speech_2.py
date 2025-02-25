@@ -831,8 +831,9 @@ class StyleTextToSpeech2Generator(nn.Module):
             window=self.window.to(har_source.device)
         )
         
-        mask = torch.arange(inverse_transform.size(1), device=inverse_transform.device)[None, :] < torch.tensor(har_source_lengths, device=inverse_transform.device)[:, None]
-        inverse_transform = inverse_transform * mask
+        if har_source_lengths is not None:
+            mask = torch.arange(inverse_transform.size(1), device=inverse_transform.device)[None, :] < torch.tensor(har_source_lengths, device=inverse_transform.device)[:, None]
+            inverse_transform = inverse_transform * mask
             
         return inverse_transform, har_source_lengths
 
@@ -993,7 +994,11 @@ class StyleTextToSpeech2Decoder(StyleTextToSpeech2PretrainedModel):
             if block.do_upsample:
                 residual = False
         
-        waveform, lengths = self.generator(acoustic_hidden_states, acoustic_style, pitch.squeeze(1), [l * 2 for l in lengths])
+        waveform, lengths = self.generator(
+            acoustic_hidden_states, 
+            acoustic_style, pitch.squeeze(1), 
+            [l * 2 for l in lengths] if lengths is not None else None
+        )
         return waveform, lengths
 
 
@@ -1166,7 +1171,9 @@ def _mask_hidden_states(hidden_states: torch.FloatTensor, lengths: Optional[List
             Masked hidden states where values beyond each sequence length are set to 0.
     """
 
-    if lengths is None:
+    # is not provided length or all lengths are the same and equal to the sequence lengthm
+    # simply return the hidden states
+    if lengths is None or (len(set(lengths)) == 1 and lengths[0] == hidden_states.shape[1]):
         return hidden_states
 
     _, seq_len, hidden_dim = hidden_states.shape
