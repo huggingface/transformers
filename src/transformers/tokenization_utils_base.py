@@ -20,6 +20,7 @@ of output with special method for the Fast tokenizers)
 
 import copy
 import json
+from pathlib import Path
 import os
 import re
 import warnings
@@ -146,6 +147,7 @@ SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 CHAT_TEMPLATE_FILE = "chat_template.jinja"
+CHAT_TEMPLATE_DIR = "chat_templates"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
@@ -2430,6 +2432,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         chat_template_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
         )
+        chat_template_dir = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_DIR
+        )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
@@ -2448,22 +2453,44 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
-        saved_raw_chat_template = False
+        saved_raw_chat_template_files = []
         if self.chat_template is not None:
-            if isinstance(self.chat_template, dict):
-                # Chat template dicts are saved to the config as lists of dicts with fixed key names.
+            if kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, str):
+                # New format for single templates is to save them as chat_template.jinja
+                with open(chat_template_file, "w", encoding="utf-8") as f:
+                    f.write(self.chat_template)
+                logger.info(f"chat template saved in {chat_template_file}")
+                saved_raw_chat_template_files.append(chat_template_file)
+                if "chat_template" in tokenizer_config:
+                    tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
+            elif kwargs.get("save_raw_chat_template", False) and isinstance(self.chat_template, dict):
+                # New format for multiple templates is to save the default as chat_template.jinja
+                # and the other templates in the chat_templates/ directory
+                for template_name, template in self.chat_template.items():
+                    if template_name == "default":
+                        with open(chat_template_file, "w", encoding="utf-8") as f:
+                            f.write(self.chat_template["default"])
+                        logger.info(f"chat template saved in {chat_template_file}")
+                        saved_raw_chat_template_files.append(chat_template_file)
+                    else:
+                        Path(chat_template_dir).mkdir(exist_ok=True)
+                        template_filepath = os.path.join(chat_template_dir, f"{template_name}.jinja")
+                        with open(template_filepath, "w", encoding="utf-8") as f:
+                            f.write(template)
+                        logger.info(f"chat template saved in {template_filepath}")
+                        saved_raw_chat_template_files.append(template_filepath)
+                saved_raw_chat_template = True
+                if "chat_template" in tokenizer_config:
+                    tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
+            elif isinstance(self.chat_template, dict):
+                # Legacy format for multiple templates:
+                # chat template dicts are saved to the config as lists of dicts with fixed key names.
                 # They will be reconstructed as a single dict during loading.
                 # We're trying to discourage chat template dicts, and they are always
                 # saved in the config, never as single files.
                 tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
-            elif kwargs.get("save_raw_chat_template", False):
-                with open(chat_template_file, "w", encoding="utf-8") as f:
-                    f.write(self.chat_template)
-                saved_raw_chat_template = True
-                logger.info(f"chat template saved in {chat_template_file}")
-                if "chat_template" in tokenizer_config:
-                    tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
             else:
+                # Legacy format for single templates: Just make them a key in tokenizer_config.json
                 tokenizer_config["chat_template"] = self.chat_template
 
         if len(self.init_inputs) > 0:
@@ -2518,9 +2545,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f.write(out_str)
         logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
-        file_names = (tokenizer_config_file, special_tokens_map_file)
-        if saved_raw_chat_template:
-            file_names += (chat_template_file,)
+        file_names = (tokenizer_config_file, special_tokens_map_file, *saved_raw_chat_template_files)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
