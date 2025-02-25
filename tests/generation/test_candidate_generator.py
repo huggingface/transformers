@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     UniversalSpeculativeDecodingGenerator,
@@ -233,25 +233,26 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         cls.assistant_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(
             torch_device
         )
-        cls.main_tokenizer = AutoTokenizer.from_pretrained("allenai/Llama-3.1-Tulu-3-8B-SFT")
+        cls.target_tokenizer = AutoTokenizer.from_pretrained("allenai/Llama-3.1-Tulu-3-8B-SFT")
         cls.assistant_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        cls.target_config = AutoConfig.from_pretrained("allenai/Llama-3.1-Tulu-3-8B-SFT")
         cls.generation_config = GenerationConfig()
 
         # Ensure required tokens exist
-        if cls.main_tokenizer.pad_token_id is None:
-            cls.main_tokenizer.pad_token_id = cls.main_tokenizer.eos_token_id
-        if cls.main_tokenizer.bos_token_id is None:
-            cls.main_tokenizer.bos_token_id = cls.main_tokenizer.eos_token_id
+        if cls.target_tokenizer.pad_token_id is None:
+            cls.target_tokenizer.pad_token_id = cls.target_tokenizer.eos_token_id
+        if cls.target_tokenizer.bos_token_id is None:
+            cls.target_tokenizer.bos_token_id = cls.target_tokenizer.eos_token_id
 
     def setUp(self):
         self.input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
         self.model_kwargs = {
             "attention_mask": torch.ones_like(self.input_ids).to(torch_device),
         }
-        target_tokenizer = self.main_tokenizer
+        target_tokenizer = self.target_tokenizer
         assistant_tokenizer = self.assistant_tokenizer
         atm_translator = AssistantVocabTranslatorCache.get_translator(
-            target_tokenizer, assistant_tokenizer, self.config.vocab_size, torch_device
+            target_tokenizer, assistant_tokenizer, self.target_config.vocab_size, torch_device
         )
         self.generator = UniversalSpeculativeDecodingGenerator(
             input_ids=self.input_ids,
@@ -266,7 +267,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
     def test_basic_generation(self):
         """Test basic speculative decoding works"""
         input_text = "The quick brown fox"
-        input_ids = self.main_tokenizer.encode(input_text, return_tensors="pt")
+        input_ids = self.target_tokenizer.encode(input_text, return_tensors="pt")
         self.generator.input_ids = input_ids
         candidates, scores = self.generator.get_candidates(input_ids)
 
@@ -282,19 +283,19 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         # the main tokenizer.
         missing_token = next(
             token
-            for token in self.main_tokenizer.get_vocab()
+            for token in self.target_tokenizer.get_vocab()
             if token not in self.assistant_tokenizer.get_vocab()
-            and token not in self.main_tokenizer.all_special_tokens
+            and token not in self.target_tokenizer.all_special_tokens
             and "reserved_" not in token
         )
-        input_ids = torch.tensor([[self.main_tokenizer.convert_tokens_to_ids(missing_token)]])
+        input_ids = torch.tensor([[self.target_tokenizer.convert_tokens_to_ids(missing_token)]])
         self.generator.input_ids = input_ids
         candidates, scores = self.generator.get_candidates(input_ids)
         self.assertIsNotNone(candidates)
 
     def test_speculation_depth(self):
         """Test different speculation depths"""
-        input_ids = self.main_tokenizer.encode("Test text", return_tensors="pt")
+        input_ids = self.target_tokenizer.encode("Test text", return_tensors="pt")
         self.generator.input_ids = input_ids
 
         for depth in [1, 8, 17]:
