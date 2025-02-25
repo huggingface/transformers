@@ -4883,7 +4883,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     state_dict.update(load(data))
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 missing_keys, unexpected_keys = model_to_load.load_state_dict(
-                    fixed_state_dict, assign_to_params_buffers
+                    fixed_state_dict, assign=assign_to_params_buffers
                 )
                 error_msg += missing_keys
         else:
@@ -4978,7 +4978,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         data = f.read()
                     state_dict.update(load(data))
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                    error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign_to_params_buffers)
+                    error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
                 # force memory release
                 del state_dict
                 gc.collect()
@@ -5823,7 +5823,7 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, 
             param = model.get_parameter(param_name)
         except AttributeError:
             param = model.get_buffer(param_name)
-        parameter_count[device] += math.prod(param.shape)
+        parameter_count[device] += math.prod(param.shape) * 2
 
     dtype = dtype if dtype is not None else torch.float32
     # This will kick off the caching allocator to avoid having to Malloc afterwards
