@@ -1713,9 +1713,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                                 "in the final message!"
                             )
                 final_msg_loc = rendered_chat.rindex(final_message.strip())
-                if rendered_chat[final_msg_loc : final_msg_loc + len(final_message)] == final_message:
+                if rendered_chat[final_msg_loc : final_msg_loc + len(final_message.lstrip())] == final_message:
                     # The template preserves spacing or the message doesn't have trailing spacing, so things are simple
-                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message)]
+                    rendered_chat = rendered_chat[: final_msg_loc + len(final_message.lstrip())]
                 else:
                     # The message has trailing spacing that was trimmed, so we must be more cautious
                     rendered_chat = rendered_chat[: final_msg_loc + len(final_message.strip())]
