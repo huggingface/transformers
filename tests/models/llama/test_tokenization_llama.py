@@ -839,13 +839,13 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, ["▁No", "<s>", "▁He"])  # spaces are eaten by rstrip / lstrip
 
 
-@require_tiktoken
-@require_read_token
 class TikTokenIntegrationTests(unittest.TestCase):
     """
     A class that regroups important test to make sure that we properly handle the special tokens.
     """
 
+    @require_tiktoken
+    @require_read_token
     def test_tiktoken_llama(self):
         model_path = "hf-internal-testing/llama-3-8b-internal"
         subfolder = "original"
