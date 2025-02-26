@@ -40,7 +40,6 @@ import torch
 import torch.distributed.tensor
 from huggingface_hub import split_torch_state_dict_into_shards
 from packaging import version
-from safetensors.torch import load
 from torch import Tensor, nn
 from torch.distributed.tensor import DTensor, Shard
 from torch.distributions import constraints
@@ -561,7 +560,7 @@ def load_state_dict(
                     state_dict[k] = f.get_tensor(k)
             return state_dict
 
-                
+
     try:
         if map_location is None:
             if (
@@ -811,6 +810,7 @@ def _load_state_dict_into_meta_model(
 
             if module_name not in expected_keys:
                 continue
+            layer, param_type = module_name.rsplit(".", 1)
 
             param = file_pointer.get_slice(serialized_param_name)  # param name needs to stay untouched as it's in the file
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
@@ -827,7 +827,6 @@ def _load_state_dict_into_meta_model(
                     param_casting_dtype = dtype
 
             if device_mesh is not None:  # In this case, the param is already on the correct device!
-                layer = module_name.rsplit(".", 1)[0]
                 try:
                     module_to_tp: torch.nn.Module = model.get_submodule(layer)
                 except Exception:
@@ -875,7 +874,7 @@ def _load_state_dict_into_meta_model(
                     distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
                 else:
                     module_to_tp.load_state_dict(
-                        {serialized_param_name.rsplit(".", 1)[1]: param[:].to(dtype=param_casting_dtype)}, False, True
+                        {param_type: param[:].to(dtype=param_casting_dtype)}, False, True
                     )
             else:
                 if device_map is None:
@@ -886,7 +885,7 @@ def _load_state_dict_into_meta_model(
                     module_layer = re.search(device_map_regex, module_name)
                     if module_name == "" or device_map_regex is None:
                         raise ValueError(
-                            f"`device_map` is used, but {new_param_name} doesn't have any device set. {device_map}"
+                            f"`device_map` is used, but {module_name} doesn't have any device set. {device_map}"
                         )
                     else:
                         param_device = device_map[module_layer.group()]
@@ -906,9 +905,9 @@ def _load_state_dict_into_meta_model(
                 ):
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
-                    module = model.get_submodule(module_name.rsplit(".", 1)[0])
+                    module = model.get_submodule(layer)
                     module.load_state_dict(
-                        {serialized_param_name.rsplit(".", 1)[1]: param[:].to(param_device, dtype=param_casting_dtype)},
+                        {param_type: param[:].to(param_device, dtype=param_casting_dtype)},
                         False,
                         True,
                     )
@@ -3563,7 +3562,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
-        if torch.distributed.is_initialized() and device_map == "auto" and tp_plan is None:
+
+        # If torchrun was used, make sure to TP by default. This way people don't need to change tp or device map
+        if device_map == "auto" and tp_plan is None and int(os.environ.get("WORLD_SIZE",0)):
             tp_plan = "auto"  # device_map = "auto" in torchrun equivalent to TP plan = AUTO!
             device_map = None
 
@@ -3578,7 +3579,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     logger.warning("Tensor Parallel requires torch.distributed to be initialized first.")
                     rank = int(os.environ["RANK"])
                     world_size = int(os.environ["WORLD_SIZE"])
-
                     torch.distributed.init_process_group("nccl", rank=rank, world_size=world_size)
                     torch.cuda.set_device(rank)
                 except Exception as e:
@@ -3593,10 +3593,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Get device with index assuming equal number of devices per host
             tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
             # This is the easiest way to dispatch to the current process device
+            print(tp_device)
             device_map = tp_device
 
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
+            print(world_size)
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
 
         if is_fsdp_enabled():
@@ -4545,6 +4547,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
+            # TODO refactor a lot of things to make sure this is only done once
             if len(cls.base_model_prefix) > 0:
                 if not hasattr(cls, cls.base_model_prefix) and key.startswith(cls.base_model_prefix):
                     new_key = key.replace(cls.base_model_prefix, "")
@@ -4864,8 +4867,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if gguf_path or low_cpu_mem_usage:
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
-                    fixed_state_dict,
-                    start_prefix, 
+                    state_dict,
+                    start_prefix,
                     expected_keys,
                     device_map=device_map,
                     offload_folder=offload_folder,
@@ -4887,7 +4890,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     model_to_load, state_dict, start_prefix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
-                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict, add_prefix_to_model, remove_prefix_from_model)
+                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
         else:
             # This should always be a list but, just to be sure.
@@ -4928,8 +4931,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-                if low_cpu_mem_usage:
-                    map_location = "meta" # for this to load later
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
@@ -4979,8 +4980,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         assign_to_params_buffers = check_support_param_buffer_assignment(
                             model_to_load, state_dict, start_prefix
                         )
-                    # properly read the state dict now:
-                    fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict, add_prefix_to_model, remove_prefix_from_model)
+                    fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                     error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
                 # force memory release
                 del state_dict
