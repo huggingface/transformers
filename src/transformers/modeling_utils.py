@@ -537,15 +537,13 @@ str_to_torch_dtype = {
 def load_state_dict(
     checkpoint_file: Union[str, os.PathLike],
     is_quantized: bool = False,
-    map_location: Optional[Union[str, torch.device]] = None,
+    map_location: Optional[Union[str, torch.device]] = "meta",
     weights_only: bool = True,
 ):
     """
-    Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
-    We don't actually load the weights yet, just create empty tensors
+    Reads a `safetensor` or a `.bin` checkpoint file into `meta` if requested.
     """
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
-        # Check format of the archive
         with safe_open(checkpoint_file, framework="pt") as f:
             metadata = f.metadata()
 
@@ -557,8 +555,13 @@ def load_state_dict(
             state_dict = {}
             for k in f.keys():
                 dtype = str_to_torch_dtype[f.get_slice(k).get_dtype()]
-                state_dict[k] = torch.empty(size=f.get_slice(k).get_shape(), dtype=dtype, device="meta")
+                if map_location == "meta":
+                    state_dict[k] = torch.empty(size=f.get_slice(k).get_shape(), dtype=dtype, device="meta")
+                else:
+                    state_dict[k] = f.get_tensor(k)
             return state_dict
+
+                
     try:
         if map_location is None:
             if (
@@ -3220,6 +3223,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
+    def get_init_context(cls: Type[SpecificPreTrainedModelType], _fast_init=True, is_quantized=None, _is_ds_init_called=None, low_cpu_mem_usage=True):
+        init_contexts = [no_init_weights(_enable=_fast_init)]
+
+        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
+            import deepspeed
+
+            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+            init_contexts = [
+                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                set_zero3_state(),
+            ] + init_contexts
+        elif low_cpu_mem_usage:
+            if not is_accelerate_available():
+                raise ImportError(
+                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                )
+            init_contexts.append(init_empty_weights())
+
+        if is_deepspeed_zero3_enabled() and is_quantized:
+            init_contexts.append(set_quantized_state())
+
+    @classmethod
     @restore_default_torch_dtype
     def from_pretrained(
         cls: Type[SpecificPreTrainedModelType],
@@ -4124,7 +4149,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if from_pt:
             if not is_sharded and state_dict is None:
                 # Time to load the checkpoint
-                state_dict = load_state_dict(resolved_archive_file, weights_only=weights_only)
+                state_dict = load_state_dict(resolved_archive_file, map_location="meta", weights_only=weights_only)
 
             # set dtype to instantiate the model under:
             # 1. If torch_dtype is not None, we use that dtype
@@ -4210,25 +4235,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-        init_contexts = [no_init_weights(_enable=_fast_init)]
-
-        if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
-            import deepspeed
-
-            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts = [
-                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
-                set_zero3_state(),
-            ] + init_contexts
-        elif low_cpu_mem_usage:
-            if not is_accelerate_available():
-                raise ImportError(
-                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
-                )
-            init_contexts.append(init_empty_weights())
-
-        if is_deepspeed_zero3_enabled() and is_quantized:
-            init_contexts.append(set_quantized_state())
+        model_init_context = cls.get_init_context(_fast_init, is_quantized, _is_ds_init_called, low_cpu_mem_usage)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
         if not getattr(config, "_attn_implementation_autoset", False):
@@ -4236,7 +4243,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
             )
 
-        with ContextManagers(init_contexts):
+        with ContextManagers(model_init_context):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
@@ -4563,7 +4570,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _load_pretrained_model(
         cls,
         model,
-        meta_state_dict,
+        state_dict,
         loaded_keys,
         resolved_archive_file,
         pretrained_model_name_or_path,
@@ -4723,7 +4730,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        hf_quantizer.create_quantized_param(model, value, key, "cpu", meta_state_dict, unexpected_keys)
+                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -4790,7 +4797,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map = {k.replace(f"{cls.base_model_prefix}.", ""): v for k, v in device_map.items()}
 
         def _find_mismatched_keys(
-            meta_state_dict,
+            state_dict,
             model_state_dict,
             loaded_keys,
             original_loaded_keys,
@@ -4802,7 +4809,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if ignore_mismatched_sizes:
                 for checkpoint_key, model_key in zip(original_loaded_keys, loaded_keys):
                     # If the checkpoint is sharded, we may not have the key here.
-                    if checkpoint_key not in meta_state_dict:
+                    if checkpoint_key not in state_dict:
                         continue
                     if remove_prefix_from_model:
                         # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
@@ -4813,20 +4820,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     if (
                         model_key in model_state_dict
-                        and meta_state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+                        and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
                     ):
                         if (
-                            meta_state_dict[checkpoint_key].shape[-1] == 1
-                            and meta_state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
+                            state_dict[checkpoint_key].shape[-1] == 1
+                            and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
                         ):
                             # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                             # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                             pass
                         else:
                             mismatched_keys.append(
-                                (checkpoint_key, meta_state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
                             )
-                            del meta_state_dict[checkpoint_key]
+                            del state_dict[checkpoint_key]
             return mismatched_keys
 
         if resolved_archive_file is not None:
@@ -4859,10 +4866,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             offload_index = None
 
         error_msgs = []
-        if meta_state_dict is not None:
+        if state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
-                meta_state_dict,
+                state_dict,
                 model_state_dict,
                 loaded_keys,
                 original_loaded_keys,
@@ -4893,14 +4900,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 # We need to read the state dict as it is meta otherwise
-                with open(shard_file, "rb") as f:
-                    data = f.read()
-                state_dict = load(data)
+                state_dict = load_state_dict(resolved_archive_file, map_location="cpu")
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
-                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
+                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict, add_prefix_to_model, remove_prefix_from_model)
                 model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
         else:
             # This should always be a list but, just to be sure.
@@ -4941,14 +4946,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-                meta_state_dict = load_state_dict(
+                if low_cpu_mem_usage:
+                    map_location = "meta" # for this to load later
+                state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
                 mismatched_keys += _find_mismatched_keys(
-                    meta_state_dict,
+                    state_dict,
                     model_state_dict,
                     loaded_keys,
                     original_loaded_keys,
@@ -4966,8 +4973,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     else:
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
-                            fixed_state_dict,
-                            start_prefix,
+                            state_dict,
+                            cls.base_model_prefix,
                             expected_keys,
                             device_map=device_map,
                             offload_folder=offload_folder,
@@ -4990,10 +4997,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, meta_state_dict, start_prefix
                         )
                     # properly read the state dict now:
-                    with open(shard_file, "rb") as f:
-                        data = f.read()
-                    state_dict = load(data)
-                    fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
+                    fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict, add_prefix_to_model, remove_prefix_from_model)
                     error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
                 # force memory release
                 del state_dict, meta_state_dict
