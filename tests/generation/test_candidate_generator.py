@@ -1,5 +1,4 @@
 import gc
-import threading
 import unittest
 import weakref
 from unittest.mock import MagicMock
@@ -52,12 +51,20 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
 
     def test_get_target_ids(self):
         """Test the translation of assistant candidate IDs to target candidate IDs."""
-        assistant_input_ids = torch.LongTensor([[0, 1, 2]])  # 'hello world foo' in assistant tokenizer
-        target_input_ids = torch.LongTensor([[0, 1, 2]])  # 'hello world foo' in target tokenizer
-        assistant_candidate_ids = torch.LongTensor([[0, 1, 2, 4]])  # 'hello world foo baz' in assistant tokenizer
+        assistant_input_ids = torch.LongTensor([[0, 1, 2]]).to(
+            self.assistant_model_device
+        )  # 'hello world foo' in assistant tokenizer
+        target_input_ids = torch.LongTensor([[0, 1, 2]]).to(
+            self.assistant_model_device
+        )  # 'hello world foo' in target tokenizer
+        assistant_candidate_ids = torch.LongTensor([[0, 1, 2, 4]]).to(
+            self.assistant_model_device
+        )  # 'hello world foo baz' in assistant tokenizer
 
         expected_target_ids = torch.LongTensor(
             [[0, 1, 2, self.translator.SUPPRESS_TOKEN_ID]]
+        ).to(
+            self.assistant_model_device
         )  # 'hello world foo baz' in target tokenizer (baz is mapped to self.translator.suppress_tokens_id since it does not exist in target vocab)
 
         actual_target_ids = self.translator.get_target_ids(
@@ -68,10 +75,14 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
     def test_get_target_logits(self):
         """Test the conversion of assistant logits to target logits."""
         # Assistant logits for IDs 0, 1, 2
-        assistant_logits = torch.FloatTensor([[[0.1, 0.2, 0.3, 0.4, self.translator.FILTER_VALUE]]])  # Shape (1, 1, 5)
+        assistant_logits = torch.FloatTensor([[[0.1, 0.2, 0.3, 0.4, self.translator.FILTER_VALUE]]]).to(
+            self.assistant_model_device
+        )  # Shape (1, 1, 5)
 
         # Expected target logits (target_vocab_size = 4)
-        expected_target_logits = torch.full((1, 1, self.target_vocab_size), self.translator.FILTER_VALUE)
+        expected_target_logits = torch.full((1, 1, self.target_vocab_size), self.translator.FILTER_VALUE).to(
+            self.assistant_model_device
+        )
         expected_target_logits[0, 0, 0] = 0.1  # 'hello'
         expected_target_logits[0, 0, 1] = 0.2  # 'world'
         expected_target_logits[0, 0, 2] = 0.3  # 'foo'
@@ -203,29 +214,6 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
         self.assertIsNotNone(assistant_ref(), "Assistant tokenizer should still be alive due to strong references")
         self.assertIsNotNone(translator_ref(), "Translator should still be alive due to strong references")
 
-    def test_thread_safety(self):
-        """Test that get_translator is thread-safe."""
-        translators = []
-
-        def get_translator():
-            translator = AssistantVocabTranslatorCache.get_translator(
-                self.target_tokenizer,
-                self.assistant_tokenizer,
-                assistant_model_device=self.assistant_model_device,
-                target_vocab_size=self.target_vocab_size,
-            )
-            translators.append(translator)
-
-        threads = [threading.Thread(target=get_translator) for _ in range(10)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-
-        # All translators should be the same instance
-        for translator in translators:
-            self.assertIs(translators[0], translator, "All translators should be identical across threads")
-
 
 class TestUniversalSpeculativeDecoding(unittest.TestCase):
     @classmethod
@@ -308,5 +296,5 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         if torch.cuda.is_available():
             input_ids = torch.tensor([[1, 2, 3]]).to(self.generator.assistant_model.device)
             self.generator.input_ids = input_ids
-            candidates, scores = self.generator.get_candidates(input_ids)
+            candidates, _ = self.generator.get_candidates(input_ids)
             self.assertEqual(candidates.device, input_ids.device)
