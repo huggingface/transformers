@@ -96,11 +96,17 @@ def speechlib_mel(sample_rate, n_fft, n_mels, fmin=None, fmax=None):
 class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
     model_input_names = ["input_audio_embeds", "audio_embed_sizes", "audio_attention_mask"]
 
-    def __init__(self, audio_compression_rate, audio_downsample_rate, audio_feat_stride, **kwargs):
-        feature_size = 80
-        sampling_rate = 16000
-        padding_value = 0.0
-        super().__init__(feature_size, sampling_rate, padding_value, **kwargs)
+    def __init__(
+        self,
+        feature_size: int = 80,
+        sampling_rate: int = 16000,
+        padding_value: float = 0.0,
+        audio_compression_rate: int = 8,
+        audio_downsample_rate: int = 1,
+        audio_feat_stride: int = 1,
+        **kwargs
+    ):
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
         self.audio_compression_rate = audio_compression_rate
         self.audio_downsample_rate = audio_downsample_rate

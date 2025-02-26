@@ -73,10 +73,8 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     image_processor_class = "Phi4MultimodalImageProcessor"
     audio_processor_class = "Phi4MultimodalFeatureExtractor"
 
-    def __init__(self, image_processor, audio_processor, tokenizer):
-        self.image_processor = image_processor
-        self.audio_processor = audio_processor
-        self.tokenizer = tokenizer
+    def __init__(self, image_processor, audio_processor, tokenizer, **kwargs):
+        super().__init__(image_processor, audio_processor, tokenizer, **kwargs)
 
     def __call__(
         self,
@@ -167,9 +165,9 @@ class Phi4MultimodalProcessor(ProcessorMixin):
     def get_special_image_token_id(self):
         return self.tokenizer.convert_tokens_to_ids(self.special_image_token)
 
-    @property
-    def chat_template(self):
-        return self.tokenizer.chat_template
+    # @property
+    # def chat_template(self):
+    #     return self.tokenizer.chat_template
 
     def _convert_images_audios_text_to_inputs(
         self, images, audios, text, padding=False, truncation=None, max_length=None, return_tensors=None
