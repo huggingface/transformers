@@ -21,11 +21,13 @@ import importlib.metadata
 import inspect
 import itertools
 import json
+import math
 import os
 import re
 import shutil
 import tempfile
 import warnings
+from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
@@ -95,6 +97,7 @@ from .utils import (
     is_safetensors_available,
     is_torch_flex_attn_available,
     is_torch_greater_or_equal,
+    is_torch_npu_available,
     is_torch_sdpa_available,
     is_torch_xla_available,
     logging,
@@ -1685,16 +1688,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def can_generate(cls) -> bool:
         """
-        Returns whether this model can generate sequences with `.generate()`.
+        Returns whether this model can generate sequences with `.generate()` from the `GenerationMixin`.
 
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
         # Directly inherits `GenerationMixin` -> can generate
         if "GenerationMixin" in str(cls.__bases__):
-            return True
-        # Model class overwrites `generate` (e.g. time series models) -> can generate
-        if str(cls.__name__) in str(cls.generate):
             return True
         # The class inherits from a class that can generate (recursive check) -> can generate
         for base in cls.__bases__:
@@ -1747,7 +1747,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             install_message = "Please refer to the documentation of https://huggingface.co/docs/transformers/perf_infer_gpu_one#flashattention-2 to install Flash Attention 2."
 
             if importlib.util.find_spec("flash_attn") is None:
-                raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
+                if is_torch_npu_available():
+                    recommend_message_npu = "You should use attn_implementation='sdpa' instead when using NPU. "
+                    raise ImportError(
+                        f"{preface} the package flash_attn is not supported on Ascend NPU. {recommend_message_npu}"
+                    )
+                else:
+                    raise ImportError(f"{preface} the package flash_attn seems to be not installed. {install_message}")
 
             flash_attention_version = version.parse(importlib.metadata.version("flash_attn"))
             if torch.version.cuda:
@@ -4676,16 +4682,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
         if hf_quantizer is not None:
             missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+            unexpected_keys = hf_quantizer.update_unexpected_keys(model, unexpected_keys, prefix)
 
         # retrieve weights on meta device and put them back on CPU.
         # This is not ideal in terms of memory, but if we don't do that not, we can't initialize them in the next step
         if low_cpu_mem_usage:
             for key in missing_keys:
-                if key in list(model_state_dict.keys()):
+                if key in model_state_dict:
                     key = key
-                elif f"{prefix}.{key}" in list(model_state_dict.keys()):
+                elif f"{prefix}.{key}" in model_state_dict:
                     key = f"{prefix}.{key}"
-                elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict.keys()):
+                elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in model_state_dict:
                     key = ".".join(key.split(".")[1:])
                 param = model_state_dict[key]
 
@@ -4818,8 +4825,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             folder = os.path.sep.join(resolved_archive_file[0].split(os.path.sep)[:-1])
         else:
             folder = None
+
+        if device_map is not None:
+            expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
+            caching_allocator_warmup(model, expanded_device_map, dtype)
+
         if device_map is not None and is_safetensors:
-            param_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
+            param_device_map = expanded_device_map
             str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
             if sharded_metadata is None:
                 archive_file = (
@@ -4916,7 +4928,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     device_map is not None
                     and hf_quantizer is not None
                     and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                    and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
+                    and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
                 state_dict = load_state_dict(
@@ -4995,6 +5007,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Load back temporarily offloaded state dict
                 load_offloaded_weights(model_to_load, state_dict_index, state_dict_folder)
                 shutil.rmtree(state_dict_folder)
+
+        if hf_quantizer is not None:
+            missing_keys = hf_quantizer.update_missing_keys_after_loading(model_to_load, missing_keys, prefix)
 
         if len(error_msgs) > 0:
             error_msg = "\n\t".join(error_msgs)
@@ -5792,6 +5807,30 @@ def expand_device_map(device_map, param_names, start_prefix):
             {p: device for p in param_names if p == module or p.startswith(f"{module}.") or module == ""}
         )
     return new_device_map
+
+
+def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: Dict, dtype: torch.dtype) -> Dict:
+    """This function warm-ups the caching allocator based on the size of the model tensors that will reside on each
+    device. It allows to have one large call to Malloc, instead of recursively calling it later when loading
+    the model, which is actually the loading speed botteneck.
+    Calling this function allows to cut the model loading time by a very large margin.
+    """
+    # Remove disk and cpu devices, and cast to proper torch.device
+    accelerator_device_map = {
+        param: torch.device(device) for param, device in expanded_device_map.items() if device not in ["cpu", "disk"]
+    }
+    parameter_count = defaultdict(lambda: 0)
+    for param_name, device in accelerator_device_map.items():
+        try:
+            param = model.get_parameter(param_name)
+        except AttributeError:
+            param = model.get_buffer(param_name)
+        parameter_count[device] += math.prod(param.shape)
+
+    dtype = dtype if dtype is not None else torch.float32
+    # This will kick off the caching allocator to avoid having to Malloc afterwards
+    for device, param_count in parameter_count.items():
+        _ = torch.empty(param_count, dtype=dtype, device=device, requires_grad=False)
 
 
 def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):

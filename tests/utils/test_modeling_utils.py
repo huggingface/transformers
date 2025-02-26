@@ -51,6 +51,7 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    hub_retry,
     is_staging_test,
     require_accelerate,
     require_flax,
@@ -326,6 +327,18 @@ class ModelUtilsTest(TestCasePlus):
     def tearDown(self):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
+
+    def test_hub_retry(self):
+        @hub_retry(max_attempts=2)
+        def test_func():
+            # First attempt will fail with a connection error
+            if not hasattr(test_func, "attempt"):
+                test_func.attempt = 1
+                raise requests.exceptions.ConnectionError("Connection failed")
+            # Second attempt will succeed
+            return True
+
+        self.assertTrue(test_func())
 
     @slow
     def test_model_from_pretrained(self):
@@ -1709,17 +1722,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 3 - Alternatively, a model can implement a `generate` method
-        class DummyBertWithGenerate(BertModel):
-            def generate(self):
-                pass
-
-        with CaptureLogger(logger) as cl:
-            can_generate = DummyBertWithGenerate.can_generate()
-        self.assertTrue("" == cl.out)
-        self.assertTrue(can_generate)
-
-        # 4 - Finally, it can inherit from a model that can generate
+        # 3 - Finally, it can inherit from a model that can generate
         class DummyBertWithParent(DummyBertWithMixin):
             pass
 
@@ -1728,7 +1731,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertTrue("" == cl.out)
         self.assertTrue(can_generate)
 
-        # 5 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
+        # 4 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
         # `GenerationMixin`)
         class DummyBertWithPrepareInputs(BertModel):
             def prepare_inputs_for_generation(self):
