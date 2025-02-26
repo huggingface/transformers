@@ -14,10 +14,12 @@
 # limitations under the License.
 
 import copy
+import weakref
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-import numpy as np
 import torch
+
+import numpy as np
 
 from ..utils import is_sklearn_available
 
@@ -728,6 +730,55 @@ class AssistantToTargetTranslator:
         target_logits[..., target_logits_supported_indices] = valid_assistant_logits[..., assistant_indices_mask]
 
         return target_logits
+
+
+class AssistantVocabTranslatorCache:
+    """
+    Cache for `AssistantToTargetTranslator` instances. The instances are computed at
+    pre-processing time, and this cache allows us to avoid recomputing them.
+    """
+
+    _cache = weakref.WeakKeyDictionary()
+
+    @classmethod
+    def get_translator(
+        cls,
+        target_tokenizer: "PreTrainedTokenizerBase",
+        assistant_tokenizer: "PreTrainedTokenizerBase",
+        assistant_model_device: str = "cpu",
+        target_vocab_size: Optional[int] = None,
+    ) -> AssistantToTargetTranslator:
+        assistant_dict = cls._cache.get(target_tokenizer)
+        if assistant_dict is None:
+            assistant_dict = weakref.WeakKeyDictionary()
+            cls._cache[target_tokenizer] = assistant_dict
+
+        mapping = assistant_dict.get(assistant_tokenizer)
+        if mapping is None:
+            mapping = AssistantToTargetTranslator(
+                target_tokenizer, assistant_tokenizer, assistant_model_device, target_vocab_size
+            )
+            assistant_dict[assistant_tokenizer] = mapping
+
+        return mapping
+
+    @classmethod
+    def cleanup(cls):
+        """
+        Clean up dead references in the cache.
+        This removes entries where either the target_tokenizer or assistant_tokenizer
+        has been garbage collected.
+        """
+        # Remove entries from the outer cache where the target_tokenizer is no longer alive
+        dead_keys = [key for key in cls._cache if key is None]
+        for key in dead_keys:
+            del cls._cache[key]
+
+        # For each assistant_dict, remove entries where assistant_tokenizer is no longer alive
+        for assistant_dict in cls._cache.values():
+            dead_keys = [key for key in assistant_dict if key is None]
+            for key in dead_keys:
+                del assistant_dict[key]
 
 
 class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentTokenizers):

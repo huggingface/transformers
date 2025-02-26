@@ -5,12 +5,12 @@ from unittest.mock import MagicMock
 
 import torch
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, GenerationConfig, pipeline
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
+    AssistantVocabTranslatorCache,
     UniversalSpeculativeDecodingGenerator,
 )
-from transformers.generation.utils import AssistantVocabTranslatorCache
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -221,35 +221,40 @@ class TestAssistantVocabTranslatorCache(unittest.TestCase):
 class TestUniversalSpeculativeDecoding(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.assistant_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(
-            torch_device
-        )
-        cls.target_tokenizer = AutoTokenizer.from_pretrained("allenai/Llama-3.1-Tulu-3-8B-SFT")
-        cls.assistant_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        cls.target_config = AutoConfig.from_pretrained("allenai/Llama-3.1-Tulu-3-8B-SFT")
-        cls.generation_config = GenerationConfig()
-
-        # Ensure required tokens exist
-        if cls.target_tokenizer.pad_token_id is None:
-            cls.target_tokenizer.pad_token_id = cls.target_tokenizer.eos_token_id
-        if cls.target_tokenizer.bos_token_id is None:
-            cls.target_tokenizer.bos_token_id = cls.target_tokenizer.eos_token_id
+        cls.target_name = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        cls.assistant_name = "hf-internal-testing/tiny-random-PhiForCausalLM"
 
     def setUp(self):
+        self.target_tokenizer = AutoTokenizer.from_pretrained(self.target_name)
+        self.target_config = AutoConfig.from_pretrained(self.target_name)
+        self.assistant_model = AutoModelForCausalLM.from_pretrained(self.assistant_name).to(torch_device)
+        self.assistant_tokenizer = AutoTokenizer.from_pretrained(self.assistant_name)
+
+        self.generation_config = GenerationConfig()
+
+        # Ensure required tokens exist
+        if self.target_tokenizer.pad_token_id is None:
+            self.target_tokenizer.pad_token_id = self.target_tokenizer.eos_token_id
+        if self.target_tokenizer.bos_token_id is None:
+            self.target_tokenizer.bos_token_id = self.target_tokenizer.eos_token_id
+        if self.assistant_tokenizer.pad_token_id is None:
+            self.assistant_tokenizer.pad_token_id = self.assistant_tokenizer.eos_token_id
+        if self.target_tokenizer.bos_token_id is None:
+            self.assistant_tokenizer.bos_token_id = self.assistant_tokenizer.eos_token_id
+
         self.input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
         self.model_kwargs = {
             "attention_mask": torch.ones_like(self.input_ids).to(torch_device),
         }
-        target_tokenizer = self.target_tokenizer
-        assistant_tokenizer = self.assistant_tokenizer
+
         atm_translator = AssistantVocabTranslatorCache.get_translator(
-            target_tokenizer, assistant_tokenizer, self.target_config.vocab_size, torch_device
+            self.target_tokenizer, self.assistant_tokenizer, self.target_config.vocab_size, torch_device
         )
         self.generator = UniversalSpeculativeDecodingGenerator(
             input_ids=self.input_ids,
             assistant_model=self.assistant_model,
-            target_tokenizer=target_tokenizer,
-            assistant_tokenizer=assistant_tokenizer,
+            target_tokenizer=self.target_tokenizer,
+            assistant_tokenizer=self.assistant_tokenizer,
             generation_config=self.generation_config,
             model_kwargs=self.model_kwargs,
             atm_translator=atm_translator,
@@ -296,8 +301,25 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
     def test_device_consistency(self):
         """Test handling of inputs on different devices"""
-        if torch.cuda.is_available():
-            input_ids = torch.tensor([[1, 2, 3]]).to(self.generator.assistant_model.device)
-            self.generator.input_ids = input_ids
-            candidates, _ = self.generator.get_candidates(input_ids)
-            self.assertEqual(candidates.device, input_ids.device)
+        input_ids = torch.tensor([[1, 2, 3]]).to(torch_device)
+        self.generator.input_ids = input_ids
+        candidates, _ = self.generator.get_candidates(input_ids)
+        self.assertEqual(candidates.device, input_ids.device)
+
+    def test_usd_vs_vanilla_sampling(cls):
+        """Test that USD matches vanilla sampling with temperature set to nearly 0"""
+        prompt = "Test text"
+
+        pipe_usd = pipeline("text-generation", model=cls.target_name, assistant_model=cls.assistant_name)
+        pipe_usd_output = pipe_usd(prompt, max_new_tokens=5, do_sample=True, temperature=1e-9)  # Nearly 0 temperature
+        usd_text = pipe_usd_output[0]["generated_text"]
+
+        pipe_vanilla = pipeline(
+            "text-generation",
+            model=cls.target_name,
+        )
+        pipe_vanilla_output = pipe_vanilla(prompt, max_new_tokens=5, do_sample=False)
+        vanilla_text = pipe_vanilla_output[0]["generated_text"]
+
+        # Assert that the outputs match
+        cls.assertEqual(usd_text, vanilla_text)
