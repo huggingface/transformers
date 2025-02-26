@@ -71,7 +71,7 @@ def convert_config(original_config: dict):
 
     embd_layer = original_config.pop("embd_layer")
     audio_embd_layer = embd_layer["audio_embd_layer"]
-    vision_embd_layer = embd_layer["vision_embd_layer"]
+    vision_embd_layer = embd_layer["image_embd_layer"]
 
     audio_config = original_config.pop("audio_processor")["config"]
     # remove
