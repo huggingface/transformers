@@ -45,6 +45,7 @@ from unittest.mock import patch
 import huggingface_hub.utils
 import urllib3
 from huggingface_hub import delete_repo
+from packaging import version
 
 from transformers import logging as transformers_logging
 
@@ -235,17 +236,6 @@ _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
-
-
-def get_device_count():
-    import torch
-
-    if is_torch_xpu_available():
-        num_devices = torch.xpu.device_count()
-    else:
-        num_devices = torch.cuda.device_count()
-
-    return num_devices
 
 
 def is_staging_test(test_case):
@@ -755,17 +745,17 @@ def require_spacy(test_case):
 
 def require_torch_multi_gpu(test_case):
     """
-    Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
-    multiple GPUs.
+    Decorator marking a test that requires a multi-GPU CUDA setup (in PyTorch). These tests are skipped on a machine without
+    multiple CUDA GPUs.
 
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not is_torch_available():
         return unittest.skip(reason="test requires PyTorch")(test_case)
 
-    device_count = get_device_count()
+    import torch
 
-    return unittest.skipUnless(device_count > 1, "test requires multiple GPUs")(test_case)
+    return unittest.skipUnless(torch.cuda.device_count() > 1, "test requires multiple CUDA GPUs")(test_case)
 
 
 def require_torch_multi_accelerator(test_case):
@@ -961,6 +951,18 @@ def require_torchdynamo(test_case):
 def require_torchao(test_case):
     """Decorator marking a test that requires torchao"""
     return unittest.skipUnless(is_torchao_available(), "test requires torchao")(test_case)
+
+
+def require_torchao_version_greater_or_equal(torchao_version):
+    def decorator(test_case):
+        correct_torchao_version = is_torchao_available() and version.parse(
+            version.parse(importlib.metadata.version("torchao")).base_version
+        ) >= version.parse(torchao_version)
+        return unittest.skipUnless(
+            correct_torchao_version, f"Test requires torchao with the version greater than {torchao_version}."
+        )(test_case)
+
+    return decorator
 
 
 def require_torch_tensorrt_fx(test_case):
