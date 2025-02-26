@@ -30,8 +30,9 @@ from transformers import (
 # fmt: off
 STATE_DICT_MAPPING = {
     # CausalLM keys
-    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_in.net.0.linear"  : r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_in.gate_up_proj",
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_out.net.2": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_in.down_proj",
+    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.0.linear"  : r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.gate_up_proj",
+    r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).feed_forward_(in|out).net.2": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.feed_forward_\2.down_proj",
 
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).self_attn.linear_(q|k|v)": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.self_attn.\2_proj",
     r"^model.embed_tokens_extend.audio_embed.encoder.encoders.(\d+).self_attn.linear_out": r"model.embed_tokens_extend.audio_embed.encoder.encoders.\1.self_attn.o_proj"
@@ -46,6 +47,13 @@ def map_old_key_to_new(old_key):
         # Early exit of the loop
         if n_replace > 0:
             return new_key
+        
+    # The state dict contains lora keys....
+    if "lora" in old_key:
+        return None
+    # This extracts the original weight before adding the lora adapter
+    if "base_layer." in old_key:
+        return old_key.replace("base_layer.", "")
 
     # not part of the key mapping
     return old_key
@@ -56,7 +64,8 @@ def convert_state_dict(original_state_dict: dict):
     new_dict = {}
     for old_key, tensor in original_state_dict.items():
         new_key = map_old_key_to_new(old_key)
-        new_dict[new_key] = tensor
+        if new_key is not None:
+            new_dict[new_key] = tensor
     return new_dict
 
 
