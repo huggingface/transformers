@@ -4000,7 +4000,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
             torchdynamo.reset()
 
-    @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
