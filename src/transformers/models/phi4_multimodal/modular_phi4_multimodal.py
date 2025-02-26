@@ -1979,6 +1979,9 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
 
         hidden_states = inputs_embeds
 
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -1997,6 +2000,7 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    position_embeddings,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -2007,6 +2011,8 @@ class Phi4MultimodalModel(Phi3Model, nn.Module):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
                 )
 
             hidden_states = layer_outputs[0]
