@@ -824,7 +824,7 @@ def _load_state_dict_into_meta_model(
                     param_casting_dtype = torch.float32
                 else:
                     param_casting_dtype = dtype
-                
+
             if device_mesh is not None:  # In this case, the param is already on the correct device!
                 try:
                     module_to_tp: torch.nn.Module = model.get_submodule(layer)
@@ -4987,9 +4987,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, state_dict, start_prefix
                         )
                     fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
-                    model_to_load.load_state_dict(
-                        fixed_state_dict, strict=False, assign=assign_to_params_buffers
-                    )
+                    model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
                 # force memory release
                 del state_dict
                 gc.collect()
