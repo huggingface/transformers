@@ -62,6 +62,7 @@ deps = {
     "rich": "rich",
     "rjieba": "rjieba",
     "ruff": "ruff==0.5.1",
+    "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "safetensors": "safetensors>=0.4.1",
     "sagemaker": "sagemaker>=2.31.0",
