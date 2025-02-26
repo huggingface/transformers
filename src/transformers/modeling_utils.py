@@ -4826,9 +4826,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             folder = None
 
-        if device_map is not None and hf_quantizer is None:
+        if device_map is not None:
             expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
-            caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
+            if hf_quantizer is None:
+                caching_allocator_warmup(model_to_load, expanded_device_map, dtype)
 
         if device_map is not None and is_safetensors:
             param_device_map = expanded_device_map
