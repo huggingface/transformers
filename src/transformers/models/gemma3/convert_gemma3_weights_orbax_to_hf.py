@@ -342,6 +342,9 @@ def _convert_transformer_weights(
         else:
             raise ValueError(f"Upexpected member, {prop}, in Embedder.")
     elif path.startswith(f"{_TRANSFORMER_EMBEDDER}/mm"):
+        if _TEXT_ONLY.value:
+            return zip([], [])
+
         if path.endswith("/mm_input_projection"):
             converted_paths = ["mm_input_projection.weight"]
             converted_weights = [weights]
