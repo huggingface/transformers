@@ -749,7 +749,7 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
 
-
+@torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: torch.nn.Module,
     state_dict: Dict[str, torch.Tensor],
@@ -808,9 +808,8 @@ def _load_state_dict_into_meta_model(
                 continue
             layer, param_type = module_name.rsplit(".", 1)
 
-            param = file_pointer.get_slice(
-                serialized_param_name
-            )  # param name needs to stay untouched as it's in the file
+            # param name needs to stay untouched as it's in the file
+            param = file_pointer.get_slice(serialized_param_name)
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
             param_casting_dtype = None
@@ -832,14 +831,12 @@ def _load_state_dict_into_meta_model(
                     raise ValueError(
                         "The config tp plan is wrong because the layer is not a liner layer, nor an embedding"
                     )
-
                 current_module_plan = None
                 full_tp_plan_ = "|".join(full_tp_plan.keys()).replace("*", "[0-9]+")
                 if plan := re.search(full_tp_plan_, module_name):
                     match = re.sub("[0-9]+", "*", plan[0])
                     current_module_plan = full_tp_plan[match]
 
-                # TODO currently this only supports weights, not bias
                 if current_module_plan is not None:
                     tp_layer = translate_to_torch_parallel_style(current_module_plan)
                     rank = tensor_device
@@ -854,13 +851,11 @@ def _load_state_dict_into_meta_model(
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
-                    local_parameter = torch.nn.Parameter(
-                        DTensor.from_local(
-                            param.to(dtype=param_casting_dtype),
+                    local_parameter = DTensor.from_local(
+                            param,
                             device_mesh=device_mesh,
                             placements=[shard] * device_mesh.ndim,
                         )
-                    )
                     if isinstance(module_to_tp.weight, nn.Parameter):
                         local_parameter = torch.nn.Parameter(local_parameter)
                     module_to_tp.weight = local_parameter
@@ -872,7 +867,8 @@ def _load_state_dict_into_meta_model(
                     )
                     distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
                 else:
-                    module_to_tp.load_state_dict({param_type: param[:].to(dtype=param_casting_dtype)}, False, True)
+                    module_to_tp.load_state_dict({param_type: param[:]}, False, True)
+
             else:
                 if device_map is None:
                     param_device = "cpu"
@@ -4545,7 +4541,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
-        true_keys = self.state_dict()
         for key in state_dict_keys:
             new_key = key
             if len(self.base_model_prefix) > 0:
@@ -4554,7 +4549,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 elif (
                     hasattr(self, self.base_model_prefix)
                     and not key.startswith(self.base_model_prefix)
-                    and key not in true_keys
+                    and key not in self.expected_keys 
                 ):
                     new_key = f"{self.base_model_prefix}.{key}"
 
@@ -4829,8 +4824,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             folder = None
 
+        model.expected_keys = expected_keys
         if device_map is not None:
-            expanded_device_map = expand_device_map(device_map, expected_keys, start_prefix)
+            expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
             caching_allocator_warmup(model, expanded_device_map, dtype)
 
         if device_map is not None and is_safetensors:
@@ -4952,7 +4948,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ignore_mismatched_sizes,
                     prefix,
                 )
-                if low_cpu_mem_usage and is_safetensors:
+                if low_cpu_mem_usage and shard_file.endswith(".safetensors"):
                     if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
