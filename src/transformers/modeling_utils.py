@@ -749,6 +749,7 @@ def _move_model_to_meta(model, loaded_state_dict_keys, start_prefix):
                 new_val = new_val.to("meta")
             setattr(submodule, param_name, new_val)
 
+
 @torch.no_grad()
 def _load_state_dict_into_meta_model(
     model: torch.nn.Module,
@@ -852,10 +853,10 @@ def _load_state_dict_into_meta_model(
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
                     local_parameter = DTensor.from_local(
-                            param,
-                            device_mesh=device_mesh,
-                            placements=[shard] * device_mesh.ndim,
-                        )
+                        param,
+                        device_mesh=device_mesh,
+                        placements=[shard] * device_mesh.ndim,
+                    )
                     if isinstance(module_to_tp.weight, nn.Parameter):
                         local_parameter = torch.nn.Parameter(local_parameter)
                     module_to_tp.weight = local_parameter
@@ -4549,7 +4550,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 elif (
                     hasattr(self, self.base_model_prefix)
                     and not key.startswith(self.base_model_prefix)
-                    and key not in self.expected_keys 
+                    and key not in self.expected_keys
                 ):
                     new_key = f"{self.base_model_prefix}.{key}"
 
