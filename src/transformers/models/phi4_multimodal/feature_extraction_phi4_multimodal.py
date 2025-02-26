@@ -102,9 +102,9 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         padding_value = 0.0
         super().__init__(feature_size, sampling_rate, padding_value, **kwargs)
 
-        self.compression_rate = audio_compression_rate
-        self.qformer_compression_rate = audio_downsample_rate
-        self.feat_stride = audio_feat_stride
+        self.audio_compression_rate = audio_compression_rate
+        self.audio_downsample_rate = audio_downsample_rate
+        self.audio_feat_stride = audio_feat_stride
 
         self._eightk_method = "fillzero"
         self._mel = speechlib_mel(16000, 512, 80, fmin=None, fmax=7690).T
@@ -131,7 +131,7 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
 
         for audio_data, sample_rate in audios:
             audio_embeds = self._extract_features(audio_data, sample_rate)
-            audio_frames = len(audio_embeds) * self.feat_stride
+            audio_frames = len(audio_embeds) * self.audio_feat_stride
             audio_embed_size = self._compute_audio_embed_size(audio_frames)
 
             returned_input_audio_embeds.append(torch.tensor(audio_embeds))
@@ -252,13 +252,13 @@ class Phi4MultimodalFeatureExtractor(SequenceFeatureExtractor):
         return log_fbank
 
     def _compute_audio_embed_size(self, audio_frames):
-        integer = audio_frames // self.compression_rate
-        remainder = audio_frames % self.compression_rate
+        integer = audio_frames // self.audio_compression_rate
+        remainder = audio_frames % self.audio_compression_rate
 
         result = integer if remainder == 0 else integer + 1
 
-        integer = result // self.qformer_compression_rate
-        remainder = result % self.qformer_compression_rate
+        integer = result // self.audio_downsample_rate
+        remainder = result % self.audio_downsample_rate
         result = integer if remainder == 0 else integer + 1  # qformer compression
 
         return result
