@@ -950,6 +950,18 @@ class SamVisionSdpaAttention(SamVisionAttention):
         return rel_h, rel_w
 
     def forward(self, hidden_states: torch.Tensor, output_attentions=False) -> torch.Tensor:
+        if output_attentions:
+            logger.warning_once(
+                "`SamVisionSdpaAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "`output_attentions=True`. Falling back to the manual attention implementation, but "
+                "specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
+                'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states=hidden_states,
+                output_attentions=output_attentions,
+            )
+
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
@@ -988,17 +1000,7 @@ class SamVisionSdpaAttention(SamVisionAttention):
 
         attn_output = self.proj(attn_output)
 
-        if output_attentions:
-            # For output_attentions, calculate the attention weights
-            attn_weights = (query @ key.transpose(-2, -1)) * self.scale
-            if attn_bias is not None:
-                attn_weights = attn_weights + attn_bias
-            attn_weights = F.softmax(attn_weights, dim=-1)
-            outputs = (attn_output, attn_weights)
-        else:
-            outputs = (attn_output, None)
-
-        return outputs
+        return attn_output, None
 
 
 SAM_VISION_ATTENTION_CLASSES = {
