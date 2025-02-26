@@ -56,7 +56,19 @@ if is_numba_available():
     from numba import jit, prange
 
     @jit("float32[:,:,:,:](uint8[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
-    def _fuse_rescale_normalize_transpose(vid_in: np.ndarray, pixel_map: np.ndarray):
+    def fast_rescale_normalize_transpose(vid_in: np.ndarray, pixel_map: np.ndarray):
+        """
+        A numba accelerated fn: do rescale, normalize and transpose image together
+
+        Args:
+            image (`numpy.ndarray`):
+                The uint8 image. Image should have (frames, height, width, num_channels) format.
+            pixel_map (`numpy.ndarray`):
+                The pre-computed values for each pixel in the image. Should have shape (num_channels, 256).
+
+        Returns:
+            `numpy.ndarray`: The rescaled, normalized and transposed image have (frames, num_channels, height, width) format.
+        """
         B, H, W, C = vid_in.shape
         vid_out = np.empty((B, C, H, W), dtype=np.float32)
         for bs in range(B):
@@ -67,10 +79,22 @@ if is_numba_available():
         return vid_out
 
     @jit("float32[:,:,:,:](uint8[:,:,:,:],float32[:,:])", nopython=True, nogil=True, parallel=True)
-    def _fuse_rescale_normalize(vid_in: np.ndarray, pixel_map: np.ndarray):
+    def fast_rescale_normalize(vid_in: np.ndarray, pixel_map: np.ndarray):
+        """
+        A numba accelerated fn: do rescale, normalize and transpose image together
+
+        Args:
+            image (`numpy.ndarray`):
+                The uint8 image. Image should have (frames, height, width, num_channels) format.
+            pixel_map (`numpy.ndarray`):
+                The pre-computed values for each pixel in the image. Should have shape (num_channels, 256).
+
+        Returns:
+            `numpy.ndarray`: The rescaled, normalized and transposed image have (frames, num_channels, height, width) format.
+        """
         B, C, H, W = vid_in.shape
         vid_out = np.empty((B, C, H, W), dtype=np.float32)
-        for bs in prange(B):
+        for bs in range(B):
             for dim in range(C):
                 for i in prange(H):
                     for j in range(W):

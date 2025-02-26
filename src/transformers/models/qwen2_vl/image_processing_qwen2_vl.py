@@ -52,7 +52,7 @@ from ...utils import TensorType, is_numba_available, logging
 
 
 if is_numba_available():
-    from ...image_transforms import _fuse_rescale_normalize, _fuse_rescale_normalize_transpose
+    from ...image_transforms import fast_rescale_normalize, fast_rescale_normalize_transpose
 
 
 logger = logging.get_logger(__name__)
@@ -181,9 +181,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         mean = tuple(mean) if isinstance(mean, list) else mean
         pixel_map = self._get_pixel_map(scale, tuple(mean), tuple(std))
         if input_data_format == ChannelDimension.FIRST:
-            image = _fuse_rescale_normalize(image, pixel_map)
+            image = fast_rescale_normalize(image, pixel_map)
         elif input_data_format == ChannelDimension.LAST:
-            image = _fuse_rescale_normalize_transpose(image, pixel_map)
+            image = fast_rescale_normalize_transpose(image, pixel_map)
         return image
 
     def _preprocess(
