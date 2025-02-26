@@ -93,7 +93,7 @@ rendered properly in your Markdown viewer.
 [[autodoc]] integrations.DVCLiveCallback
     - setup
 
-[[autodoc]] integrations.SwanLabCalback
+[[autodoc]] integrations.SwanLabCallback
     - setup
 
 ## TrainerCallback
