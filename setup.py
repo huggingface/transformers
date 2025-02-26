@@ -107,6 +107,7 @@ _deps = [
     # Keras pin - this is to make sure Keras 3 doesn't destroy us. Remove or change when we have proper support.
     "keras>2.9,<2.16",
     "keras-nlp>=0.3.1,<0.14.0",  # keras-nlp 0.14 doesn't support keras 2, see pin on keras.
+    "libcst",
     "librosa",
     "natten>=0.14.6",
     "nltk<=3.8.1",
@@ -124,7 +125,7 @@ _deps = [
     "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic",
+    "pydantic",  # TODO (joao) can be removed, only used in the old serving command
     "pytest>=7.2.0",
     "pytest-asyncio",
     "pytest-timeout",
@@ -134,6 +135,7 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rhoknp>=1.1.0,<1.3.1",
+    "rich",
     "rjieba",
     "ruff==0.5.1",
     "sacremoses",
@@ -154,7 +156,7 @@ _deps = [
     "tensorflow-text<2.16",
     "tensorflow-probability<0.24",
     "tf2onnx",
-    "timeout-decorator",
+    "timeout-decorator",  # TODO (joao) can be removed, redundant with pytest-timeout
     "tiktoken",
     "timm<=1.0.11",
     "tokenizers>=0.21,<0.22",
@@ -167,9 +169,6 @@ _deps = [
     "unidic_lite>=1.0.7",
     "urllib3<2.0.0",
     "uvicorn",
-    "pytest-rich",
-    "libcst",
-    "rich",
 ]
 
 
@@ -291,7 +290,6 @@ extras["testing"] = (
     deps_list(
         "pytest",
         "pytest-asyncio",
-        "pytest-rich",
         "pytest-xdist",
         "timeout-decorator",
         "parameterized",

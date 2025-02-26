@@ -31,6 +31,7 @@ deps = {
     "kenlm": "kenlm",
     "keras": "keras>2.9,<2.16",
     "keras-nlp": "keras-nlp>=0.3.1,<0.14.0",
+    "libcst": "libcst",
     "librosa": "librosa",
     "natten": "natten>=0.14.6",
     "nltk": "nltk<=3.8.1",
@@ -58,6 +59,7 @@ deps = {
     "regex": "regex!=2019.12.17",
     "requests": "requests",
     "rhoknp": "rhoknp>=1.1.0,<1.3.1",
+    "rich": "rich",
     "rjieba": "rjieba",
     "ruff": "ruff==0.5.1",
     "sacremoses": "sacremoses",
@@ -90,7 +92,4 @@ deps = {
     "unidic_lite": "unidic_lite>=1.0.7",
     "urllib3": "urllib3<2.0.0",
     "uvicorn": "uvicorn",
-    "pytest-rich": "pytest-rich",
-    "libcst": "libcst",
-    "rich": "rich",
 }
