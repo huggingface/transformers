@@ -4235,6 +4235,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             config = cls._autoset_attn_implementation(
                 config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
             )
+
         with ContextManagers(init_contexts):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
@@ -4562,7 +4563,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _load_pretrained_model(
         cls,
         model,
-        state_dict,
+        meta_state_dict,
         loaded_keys,
         resolved_archive_file,
         pretrained_model_name_or_path,
@@ -4722,7 +4723,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ):
                         set_module_tensor_to_device(model, key, "cpu", value)
                     else:
-                        hf_quantizer.create_quantized_param(model, value, key, "cpu", state_dict, unexpected_keys)
+                        hf_quantizer.create_quantized_param(model, value, key, "cpu", meta_state_dict, unexpected_keys)
 
         # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
         if _fast_init:
@@ -4789,7 +4790,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 device_map = {k.replace(f"{cls.base_model_prefix}.", ""): v for k, v in device_map.items()}
 
         def _find_mismatched_keys(
-            state_dict,
+            meta_state_dict,
             model_state_dict,
             loaded_keys,
             original_loaded_keys,
@@ -4801,7 +4802,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if ignore_mismatched_sizes:
                 for checkpoint_key, model_key in zip(original_loaded_keys, loaded_keys):
                     # If the checkpoint is sharded, we may not have the key here.
-                    if checkpoint_key not in state_dict:
+                    if checkpoint_key not in meta_state_dict:
                         continue
                     if remove_prefix_from_model:
                         # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
@@ -4812,20 +4813,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                     if (
                         model_key in model_state_dict
-                        and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
+                        and meta_state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
                     ):
                         if (
-                            state_dict[checkpoint_key].shape[-1] == 1
-                            and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
+                            meta_state_dict[checkpoint_key].shape[-1] == 1
+                            and meta_state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
                         ):
                             # This skips size mismatches for 4-bit weights. Two 4-bit values share an 8-bit container, causing size differences.
                             # Without matching with module type or paramter type it seems like a practical way to detect valid 4bit weights.
                             pass
                         else:
                             mismatched_keys.append(
-                                (checkpoint_key, state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
+                                (checkpoint_key, meta_state_dict[checkpoint_key].shape, model_state_dict[model_key].shape)
                             )
-                            del state_dict[checkpoint_key]
+                            del meta_state_dict[checkpoint_key]
             return mismatched_keys
 
         if resolved_archive_file is not None:
@@ -4858,10 +4859,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             offload_index = None
 
         error_msgs = []
-        if state_dict is not None:
+        if meta_state_dict is not None:
             # Whole checkpoint
             mismatched_keys = _find_mismatched_keys(
-                state_dict,
+                meta_state_dict,
                 model_state_dict,
                 loaded_keys,
                 original_loaded_keys,
@@ -4872,7 +4873,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # For GGUF models `state_dict` is never set to None as the state dict is always small
             if gguf_path or low_cpu_mem_usage:
-                fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     fixed_state_dict,
@@ -4892,7 +4892,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     resolved_archive_file=resolved_archive_file,
                 )
             else:
-                # Sharded checkpoint or whole but low_cpu_mem_usage==True
+                # We need to read the state dict as it is meta otherwise
+                with open(shard_file, "rb") as f:
+                    data = f.read()
+                state_dict = load(data)
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
@@ -4938,14 +4941,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     and hf_quantizer.quantization_config.quant_type in ["int4_weight_only", "autoquant"]
                 ):
                     map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
-                state_dict = load_state_dict(
+                meta_state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
                 mismatched_keys += _find_mismatched_keys(
-                    state_dict,
+                    meta_state_dict,
                     model_state_dict,
                     loaded_keys,
                     original_loaded_keys,
@@ -4961,7 +4964,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                 )
                     else:
-                        fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                         new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                             model_to_load,
                             fixed_state_dict,
@@ -4985,16 +4987,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # Sharded checkpoint or whole but low_cpu_mem_usage==True
                     if assign_to_params_buffers is None:
                         assign_to_params_buffers = check_support_param_buffer_assignment(
-                            model_to_load, state_dict, start_prefix
+                            model_to_load, meta_state_dict, start_prefix
                         )
                     # properly read the state dict now:
                     with open(shard_file, "rb") as f:
                         data = f.read()
-                    state_dict.update(load(data))
+                    state_dict = load(data)
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                     error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
                 # force memory release
-                del state_dict
+                del state_dict, meta_state_dict
                 gc.collect()
 
             if offload_index is not None and len(offload_index) > 0:
