@@ -3,7 +3,7 @@ name: Change PR to draft
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
-#  # TODO: delete
+#  # TODO: delete 1
 #  pull_request:
 #    types: [opened, reopened, synchronize]
 
