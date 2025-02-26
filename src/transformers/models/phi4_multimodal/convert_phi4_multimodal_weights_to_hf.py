@@ -23,6 +23,7 @@ from transformers import (
     Phi4MultimodalAudioConfig,
     Phi4MultimodalConfig,
     Phi4MultimodalForCausalLM,
+    Phi4MultimodalProcessor,
     Phi4MultimodalVisionConfig,
 )
 
@@ -122,8 +123,15 @@ def convert_and_write_model(input_dir: str, output_dir: str):
     # Load weights into model and resave them
     with torch.device("meta"):
         model = Phi4MultimodalForCausalLM(config)
-    model.load_state_dict(full_state_dict, strict=True, assign=True)
+    model.load_state_dict(full_state_dict, strict=False, assign=True)
+    model.tie_weights()
     model.save_pretrained(output_dir)
+
+
+def convert_and_save_processor(input_dir: str, output_dir: str):
+    """Convert the model and save it (this implicitly save the config as well)."""
+    processor = Phi4MultimodalProcessor.from_pretrained(input_dir)
+    processor.save_pretrained(output_dir)
 
 
 def main():
@@ -140,6 +148,7 @@ def main():
 
     # Convert
     convert_and_write_model(args.input_dir, args.output_dir)
+    convert_and_save_processor(args.input_dir, args.output_dir)
 
 
 if __name__ == "__main__":

@@ -57,7 +57,7 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "phi4_multimodal_vision_model"
+    model_type = "phi4_multimodal_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -92,6 +92,8 @@ class Phi4MultimodalVisionConfig(PretrainedConfig):
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
+    model_type = "phi4_multimodal_audio"
+
     def __init__(
         self,
         hidden_size: int = 1024,

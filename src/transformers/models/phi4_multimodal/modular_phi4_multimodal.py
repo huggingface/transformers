@@ -40,6 +40,8 @@ logger = logging.get_logger(__name__)
 
 
 class Phi4MultimodalVisionConfig(SiglipVisionConfig):
+    model_type = "phi4_multimodal_vision"
+
     def __init__(
         self,
         hidden_size=1152,
@@ -73,6 +75,8 @@ class Phi4MultimodalVisionConfig(SiglipVisionConfig):
 
 
 class Phi4MultimodalAudioConfig(PretrainedConfig):
+    model_type = "phi4_multimodal_audio"
+
     def __init__(
         self,
         hidden_size: int = 1024,
