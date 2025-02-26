@@ -8,6 +8,7 @@ jobs:
   convert_pr_to_draft:
     runs-on: ubuntu-22.04
     name: Convert PR to draft
+    if: github.event.pull_request.draft == false
     steps:
       - name: Convert PR to draft
         shell: bash
@@ -18,4 +19,4 @@ jobs:
         run: |
           echo $PR_NUMBER
           gh pr ready $PR_NUMBER --repo $REPO --undo
-          gh pr comment $PR_NUMBER --repo $REPO --body "Hi 👋, thank you for opening this pull request! The pull request is converted to draft by default. When it is ready for review, please click the `Ready for review` button (at the button of the PR page)."
+          gh pr comment $PR_NUMBER --repo $REPO --body "Hi 👋, thank you for opening this pull request! The pull request is converted to draft by default. When it is ready for review, please click the \`Ready for review\` button (at the button of the PR page)."
