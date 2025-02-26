@@ -801,10 +801,7 @@ def _load_state_dict_into_meta_model(
         for serialized_param_name, empty_param in state_dict.items():
             # param_name is the raw, serialized name
             # new_param_name is the model's equivalent
-            module_name, empty_param = list(
-                model._fix_state_dict_keys_on_load({serialized_param_name: empty_param}).items()
-            )[0]
-
+            module_name, _ = model.rename_key(serialized_param_name)
             if module_name not in expected_keys:
                 continue
             layer, param_type = module_name.rsplit(".", 1)
@@ -822,8 +819,6 @@ def _load_state_dict_into_meta_model(
                     and dtype == torch.float16
                 ):
                     param_casting_dtype = torch.float32
-                else:
-                    param_casting_dtype = dtype
 
             if device_mesh is not None:  # In this case, the param is already on the correct device!
                 try:
@@ -852,6 +847,8 @@ def _load_state_dict_into_meta_model(
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
+                    if param_casting_dtype is not None:
+                        param = param.to(param_casting_dtype)
                     local_parameter = DTensor.from_local(
                         param,
                         device_mesh=device_mesh,
@@ -900,8 +897,10 @@ def _load_state_dict_into_meta_model(
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
                     module = model.get_submodule(layer)
+                    if param_casting_dtype is not None:
+                        param = param[:].to(param_casting_dtype)
                     module.load_state_dict(
-                        {param_type: param[:].to(param_device, dtype=param_casting_dtype)},
+                        {param_type: param[:].to(param_device)},
                         False,
                         True,
                     )
@@ -4535,6 +4534,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         return key, False
 
+    def rename_key(self, key):
+        new_key = key
+        if len(self.base_model_prefix) > 0:
+            if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
+                new_key = ".".join(key.split(".")[1:])
+            elif (
+                hasattr(self, self.base_model_prefix)
+                and not key.startswith(self.base_model_prefix)
+                and key not in self.expected_keys
+            ):
+                new_key = f"{self.base_model_prefix}.{key}"
+
+        new_key, has_changed = self._fix_state_dict_key_on_load(new_key)
+        return new_key, has_changed
+
     def _fix_state_dict_keys_on_load(self, state_dict):
         """Fixes state dict keys by replacing legacy parameter names with their modern equivalents.
         Logs if any parameters have been renamed.
@@ -4543,19 +4557,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
         for key in state_dict_keys:
-            new_key = key
-            if len(self.base_model_prefix) > 0:
-                if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
-                    new_key = ".".join(key.split(".")[1:])
-                elif (
-                    hasattr(self, self.base_model_prefix)
-                    and not key.startswith(self.base_model_prefix)
-                    and key not in self.expected_keys
-                ):
-                    new_key = f"{self.base_model_prefix}.{key}"
-
-            new_key, has_changed = self._fix_state_dict_key_on_load(new_key)
-
+            new_key, has_changed = self.rename_key(key)
             state_dict[new_key] = state_dict.pop(key)
 
             # track gamma/beta rename for logging
