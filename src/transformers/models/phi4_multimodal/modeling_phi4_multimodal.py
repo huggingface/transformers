@@ -1844,8 +1844,8 @@ class Phi4MultimodalImageAudioEmbedding(nn.Module):
         self.audio_input_id = -10000
         assert self.image_input_id != self.audio_input_id, "image_input_id and audio_input_id should be different"
 
-        self.image_embed = Phi4MultimodalImageEmbedding(config.vision_config)
-        self.audio_embed = Phi4MultimodalAudioEmbedding(config.audio_config)
+        self.image_embed = Phi4MultimodalImageEmbedding(config)
+        self.audio_embed = Phi4MultimodalAudioEmbedding(config)
 
         self.input_image_embeds = None
         self.image_sizes = None
