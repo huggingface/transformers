@@ -164,6 +164,7 @@ _pyctcdecode_available = _is_package_available("pyctcdecode")
 _pygments_available = _is_package_available("pygments")
 _pytesseract_available = _is_package_available("pytesseract")
 _pytest_available = _is_package_available("pytest")
+_pytorch_quantization_available = _is_package_available("pytorch_quantization")
 _rjieba_available = _is_package_available("rjieba")
 _sacremoses_available = _is_package_available("sacremoses")
 _safetensors_available = _is_package_available("safetensors")
@@ -1075,6 +1076,10 @@ def is_in_notebook():
         return False
 
 
+def is_pytorch_quantization_available():
+    return _pytorch_quantization_available
+
+
 def is_tensorflow_probability_available():
     return _tensorflow_probability_available
 
@@ -1428,6 +1433,15 @@ G2P_EN_IMPORT_ERROR = """
 `pip install g2p-en`. Please note that you may need to restart your runtime after installation.
 """
 
+
+# docstyle-ignore
+PYTORCH_QUANTIZATION_IMPORT_ERROR = """
+{0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
+`pip install pytorch-quantization --extra-index-url https://pypi.ngc.nvidia.com`
+Please note that you may need to restart your runtime after installation.
+"""
+
+
 # docstyle-ignore
 TENSORFLOW_PROBABILITY_IMPORT_ERROR = """
 {0} requires the tensorflow_probability library but it was not found in your environment. You can install it with pip as
@@ -1609,6 +1623,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
+        ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
         ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),

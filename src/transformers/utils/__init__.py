@@ -176,6 +176,7 @@ from .import_utils import (
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
+    is_pytorch_quantization_available,
     is_rich_available,
     is_rjieba_available,
     is_sacremoses_available,

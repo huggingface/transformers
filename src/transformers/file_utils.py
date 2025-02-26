@@ -94,6 +94,7 @@ from .utils import (
     is_py3nvml_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytorch_quantization_available,
     is_rjieba_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
@@ -125,4 +126,5 @@ from .utils import (
     requires_backends,
     to_numpy,
     to_py_obj,
+    torch_only_method,
 )
