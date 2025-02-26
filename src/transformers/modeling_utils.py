@@ -784,7 +784,7 @@ def _load_state_dict_into_meta_model(
 
     """
     tensor_device = None
-    if "" in device_map and device_map[""] is not None:
+    if device_map is not None and device_map.get("", None) is not None:
         tensor_device = device_map[""].index if isinstance(device_map[""], torch.device) else device_map[""]
 
     with safe_open(shard_file, framework="pt", device=tensor_device) as file_pointer:
@@ -4886,13 +4886,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 # We need to read the state dict as it is meta otherwise
-                state_dict = load_state_dict(resolved_archive_file, map_location="cpu")
+                if resolved_archive_file is not None:
+                    state_dict = load_state_dict(resolved_archive_file, map_location="cpu")
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
+                model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
@@ -4982,7 +4983,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             model_to_load, state_dict, start_prefix
                         )
                     fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                    error_msgs += model_to_load.load_state_dict(fixed_state_dict, assign=assign_to_params_buffers)
+                    error_msgs += model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
                 # force memory release
                 del state_dict
                 gc.collect()
