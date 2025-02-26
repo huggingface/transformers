@@ -108,7 +108,7 @@ def convert_and_write_model(input_dir: str, output_dir: str):
     shards = [file for file in os.listdir(input_dir) if file.endswith(".safetensors")]
     for shard_file in shards:
         original_state_dict = load_file(os.path.join(input_dir, shard_file))
-        new_dict = convert_state_dict(original_state_dict, config)
+        new_dict = convert_state_dict(original_state_dict)
         full_state_dict.update(new_dict)
 
     # Load weights into model and resave them
