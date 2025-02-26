@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deepsek_v2 import *
-    from .modeling_deepsek_v2 import *
+    from .configuration_deepseek_v2 import *
+    from .modeling_deepseek_v2 import *
 else:
     import sys
 
