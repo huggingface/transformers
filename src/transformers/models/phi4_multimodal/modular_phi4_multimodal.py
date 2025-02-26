@@ -1132,8 +1132,6 @@ class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
     def forward(
         self,
         x,
-        pos_k,
-        pos_v,
         mask,
         relative_attention_bias: Optional[torch.Tensor] = None,
     ):
@@ -1154,8 +1152,6 @@ class Phi4MultimodalAudioConformerEncoderLayer(nn.Module):
 
         x = x + self.self_attn(
             norm_x,
-            pos_k,
-            pos_v,
             mask,
             relative_attention_bias=relative_attention_bias,
         )
