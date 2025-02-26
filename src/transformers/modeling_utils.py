@@ -4547,15 +4547,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         renamed_keys = {}
         state_dict_keys = list(state_dict.keys())
+        true_keys = self.state_dict()
         for key in state_dict_keys:
-            # TODO refactor a lot of things to make sure this is only done once
             new_key = key
-            print(f"{hasattr(self, self.base_model_prefix)}, {self}, {self.base_model_prefix}")
             if len(self.base_model_prefix) > 0:
                 if not hasattr(self, self.base_model_prefix) and key.startswith(self.base_model_prefix):
                     new_key = ".".join(key.split(".")[1:])
-                elif hasattr(self, self.base_model_prefix) and not key.startswith(self.base_model_prefix):
-                    print("adding the key to base model keys")
+                elif (
+                    hasattr(self, self.base_model_prefix)
+                    and not key.startswith(self.base_model_prefix)
+                    and key not in true_keys
+                ):
+                    print("adding the key to base model keys", key, f"{self.base_model_prefix}.{key}")
                     new_key = f"{self.base_model_prefix}.{key}"
 
             new_key, has_changed = self._fix_state_dict_key_on_load(new_key)
@@ -4651,7 +4654,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
         original_loaded_keys = loaded_keys
-        loaded_keys = [cls._fix_state_dict_key_on_load(key)[0] for key in loaded_keys]
+        loaded_keys = [model._fix_state_dict_key_on_load(key)[0] for key in loaded_keys]
 
         if len(prefix) > 0:
             has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)
