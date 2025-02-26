@@ -238,15 +238,18 @@ def GroundingDinoForObjectDetectionLoss(
             aux_output["text_mask"] = text_mask
         outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
+    loss_dict = criterion(outputs_loss, labels)
+
     if config.two_stage:
-        outputs_loss["enc_outputs"] = {
+        encoder_outputs_loss = {
             "logits": encoder_logits,
             "pred_boxes": encoder_pred_boxes,
             "label_maps": label_maps,
             "text_mask": text_mask,
         }
-
-    loss_dict = criterion(outputs_loss, labels)
+        encoder_loss_dict = criterion(encoder_outputs_loss, labels)
+        encoder_loss_dict = {k + "_enc": v for k, v in encoder_loss_dict.items()}
+        loss_dict.update(encoder_loss_dict)
     # Fourth: compute total loss, as a weighted sum of the various losses
     weight_dict = {
         "loss_ce": 2.0,
