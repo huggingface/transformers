@@ -1208,7 +1208,7 @@ class Phi4MultimodalAudioNemoConvSubsampling(torch.nn.Module):
 
         self.conv = torch.nn.Sequential(*layers)
 
-        in_length = torch.tensor(config.hidden_size, dtype=torch.float, device="cpu")
+        in_length = torch.tensor(config.input_size, dtype=torch.float, device="cpu")
         out_length = calc_length(
             lengths=in_length,
             all_paddings=2,
@@ -1317,15 +1317,10 @@ class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
             layer input size.
     """
 
-    # TODO: IT APPEARS THEY NEVER UPDATE THIS SO PROBABLY REMOVE
     def __init__(self, config):
         super().__init__()
-        self.register_buffer(
-            "global_mean", torch.zeros(config.encoder_embedding_config["input_size"]), persistent=False
-        )
-        self.register_buffer(
-            "global_invstd", torch.ones(config.encoder_embedding_config["input_size"]), persistent=False
-        )
+        self.register_buffer("global_mean", torch.zeros(config.encoder_embedding_config["input_size"]))
+        self.register_buffer("global_invstd", torch.ones(config.encoder_embedding_config["input_size"]))
 
     def forward(self, x):
         return (x - self.global_mean) * self.global_invstd

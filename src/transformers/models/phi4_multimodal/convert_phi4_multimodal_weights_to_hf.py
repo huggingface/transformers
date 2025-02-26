@@ -46,7 +46,7 @@ def map_old_key_to_new(old_key):
         # Early exit of the loop
         if n_replace > 0:
             return new_key
-        
+
     # The state dict contains lora keys....
     if "lora" in old_key:
         return None
@@ -87,7 +87,6 @@ def convert_config(original_config: dict):
     audio_config.pop("activation_checkpointing", None)
     audio_config.pop("cnn_layer_norm", None)
     audio_config.pop("input_layer", None)
-    audio_config.pop("relative_attention_bias_args", None)
     # rename
     audio_config["hidden_size"] = audio_config.pop("attention_dim")
     audio_config["num_attention_heads"] = audio_config.pop("attention_heads")
