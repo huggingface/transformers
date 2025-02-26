@@ -245,6 +245,7 @@ from . import (
     sew,
     sew_d,
     siglip,
+    siglip2,
     smolvlm,
     speech_encoder_decoder,
     speech_to_text,
