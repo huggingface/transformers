@@ -811,6 +811,7 @@ _import_structure = {
     "models.swin": ["SwinConfig"],
     "models.swin2sr": ["Swin2SRConfig"],
     "models.swinv2": ["Swinv2Config"],
+    "models.swissai": ["SwissAIConfig"],
     "models.switch_transformers": ["SwitchTransformersConfig"],
     "models.t5": ["T5Config"],
     "models.table_transformer": ["TableTransformerConfig"],
@@ -3685,6 +3686,13 @@ else:
             "Swinv2PreTrainedModel",
         ]
     )
+    _import_structure["models.swissai"].extend(
+        [
+            "SwissAIModel",
+            "SwissAIConfig",
+            "SwissAIPreTrainedModel",
+        ]
+    )
     _import_structure["models.switch_transformers"].extend(
         [
             "SwitchTransformersEncoderModel",
@@ -5996,6 +6004,9 @@ if TYPE_CHECKING:
     from .models.swin import SwinConfig
     from .models.swin2sr import Swin2SRConfig
     from .models.swinv2 import Swinv2Config
+    from .models.swissai import (
+        SwissAIConfig,
+    )
     from .models.switch_transformers import (
         SwitchTransformersConfig,
     )
@@ -8402,6 +8413,11 @@ if TYPE_CHECKING:
             Swinv2ForMaskedImageModeling,
             Swinv2Model,
             Swinv2PreTrainedModel,
+        )
+        from .models.swissai import (
+            SwissAIModel,
+            SwissAIConfig,
+            SwissAIPreTrainedModel,
         )
         from .models.switch_transformers import (
             SwitchTransformersEncoderModel,
