@@ -599,6 +599,7 @@ def read_video_opencv(
     """
     # Lazy import cv2
     import cv2
+
     video = cv2.VideoCapture(video_path)
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = video.get(cv2.CAP_PROP_FPS)
@@ -654,6 +655,7 @@ def read_video_decord(
     """
     # Lazy import from decord
     from decord import VideoReader, cpu
+
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
@@ -695,6 +697,7 @@ def read_video_pyav(
     """
     # Lazy import av
     import av
+
     container = av.open(video_path)
     total_num_frames = container.streams.video[0].frames
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
@@ -831,6 +834,7 @@ def load_video(
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
         # Lazy import from yt_dlp
         from yt_dlp import YoutubeDL
+
         buffer = BytesIO()
         with redirect_stdout(buffer), YoutubeDL() as f:
             f.download([video])
