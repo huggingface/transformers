@@ -17,9 +17,8 @@ import copy
 import weakref
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-import torch
-
 import numpy as np
+import torch
 
 from ..utils import is_sklearn_available
 
@@ -745,8 +744,8 @@ class AssistantVocabTranslatorCache:
         cls,
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
+        target_vocab_size: int,
         assistant_model_device: str = "cpu",
-        target_vocab_size: Optional[int] = None,
     ) -> AssistantToTargetTranslator:
         assistant_dict = cls._cache.get(target_tokenizer)
         if assistant_dict is None:
@@ -756,7 +755,7 @@ class AssistantVocabTranslatorCache:
         mapping = assistant_dict.get(assistant_tokenizer)
         if mapping is None:
             mapping = AssistantToTargetTranslator(
-                target_tokenizer, assistant_tokenizer, assistant_model_device, target_vocab_size
+                target_tokenizer, assistant_tokenizer, target_vocab_size, assistant_model_device
             )
             assistant_dict[assistant_tokenizer] = mapping
 
