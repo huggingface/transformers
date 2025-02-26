@@ -417,7 +417,8 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         expected_vision_attention_shape = (
-            self.model_tester.batch_size * self.model_tester.num_attention_heads,
+            self.model_tester.batch_size,
+            self.model_tester.num_attention_heads,
             196,
             196,
         )
