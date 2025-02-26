@@ -819,6 +819,8 @@ def _load_state_dict_into_meta_model(
                     and dtype == torch.float16
                 ):
                     param_casting_dtype = torch.float32
+                else:
+                    param_casting_dtype = dtype
 
             if device_mesh is not None:  # In this case, the param is already on the correct device!
                 try:
@@ -847,7 +849,7 @@ def _load_state_dict_into_meta_model(
                     else:
                         param = param[rank * (row // device_mesh.size()) : (rank + 1) * (row // device_mesh.size()), :]
                         shard = Shard(0)
-                    if param_casting_dtype is not None:
+                    if param_casting_dtype is not None and param_casting_dtype != param.dtype:
                         param = param.to(param_casting_dtype)
                     local_parameter = DTensor.from_local(
                         param,
@@ -897,7 +899,7 @@ def _load_state_dict_into_meta_model(
                     if is_fsdp_enabled():
                         param_device = "cpu" if is_local_dist_rank_0() else "meta"
                     module = model.get_submodule(layer)
-                    if param_casting_dtype is not None:
+                    if param_casting_dtype is not None and param_casting_dtype != param.dtype:
                         param = param[:].to(param_casting_dtype)
                     module.load_state_dict(
                         {param_type: param[:].to(param_device)},
