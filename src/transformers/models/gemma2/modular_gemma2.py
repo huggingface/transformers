@@ -20,7 +20,7 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, HybridCache
+from ...cache_utils import Cache, HybridCache, StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -349,7 +349,7 @@ class Gemma2DecoderLayer(nn.Module):
             # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
             # from the left, with an offset if we are beyond the sliding window
             else:
-                min_dtype = torch.finfo(hidden_states.dtype).min
+                min_dtype = torch.finfo(attention_mask.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
@@ -550,7 +550,7 @@ class Gemma2Model(GemmaModel):
 
         dtype, device = input_tensor.dtype, input_tensor.device
         sequence_length = input_tensor.shape[1]
-        if isinstance(past_key_values, HybridCache):
+        if isinstance(past_key_values, (HybridCache, StaticCache)):
             target_length = past_key_values.get_max_cache_shape()
         else:
             target_length = attention_mask.shape[-1] if attention_mask is not None else input_tensor.shape[1]

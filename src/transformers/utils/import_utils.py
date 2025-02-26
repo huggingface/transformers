@@ -196,11 +196,13 @@ _torchao_available = _is_package_available("torchao")
 _torchdistx_available = _is_package_available("torchdistx")
 _torchvision_available, _torchvision_version = _is_package_available("torchvision", return_version=True)
 _mlx_available = _is_package_available("mlx")
+_num2words_available = _is_package_available("num2words")
 _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
 _triton_available = _is_package_available("triton")
+_spqr_available = _is_package_available("spqr_quant")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -638,7 +640,7 @@ def is_flax_available():
 
 def is_flute_available():
     try:
-        return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.3.0"
+        return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.4.1"
     except importlib.metadata.PackageNotFoundError:
         return False
 
@@ -1213,6 +1215,10 @@ def is_speech_available():
     return _torchaudio_available
 
 
+def is_spqr_available():
+    return _spqr_available
+
+
 def is_phonemizer_available():
     return _phonemizer_available
 
@@ -1273,6 +1279,10 @@ def is_jinja_available():
 
 def is_mlx_available():
     return _mlx_available
+
+
+def is_num2words_available():
+    return _num2words_available
 
 
 def is_tiktoken_available():

@@ -121,6 +121,7 @@ from .utils import (
     is_seqio_available,
     is_soundfile_available,
     is_spacy_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
@@ -229,11 +230,8 @@ def parse_int_from_env(key, default=None):
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
-_run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=True)
-_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=True)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_staging = parse_flag_from_env("HUGGINGFACE_CO_STAGING", default=False)
-_tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=True)
 _run_agent_tests = parse_flag_from_env("RUN_AGENT_TESTS", default=False)
 _run_third_party_device_tests = parse_flag_from_env("RUN_THIRD_PARTY_DEVICE_TESTS", default=False)
@@ -248,44 +246,6 @@ def get_device_count():
         num_devices = torch.cuda.device_count()
 
     return num_devices
-
-
-def is_pt_tf_cross_test(test_case):
-    """
-    Decorator marking a test as a test that control interactions between PyTorch and TensorFlow.
-
-    PT+TF tests are skipped by default and we can run only them by setting RUN_PT_TF_CROSS_TESTS environment variable
-    to a truthy value and selecting the is_pt_tf_cross_test pytest mark.
-
-    """
-    if not _run_pt_tf_cross_tests or not is_torch_available() or not is_tf_available():
-        return unittest.skip(reason="test is PT+TF test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pt_tf_cross_test()(test_case)
-
-
-def is_pt_flax_cross_test(test_case):
-    """
-    Decorator marking a test as a test that control interactions between PyTorch and Flax
-
-    PT+FLAX tests are skipped by default and we can run only them by setting RUN_PT_FLAX_CROSS_TESTS environment
-    variable to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
-
-    """
-    if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
-        return unittest.skip(reason="test is PT+FLAX test")(test_case)
-    else:
-        try:
-            import pytest  # We don't need a hard dependency on pytest in the main library
-        except ImportError:
-            return test_case
-        else:
-            return pytest.mark.is_pt_flax_cross_test()(test_case)
 
 
 def is_staging_test(test_case):
@@ -1189,6 +1149,13 @@ def require_vptq(test_case):
     Decorator marking a test that requires vptq
     """
     return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
+
+
+def require_spqr(test_case):
+    """
+    Decorator marking a test that requires spqr
+    """
+    return unittest.skipUnless(is_spqr_available(), "test requires spqr")(test_case)
 
 
 def require_eetq(test_case):
@@ -2195,7 +2162,7 @@ def pytest_terminal_summary_main(tr, id):
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
                 if rep.duration < durations_min:
-                    f.write(f"{len(dlist)-i} durations < {durations_min} secs were omitted")
+                    f.write(f"{len(dlist) - i} durations < {durations_min} secs were omitted")
                     break
                 f.write(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}\n")
 
@@ -2580,7 +2547,7 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
     process.join(timeout=timeout)
 
     if results["error"] is not None:
-        test_case.fail(f'{results["error"]}')
+        test_case.fail(f"{results['error']}")
 
 
 def run_test_using_subprocess(func):

@@ -687,7 +687,7 @@ class TrainerIntegrationCommon:
         keys = list(state_dict.keys())
 
         shard_files = [
-            shard_name.replace(f".{extension}", f"-{idx+1:05d}-of-{len(keys):05d}.{extension}")
+            shard_name.replace(f".{extension}", f"-{idx + 1:05d}-of-{len(keys):05d}.{extension}")
             for idx in range(len(keys))
         ]
         index = {"metadata": {}, "weight_map": {key: shard_files[i] for i, key in enumerate(keys)}}

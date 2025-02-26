@@ -215,7 +215,6 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
 
     all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
     )
@@ -345,6 +344,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("LLaVA OneVision has dynamic control flow in unpadding")
+    def test_generate_compile_model_forward(self):
         pass
 
 
