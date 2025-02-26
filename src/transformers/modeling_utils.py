@@ -4559,7 +4559,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     and not key.startswith(self.base_model_prefix)
                     and key not in true_keys
                 ):
-                    print("adding the key to base model keys", key, f"{self.base_model_prefix}.{key}")
                     new_key = f"{self.base_model_prefix}.{key}"
 
             new_key, has_changed = self._fix_state_dict_key_on_load(new_key)
@@ -4834,7 +4833,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             folder = None
 
         if device_map is not None:
-            expanded_device_map = expand_device_map(device_map, original_loaded_keys, start_prefix)
+            expanded_device_map = expand_device_map(device_map, expected_keys, start_prefix)
             caching_allocator_warmup(model, expanded_device_map, dtype)
 
         if device_map is not None and is_safetensors:
@@ -4872,7 +4871,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             # For GGUF models `state_dict` is never set to None as the state dict is always small
-            if gguf_path or low_cpu_mem_usage:
+            if gguf_path or low_cpu_mem_usage and is_safetensors:
                 error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
                     model_to_load,
                     state_dict,
@@ -4900,7 +4899,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 # at this point the state dict should be on cpu, we don't need to actually read it
                 fixed_state_dict = model_to_load._fix_state_dict_keys_on_load(state_dict)
-                print(model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers))
+                model_to_load.load_state_dict(fixed_state_dict, strict=False, assign=assign_to_params_buffers)
         else:
             # This should always be a list but, just to be sure.
             if not isinstance(resolved_archive_file, list):
@@ -4956,7 +4955,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ignore_mismatched_sizes,
                     prefix,
                 )
-                if low_cpu_mem_usage:
+                if low_cpu_mem_usage and is_safetensors:
                     if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
                         for key, param in model_to_load.state_dict().items():
                             if param.device == torch.device("meta"):
@@ -4984,6 +4983,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         )
                         error_msgs += new_error_msgs
                 else:
+                    if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
+                        for key, param in model_to_load.state_dict().items():
+                            if param.device == torch.device("meta"):
+                                set_module_tensor_to_device(
+                                    model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                )
                     # Sharded checkpoint or whole but low_cpu_mem_usage==True
                     if assign_to_params_buffers is None:
                         assign_to_params_buffers = check_support_param_buffer_assignment(
