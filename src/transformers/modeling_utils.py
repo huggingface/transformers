@@ -560,7 +560,6 @@ def load_state_dict(
                     state_dict[k] = f.get_tensor(k)
             return state_dict
 
-
     try:
         if map_location is None:
             if (
@@ -804,15 +803,17 @@ def _load_state_dict_into_meta_model(
         for serialized_param_name, empty_param in state_dict.items():
             # param_name is the raw, serialized name
             # new_param_name is the model's equivalent
-            module_name, empty_param = list(model._fix_state_dict_keys_on_load({serialized_param_name: empty_param}).items())[
-                0
-            ]
+            module_name, empty_param = list(
+                model._fix_state_dict_keys_on_load({serialized_param_name: empty_param}).items()
+            )[0]
 
             if module_name not in expected_keys:
                 continue
             layer, param_type = module_name.rsplit(".", 1)
 
-            param = file_pointer.get_slice(serialized_param_name)  # param name needs to stay untouched as it's in the file
+            param = file_pointer.get_slice(
+                serialized_param_name
+            )  # param name needs to stay untouched as it's in the file
             # We convert floating dtypes to the `dtype` passed except for float8_e4m3fn type. We also want to keep the buffers/params
             # in int/uint/bool and not cast them.
             is_param_float8_e4m3fn = is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
@@ -873,9 +874,7 @@ def _load_state_dict_into_meta_model(
                     )
                     distribute_module(module_to_tp, device_mesh, None, input_fn, output_fn)
                 else:
-                    module_to_tp.load_state_dict(
-                        {param_type: param[:].to(dtype=param_casting_dtype)}, False, True
-                    )
+                    module_to_tp.load_state_dict({param_type: param[:].to(dtype=param_casting_dtype)}, False, True)
             else:
                 if device_map is None:
                     param_device = "cpu"
@@ -1255,6 +1254,7 @@ class ModuleUtilsMixin:
 
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
+
 def _find_mismatched_keys(
     state_dict,
     model_state_dict,
@@ -1263,7 +1263,7 @@ def _find_mismatched_keys(
     add_prefix_to_model,
     remove_prefix_from_model,
     ignore_mismatched_sizes,
-    prefix
+    prefix,
 ):
     mismatched_keys = []
     if ignore_mismatched_sizes:
@@ -1278,10 +1278,7 @@ def _find_mismatched_keys(
                 # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
                 model_key = ".".join(model_key.split(".")[1:])
 
-            if (
-                model_key in model_state_dict
-                and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape
-            ):
+            if model_key in model_state_dict and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape:
                 if (
                     state_dict[checkpoint_key].shape[-1] == 1
                     and state_dict[checkpoint_key].numel() * 2 == model_state_dict[model_key].numel()
@@ -1295,6 +1292,7 @@ def _find_mismatched_keys(
                     )
                     del state_dict[checkpoint_key]
     return mismatched_keys
+
 
 # TODO (joao): remove `GenerationMixin` inheritance in v4.50
 class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
@@ -3235,7 +3233,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().float(*args)
 
     @classmethod
-    def get_init_context(cls: Type[SpecificPreTrainedModelType], _fast_init=True, is_quantized=None, _is_ds_init_called=None, low_cpu_mem_usage=True):
+    def get_init_context(
+        cls: Type[SpecificPreTrainedModelType],
+        _fast_init=True,
+        is_quantized=None,
+        _is_ds_init_called=None,
+        low_cpu_mem_usage=True,
+    ):
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
@@ -3564,7 +3568,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         # If torchrun was used, make sure to TP by default. This way people don't need to change tp or device map
-        if device_map == "auto" and tp_plan is None and int(os.environ.get("WORLD_SIZE",0)):
+        if device_map == "auto" and tp_plan is None and int(os.environ.get("WORLD_SIZE", 0)):
             tp_plan = "auto"  # device_map = "auto" in torchrun equivalent to TP plan = AUTO!
             device_map = None
 
@@ -4819,7 +4823,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map is not None:
                 device_map = {k.replace(f"{cls.base_model_prefix}.", ""): v for k, v in device_map.items()}
 
-
         if resolved_archive_file is not None:
             folder = os.path.sep.join(resolved_archive_file[0].split(os.path.sep)[:-1])
         else:
@@ -4860,7 +4863,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 add_prefix_to_model,
                 remove_prefix_from_model,
                 ignore_mismatched_sizes,
-                prefix
+                prefix,
             )
 
             # For GGUF models `state_dict` is never set to None as the state dict is always small
@@ -4945,7 +4948,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     add_prefix_to_model,
                     remove_prefix_from_model,
                     ignore_mismatched_sizes,
-                    prefix
+                    prefix,
                 )
                 if low_cpu_mem_usage:
                     if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
