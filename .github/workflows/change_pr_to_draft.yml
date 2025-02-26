@@ -18,3 +18,4 @@ jobs:
           PR_NUMBER: ${{ github.event.number }}
         run: |
           echo $PR_NUMBER
+          gh pr ready $PR_NUMBER --undo
