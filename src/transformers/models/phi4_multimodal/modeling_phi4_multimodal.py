@@ -98,6 +98,7 @@ class Phi4MultimodalVisionAttention(nn.Module):
                 f" {self.num_heads})."
             )
         self.scaling = self.head_dim**-0.5
+        self.is_causal = True
         self.attention_dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -599,7 +600,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         else:
             attention_mask = (
                 _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if not self.config._flash_attn_2_enabled
+                if not self.config._attn_implementation == "flash_attention_2"
                 else patch_attention_mask
             )
 
@@ -1143,7 +1144,7 @@ class Phi4MultimodalAudioGluPointWiseConv(nn.Module):
         # tensor, so need to switch the dimension first for 1D-Conv case
         x = x.permute([0, 2, 1])
         x = self.ext_pw_conv_1d(x)
-        if self.bias_in_glu:
+        if self.config.bias_in_glu:
             x = (x[:, 0 : self.output_dim, :] + self.b1) * self.glu_act(
                 x[:, self.output_dim : self.output_dim * 2, :] + self.b2
             )
@@ -1160,6 +1161,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
         self.config = config
         self.batch_norm = config.batch_norm
         self.kernel_size = config.kernel_size
+        self.ext_pw_kernel_size = config.ext_pw_kernel_size
 
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.glu = Phi4MultimodalAudioGluPointWiseConv(config)
@@ -1168,6 +1170,7 @@ class Phi4MultimodalAudioConvModule(nn.Module):
             if config.hidden_size != config.ext_pw_out_channel
             else nn.Identity()
         )
+        self.apply_ln1 = not isinstance(self.ln1, nn.Identity)
 
         padding = config.kernel_size - 1 if config.causal else (config.kernel_size - 1) // 2
         self.dw_sep_conv_1d = Phi4MultimodalAudioDepthWiseSeperableConv1d(config, padding=padding)
@@ -1192,14 +1195,14 @@ class Phi4MultimodalAudioConvModule(nn.Module):
     def forward(self, x):
         x = self.layer_norm(x)
         x = self.glu(x)
-        if self.causal and self.ext_pw_kernel_size > 1:
+        if self.config.causal and self.ext_pw_kernel_size > 1:
             x = x[:, : -(self.ext_pw_kernel_size - 1), :]
         x = self.ln1(x)
 
         x = x.permute([0, 2, 1])
 
         x = self.dw_sep_conv_1d(x)
-        if self.causal and self.kernel_size > 1:
+        if self.config.causal and self.kernel_size > 1:
             x = x[:, :, : -(self.kernel_size - 1)]
         if hasattr(self, "ln2"):
             x = x.permute([0, 2, 1])
@@ -1585,10 +1588,7 @@ class Phi4MultimodalAudioConformerEncoder(nn.Module):
         batch_size = xs_pad.shape[0]
 
         enc_streaming_mask = self._streaming_mask(seq_len, batch_size, self.config.chunk_size, self.config.left_chunk)
-
-        if xs_pad.is_cuda:
-            enc_streaming_mask = enc_streaming_mask.cuda()
-            xs_pad = xs_pad.cuda()
+        enc_streaming_mask = enc_streaming_mask.to(xs_pad.device)
 
         input_tensor = xs_pad
         input_tensor, masks = self.embed(input_tensor, masks)
