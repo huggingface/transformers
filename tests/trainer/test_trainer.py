@@ -3962,7 +3962,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_non_multi_gpu
     @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
-        import torchdynamo
+        import torch._dynamo as torchdynamo
 
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         n_gpus = get_gpu_count()
@@ -4003,7 +4003,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_non_multi_gpu
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
-        import torchdynamo
+        import torch._dynamo as torchdynamo
 
         class CustomTrainer(Trainer):
             def compute_loss(self, model, inputs, return_outputs=False):
