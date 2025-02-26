@@ -41,6 +41,7 @@ from ...image_utils import (
     infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
+    ImageInput,
 )
 from ...modeling_outputs import CausalLMOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -1457,7 +1458,7 @@ class JanusImageProcessor(BlipImageProcessor):
 
     def postprocess(
         self,
-        images: Union[List[np.ndarray], List[torch.Tensor], List[Image.Image]],
+        images: ImageInput,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,

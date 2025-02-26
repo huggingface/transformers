@@ -22,7 +22,6 @@
 from typing import Dict, Iterable, List, Optional, Union
 
 import numpy as np
-import torch
 from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -371,7 +370,7 @@ class JanusImageProcessor(BaseImageProcessor):
 
     def postprocess(
         self,
-        images: Union[List[np.ndarray], List[torch.Tensor], List[Image.Image]],
+        images: ImageInput,
         do_rescale: bool = None,
         rescale_factor: float = None,
         do_normalize: bool = None,
