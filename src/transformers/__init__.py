@@ -319,6 +319,11 @@ _import_structure = {
     ],
     "models.convnext": ["ConvNextConfig"],
     "models.convnextv2": ["ConvNextV2Config"],
+    "models.cosmos": [
+        "CosmosConfig",
+        "CosmosTextConfig",
+        "CosmosVQVAEConfig",
+    ],
     "models.cpm": [],
     "models.cpmant": [
         "CpmAntConfig",
@@ -435,11 +440,6 @@ _import_structure = {
         "Emu3Processor",
         "Emu3TextConfig",
         "Emu3VQVAEConfig",
-    ],
-    "models.cosmos": [
-        "CosmosConfig",
-        "CosmosTextConfig",
-        "CosmosVQVAEConfig",
     ],
     "models.encodec": [
         "EncodecConfig",
@@ -1246,6 +1246,7 @@ else:
         ["ConditionalDetrFeatureExtractor", "ConditionalDetrImageProcessor"]
     )
     _import_structure["models.convnext"].extend(["ConvNextFeatureExtractor", "ConvNextImageProcessor"])
+    _import_structure["models.cosmos"].append("CosmosVideoProcessor")
     _import_structure["models.deformable_detr"].extend(
         ["DeformableDetrFeatureExtractor", "DeformableDetrImageProcessor"]
     )
@@ -1907,6 +1908,14 @@ else:
             "ConvNextV2PreTrainedModel",
         ]
     )
+    _import_structure["models.cosmos"].extend(
+        [
+            "CosmosForConditionalGeneration",
+            "CosmosTextModel",
+            "CosmosVQVAE",
+            "CosmosPreTrainedModel",
+        ]
+    )
     _import_structure["models.cpmant"].extend(
         [
             "CpmAntForCausalLM",
@@ -2315,13 +2324,6 @@ else:
             "Emu3PreTrainedModel",
             "Emu3TextModel",
             "Emu3VQVAE",
-        ]
-    )
-    _import_structure["models.cosmos"].extend(
-        [
-            "CosmosForConditionalGeneration",
-            "CosmosTextModel",
-            "CosmosVQVAE",
         ]
     )
     _import_structure["models.encodec"].extend(
@@ -6440,6 +6442,7 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
+        from .models.cosmos import CosmosVideoProcessor
         from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
@@ -7027,6 +7030,7 @@ if TYPE_CHECKING:
         )
         from .models.cosmos import (
             CosmosForConditionalGeneration,
+            CosmosPreTrainedModel,
             CosmosTextModel,
             CosmosVQVAE,
         )

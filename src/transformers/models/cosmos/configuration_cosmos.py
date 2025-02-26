@@ -238,22 +238,20 @@ class CosmosTextConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int = 184622,
+        vocab_size: int = 64000,
         hidden_size: int = 4096,
         intermediate_size: int = 14336,
-        num_hidden_layers: int = 32,
+        num_hidden_layers: int = 16,
         num_attention_heads: int = 32,
         num_key_value_heads: Optional[int] = 8,
         hidden_act: str = "silu",
-        max_position_embeddings: int = 9216,
+        max_position_embeddings: int = 12800,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: int = 151643,
-        bos_token_id: int = 151849,
-        eos_token_id: int = 151850,
         tie_word_embeddings: bool = False,
-        rope_theta: float = 1000000.0,
+        rope_theta: float = 500000.0,
         rope_scaling: Optional = None,
+        rope_latent_shape: List[int] = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
@@ -271,7 +269,8 @@ class CosmosTextConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
+        self.rope_scaling = {"rope_type": "3d", "original_max_position_embeddings": 8192}
+        self.rope_latent_shape = [5, 40, 64]
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
         self.initializer_range = initializer_range
@@ -280,9 +279,6 @@ class CosmosTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
@@ -316,7 +312,7 @@ class CosmosConfig(PretrainedConfig):
         self,
         vq_config: Union[Dict, CosmosVQVAEConfig] = None,
         text_config: Union[Dict, CosmosTextConfig] = None,
-        vocabulary_map: Dict[int, int] = None,
+        image_token_id: int = 64000,
         **kwargs,
     ):
         if vq_config is None:
@@ -331,7 +327,7 @@ class CosmosConfig(PretrainedConfig):
 
         self.vq_config = vq_config
         self.text_config = text_config
-        self.vocabulary_map = vocabulary_map
+        self.image_token_id = image_token_id
 
         super().__init__(**kwargs)
 
